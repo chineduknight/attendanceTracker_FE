@@ -1,4 +1,5 @@
 import { Box, Flex } from "@chakra-ui/layout";
+import { FaHome } from 'react-icons/fa'
 import {
   useColorModeValue,
   Text,
