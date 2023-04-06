@@ -49,9 +49,15 @@ const Login = () => {
             <Stack spacing={8} mx={"auto"} maxW={"lg"} pb={12} px={6}>
                 <Stack align={"center"}>
                     <Heading fontSize={"4xl"}>Login Details</Heading>
+
+
                     <Text fontSize={"lg"} color={"gray.600"}>
-                        Please fill in the following  <Link color={"green.400"}>details</Link> ✌️
+                        Please fill in the following  <Link cursor="" _hover={{
+                            textDecoration: "none"
+                        }} color={"green.400"}>details</Link>
                     </Text>
+
+
                 </Stack>
                 <Box
                     rounded={"lg"}
@@ -92,13 +98,13 @@ const Login = () => {
                                     }
                                 }
                             >
-                                submit
+                                Submit
                             </Button>
                         </Stack>
                     </Stack>
                 </Box>
             </Stack>
-        </Flex>
+        </Flex >
     );
 };
 
