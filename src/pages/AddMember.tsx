@@ -1,5 +1,5 @@
 import { Box, Flex } from "@chakra-ui/layout";
-
+import { FaHome } from 'react-icons/fa'
 import {
   useColorModeValue,
   Text,
@@ -14,49 +14,22 @@ import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 const AddMember = () => {
-
-  const [email, setEmail] = useState("")
-  const [name, setName] = useState("")
-  function newMember(e) {
-
-
-    let input = e.target;
-
-
-    if (input.name === "email") {
-      setEmail(input.value)
-    } else if (input.name === 'name') {
-      setName(input.value)
-    }
-
-  }
-
   const [fields] = useState([
     {
       id: nanoid(),
       title: "name",
-      type: "email",
-      value: name,
+      type: "text",
       required: true,
-      name: 'name',
-      onChange: newMember
     },
     {
       id: nanoid(),
       title: "email address",
-      type: "text",
-      value: email,
+      type: "number",
       required: true,
-      name: 'email',
-      onChange: newMember
     },
   ]);
 
-
-
   const navigate = useNavigate();
-
-
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -88,11 +61,7 @@ const AddMember = () => {
               <FormLabel textTransform="capitalize" mb="0">
                 {field.title}
               </FormLabel>
-              <Input type={field.type}
-
-                name={field.name}
-                onChange={field.onChange}
-              />
+              <Input type={field.type} />
             </FormControl>
           ))}
 
@@ -100,13 +69,7 @@ const AddMember = () => {
             <Button
               w="full"
               mt="40px"
-              onClick={() => {
-
-                console.log(`Add user with ${name} and ${email}`)
-                navigate(PROTECTED_PATHS.DASHBOARD)
-              }
-
-              }
+              onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
               bg={"blue.400"}
               color={"white"}
               _hover={{
