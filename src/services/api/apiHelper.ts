@@ -1,13 +1,11 @@
-import { useQuery , useMutation, QueryClient } from "react-query";
+import { useQuery , useMutation, QueryClient, QueryKey } from "@tanstack/react-query";
 import axiosInstance from ".";
 import { toast } from "react-toastify";
 
-export const useQueryWrapper = (key: string, url: string, options?: any) => {
+export const useQueryWrapper = (key: QueryKey, url: string, options?: any) => {
   const getAPICall = async () => {
-    const {
-      data: { data },
-    } = await axiosInstance.get(url);
-    return data;
+    const response = await axiosInstance.get(url);
+    return response;
   };
   return useQuery(key, getAPICall, options);
 };

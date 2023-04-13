@@ -11,9 +11,12 @@ import {
 } from "@chakra-ui/react";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
+import { useQueryWrapper } from 'services/api/apiHelper';
+import { orgRequest } from 'services/api/request';
 const AddOrganisation = () => {
   const navigate = useNavigate();
-
+const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
+  console.log("data:", data?.data)
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex

@@ -9,7 +9,6 @@ import {
   Input,
   Stack,
 } from "@chakra-ui/react";
-import { FaHome } from 'react-icons/fa'
 import { useState } from "react";
 import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
