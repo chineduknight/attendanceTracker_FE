@@ -8,6 +8,7 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+// import { FaBook } from 'react-icons'
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ const Dashboard = () => {
         p="4"
       >
         <Text fontWeight="bold" color="#fff">
-          VOICE OF THE BELOVED
+          Attendance Tracker
         </Text>
       </Flex>
       <HStack spacing="4" p="4" wrap="wrap">
