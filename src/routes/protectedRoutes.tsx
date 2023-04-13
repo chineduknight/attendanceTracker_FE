@@ -39,7 +39,7 @@ const PROTECTED_ROUTES = [
   { path: CREATE_ATTENDANCE, element: <CreateAttendance /> },
   { path: LOGIN_USER, element: <LoginUser /> },
   { path: LOGIN, element: <Login /> },
-  { path: "/", element: <Navigate to={DASHBOARD} /> },
+  { path: "/", element: <Navigate to={ALL_ORG} /> },
   // this enables you not to access the public routes when logged in
   ...Object.values(PUBLIC_PATHS).map((route) => {
     return {
