@@ -1,15 +1,13 @@
 import {
   Box, Flex, useColorModeValue, Button, Text, Stack
 } from "@chakra-ui/react";
-// import db from './db.json';
-// import { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 
 const OrgList = () => {
   const navigate = useNavigate();
-  // const [orglist, setOrglist] = useState([])
-  // const [orglist, setOrglist] = useState(db.organisation)
+
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
