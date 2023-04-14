@@ -13,10 +13,11 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
 import { useQueryWrapper } from 'services/api/apiHelper';
 import { orgRequest } from 'services/api/request';
+import { FaArrowCircleLeft } from 'react-icons/fa'
 const AddOrganisation = () => {
   const navigate = useNavigate();
-const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
-  console.log("data:", data?.data)
+  const { data } = useQueryWrapper(["my-key"], orgRequest.ORG);
+  console.log("data:", data)
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -58,7 +59,7 @@ const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
           </FormControl>
           <Stack spacing={6}>
             <Button
-              onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+              onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
               bg={"blue.400"}
               color={"white"}
               _hover={{
@@ -70,6 +71,17 @@ const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
           </Stack>
         </Stack>
       </Flex>
+      <Button
+        onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
+        bg={"blue.400"}
+        color={"white"}
+        ml='455px'
+        _hover={{
+          bg: "blue.500",
+        }}
+      >
+        <FaArrowCircleLeft /> Back
+      </Button>
     </Box>
   );
 };
