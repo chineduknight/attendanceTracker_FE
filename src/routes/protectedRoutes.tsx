@@ -12,7 +12,7 @@ const CreateAttendance = WithSuspense(
   lazy(() => import("pages/CreateAttendance"))
 );
 const AddMember = WithSuspense(lazy(() => import("pages/AddMember")));
-const OrgList = WithSuspense(lazy(() => import("pages/Orglist")));
+const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AddOrganisation = WithSuspense(
   lazy(() => import("pages/AddOrganisation"))
 );
