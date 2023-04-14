@@ -10,15 +10,31 @@ import {
   Stack,
 } from "@chakra-ui/react";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryWrapper } from 'services/api/apiHelper';
 import { orgRequest } from 'services/api/request';
+import { FaArrowCircleLeft } from 'react-icons/fa'
 const AddOrganisation = () => {
   const navigate = useNavigate();
-const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
-  console.log("data:", data?.data)
+  const { data } = useQueryWrapper(["my-key"], orgRequest.ORG);
+  // console.log("data:", data)
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  function newOrganisation(e) {
+    let input = e.target
+    if (input.name === 'email') {
+      setEmail(input.value)
+    } else if (input.name === 'password') {
+      setPassword(input.value)
+    }
+  }
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+
       <Flex
         bg="blue.500"
         justifyContent="space-between"
@@ -29,6 +45,20 @@ const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
           New Organisation
         </Text>
       </Flex>
+      <Button
+        onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
+
+        mt='10px'
+        ml='10px'
+        color={"white"}
+
+        _hover={{
+          bg: "blue.500",
+        }}
+      >
+        <FaArrowCircleLeft /> Back
+      </Button>
+
       <Flex
         align={"center"}
         justify={"center"}
@@ -44,21 +74,36 @@ const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
           p={6}
           my={12}
         >
-          <FormControl id="email" isRequired>
+          <FormControl
+            id="email"
+            isRequired>
             <FormLabel>Organisation Name</FormLabel>
             <Input
               placeholder="Seat of wisdom presidium"
               _placeholder={{ color: "gray.500" }}
               type="text"
+              name="email"
+              value={email}
+              onChange={newOrganisation}
             />
           </FormControl>
           <FormControl id="password">
             <FormLabel>Image Url</FormLabel>
-            <Input type="text" />
+            <Input
+              type="text"
+              name="password"
+              value={password}
+              onChange={newOrganisation}
+            />
           </FormControl>
           <Stack spacing={6}>
             <Button
-              onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+              onClick={() => {
+                console.log(`organisation registered with ${email} and ${password}`)
+
+                navigate(PROTECTED_PATHS.ALL_ORG)
+              }
+              }
               bg={"blue.400"}
               color={"white"}
               _hover={{
@@ -70,7 +115,7 @@ const {data} = useQueryWrapper(["my-key"],orgRequest.ORG);
           </Stack>
         </Stack>
       </Flex>
-    </Box>
+    </Box >
   );
 };
 

@@ -1,5 +1,5 @@
 import { ChakraProvider } from "@chakra-ui/react";
-import { QueryClientProvider,} from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { ToastContainer } from "react-toastify";
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import ErrorBoundary from "components/ErrorBoundary";
@@ -15,6 +15,7 @@ const RenderDevTool = () => {
   }
   return null;
 };
+// { process.env.NODE_ENV === 'development' ? <ReactQueryDevtools initialIsOpen={false} /> : null }
 
 const App = () => {
   return (
@@ -29,5 +30,6 @@ const App = () => {
     </ChakraProvider>
   );
 };
+
 
 export default App;
