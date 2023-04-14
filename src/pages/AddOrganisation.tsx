@@ -12,14 +12,19 @@ import {
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryWrapper } from 'services/api/apiHelper';
-import { orgRequest } from 'services/api/request';
+import { postRequest, useMutationWrapper } from 'services/api/apiHelper';
 import { FaArrowCircleLeft } from 'react-icons/fa'
+import { nanoid } from 'nanoid';
+
 const AddOrganisation = () => {
   const navigate = useNavigate();
-  const { data } = useQueryWrapper(["my-key"], orgRequest.ORG);
   // console.log("data:", data)
 
+  const onSuccess = (data) => {
+    console.log("data:", data)
+
+  }
+  const { mutate } = useMutationWrapper(postRequest, onSuccess)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -31,7 +36,19 @@ const AddOrganisation = () => {
       setPassword(input.value)
     }
   }
-
+  const handleAddOrg = () => {
+    console.log(`organisation registered with ${email} and ${password}`)
+    const data = {
+      id: nanoid(),
+      name: email,
+      imageURL: password
+    }
+    mutate({
+      url: "/organisations",
+      data
+    })
+    navigate(PROTECTED_PATHS.ALL_ORG)
+  }
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
 
@@ -98,12 +115,7 @@ const AddOrganisation = () => {
           </FormControl>
           <Stack spacing={6}>
             <Button
-              onClick={() => {
-                console.log(`organisation registered with ${email} and ${password}`)
-
-                navigate(PROTECTED_PATHS.ALL_ORG)
-              }
-              }
+              onClick={handleAddOrg}
               bg={"blue.400"}
               color={"white"}
               _hover={{

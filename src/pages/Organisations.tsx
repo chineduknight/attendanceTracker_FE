@@ -1,14 +1,16 @@
 import {
-  Box, Flex, useColorModeValue, Button, Text, Stack
+  Box, Flex, useColorModeValue, Button, Text, Stack,Image
 } from "@chakra-ui/react";
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { useQueryWrapper } from 'services/api/apiHelper';
 
 const OrgList = () => {
   const navigate = useNavigate();
 
-
+ const {data}= useQueryWrapper(["all-organisations"],"/organisations");
+  console.log("data:", data)
+  console.log("data:", data?.data)
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -31,11 +33,24 @@ const OrgList = () => {
         my={12}
         mx='auto'
       >
-        <Text fontWeight='bold'>No organisation yet</Text>
-        {/* {orglist.length
-          ? <Text fontWeight='bold'>organisation yet</Text>
-          : (<Text fontWeight='bold'>No organisation yet</Text>)
-        } */}
+        {
+          data?.data ? <>{  data?.data.map(org=> <Flex key={org.id}
+          alignItems="center"
+          >
+            <Image src={org.imageURL} alt='Dan Abramov'
+            w="45px"
+            h="45px"
+            objectFit="cover"
+            borderRadius="50%"
+            />
+            <Text  ml="4"> 
+
+            {org.name}
+            </Text>
+            </Flex>)}</>:
+        
+          <Text ml="4" fontWeight='bold'>No organisation yet</Text>
+        }
       </Stack>
 
     </Box>

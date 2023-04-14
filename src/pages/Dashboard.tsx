@@ -24,6 +24,7 @@ const Dashboard = () => {
           Attendance Tracker
         </Text>
       </Flex>
+      <Text>Organisation Name</Text>
       <HStack spacing="4" p="4" wrap="wrap">
         <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
           Add Member
