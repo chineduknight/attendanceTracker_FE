@@ -1,14 +1,15 @@
 import {
   Box, Flex, useColorModeValue, Button, Text, Stack
 } from "@chakra-ui/react";
-import db from './../../db.json';
+// import db from './db.json';
 // import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 
 const OrgList = () => {
   const navigate = useNavigate();
-  // const [orglist, setOrglist] = useState(true)
+  // const [orglist, setOrglist] = useState([])
+  // const [orglist, setOrglist] = useState(db.organisation)
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -33,7 +34,7 @@ const OrgList = () => {
         mx='auto'
       >
         <Text fontWeight='bold'>No organisation yet</Text>
-        {/* {orglist
+        {/* {orglist.length
           ? <Text fontWeight='bold'>organisation yet</Text>
           : (<Text fontWeight='bold'>No organisation yet</Text>)
         } */}

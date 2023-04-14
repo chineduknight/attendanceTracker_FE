@@ -20,6 +20,7 @@ const AddOrganisation = () => {
   console.log("data:", data)
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+
       <Flex
         bg="blue.500"
         justifyContent="space-between"
@@ -30,6 +31,20 @@ const AddOrganisation = () => {
           New Organisation
         </Text>
       </Flex>
+      <Button
+        onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
+        // bg={"blue.400"}
+        mt='10px'
+        ml='10px'
+        color={"white"}
+        // w="200px"
+        _hover={{
+          bg: "blue.500",
+        }}
+      >
+        <FaArrowCircleLeft /> Back
+      </Button>
+
       <Flex
         align={"center"}
         justify={"center"}
@@ -71,17 +86,6 @@ const AddOrganisation = () => {
           </Stack>
         </Stack>
       </Flex>
-      <Button
-        onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
-        bg={"blue.400"}
-        color={"white"}
-        ml='455px'
-        _hover={{
-          bg: "blue.500",
-        }}
-      >
-        <FaArrowCircleLeft /> Back
-      </Button>
     </Box>
   );
 };
