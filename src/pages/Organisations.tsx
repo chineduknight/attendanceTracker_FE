@@ -1,5 +1,5 @@
 import {
-  Box, Flex, useColorModeValue, Button, Text, Stack,Image
+  Box, Flex, useColorModeValue, Button, Text, Stack, Image
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -8,9 +8,12 @@ import { useQueryWrapper } from 'services/api/apiHelper';
 const OrgList = () => {
   const navigate = useNavigate();
 
- const {data}= useQueryWrapper(["all-organisations"],"/organisations");
-  console.log("data:", data)
-  console.log("data:", data?.data)
+  const { data } = useQueryWrapper(["all-organisations"], "/organisations");
+
+  function hndKini(userData) {
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE, { state: userData })
+  }
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -34,22 +37,23 @@ const OrgList = () => {
         mx='auto'
       >
         {
-          data?.data ? <>{  data?.data.map(org=> <Flex key={org.id}
-          alignItems="center"
+          (data?.data) ? <>{data?.data.map(org => <Flex key={org.id}
+            alignItems="center"
           >
             <Image src={org.imageURL} alt='Dan Abramov'
-            w="45px"
-            h="45px"
-            objectFit="cover"
-            borderRadius="50%"
+              w="45px"
+              h="45px"
+              objectFit="cover"
+              borderRadius="50%"
+              onClick={() => { hndKini(org) }}
             />
-            <Text  ml="4"> 
+            <Text ml="4">
 
-            {org.name}
+              {org.name}
             </Text>
-            </Flex>)}</>:
-        
-          <Text ml="4" fontWeight='bold'>No organisation yet</Text>
+          </Flex>)}</> :
+
+            <Text ml="4" fontWeight='bold'>No organisation yet</Text>
         }
       </Stack>
 
