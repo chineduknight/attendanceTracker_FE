@@ -10,9 +10,14 @@ import {
   InputLeftElement,
   Container,
 } from "@chakra-ui/react";
+import { useNavigate, useLocation } from "react-router-dom";
+
 import { nanoid } from "nanoid";
 
 const MarkAttendance = () => {
+  const { state } = useLocation();
+  console.log("ghty:", state);
+
   const members = [
     {
       name: "Alice Rose",
@@ -65,12 +70,15 @@ const MarkAttendance = () => {
       </Flex>
       <Container>
         <Heading mt="4" fontSize="22px">
+          {/* {state.name} */}
+        </Heading>
+        <Heading mt="4" fontSize="22px">
           Members
         </Heading>
         <InputGroup mt="4">
           <InputLeftElement
             pointerEvents="none"
-            // children={<PhoneIcon color="gray.300" />}
+          // children={<PhoneIcon color="gray.300" />}
           />
           <Input type="tel" placeholder="Phone number" />
         </InputGroup>

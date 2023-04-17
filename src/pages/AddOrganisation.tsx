@@ -10,45 +10,65 @@ import {
   Stack,
 } from "@chakra-ui/react";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { postRequest, useMutationWrapper } from 'services/api/apiHelper';
 import { FaArrowCircleLeft } from 'react-icons/fa'
 import { nanoid } from 'nanoid';
+import { useForm, SubmitHandler } from "react-hook-form";
+import { queryClient } from 'services/api/apiHelper';
+// import { useState } from 'react'
+
+type Inputs = {
+  name: string,
+  imageURL: string,
+}
 
 const AddOrganisation = () => {
+  // here
+  // const [showName, setShowName] = useState('')
+
   const navigate = useNavigate();
-  // console.log("data:", data)
+
+  const { register, handleSubmit } = useForm<Inputs>();
 
   const onSuccess = (data) => {
-    console.log("data:", data)
-
+    queryClient.invalidateQueries({ queryKey: ["all-organisations"] })
   }
+
   const { mutate } = useMutationWrapper(postRequest, onSuccess)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
 
-  function newOrganisation(e) {
-    let input = e.target
-    if (input.name === 'email') {
-      setEmail(input.value)
-    } else if (input.name === 'password') {
-      setPassword(input.value)
-    }
-  }
-  const handleAddOrg = () => {
-    console.log(`organisation registered with ${email} and ${password}`)
+  const handleAddOrg = (details) => {
+
     const data = {
       id: nanoid(),
-      name: email,
-      imageURL: password
+      name: details.name,
+      imageURL: details.imageURL
     }
+
+    console.log(data.name);
+
     mutate({
       url: "/organisations",
       data
     })
+
     navigate(PROTECTED_PATHS.ALL_ORG)
+
   }
+
+  const onSubmit: SubmitHandler<Inputs> = details => {
+    console.log(`the organisation registered with ${details.name} and ${details.imageURL}`);
+    handleAddOrg(details)
+  }
+
+  // onclick = () => console.log();
+
+  // here
+
+  // const handleClick = (e) => {
+  //   console.log(setShowname(e.target));
+  // }
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
 
@@ -81,51 +101,54 @@ const AddOrganisation = () => {
         justify={"center"}
         bg={useColorModeValue("gray.50", "gray.800")}
       >
-        <Stack
-          spacing={4}
-          w={"full"}
-          maxW={"md"}
-          bg={useColorModeValue("white", "gray.700")}
-          rounded={"xl"}
-          boxShadow={"lg"}
-          p={6}
-          my={12}
-        >
-          <FormControl
-            id="email"
-            isRequired>
-            <FormLabel>Organisation Name</FormLabel>
-            <Input
-              placeholder="Seat of wisdom presidium"
-              _placeholder={{ color: "gray.500" }}
-              type="text"
-              name="email"
-              value={email}
-              onChange={newOrganisation}
-            />
-          </FormControl>
-          <FormControl id="password">
-            <FormLabel>Image Url</FormLabel>
-            <Input
-              type="text"
-              name="password"
-              value={password}
-              onChange={newOrganisation}
-            />
-          </FormControl>
-          <Stack spacing={6}>
-            <Button
-              onClick={handleAddOrg}
-              bg={"blue.400"}
-              color={"white"}
-              _hover={{
-                bg: "blue.500",
-              }}
-            >
-              Submit
-            </Button>
+
+        <form onSubmit={handleSubmit(onSubmit)}>
+
+          <Stack
+            spacing={4}
+            w={"full"}
+            maxW={"md"}
+            bg={useColorModeValue("white", "gray.700")}
+            rounded={"xl"}
+            boxShadow={"lg"}
+            p={6}
+            my={12}
+          >
+            <FormControl
+              id="email"
+              isRequired>
+              <FormLabel>Organisation Name</FormLabel>
+              <Input
+                placeholder="Seat of wisdom presidium"
+                _placeholder={{ color: "gray.500" }}
+                type="name"
+                // onClick={handleClick}here
+                {...register("name", { required: true })}
+              />
+            </FormControl>
+            <FormControl id="password">
+              <FormLabel>Image Url</FormLabel>
+              <Input
+                type="imageURL"
+
+                {...register("imageURL", { required: true })}
+              />
+            </FormControl>
+            <Stack spacing={6}>
+              <Button
+                bg={"blue.400"}
+                color={"white"}
+                _hover={{
+                  bg: "blue.500",
+                }}
+                type="submit"
+              >
+                Submit
+              </Button>
+            </Stack>
           </Stack>
-        </Stack>
+        </form>
+
       </Flex>
     </Box >
   );

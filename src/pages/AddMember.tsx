@@ -17,12 +17,9 @@ const AddMember = () => {
 
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
+
   function newMember(e) {
-
-
     let input = e.target;
-
-
     if (input.name === "email") {
       setEmail(input.value)
     } else if (input.name === 'name') {
