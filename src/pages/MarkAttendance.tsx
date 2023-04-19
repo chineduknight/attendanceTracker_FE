@@ -10,14 +10,10 @@ import {
   InputLeftElement,
   Container,
 } from "@chakra-ui/react";
-import { useNavigate, useLocation } from "react-router-dom";
 
 import { nanoid } from "nanoid";
 
 const MarkAttendance = () => {
-  const { state } = useLocation();
-  console.log("ghty:", state);
-
   const members = [
     {
       name: "Alice Rose",

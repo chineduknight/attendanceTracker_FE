@@ -15,8 +15,8 @@ import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 const AddMember = () => {
 
-  const [email, setEmail] = useState("")
-  const [name, setName] = useState("")
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
 
   function newMember(e) {
     let input = e.target;
@@ -98,8 +98,6 @@ const AddMember = () => {
               w="full"
               mt="40px"
               onClick={() => {
-
-                console.log(`Add user with ${name} and ${email}`)
                 navigate(PROTECTED_PATHS.DASHBOARD)
               }
 
