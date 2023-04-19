@@ -45,8 +45,6 @@ const AddOrganisation = () => {
       imageURL: details.imageURL
     }
 
-    console.log(data.name);
-
     mutate({
       url: "/organisations",
       data
@@ -57,17 +55,10 @@ const AddOrganisation = () => {
   }
 
   const onSubmit: SubmitHandler<Inputs> = details => {
-    console.log(`the organisation registered with ${details.name} and ${details.imageURL}`);
     handleAddOrg(details)
   }
 
-  // onclick = () => console.log();
-
-  // here
-
-  // const handleClick = (e) => {
-  //   console.log(setShowname(e.target));
-  // }
+ 
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>

@@ -8,9 +8,10 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-// import { FaBook } from 'react-icons'
+import useGlobalStore from 'zStore';
 
 const Dashboard = () => {
+  const [org] = useGlobalStore(state=>[state.organisation])
   const navigate = useNavigate();
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -24,7 +25,7 @@ const Dashboard = () => {
           Attendance Tracker
         </Text>
       </Flex>
-      <Text>Organisation Name</Text>
+      <Text>{org.name}</Text>
       <HStack spacing="4" p="4" wrap="wrap">
         <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
           Add Member

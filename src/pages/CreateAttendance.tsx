@@ -82,7 +82,15 @@ const CreateAttendance = () => {
             <Button
               w="full"
               mt="40px"
+<<<<<<< HEAD:src/pages/CreateAttendance.tsx
               onClick={() => navigate(PROTECTED_PATHS.MARK_ATTENANCE)}
+=======
+              onClick={() => {
+                navigate(PROTECTED_PATHS.DASHBOARD)
+              }
+
+              }
+>>>>>>> minor modifications:src/pages/AddMember.tsx
               bg={"blue.400"}
               color={"white"}
               _hover={{

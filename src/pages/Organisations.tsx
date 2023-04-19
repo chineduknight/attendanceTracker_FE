@@ -4,14 +4,16 @@ import {
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useQueryWrapper } from 'services/api/apiHelper';
+import useGlobalStore from 'zStore';
 
 const OrgList = () => {
   const navigate = useNavigate();
 
   const { data } = useQueryWrapper(["all-organisations"], "/organisations");
-
-  function hndKini(userData) {
-    navigate(PROTECTED_PATHS.MARK_ATTENANCE, { state: userData })
+  const [updateOrg] = useGlobalStore(state=>[state.updateOrganisation])
+  const handleNavigation = (selectedOrg)=> {
+    updateOrg(selectedOrg);
+    navigate(PROTECTED_PATHS.DASHBOARD)
   }
 
   return (
@@ -45,7 +47,7 @@ const OrgList = () => {
               h="45px"
               objectFit="cover"
               borderRadius="50%"
-              onClick={() => { hndKini(org) }}
+              onClick={() => handleNavigation(org)}
             />
             <Text ml="4">
 

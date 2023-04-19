@@ -1,17 +1,17 @@
 {
   "organisations": [
     {
-      "id": 1,
+      "id": "AUOA7eQYNIrPdajtOtBRt",
       "name": "VOB Choir",
       "imageURL": "https://media.istockphoto.com/id/1416048929/photo/woman-working-on-laptop-online-checking-emails-and-planning-on-the-internet-while-sitting-in.jpg?s=612x612&w=0&k=20&c=mt-Bsap56B_7Lgx1fcLqFVXTeDbIOILVjTdOqrDS54s="
     },
     {
-      "id": 2,
+      "id": "24CVNXmEa-p58xJ1vggd9",
       "name": "Laity General",
       "imageURL": "https://media.istockphoto.com/id/1293502003/photo/good-looking-woman-enjoying-a-cup-of-coffee-while-relaxing-with-her-laptop-in-the-kitchen.jpg?s=2048x2048&w=is&k=20&c=1gDzT8VNPBXXYyHSAa5QSbGYEvryINcAQOkPicX0MGY="
     },
     {
-      "id": 3,
+      "id": "7a9MPfxo4hh9-X8fViXPM",
       "name": "Seat of wisdom",
       "imageURL": "raasdfasdfadsfasdf"
     },
@@ -24,28 +24,14 @@
       "id": "7fIyHqxUL_7QyP7Sk279I",
       "name": "test here",
       "imageURL": "has me"
-    },
-    {
-      "id": "7a9MPfxo4hh9-X8fViXPM",
-      "name": "Sochima",
-      "imageURL": "here now"
-    },
-    {
-      "id": "24CVNXmEa-p58xJ1vggd9",
-      "name": "Wendy Mendy",
-      "imageURL": "iuetst"
-    },
-    {
-      "id": "AUOA7eQYNIrPdajtOtBRt",
-      "name": "uihjokk",
-      "imageURL": "hhjkl"
     }
   ],
-  "comments": [
+  "members": [
     {
-      "id": 1,
-      "body": "some comment",
-      "postId": 1
+      "id": "asdfasdfasdfasdf",
+      "orgId": "AUOA7eQYNIrPdajtOtBRt",
+      "name": "John Doe",
+      "email": "joe@gmail.com"
     }
   ],
   "profile": {
