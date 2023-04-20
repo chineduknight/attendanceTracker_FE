@@ -28,6 +28,7 @@ const OrgList = () => {
         <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>+</Button>
       </Flex>
       <Stack
+        cursor='pointer'
         spacing={4}
         w={"full"}
         maxW={"md"}
@@ -39,10 +40,11 @@ const OrgList = () => {
         mx='auto'
       >
         {
-          (data?.data) ? <>{data?.data.map(org => <Flex key={org.id}
+          (data?.data) ? <>{data?.data.map((org) => <Flex key={org.id}
             alignItems="center"
           >
             <Image src={org.imageURL} alt='Dan Abramov'
+
               w="45px"
               h="45px"
               objectFit="cover"
