@@ -34,6 +34,44 @@
       "email": "joe@gmail.com"
     }
   ],
+  "users": [
+    {
+      "name": "Ejezie Bonave",
+      "attend": false
+    },
+    {
+      "name": "Isaiah Mensah",
+      "attend": true
+    },
+    {
+      "name": "Blessing Okolie",
+      "attend": false
+    },
+    {
+      "name": "Ejezie Bonave",
+      "attend": false
+    },
+    {
+      "name": "Muiz Tiamiyu",
+      "attend": true
+    },
+    {
+      "name": "Sochima Aristotle",
+      "attend": false
+    },
+    {
+      "name": "Aburo peace",
+      "attend": false
+    },
+    {
+      "name": "Ngozi Francis",
+      "attend": false
+    },
+    {
+      "name": "David Uchenna Okafor",
+      "attend": false
+    }
+  ],
   "profile": {
     "name": "typicode"
   }

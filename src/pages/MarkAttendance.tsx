@@ -12,6 +12,7 @@ import {
 } from "@chakra-ui/react";
 
 import { nanoid } from "nanoid";
+import { useQueryWrapper } from "services/api/apiHelper";
 
 const MarkAttendance = () => {
   const members = [
@@ -27,30 +28,7 @@ const MarkAttendance = () => {
       name: "Alice Peter",
       attend: true,
     },
-    {
-      name: "Ejezie Bonave",
-      attend: false,
-    },
-    {
-      name: "Isaiah Mensah",
-      attend: true,
-    },
-    {
-      name: "Blessing Okolie",
-      attend: false,
-    },
-    {
-      name: "Ejezie Bonave",
-      attend: false,
-    },
-    {
-      name: "Isaiah Mensah",
-      attend: true,
-    },
-    {
-      name: "Blessing Okolie",
-      attend: false,
-    },
+
   ];
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -66,7 +44,7 @@ const MarkAttendance = () => {
       </Flex>
       <Container>
         <Heading mt="4" fontSize="22px">
-          {/* {state.name} */}
+          {state.name}
         </Heading>
         <Heading mt="4" fontSize="22px">
           Members

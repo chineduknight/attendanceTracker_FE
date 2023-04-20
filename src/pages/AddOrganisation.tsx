@@ -16,7 +16,7 @@ import { FaArrowCircleLeft } from 'react-icons/fa'
 import { nanoid } from 'nanoid';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { queryClient } from 'services/api/apiHelper';
-// import { useState } from 'react'
+
 
 type Inputs = {
   name: string,
@@ -24,8 +24,6 @@ type Inputs = {
 }
 
 const AddOrganisation = () => {
-  // here
-  // const [showName, setShowName] = useState('')
 
   const navigate = useNavigate();
 
@@ -58,7 +56,6 @@ const AddOrganisation = () => {
     handleAddOrg(details)
   }
 
- 
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -113,7 +110,6 @@ const AddOrganisation = () => {
                 placeholder="Seat of wisdom presidium"
                 _placeholder={{ color: "gray.500" }}
                 type="name"
-                // onClick={handleClick}here
                 {...register("name", { required: true })}
               />
             </FormControl>
