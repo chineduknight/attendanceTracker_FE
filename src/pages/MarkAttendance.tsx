@@ -10,48 +10,40 @@ import {
   InputLeftElement,
   Container,
 } from "@chakra-ui/react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { nanoid } from "nanoid";
+import { postRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
+import { SubmitHandler, useForm } from "react-hook-form";
+
+type Inputs = {
+  tel: 'string'
+}
 
 const MarkAttendance = () => {
-  const members = [
-    {
-      name: "Alice Rose",
-      attend: true,
-    },
-    {
-      name: "Jude Nwaohiri",
-      attend: false,
-    },
-    {
-      name: "Alice Peter",
-      attend: true,
-    },
-    {
-      name: "Ejezie Bonave",
-      attend: false,
-    },
-    {
-      name: "Isaiah Mensah",
-      attend: true,
-    },
-    {
-      name: "Blessing Okolie",
-      attend: false,
-    },
-    {
-      name: "Ejezie Bonave",
-      attend: false,
-    },
-    {
-      name: "Isaiah Mensah",
-      attend: true,
-    },
-    {
-      name: "Blessing Okolie",
-      attend: false,
-    },
-  ];
+  const location = useLocation();
+
+  const { data } = useQueryWrapper(["all-members"], "/members");
+  const state = location.state
+
+
+
+  // function handleData(formData) {
+  //    navigate(PROTECTED_PATHS.DASHBOARD, { state: userData })
+
+  // }
+
+  const { register, handleSubmit } = useForm<Inputs>();
+  const onSubmit: SubmitHandler<Inputs> = formData => {
+    //add mouse event so that user can be found easily
+    // handleData(formData)
+  }
+
+  const result = data?.data
+
+
+
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -66,41 +58,54 @@ const MarkAttendance = () => {
       </Flex>
       <Container>
         <Heading mt="4" fontSize="22px">
-          {/* {state.name} */}
-        </Heading>
-        <Heading mt="4" fontSize="22px">
           Members
         </Heading>
-        <InputGroup mt="4">
-          <InputLeftElement
-            pointerEvents="none"
-          // children={<PhoneIcon color="gray.300" />}
-          />
-          <Input type="tel" placeholder="Phone number" />
-        </InputGroup>
-        <Box mt="4" overflow="scroll" maxHeight="300px">
-          {members.map((item) => (
+        <form onSubmit={handleSubmit(onSubmit)}>
+
+          <InputGroup mt="4">
+            <InputLeftElement
+              pointerEvents="none"
+            // children={<PhoneIcon color="gray.300" />}
+            />
+            <Input
+              type="tel"
+              placeholder="Phone number"
+              {...register('tel', { required: true })}
+            />
+          </InputGroup>
+          <Box mt="4" overflow="scroll" maxHeight="300px">
+            {
+              (result) && result.map((item) => (
+                <Button
+                  display="block"
+                  w="full"
+                  mt="3"
+                  variant="outline"
+                  key={nanoid()}
+                  bg={item.attend ? "green" : ""}
+                  color={item.attend ? "#fff" : ""}
+                >
+                  {item.name}
+                </Button>
+              ))}
+
+          </Box>
+          <Box>
             <Button
-              display="block"
+              type="submit"
               w="full"
-              mt="3"
-              variant="outline"
-              key={nanoid()}
-              bg={item.attend ? "green" : ""}
-              color={item.attend ? "#fff" : ""}
+              mt="4"
             >
-              {item.name}
+              Submit
             </Button>
-          ))}
-        </Box>
-        <Box>
-          <Button w="full" mt="4">
-            Submit
-          </Button>
-        </Box>
+          </Box>
+        </form>
       </Container>
     </Box>
   );
 };
 
 export default MarkAttendance;
+
+
+

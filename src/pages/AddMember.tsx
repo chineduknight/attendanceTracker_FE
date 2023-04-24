@@ -13,7 +13,38 @@ import { useState } from "react";
 import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { postRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
+
+type Inputs = {
+  name: 'string',
+  email: 'string'
+}
 const AddMember = () => {
+  const onSuccess = (data) => {
+    queryClient.invalidateQueries({ queryKey: ["all-members"] })
+  }
+
+
+  const { mutate } = useMutationWrapper(postRequest, onSuccess)
+
+
+  const handleAddMember = (formData) => {
+
+    const data = {
+      id: nanoid(),
+      name: formData.name,
+      email: formData.email
+    }
+    console.log(data.name);
+
+    mutate({
+      url: "/members",
+      data
+    })
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE)
+    console.log('this is  details', data);
+  }
+
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -69,6 +100,7 @@ const AddMember = () => {
       <Flex
         align={"center"}
         justify={"center"}
+
         bg={useColorModeValue("gray.50", "gray.800")}
       >
         <Stack
@@ -115,7 +147,7 @@ const AddMember = () => {
           </Box>
         </Stack>
       </Flex>
-    </Box>
+    </Box >
   );
 };
 

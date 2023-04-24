@@ -10,10 +10,9 @@ const OrgList = () => {
   const navigate = useNavigate();
 
   const { data } = useQueryWrapper(["all-organisations"], "/organisations");
-  const [updateOrg] = useGlobalStore(state=>[state.updateOrganisation])
-  const handleNavigation = (selectedOrg)=> {
-    updateOrg(selectedOrg);
-    navigate(PROTECTED_PATHS.DASHBOARD)
+
+  function handOrg(userData) {
+    navigate(PROTECTED_PATHS.DASHBOARD, { state: userData })
   }
 
   return (
@@ -41,13 +40,13 @@ const OrgList = () => {
         {
           (data?.data) ? <>{data?.data.map(org => <Flex key={org.id}
             alignItems="center"
+            onClick={() => { handOrg(org) }}
           >
             <Image src={org.imageURL} alt='Dan Abramov'
               w="45px"
               h="45px"
               objectFit="cover"
               borderRadius="50%"
-              onClick={() => handleNavigation(org)}
             />
             <Text ml="4">
 
