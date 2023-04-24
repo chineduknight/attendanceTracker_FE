@@ -9,11 +9,11 @@ import {
   Input,
   Stack,
 } from "@chakra-ui/react";
-import { useState } from "react";
+
 import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { postRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
+import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
 
 type Inputs = {
   name: 'string',

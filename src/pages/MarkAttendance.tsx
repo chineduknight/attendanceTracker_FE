@@ -10,10 +10,10 @@ import {
   InputLeftElement,
   Container,
 } from "@chakra-ui/react";
-import { useLocation, useNavigate } from "react-router-dom";
+
 
 import { nanoid } from "nanoid";
-import { postRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
+import { useQueryWrapper } from "services/api/apiHelper";
 import { SubmitHandler, useForm } from "react-hook-form";
 
 type Inputs = {
@@ -21,22 +21,18 @@ type Inputs = {
 }
 
 const MarkAttendance = () => {
-  const location = useLocation();
 
   const { data } = useQueryWrapper(["all-members"], "/members");
-  const state = location.state
 
 
 
-  // function handleData(formData) {
-  //    navigate(PROTECTED_PATHS.DASHBOARD, { state: userData })
 
-  // }
+
 
   const { register, handleSubmit } = useForm<Inputs>();
   const onSubmit: SubmitHandler<Inputs> = formData => {
     //add mouse event so that user can be found easily
-    // handleData(formData)
+
   }
 
   const result = data?.data
@@ -65,7 +61,7 @@ const MarkAttendance = () => {
           <InputGroup mt="4">
             <InputLeftElement
               pointerEvents="none"
-            // children={<PhoneIcon color="gray.300" />}
+
             />
             <Input
               type="tel"
