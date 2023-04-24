@@ -58,6 +58,7 @@ const CreateAttendance = () => {
       <Flex
         align={"center"}
         justify={"center"}
+
         bg={useColorModeValue("gray.50", "gray.800")}
       >
         <Stack
@@ -96,7 +97,7 @@ const CreateAttendance = () => {
           </Box>
         </Stack>
       </Flex>
-    </Box>
+    </Box >
   );
 };
 

@@ -39,7 +39,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "prepare": "husky install",
-    "file": "concurrently \"yarn start\" \"server.js\""
+    "script": "concurrently \"yarn start\" \"yarn run server\""
 
   },
   "eslintConfig": {
