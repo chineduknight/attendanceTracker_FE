@@ -13,6 +13,52 @@ import {
 import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
+
+type Inputs = {
+  name: 'string',
+  email: 'string'
+}
+const AddMember = () => {
+  const onSuccess = (data) => {
+    queryClient.invalidateQueries({ queryKey: ["all-members"] })
+  }
+
+
+  const { mutate } = useMutationWrapper(postRequest, onSuccess)
+
+
+  const handleAddMember = (formData) => {
+
+    const data = {
+      id: nanoid(),
+      name: formData.name,
+      email: formData.email
+    }
+
+
+    mutate({
+      url: "/members",
+      data,
+
+    })
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE)
+    console.log('this is  details', data);
+  }
+
+
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+
+  function newMember(e) {
+    let input = e.target;
+    if (input.name === "email") {
+      setEmail(input.value)
+    } else if (input.name === 'name') {
+      setName(input.value)
+    }
+
+  }
 
 const CreateAttendance = () => {
   const navigate = useNavigate();

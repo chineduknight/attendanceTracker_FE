@@ -17,7 +17,7 @@ import { useQueryWrapper } from "services/api/apiHelper";
 import { SubmitHandler, useForm } from "react-hook-form";
 
 type Inputs = {
-  tel: 'string'
+  name: 'string'
 }
 
 const MarkAttendance = () => {
@@ -36,9 +36,6 @@ const MarkAttendance = () => {
   }
 
   const result = data?.data
-
-
-
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -64,9 +61,9 @@ const MarkAttendance = () => {
 
             />
             <Input
-              type="tel"
-              placeholder="Phone number"
-              {...register('tel', { required: true })}
+              type="name"
+              placeholder="Search member"
+              {...register('name', { required: true })}
             />
           </InputGroup>
           <Box mt="4" overflow="scroll" maxHeight="300px">
