@@ -35,11 +35,12 @@ const AddMember = () => {
       name: formData.name,
       email: formData.email
     }
-    console.log(data.name);
+
 
     mutate({
       url: "/members",
-      data
+      data,
+
     })
     navigate(PROTECTED_PATHS.MARK_ATTENANCE)
     console.log('this is  details', data);

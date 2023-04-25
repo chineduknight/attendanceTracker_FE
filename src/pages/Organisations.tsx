@@ -1,5 +1,12 @@
+
 import {
-  Box, Flex, useColorModeValue, Button, Text, Stack, Image
+  Box,
+  Flex,
+  useColorModeValue,
+  Button,
+  Text,
+  Stack,
+  Image
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -9,10 +16,27 @@ import useGlobalStore from 'zStore';
 const OrgList = () => {
   const navigate = useNavigate();
 
-  const { data } = useQueryWrapper(["all-organisations"], "/organisations");
+  const onSuccess = (data) => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["all-organistions"] });
+  };
+
+  const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
+
+  const { data, refetch } = useQueryWrapper(
+    ["all-organisations"],
+    "/organisations"
+  );
+
+  function handleDelete(orgDelete, e) {
+    mutate({
+      url: `/organisations/${orgDelete.id}`
+    });
+    e.stopPropagation();
+  }
 
   function handOrg(userData) {
-    navigate(PROTECTED_PATHS.DASHBOARD, { state: userData })
+    navigate(PROTECTED_PATHS.DASHBOARD, { state: userData });
   }
 
   return (
@@ -35,7 +59,7 @@ const OrgList = () => {
         boxShadow={"lg"}
         p={6}
         my={12}
-        mx='auto'
+        mx="auto"
       >
         {
           (data?.data) ? <>{data?.data.map(org => <Flex key={org.id}
@@ -57,7 +81,6 @@ const OrgList = () => {
             <Text ml="4" fontWeight='bold'>No organisation yet</Text>
         }
       </Stack>
-
     </Box>
   );
 };
