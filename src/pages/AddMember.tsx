@@ -20,7 +20,7 @@ type Inputs = {
   email: 'string'
 }
 const AddMember = () => {
-  const onSuccess = (data) => {
+  const onSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ["all-members"] })
   }
 
