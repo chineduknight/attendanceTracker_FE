@@ -43,10 +43,10 @@ const AddMember = () => {
 
     })
     navigate(PROTECTED_PATHS.MARK_ATTENANCE)
-    console.log('this is  details', data);
   }
 
 
+<<<<<<< HEAD
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
 
@@ -58,6 +58,12 @@ const AddMember = () => {
       setName(input.value)
     }
 
+=======
+  const navigate = useNavigate();
+  const { register, handleSubmit } = useForm<Inputs>();
+  const onSubmit: SubmitHandler<Inputs> = formData => {
+    handleAddMember(formData)
+>>>>>>> Finished on the minor edits
   }
 
 const CreateAttendance = () => {
