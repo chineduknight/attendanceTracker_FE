@@ -10,8 +10,14 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { useQueryWrapper } from 'services/api/apiHelper';
-import useGlobalStore from 'zStore';
+import {
+  deleteRequest,
+  queryClient,
+  useMutationWrapper,
+  useQueryWrapper
+} from "services/api/apiHelper";
+import { FaTrashAlt } from "react-icons/fa";
+
 
 const OrgList = () => {
   const navigate = useNavigate();
@@ -61,25 +67,44 @@ const OrgList = () => {
         my={12}
         mx="auto"
       >
-        {
-          (data?.data) ? <>{data?.data.map(org => <Flex key={org.id}
-            alignItems="center"
-            onClick={() => { handOrg(org) }}
-          >
-            <Image src={org.imageURL} alt='Dan Abramov'
-              w="45px"
-              h="45px"
-              objectFit="cover"
-              borderRadius="50%"
-            />
-            <Text ml="4">
-
-              {org.name}
-            </Text>
-          </Flex>)}</> :
-
-            <Text ml="4" fontWeight='bold'>No organisation yet</Text>
-        }
+        {data?.data?.length ? (
+          <>
+            {data?.data.map((org) => (
+              <Flex
+                key={org.id}
+                cursor="pointer"
+                alignItems="center"
+                borderRadius="10px"
+                justifyContent="space-between"
+                p="4"
+                mb="10px"
+                bg="rebeccapurple"
+                // bg="#C3CDE6"
+                color="#fff"
+                onClick={() => {
+                  handOrg(org);
+                }}
+              >
+                <Image
+                  src={org.imageURL}
+                  alt="Dan Abramov"
+                  w="45px"
+                  h="45px"
+                  objectFit="cover"
+                  borderRadius="50%"
+                />
+                <Text ml="4">{org.name}</Text>
+                <Button onClick={(e) => handleDelete(org, e)} bg="#D30000">
+                  <FaTrashAlt /> Delete
+                </Button>
+              </Flex>
+            ))}
+          </>
+        ) : (
+          <Text ml="4" fontWeight="bold">
+            No organisation yet
+          </Text>
+        )}
       </Stack>
     </Box>
   );

@@ -50,6 +50,7 @@ const MarkAttendance = () => {
         </Text>
       </Flex>
       <Container>
+
         <Heading mt="4" fontSize="22px">
           Members
         </Heading>
@@ -99,6 +100,5 @@ const MarkAttendance = () => {
 };
 
 export default MarkAttendance;
-
 
 

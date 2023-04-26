@@ -43,10 +43,7 @@ const AddOrganisation = () => {
       imageURL: "https://picsum.photos/200/300"
     }
 
-<<<<<<< HEAD
-=======
 
->>>>>>> Finished on the minor edits
     mutate({
       url: "/organisations",
       data
