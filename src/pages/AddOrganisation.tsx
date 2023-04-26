@@ -40,9 +40,13 @@ const AddOrganisation = () => {
     const data = {
       id: nanoid(),
       name: details.name,
-      imageURL: details.imageURL
+      imageURL: "https://picsum.photos/200/300"
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> Finished on the minor edits
     mutate({
       url: "/organisations",
       data

@@ -22,7 +22,9 @@ type Inputs = {
 
 const Login = () => {
     const { register, handleSubmit } = useForm<Inputs>();
-    const onSubmit: SubmitHandler<Inputs> = data => console.log(`user logged in with ${data.email} and ${data.password}`);
+    const onSubmit: SubmitHandler<Inputs> = data =>{
+        // nothing here for now
+    }
 
     return (
         <Flex
