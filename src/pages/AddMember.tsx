@@ -1,5 +1,5 @@
 import { Box, Flex } from "@chakra-ui/layout";
-
+import { useForm, SubmitHandler } from "react-hook-form";
 import {
   useColorModeValue,
   Text,
@@ -46,50 +46,11 @@ const AddMember = () => {
   }
 
 
-<<<<<<< HEAD
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-
-  function newMember(e) {
-    let input = e.target;
-    if (input.name === "email") {
-      setEmail(input.value)
-    } else if (input.name === 'name') {
-      setName(input.value)
-    }
-
-=======
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm<Inputs>();
   const onSubmit: SubmitHandler<Inputs> = formData => {
     handleAddMember(formData)
->>>>>>> Finished on the minor edits
   }
-
-  const [fields] = useState([
-    {
-      id: nanoid(),
-      title: "name",
-      type: "email",
-      value: name,
-      required: true,
-      name: 'name',
-      onChange: newMember
-    },
-    {
-      id: nanoid(),
-      title: "email address",
-      type: "text",
-      value: email,
-      required: true,
-      name: 'email',
-      onChange: newMember
-    },
-  ]);
-
-
-
-  const navigate = useNavigate();
 
 
   return (
@@ -104,58 +65,70 @@ const AddMember = () => {
           Add Member
         </Text>
       </Flex>
+
       <Flex
+        mt='40px'
         align={"center"}
         justify={"center"}
 
         bg={useColorModeValue("gray.50", "gray.800")}
       >
-        <Stack
-          spacing={4}
-          w={"full"}
-          maxW={"md"}
-          bg={useColorModeValue("white", "gray.700")}
-          rounded={"xl"}
-          boxShadow={"lg"}
-          p={6}
-        >
-          {fields.map((field) => (
-            <FormControl key={field.id} isRequired={field.required}>
-              <FormLabel textTransform="capitalize" mb="0">
-                {field.title}
-              </FormLabel>
-              <Input type={field.type}
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <Stack
+            spacing={4}
+            w={"full"}
+            maxW={"md"}
+            bg={useColorModeValue("white", "gray.700")}
+            rounded={"xl"}
+            boxShadow={"lg"}
+            p={6}
+          >
 
-                name={field.name}
-                onChange={field.onChange}
+            <FormControl
+              id="name"
+              isRequired>
+              <FormLabel> Name</FormLabel>
+              <Input
+                type='name'
+                {...register("name", { required: true })}
               />
             </FormControl>
-          ))}
 
-          <Box>
-            <Button
-              w="full"
-              mt="40px"
-              onClick={() => {
-                navigate(PROTECTED_PATHS.DASHBOARD)
-              }
+            <FormControl
+              id="email"
+              isRequired>
+              <FormLabel>Email</FormLabel>
+              <Input
+                type='email'
+                {...register("email", { required: true })}
+              />
+            </FormControl>
 
-              }
-              bg={"blue.400"}
-              color={"white"}
-              _hover={{
-                bg: "blue.500",
-              }}
-              fontWeight="bold"
-              fontSize="15px"
-            >
-              Submit
-            </Button>
-          </Box>
-        </Stack>
+
+            <Box>
+              <Button
+                w="full"
+                mt="40px"
+
+                bg={"blue.400"}
+                color={"white"}
+                _hover={{
+                  bg: "blue.500",
+                }}
+                fontWeight="bold"
+                fontSize="15px"
+                type='submit'
+              >
+                Submit
+              </Button>
+            </Box>
+          </Stack>
+        </form>
       </Flex>
     </Box >
   );
 };
 
 export default AddMember;
+
+
