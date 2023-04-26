@@ -11,47 +11,32 @@ import {
   Container,
 } from "@chakra-ui/react";
 
+
 import { nanoid } from "nanoid";
+import { useQueryWrapper } from "services/api/apiHelper";
+import { SubmitHandler, useForm } from "react-hook-form";
+
+type Inputs = {
+  name: 'string'
+}
 
 const MarkAttendance = () => {
-  const members = [
-    {
-      name: "Alice Rose",
-      attend: true,
-    },
-    {
-      name: "Jude Nwaohiri",
-      attend: false,
-    },
-    {
-      name: "Alice Peter",
-      attend: true,
-    },
-    {
-      name: "Ejezie Bonave",
-      attend: false,
-    },
-    {
-      name: "Isaiah Mensah",
-      attend: true,
-    },
-    {
-      name: "Blessing Okolie",
-      attend: false,
-    },
-    {
-      name: "Ejezie Bonave",
-      attend: false,
-    },
-    {
-      name: "Isaiah Mensah",
-      attend: true,
-    },
-    {
-      name: "Blessing Okolie",
-      attend: false,
-    },
-  ];
+
+  const { data } = useQueryWrapper(["all-members"], "/members");
+
+
+
+
+
+
+  const { register, handleSubmit } = useForm<Inputs>();
+  const onSubmit: SubmitHandler<Inputs> = formData => {
+    //add mouse event so that user can be found easily
+
+  }
+
+  const result = data?.data
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -65,42 +50,55 @@ const MarkAttendance = () => {
         </Text>
       </Flex>
       <Container>
-        <Heading mt="4" fontSize="22px">
-          {/* {state.name} */}
-        </Heading>
+
         <Heading mt="4" fontSize="22px">
           Members
         </Heading>
-        <InputGroup mt="4">
-          <InputLeftElement
-            pointerEvents="none"
-          // children={<PhoneIcon color="gray.300" />}
-          />
-          <Input type="tel" placeholder="Phone number" />
-        </InputGroup>
-        <Box mt="4" overflow="scroll" maxHeight="300px">
-          {members.map((item) => (
+        <form onSubmit={handleSubmit(onSubmit)}>
+
+          <InputGroup mt="4">
+            <InputLeftElement
+              pointerEvents="none"
+
+            />
+            <Input
+              type="name"
+              placeholder="Search member"
+              {...register('name', { required: true })}
+            />
+          </InputGroup>
+          <Box mt="4" overflow="scroll" maxHeight="300px">
+            {
+              (result) && result.map((item) => (
+                <Button
+                  display="block"
+                  w="full"
+                  mt="3"
+                  variant="outline"
+                  key={nanoid()}
+                  bg={item.attend ? "green" : ""}
+                  color={item.attend ? "#fff" : ""}
+                >
+                  {item.name}
+                </Button>
+              ))}
+
+          </Box>
+          <Box>
             <Button
-              display="block"
+              type="submit"
               w="full"
-              mt="3"
-              variant="outline"
-              key={nanoid()}
-              bg={item.attend ? "green" : ""}
-              color={item.attend ? "#fff" : ""}
+              mt="4"
             >
-              {item.name}
+              Submit
             </Button>
-          ))}
-        </Box>
-        <Box>
-          <Button w="full" mt="4">
-            Submit
-          </Button>
-        </Box>
+          </Box>
+        </form>
       </Container>
     </Box>
   );
 };
 
 export default MarkAttendance;
+
+
