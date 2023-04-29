@@ -21,10 +21,8 @@ type Inputs = {
 
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<any>([]);
-  console.log("allMembers:", allMembers)
 
   const onSuccess = (data) => {
-    console.log("data:", data.data)
     const members = data.data;
     const membersWithAttendStatus = members.map(member => {
       return {
@@ -34,7 +32,6 @@ const MarkAttendance = () => {
     }
 
     )
-    console.log("membersWithAttendStatus:", membersWithAttendStatus)
     setAllMembers(membersWithAttendStatus)
   }
 
@@ -65,8 +62,7 @@ const MarkAttendance = () => {
 
     }
   }
-  // const allMembers = data?.data
-  // console.log("allMembers:", allMembers)
+
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -94,7 +90,6 @@ const MarkAttendance = () => {
             <Input
               type="name"
               placeholder="Search member"
-              // onChange={(e)=>console.log(e)}
               {...register('name', { required: true })}
             />
           </InputGroup>
