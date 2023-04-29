@@ -73,18 +73,21 @@ const OrgList = () => {
               <Flex
                 key={org.id}
                 cursor="pointer"
-                alignItems="center"
                 borderRadius="10px"
+                alignItems="center"
                 justifyContent="space-between"
+               
                 p="4"
                 mb="10px"
-                bg="rebeccapurple"
+                // bg="rebeccapurple"
                 // bg="#C3CDE6"
-                color="#fff"
+                border="1px solid rebeccapurple"
+                // color="#fff"
                 onClick={() => {
                   handOrg(org);
                 }}
               >
+                <Flex alignItems="center">
                 <Image
                   src={org.imageURL}
                   alt="Dan Abramov"
@@ -93,9 +96,10 @@ const OrgList = () => {
                   objectFit="cover"
                   borderRadius="50%"
                 />
-                <Text ml="4">{org.name}</Text>
+                <Text ml="4"  textAlign="left"> {org.name}</Text>
+                </Flex>
                 <Button onClick={(e) => handleDelete(org, e)} bg="#D30000">
-                  <FaTrashAlt /> Delete
+                  <FaTrashAlt color="#fff"/> 
                 </Button>
               </Flex>
             ))}
