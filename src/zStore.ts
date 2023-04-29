@@ -1,8 +1,19 @@
-import {create} from "zustand";
+import { create } from "zustand";
+
+type currentAttendanceType = {
+  name: string;
+  category: string;
+  subCategory: string;
+  date: Date
+  members: Array<any>
+}
+
 interface GlobalStoreState {
   organisation: any;
   updateOrganisation: (products: any) => void;
-  
+
+  currentAttendance: currentAttendanceType;
+  updateCurrentAttendance: (products: any) => void;
 }
 
 
@@ -14,7 +25,17 @@ const globalStore = <F extends Function>(set: F) => ({
   updateOrganisation: (organisation: any) => {
     set({ organisation });
   },
- 
+  currentAttendance: {
+    name: "",
+    category: "",
+    subCategory: "",
+    date: new Date(),
+    members: []
+  },
+  updateCurrentAttendance: (currentAttendance: currentAttendanceType) => {
+    set({ currentAttendance });
+  },
+
 });
 
 

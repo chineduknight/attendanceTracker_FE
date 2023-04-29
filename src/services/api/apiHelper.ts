@@ -59,12 +59,14 @@ export const useMutationWrapper = (makeAPICall: any, onSuccess?: any, onError?: 
   });
 };
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 1000 * 600, // this is in millisecond
-      retry: 0,
-    },
-  },
-});
+// export const queryClient = new QueryClient({
+//   defaultOptions: {
+//     queries: {
+//       refetchOnWindowFocus: false,
+//       staleTime: 1000 * 600, // this is in millisecond
+//       retry: 0,
+//     },
+//   },
+// });
+
+export const queryClient = new QueryClient({});

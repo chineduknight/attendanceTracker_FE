@@ -11,8 +11,7 @@ import {
   Container,
 } from "@chakra-ui/react";
 
-
-import { nanoid } from "nanoid";
+import { useState } from 'react'
 import { useQueryWrapper } from "services/api/apiHelper";
 import { SubmitHandler, useForm } from "react-hook-form";
 
@@ -21,13 +20,27 @@ type Inputs = {
 }
 
 const MarkAttendance = () => {
+  const [allMembers, setAllMembers] = useState<any>([]);
+  console.log("allMembers:", allMembers)
 
-  const { data } = useQueryWrapper(["all-members"], "/members");
+  const onSuccess = (data) => {
+    console.log("data:", data.data)
+    const members = data.data;
+    const membersWithAttendStatus = members.map(member => {
+      return {
+        ...member,
+        attend: false
+      }
+    }
 
+    )
+    console.log("membersWithAttendStatus:", membersWithAttendStatus)
+    setAllMembers(membersWithAttendStatus)
+  }
 
-
-
-
+  useQueryWrapper(["all-members"], "/members", {
+    onSuccess
+  });
 
   const { register, handleSubmit } = useForm<Inputs>();
   const onSubmit: SubmitHandler<Inputs> = formData => {
@@ -35,7 +48,25 @@ const MarkAttendance = () => {
 
   }
 
-  const result = data?.data
+  const updateAttendance = (userId) => {
+    for (let index = 0; index < allMembers.length; index++) {
+      let member = allMembers[index];
+      const tempMembers = allMembers;
+      const isUserToUpdate = member.id === userId;
+      if (isUserToUpdate) {
+      
+        tempMembers[index] = {
+            ...member,
+          attend:!member.attend
+        };
+        setAllMembers([...tempMembers]);
+        break;
+      }
+
+    }
+  }
+  // const allMembers = data?.data
+  // console.log("allMembers:", allMembers)
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -55,7 +86,6 @@ const MarkAttendance = () => {
           Members
         </Heading>
         <form onSubmit={handleSubmit(onSubmit)}>
-
           <InputGroup mt="4">
             <InputLeftElement
               pointerEvents="none"
@@ -64,36 +94,39 @@ const MarkAttendance = () => {
             <Input
               type="name"
               placeholder="Search member"
+              // onChange={(e)=>console.log(e)}
               {...register('name', { required: true })}
             />
           </InputGroup>
-          <Box mt="4" overflow="scroll" maxHeight="300px">
-            {
-              (result) && result.map((item) => (
-                <Button
-                  display="block"
-                  w="full"
-                  mt="3"
-                  variant="outline"
-                  key={nanoid()}
-                  bg={item.attend ? "green" : ""}
-                  color={item.attend ? "#fff" : ""}
-                >
-                  {item.name}
-                </Button>
-              ))}
-
-          </Box>
-          <Box>
-            <Button
-              type="submit"
-              w="full"
-              mt="4"
-            >
-              Submit
-            </Button>
-          </Box>
         </form>
+        <Box mt="4" overflow="scroll" maxHeight="300px">
+          {
+          allMembers &&   allMembers.map((item) => (
+              <Button
+                variant="unstyled"
+                onClick={() => updateAttendance(item.id)}
+                display="block"
+                w="full"
+                mt="3"
+                key={item.id}
+                bg={item.attend ? "green" : ""}
+                color={item.attend ? "#fff" : ""}
+              >
+                {item.name}
+              </Button>
+            ))}
+
+        </Box>
+        <Box>
+          <Button
+            type="submit"
+            w="full"
+            mt="4"
+          >
+            Submit
+          </Button>
+        </Box>
+
       </Container>
     </Box>
   );
