@@ -54,7 +54,7 @@ const OrgList = () => {
         p="4"
       >
         <Text color="#fff">Attendance Tracker</Text>
-        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>+</Button>
+        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>+ Add Org</Button>
       </Flex>
       <Stack
         spacing={4}
@@ -76,30 +76,27 @@ const OrgList = () => {
                 borderRadius="10px"
                 alignItems="center"
                 justifyContent="space-between"
-               
+
                 p="4"
                 mb="10px"
-                // bg="rebeccapurple"
-                // bg="#C3CDE6"
                 border="1px solid rebeccapurple"
-                // color="#fff"
                 onClick={() => {
                   handOrg(org);
                 }}
               >
                 <Flex alignItems="center">
-                <Image
-                  src={org.imageURL}
-                  alt="Dan Abramov"
-                  w="45px"
-                  h="45px"
-                  objectFit="cover"
-                  borderRadius="50%"
-                />
-                <Text ml="4"  textAlign="left"> {org.name}</Text>
+                  <Image
+                    src={org.imageURL}
+                    alt="Dan Abramov"
+                    w="45px"
+                    h="45px"
+                    objectFit="cover"
+                    borderRadius="50%"
+                  />
+                  <Text ml="4" textAlign="left"> {org.name}</Text>
                 </Flex>
                 <Button onClick={(e) => handleDelete(org, e)} bg="#D30000">
-                  <FaTrashAlt color="#fff"/> 
+                  <FaTrashAlt color="#fff" />
                 </Button>
               </Flex>
             ))}
