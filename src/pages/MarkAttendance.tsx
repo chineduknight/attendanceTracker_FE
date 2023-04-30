@@ -51,10 +51,10 @@ const MarkAttendance = () => {
       const tempMembers = allMembers;
       const isUserToUpdate = member.id === userId;
       if (isUserToUpdate) {
-      
+
         tempMembers[index] = {
-            ...member,
-          attend:!member.attend
+          ...member,
+          attend: !member.attend
         };
         setAllMembers([...tempMembers]);
         break;
@@ -96,13 +96,14 @@ const MarkAttendance = () => {
         </form>
         <Box mt="4" overflow="scroll" maxHeight="300px">
           {
-          allMembers &&   allMembers.map((item) => (
+            allMembers && allMembers.map((item) => (
               <Button
                 variant="unstyled"
                 onClick={() => updateAttendance(item.id)}
                 display="block"
                 w="full"
                 mt="3"
+                border="1px solid green"
                 key={item.id}
                 bg={item.attend ? "green" : ""}
                 color={item.attend ? "#fff" : ""}
