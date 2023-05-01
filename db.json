@@ -233,6 +233,51 @@
           "attend": true
         }
       ]
+    },
+    {
+      "id": "VFUHqtmq2hZoDfh_KMDNI",
+      "name": "Jordan Suarez",
+      "category": "Velit ut veritatis a",
+      "subCategory": "Suscipit odio Nam es",
+      "date": "1986-06-07",
+      "members": [
+        {
+          "id": "hfGNKq8_Bm8RkGmpGHlIg",
+          "name": "sage feast",
+          "email": "sage@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "6ByJbrW6mhWsR060QoFYt",
+          "name": "Carlo Acutis",
+          "email": "geny@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "i_fB-ZZS_pLkS4PS36xLH",
+          "name": "Geny Wesley",
+          "email": "jill@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "Xy-P24uFf56bCp-90LiPD",
+          "name": "Wendy Mendy",
+          "email": "acutisaint@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "VSYCLnmF6tczxFQkLE5V5",
+          "name": "Felix Mendelssohn",
+          "email": "sdfs@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "z3HuKvvtvl2gHdxw7__Dl",
+          "name": "Isaiah",
+          "email": "test@gmail.com",
+          "attend": false
+        }
+      ]
     }
   ]
 }
