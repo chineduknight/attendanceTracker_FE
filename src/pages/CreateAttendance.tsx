@@ -13,17 +13,17 @@ import {
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useForm, SubmitHandler } from "react-hook-form"
-
-type Inputs = {
-  name: string,
-  category: string,
-  sub_category: string,
-  date: number
-}
+import useGlobalStore, { currentAttendanceType } from 'zStore';
 
 const CreateAttendance = () => {
-  const { register, handleSubmit } = useForm<Inputs>();
-  const onSubmit: SubmitHandler<Inputs> = data => console.log(data);
+  const { register, handleSubmit } = useForm<currentAttendanceType>();
+  const [updateCurrentAttendance] = useGlobalStore(state =>[state.updateCurrentAttendance])
+  const onSubmit: SubmitHandler<currentAttendanceType> = data => {
+    console.log(data);
+    updateCurrentAttendance(data)
+   navigate(PROTECTED_PATHS.MARK_ATTENANCE)
+  
+  }
 
   const navigate = useNavigate();
 
@@ -56,32 +56,10 @@ const CreateAttendance = () => {
           p={6}
         >
           <form onSubmit={handleSubmit(onSubmit)}>
-
-            {/* {fields.map((field) => (
-              <FormControl key={field.id} isRequired={field.required}>
-                <FormLabel textTransform="capitalize" mb="0">
-                  {field.title}
-                </FormLabel>
-                <Input type={field.type} />
-              </FormControl>
-            ))} */}
-            {/* <input
-              type="name"
-              {...register("name", { required: true })} />
-            <input
-              type="category"
-              {...register("category", { required: true })} />
-            <input
-              type="sub_category"
-              {...register("sub_category", { required: true })} />
-            <input
-              type="date"
-              {...register("date", { required: true })} /> */}
             <FormControl id="name">
-              <FormLabel>name</FormLabel>
+              <FormLabel>Name</FormLabel>
               <Input
                 type="name"
-
                 {...register("name", { required: true })}
               />
             </FormControl>
@@ -100,7 +78,7 @@ const CreateAttendance = () => {
               <Input
                 type="sub_category"
 
-                {...register("sub_category", { required: true })}
+                {...register("subCategory", { required: true })}
               />
 
             </FormControl>
@@ -118,7 +96,6 @@ const CreateAttendance = () => {
               <Button
                 w="full"
                 mt="40px"
-                onClick={() => navigate(PROTECTED_PATHS.MARK_ATTENANCE)}
                 bg={"blue.400"}
                 color={"white"}
                 _hover={{

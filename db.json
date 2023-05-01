@@ -53,7 +53,186 @@
       "email": "test@gmail.com"
     }
   ],
-  "profile": {
-    "name": "typicode"
-  }
+  "attendance-register": [
+    {
+      "id": "ecM1feP0DckALZoNmlYVX",
+      "name": "Melanie Vang",
+      "category": "Ipsam at labore alia",
+      "subCategory": "A voluptates dolore ",
+      "date": "1982-07-27",
+      "members": [
+        {
+          "id": "hfGNKq8_Bm8RkGmpGHlIg",
+          "name": "sage feast",
+          "email": "sage@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "6ByJbrW6mhWsR060QoFYt",
+          "name": "Carlo Acutis",
+          "email": "geny@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "i_fB-ZZS_pLkS4PS36xLH",
+          "name": "Geny Wesley",
+          "email": "jill@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "Xy-P24uFf56bCp-90LiPD",
+          "name": "Wendy Mendy",
+          "email": "acutisaint@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "VSYCLnmF6tczxFQkLE5V5",
+          "name": "Felix Mendelssohn",
+          "email": "sdfs@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "z3HuKvvtvl2gHdxw7__Dl",
+          "name": "Isaiah",
+          "email": "test@gmail.com",
+          "attend": false
+        }
+      ]
+    },
+    {
+      "id": "rDfokcr9ytDbT1cvCkt7w",
+      "name": "Melanie Vang",
+      "category": "Ipsam at labore alia",
+      "subCategory": "A voluptates dolore ",
+      "date": "1982-07-27",
+      "members": [
+        {
+          "id": "hfGNKq8_Bm8RkGmpGHlIg",
+          "name": "sage feast",
+          "email": "sage@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "6ByJbrW6mhWsR060QoFYt",
+          "name": "Carlo Acutis",
+          "email": "geny@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "i_fB-ZZS_pLkS4PS36xLH",
+          "name": "Geny Wesley",
+          "email": "jill@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "Xy-P24uFf56bCp-90LiPD",
+          "name": "Wendy Mendy",
+          "email": "acutisaint@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "VSYCLnmF6tczxFQkLE5V5",
+          "name": "Felix Mendelssohn",
+          "email": "sdfs@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "z3HuKvvtvl2gHdxw7__Dl",
+          "name": "Isaiah",
+          "email": "test@gmail.com",
+          "attend": true
+        }
+      ]
+    },
+    {
+      "id": "McAot7pzzZJnCERPl-OT7",
+      "name": "Melanie Vang",
+      "category": "Ipsam at labore alia",
+      "subCategory": "A voluptates dolore ",
+      "date": "1982-07-27",
+      "members": [
+        {
+          "id": "hfGNKq8_Bm8RkGmpGHlIg",
+          "name": "sage feast",
+          "email": "sage@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "6ByJbrW6mhWsR060QoFYt",
+          "name": "Carlo Acutis",
+          "email": "geny@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "i_fB-ZZS_pLkS4PS36xLH",
+          "name": "Geny Wesley",
+          "email": "jill@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "Xy-P24uFf56bCp-90LiPD",
+          "name": "Wendy Mendy",
+          "email": "acutisaint@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "VSYCLnmF6tczxFQkLE5V5",
+          "name": "Felix Mendelssohn",
+          "email": "sdfs@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "z3HuKvvtvl2gHdxw7__Dl",
+          "name": "Isaiah",
+          "email": "test@gmail.com",
+          "attend": true
+        }
+      ]
+    },
+    {
+      "id": "5tBZ6RODpvONkKtqQoaGo",
+      "name": "Melanie Vang",
+      "category": "Ipsam at labore alia",
+      "subCategory": "A voluptates dolore ",
+      "date": "1982-07-27",
+      "members": [
+        {
+          "id": "hfGNKq8_Bm8RkGmpGHlIg",
+          "name": "sage feast",
+          "email": "sage@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "6ByJbrW6mhWsR060QoFYt",
+          "name": "Carlo Acutis",
+          "email": "geny@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "i_fB-ZZS_pLkS4PS36xLH",
+          "name": "Geny Wesley",
+          "email": "jill@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "Xy-P24uFf56bCp-90LiPD",
+          "name": "Wendy Mendy",
+          "email": "acutisaint@gmail.com",
+          "attend": true
+        },
+        {
+          "id": "VSYCLnmF6tczxFQkLE5V5",
+          "name": "Felix Mendelssohn",
+          "email": "sdfs@gmail.com",
+          "attend": false
+        },
+        {
+          "id": "z3HuKvvtvl2gHdxw7__Dl",
+          "name": "Isaiah",
+          "email": "test@gmail.com",
+          "attend": true
+        }
+      ]
+    }
+  ]
 }
