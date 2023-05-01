@@ -19,7 +19,6 @@ const CreateAttendance = () => {
   const { register, handleSubmit } = useForm<currentAttendanceType>();
   const [updateCurrentAttendance] = useGlobalStore(state =>[state.updateCurrentAttendance])
   const onSubmit: SubmitHandler<currentAttendanceType> = data => {
-    console.log(data);
     updateCurrentAttendance(data)
    navigate(PROTECTED_PATHS.MARK_ATTENANCE)
   
