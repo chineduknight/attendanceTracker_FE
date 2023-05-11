@@ -12,8 +12,13 @@ import {
 } from "@chakra-ui/react";
 
 import { useState } from 'react'
-import { useQueryWrapper } from "services/api/apiHelper";
+import { postRequest, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
 import { SubmitHandler, useForm } from "react-hook-form";
+// import { queryClient } from 'services/api/apiHelper';
+import useGlobalStore from 'zStore';
+import { nanoid } from 'nanoid';
+import { useNavigate } from 'react-router-dom';
+import { PROTECTED_PATHS } from 'routes/pagePath';
 
 type Inputs = {
   name: 'string'
@@ -21,6 +26,7 @@ type Inputs = {
 
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<any>([]);
+  const [currentAttendance] = useGlobalStore(state =>[state.currentAttendance])
 
   const onSuccess = (data) => {
     const members = data.data;
@@ -51,10 +57,10 @@ const MarkAttendance = () => {
       const tempMembers = allMembers;
       const isUserToUpdate = member.id === userId;
       if (isUserToUpdate) {
-      
+
         tempMembers[index] = {
-            ...member,
-          attend:!member.attend
+          ...member,
+          attend: !member.attend
         };
         setAllMembers([...tempMembers]);
         break;
@@ -62,7 +68,26 @@ const MarkAttendance = () => {
 
     }
   }
+  const navigate = useNavigate();
 
+  const onSubmitSuccess = () => {
+    navigate(PROTECTED_PATHS.DASHBOARD)
+  
+  }
+
+  const { mutate } = useMutationWrapper(postRequest, onSubmitSuccess)
+
+const sendAttandanceToAPI = ()=>{
+  const data = {
+    id:nanoid(),
+    ...currentAttendance,
+    members:allMembers
+  }
+  mutate({
+    url:"/attendance-register",
+    data
+  })
+}
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -96,13 +121,14 @@ const MarkAttendance = () => {
         </form>
         <Box mt="4" overflow="scroll" maxHeight="300px">
           {
-          allMembers &&   allMembers.map((item) => (
+            allMembers && allMembers.map((item) => (
               <Button
                 variant="unstyled"
                 onClick={() => updateAttendance(item.id)}
                 display="block"
                 w="full"
                 mt="3"
+                border="1px solid green"
                 key={item.id}
                 bg={item.attend ? "green" : ""}
                 color={item.attend ? "#fff" : ""}
@@ -114,7 +140,7 @@ const MarkAttendance = () => {
         </Box>
         <Box>
           <Button
-            type="submit"
+            onClick={sendAttandanceToAPI}
             w="full"
             mt="4"
           >

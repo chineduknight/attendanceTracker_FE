@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type currentAttendanceType = {
+export type currentAttendanceType = {
   name: string;
   category: string;
   subCategory: string;
@@ -13,7 +13,7 @@ interface GlobalStoreState {
   updateOrganisation: (products: any) => void;
 
   currentAttendance: currentAttendanceType;
-  updateCurrentAttendance: (products: any) => void;
+  updateCurrentAttendance: (attendance: currentAttendanceType) => void;
 }
 
 

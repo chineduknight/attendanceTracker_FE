@@ -33,7 +33,7 @@ const Dashboard = () => {
         mt="4"
         fontSize="22px"
         textAlign='center'>
-        {state.name}
+        {state?.name}
       </Heading>
       <HStack spacing="4" p="4" wrap="wrap">
         <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
