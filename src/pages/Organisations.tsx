@@ -76,7 +76,6 @@ const OrgList = () => {
                 borderRadius="10px"
                 alignItems="center"
                 justifyContent="space-between"
-
                 p="4"
                 mb="10px"
                 border="1px solid rebeccapurple"
