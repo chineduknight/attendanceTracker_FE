@@ -4,6 +4,7 @@ import axios, {
   AxiosResponse,
   AxiosError,
 } from "axios";
+import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 
 export const baseURL = process.env.REACT_APP_BASE_URL;
@@ -32,11 +33,24 @@ const onRequestError = (error: AxiosError): Promise<AxiosError> => {
 const onResponse = (response: AxiosResponse): AxiosResponse => {
   return response;
 };
-
+interface ErrorResponse {
+  error?: string;
+  // define other properties if needed
+}
 const onResponseError = (error: AxiosError): Promise<AxiosError> => {
-  const statusCode = error.response!.status;
-  if (statusCode === 401) {
-    // logout user
+  if (error.response) {
+    const statusCode = error.response.status;
+    const data = error.response.data as ErrorResponse;
+    const errMsg = data.error || "Authentication Error";
+    console.log("errMsg:", errMsg);
+    if (statusCode === 401) {
+      // logout user
+      toast.error(errMsg);
+      // useGlobalStore.setState({ user: false });
+    }
+  } else {
+    // Handle error without response (network error, request cancelled, etc.)
+    console.error(error);
   }
   return Promise.reject(error);
 };

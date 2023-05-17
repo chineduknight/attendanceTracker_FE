@@ -1,4 +1,3 @@
-
 import {
   Box,
   Flex,
@@ -6,7 +5,7 @@ import {
   Button,
   Text,
   Stack,
-  Image
+  Image,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -14,49 +13,50 @@ import {
   deleteRequest,
   queryClient,
   useMutationWrapper,
-  useQueryWrapper
+  useQueryWrapper,
 } from "services/api/apiHelper";
 import { FaTrashAlt } from "react-icons/fa";
-import { useState } from 'react';
+import { useState } from "react";
+import { orgRequest } from 'services';
+import useGlobalStore from 'zStore';
 
 type OrgType = {
-    "name": string,
-    "image": string,
-    "owner": string,
-    "createdAt": string,
-    "updatedAt": string,
-    "id": string
-}
+  name: string;
+  image: string;
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+  id: string;
+};
 
 const OrgList = () => {
   const navigate = useNavigate();
-
-  const onSuccess = (data) => {
+const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
+  const onSuccess = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ["all-organistions"] });
   };
 
   const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
 
-const [allOrg, setAllOrg] = useState<OrgType[]>([])
-  const handleGetOrgSuccess = (data)=>{
-  setAllOrg(data.data.data)
-  }
-  const { refetch } = useQueryWrapper(
-    ["all-organisations"],
-    "/organisations",
-    {onSuccess:handleGetOrgSuccess}
-    );
+  const [allOrg, setAllOrg] = useState<OrgType[]>([]);
+  const handleGetOrgSuccess = (data) => {
+    setAllOrg(data.data.data);
+  };
+  const { refetch } = useQueryWrapper(["all-organisations"], orgRequest.ORGANISATIONS, {
+    onSuccess: handleGetOrgSuccess,
+  });
 
   function handleDelete(orgDelete, e) {
     mutate({
-      url: `/organisations/${orgDelete.id}`
+      url: `/organisations/${orgDelete.id}`,
     });
     e.stopPropagation();
   }
 
-  function handOrg(userData) {
-    navigate(PROTECTED_PATHS.DASHBOARD, { state: userData });
+  function handOrg(org) {
+    setOrg(org)
+    navigate(PROTECTED_PATHS.DASHBOARD, { state: org });
   }
 
   return (
@@ -68,7 +68,9 @@ const [allOrg, setAllOrg] = useState<OrgType[]>([])
         p="4"
       >
         <Text color="#fff">Attendance Tracker</Text>
-        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>+ Add Org</Button>
+        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
+          + Add Org
+        </Button>
       </Flex>
       <Stack
         spacing={4}
@@ -106,7 +108,10 @@ const [allOrg, setAllOrg] = useState<OrgType[]>([])
                     objectFit="cover"
                     borderRadius="50%"
                   />
-                  <Text ml="4" textAlign="left"> {org.name}</Text>
+                  <Text ml="4" textAlign="left">
+                    {" "}
+                    {org.name}
+                  </Text>
                 </Flex>
                 <Button onClick={(e) => handleDelete(org, e)} bg="#D30000">
                   <FaTrashAlt color="#fff" />

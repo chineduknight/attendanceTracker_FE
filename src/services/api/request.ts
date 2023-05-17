@@ -7,5 +7,6 @@ export const authRequest = {
 export const orgRequest = {
   ORGANISATION: "/organisations/:organisationId/members",
   ORGANISATIONS: "/organisations",
-  ADD_MEMBERS:"/organisations/:organisationId/members"
+  MEMBERS:"/organisations/:organisationId/members",
+  CONFIG_MODEL:"/organisations/:organisationId/model"
 };
