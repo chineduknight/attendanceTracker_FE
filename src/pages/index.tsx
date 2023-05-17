@@ -1,8 +1,11 @@
+import useGlobalStore from "zStore";
 import Authenticated from "./Authenticated";
 import UnAuthenticated from "./UnAuthenticated";
 
 const Pages = () => {
-  const isAuthUser = true;
+  const [user] = useGlobalStore((state) => [state.user]);
+
+  const isAuthUser = user.token !== "";
   if (isAuthUser) {
     return <Authenticated />;
   }

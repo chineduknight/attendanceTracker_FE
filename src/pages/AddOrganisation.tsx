@@ -16,6 +16,7 @@ import { FaArrowCircleLeft } from 'react-icons/fa'
 import { nanoid } from 'nanoid';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { queryClient } from 'services/api/apiHelper';
+import { orgRequest } from 'services';
 
 
 type Inputs = {
@@ -45,7 +46,7 @@ const AddOrganisation = () => {
 
 
     mutate({
-      url: "/organisations",
+      url: orgRequest.ORGANISATION,
       data
     })
 
