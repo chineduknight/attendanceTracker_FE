@@ -12,21 +12,12 @@ import {
 } from "@chakra-ui/react";
 
 import { useState } from 'react'
-import { postRequest, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
-import { SubmitHandler, useForm } from "react-hook-form";
-// import { queryClient } from 'services/api/apiHelper';
-import useGlobalStore from 'zStore';
-import { nanoid } from 'nanoid';
-import { useNavigate } from 'react-router-dom';
-import { PROTECTED_PATHS } from 'routes/pagePath';
+import { useQueryWrapper } from "services/api/apiHelper";
 
-type Inputs = {
-  name: 'string'
-}
 
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<any>([]);
-  const [currentAttendance] = useGlobalStore(state =>[state.currentAttendance])
+  const [filterName, setFilterName] = useState<any>([])
 
   const onSuccess = (data) => {
     const members = data.data;
@@ -39,17 +30,12 @@ const MarkAttendance = () => {
 
     )
     setAllMembers(membersWithAttendStatus)
+    setFilterName(membersWithAttendStatus)
   }
 
   useQueryWrapper(["all-members"], "/members", {
     onSuccess
   });
-
-  const { register, handleSubmit } = useForm<Inputs>();
-  const onSubmit: SubmitHandler<Inputs> = formData => {
-    //add mouse event so that user can be found easily
-
-  }
 
   const updateAttendance = (userId) => {
     for (let index = 0; index < allMembers.length; index++) {
@@ -63,31 +49,20 @@ const MarkAttendance = () => {
           attend: !member.attend
         };
         setAllMembers([...tempMembers]);
+        setFilterName([...tempMembers])
         break;
       }
 
     }
   }
-  const navigate = useNavigate();
 
-  const onSubmitSuccess = () => {
-    navigate(PROTECTED_PATHS.DASHBOARD)
-  
+  const handleSearch = (e) => {
+    const query = e.target.value.toLowerCase();
+    const filtered = allMembers.filter(member =>
+      member.name.toLowerCase().includes(query)
+    );
+    setFilterName(filtered);
   }
-
-  const { mutate } = useMutationWrapper(postRequest, onSubmitSuccess)
-
-const sendAttandanceToAPI = ()=>{
-  const data = {
-    id:nanoid(),
-    ...currentAttendance,
-    members:allMembers
-  }
-  mutate({
-    url:"/attendance-register",
-    data
-  })
-}
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -106,22 +81,25 @@ const sendAttandanceToAPI = ()=>{
         <Heading mt="4" fontSize="22px">
           Members
         </Heading>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <InputGroup mt="4">
-            <InputLeftElement
-              pointerEvents="none"
 
-            />
-            <Input
-              type="name"
-              placeholder="Search member"
-              {...register('name', { required: true })}
-            />
-          </InputGroup>
-        </form>
+        <InputGroup mt="4">
+          <InputLeftElement
+            pointerEvents="none"
+
+          />
+          <Input type="name" placeholder="Search member" onChange={handleSearch} />
+        </InputGroup>
+        {filterName.length === 0 && (
+          <Box mt="4">
+            <Text ml="4" fontWeight="bold">
+              No member found
+            </Text>
+          </Box>
+        )}
+
         <Box mt="4" overflow="scroll" maxHeight="300px">
           {
-            allMembers && allMembers.map((item) => (
+            filterName.map((item) => (
               <Button
                 variant="unstyled"
                 onClick={() => updateAttendance(item.id)}
@@ -134,13 +112,14 @@ const sendAttandanceToAPI = ()=>{
                 color={item.attend ? "#fff" : ""}
               >
                 {item.name}
+
               </Button>
             ))}
 
         </Box>
         <Box>
           <Button
-            onClick={sendAttandanceToAPI}
+            type="submit"
             w="full"
             mt="4"
           >
@@ -154,5 +133,4 @@ const sendAttandanceToAPI = ()=>{
 };
 
 export default MarkAttendance;
-
 

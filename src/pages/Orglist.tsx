@@ -1,8 +1,8 @@
 import {
   Box, Flex, useColorModeValue, Button, Text, Stack
 } from "@chakra-ui/react";
-// import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logo from '../logo.svg'
 import { PROTECTED_PATHS } from "../routes/pagePath";
 
 
@@ -18,8 +18,9 @@ const OrgList = () => {
         alignItems="center"
         p="4"
       >
-        <Text color="#fff">Attendance Tracker</Text>
-        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>+</Button>
+
+        <Text color="#fff"> Attendance Tracker</Text>
+        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>+ Add Org</Button>
       </Flex>
       <Stack
         spacing={4}
@@ -33,7 +34,6 @@ const OrgList = () => {
         mx='auto'
       >
         <Text fontWeight='bold'>No organisation yet</Text>
-
       </Stack>
 
     </Box>
