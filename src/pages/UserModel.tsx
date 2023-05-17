@@ -12,9 +12,16 @@ import {
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { nanoid } from "nanoid";
-import { useNavigate } from "react-router-dom";
-import { PROTECTED_PATHS } from "routes/pagePath";
+import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import { orgRequest } from "services";
+import { convertParamsToString } from "helpers/stringManipulations";
+import useGlobalStore from "zStore";
+import _ from "lodash";
+import { toast } from "react-toastify";
+import { useNavigate } from 'react-router-dom';
+import { PROTECTED_PATHS } from 'routes/pagePath';
 const UserModel = () => {
+  const [org] = useGlobalStore((state) => [state.organisation]);
   const inputType = [
     "text",
     "email",
@@ -25,23 +32,73 @@ const UserModel = () => {
     "color",
     "password",
   ];
-
-  const [fields] = useState([
+const navigate  = useNavigate()
+  const [fields, setFields] = useState([
     {
       id: nanoid(),
-      title: "",
-      type: "",
-      required: false,
+      name: "name",
+      type: "text",
+      required: true,
+    },
+   
+    {
+      id: nanoid(),
+      name: "",
+      type: "text",
+      required: true,
     },
     {
       id: nanoid(),
-      title: "",
-      type: "",
-      required: false,
+      name: "",
+      type: "text",
+      required: true,
     },
   ]);
+  const handleAddMore = () => {
+    setFields([
+      ...fields,
+      {
+        id: nanoid(),
+        name: "",
+        type: "text",
+        required: false,
+      },
+    ]);
+  };
+  const handleChangeInput = (id, event) => {
+    const isCheckBox = event.target.name === "required";
+    const newInputFields = fields.map((field) => {
+      if (id === field.id) {
+        return {
+          ...field,
+          [event.target.name]: isCheckBox
+            ? event.target.checked
+            : event.target.value,
+        };
+      }
+      return field;
+    });
+    setFields(newInputFields);
+  };
 
-  const navigate = useNavigate();
+  const onSuccess = (data) => {
+    toast.success(data.data);
+    navigate(PROTECTED_PATHS.DASHBOARD)
+  };
+  const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
+  const handleSubmit = () => {
+    const url = convertParamsToString(orgRequest.CONFIG_MODEL, {
+      organisationId: org.id,
+    });
+
+    const fieldsWithoutId = fields.map((field) => _.omit(field, ["id"]));
+    console.log("fieldsWithoutId:", fieldsWithoutId);
+
+    mutate({
+      url,
+      data: { fields: fieldsWithoutId },
+    });
+  };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -67,41 +124,10 @@ const UserModel = () => {
           rounded={"xl"}
           boxShadow={"lg"}
           p={6}
-          // my={12}
         >
-          <FormControl id="email" isRequired>
-            <Box borderBottom="1px dashed gray" pb="3">
-              <Box>
-                <FormLabel mb="0">Title</FormLabel>
-                <Input
-                  placeholder="name"
-                  _placeholder={{ color: "gray.500" }}
-                  type="text"
-                  w="100%"
-                  value="Name"
-                  disabled
-                />
-              </Box>
-              <Box>
-                <FormLabel mb="0" mt="3">
-                  Form Type
-                </FormLabel>
-
-                <Select placeholder="Select option" disabled value="text">
-                  {inputType.map((input) => (
-                    <option key={nanoid()} value={input}>
-                      {input}
-                    </option>
-                  ))}
-                </Select>
-              </Box>
-              <Checkbox mt="2" defaultChecked disabled>
-                required
-              </Checkbox>
-            </Box>
-          </FormControl>
-          {fields.map((field) => (
-            <FormControl id="email" isRequired>
+          
+          {fields.map((field, index) => (
+            <FormControl id={`field-${index}`} isRequired key={field.id}>
               <Box borderBottom="1px dashed gray" pb="3">
                 <Box>
                   <FormLabel mb="0">Title</FormLabel>
@@ -110,6 +136,10 @@ const UserModel = () => {
                     _placeholder={{ color: "gray.500" }}
                     type="text"
                     w="100%"
+                    value={field.name}
+                    name="name"
+                    disabled={index===0}
+                    onChange={(event) => handleChangeInput(field.id, event)}
                   />
                 </Box>
                 <Box>
@@ -117,15 +147,29 @@ const UserModel = () => {
                     Form Type
                   </FormLabel>
 
-                  <Select placeholder="Select option" value="text">
+                  <Select
+                    placeholder="Select option"
+                    value={field.type}
+                    name="type"
+                    disabled={index===0}
+                    onChange={(event) => handleChangeInput(field.id, event)}
+                  >
                     {inputType.map((input) => (
-                      <option key={nanoid()} value={input}>
+                      <option key={input} value={input}>
                         {input}
                       </option>
                     ))}
                   </Select>
                 </Box>
-                <Checkbox mt="2" defaultChecked={field.required}>
+                <Checkbox
+                  mt="2"
+                  disabled={index===0}
+                  defaultChecked={field.required}
+                  name="required"
+                  onChange={(event) => {
+                    handleChangeInput(field.id, event);
+                  }}
+                >
                   required
                 </Checkbox>
               </Box>
@@ -139,17 +183,17 @@ const UserModel = () => {
             bg="gray"
             p="2"
             textDecoration="none"
+            onClick={handleAddMore}
           >
             + Add More
           </Button>
           <Stack spacing={6}>
             <Button
-              onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+              onClick={handleSubmit}
               bg={"blue.400"}
               color={"white"}
-              _hover={{
-                bg: "blue.500",
-              }}
+              _hover={{ bg: "blue.500" }}
+              isLoading={isLoading}
             >
               Submit
             </Button>

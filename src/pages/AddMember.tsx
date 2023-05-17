@@ -10,48 +10,57 @@ import {
   Stack,
 } from "@chakra-ui/react";
 
-import { nanoid } from "nanoid";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
+import {
+  postRequest,
+  queryClient,
+  useMutationWrapper,
+  useQueryWrapper,
+} from "services/api/apiHelper";
+import { capitalize, convertParamsToString } from "helpers/stringManipulations";
+import { orgRequest } from "services";
+import useGlobalStore from "zStore";
+import { useState } from "react";
+import { toast } from 'react-toastify';
 
 type Inputs = {
-  name: 'string',
-  email: 'string'
-}
+  name: "string";
+  email: "string";
+};
 const AddMember = () => {
+  const [org] = useGlobalStore((state) => [state.organisation]);
+  const [membersModel, setMembersModel] = useState<any>([]);
   const onSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ["all-members"] })
-  }
+    toast.success("Member added successfully");
+    queryClient.invalidateQueries({ queryKey: ["all-members"] });
+    navigate(PROTECTED_PATHS.DASHBOARD);
+  };
+  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
+    organisationId: org.id,
+  });
+  useQueryWrapper(["model"], modelURL, {
+    onSuccess: (data) => {
+      setMembersModel(data?.data.data.fields);
+    },
+  });
+  const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
 
-
-  const { mutate } = useMutationWrapper(postRequest, onSuccess)
-
-
-  const handleAddMember = (formData) => {
-
-    const data = {
-      id: nanoid(),
-      name: formData.name,
-      email: formData.email
-    }
-
-
+  const handleAddMember = (data) => {
+    const url = convertParamsToString(orgRequest.MEMBERS, {
+      organisationId: org.id,
+    });
     mutate({
-      url: "/members",
+      url: url,
       data,
-
-    })
-    navigate(PROTECTED_PATHS.MARK_ATTENANCE)
-  }
-
+    });
+  };
 
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm<Inputs>();
-  const onSubmit: SubmitHandler<Inputs> = formData => {
-    handleAddMember(formData)
-  }
-
+  const onSubmit: SubmitHandler<Inputs> = (formData) => {
+    handleAddMember(formData);
+  };
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -67,13 +76,12 @@ const AddMember = () => {
       </Flex>
 
       <Flex
-        mt='40px'
+        mt="40px"
         align={"center"}
         justify={"center"}
-
         bg={useColorModeValue("gray.50", "gray.800")}
       >
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={handleSubmit(onSubmit)} style={{ width: "90%" }}>
           <Stack
             spacing={4}
             w={"full"}
@@ -83,33 +91,20 @@ const AddMember = () => {
             boxShadow={"lg"}
             p={6}
           >
-
-            <FormControl
-              id="name"
-              isRequired>
-              <FormLabel> Name</FormLabel>
-              <Input
-                type='name'
-                {...register("name", { required: true })}
-              />
-            </FormControl>
-
-            <FormControl
-              id="email"
-              isRequired>
-              <FormLabel>Email</FormLabel>
-              <Input
-                type='email'
-                {...register("email", { required: true })}
-              />
-            </FormControl>
-
+            {membersModel.map((field) => (
+              <FormControl key={field._id} id={field.name} isRequired>
+                <FormLabel>{capitalize(field.name)} </FormLabel>
+                <Input
+                  type={field.type}
+                  {...register(field.name, { required: field.required })}
+                />
+              </FormControl>
+            ))}
 
             <Box>
               <Button
                 w="full"
                 mt="40px"
-
                 bg={"blue.400"}
                 color={"white"}
                 _hover={{
@@ -117,7 +112,8 @@ const AddMember = () => {
                 }}
                 fontWeight="bold"
                 fontSize="15px"
-                type='submit'
+                type="submit"
+                isLoading={isLoading}
               >
                 Submit
               </Button>
@@ -125,10 +121,8 @@ const AddMember = () => {
           </Stack>
         </form>
       </Flex>
-    </Box >
+    </Box>
   );
 };
 
 export default AddMember;
-
-

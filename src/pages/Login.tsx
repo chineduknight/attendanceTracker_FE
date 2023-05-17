@@ -15,16 +15,16 @@ import {
 import { useState } from "react";
 import { authRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
-import useGlobalStore from 'zStore';
+import useGlobalStore from "zStore";
 
 const Login = () => {
   const [username, setUserName] = useState("");
   const [password, setPassword] = useState("");
- const [setUser] =  useGlobalStore(state=>[state.setUser])
+  const [setUser] = useGlobalStore((state) => [state.setUser]);
   const onSuccess = (data) => {
-    setUser(data.data)
+    setUser(data.data);
   };
-  const { mutate,isLoading } = useMutationWrapper(postRequest, onSuccess);
+  const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
   const handleSubmit = (e) => {
     e.preventDefault();
 
