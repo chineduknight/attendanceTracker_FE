@@ -1,4 +1,10 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+  AxiosError,
+} from "axios";
+import useGlobalStore from "zStore";
 
 export const baseURL = process.env.REACT_APP_BASE_URL;
 export * from "./request";
@@ -10,12 +16,12 @@ const axiosInstance: AxiosInstance = axios.create({
     Accept: "application/json, text/plain, */*",
   },
 });
-
 // https://dev.to/charlintosh/setting-up-axios-interceptors-react-js-typescript-12k5
 // This adds a token before all the requests.
 // https://stackoverflow.com/questions/57251719/acquiring-a-new-token-with-axios-interceptors
 const onRequest = (request: AxiosRequestConfig): AxiosRequestConfig => {
-  request.headers!.Authorization = localStorage.getItem("key-here") || "";
+  const token = "Bearer " + useGlobalStore.getState().user.token;
+  request.headers!.Authorization = token || "";
   return request;
 };
 

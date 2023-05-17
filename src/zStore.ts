@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export type currentAttendanceType = {
   name: string;
@@ -7,11 +8,16 @@ export type currentAttendanceType = {
   date: Date
   members: Array<any>
 }
-
+type UserType = {
+  token:string;
+  id:string;
+  username:string;
+}
 interface GlobalStoreState {
+  user:UserType;
+  setUser:(user: UserType) => void;
   organisation: any;
   updateOrganisation: (products: any) => void;
-
   currentAttendance: currentAttendanceType;
   updateCurrentAttendance: (attendance: currentAttendanceType) => void;
 }
@@ -19,6 +25,14 @@ interface GlobalStoreState {
 
 
 const globalStore = <F extends Function>(set: F) => ({
+  user:{
+    token:"",
+    id:"",
+    username:"",
+  },
+  setUser:(user)=>{
+    set({ user });
+  },
   organisation: {
     name: "",
   },
@@ -46,9 +60,11 @@ const globalStore = <F extends Function>(set: F) => ({
 /**
  * This is for the globalStore
  */
+const persistedCartStore: any = persist(globalStore, { name: 'GLOBAL_STORE' });
+const useGlobalStore = create<GlobalStoreState>(persistedCartStore);
 
-const useGlobalStore = create<GlobalStoreState>(globalStore);
 
 export type GlobalStore = ReturnType<typeof globalStore>;
 
 export default useGlobalStore;
+

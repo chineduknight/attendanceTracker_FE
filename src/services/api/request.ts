@@ -1,8 +1,11 @@
 export const authRequest = {
-  GET_CUSTOMIZATION: "/dl/customization",
-  GET_LOGO: "/api/dl/lendingCompanyResources?size=1&page=0&name=BASE_LOGO",
+  LOGIN: "/users/login",
+  GET_ME: "/users/me",
+  SIGN_UP: "/users/signup",
 };
 
 export const orgRequest = {
-  ORG: "/organisation",
+  ORGANISATION: "/organisations/:organisationId/members",
+  ORGANISATIONS: "/organisations",
+  ADD_MEMBERS:"/organisations/:organisationId/members"
 };

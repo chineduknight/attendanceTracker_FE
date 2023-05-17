@@ -17,7 +17,16 @@ import {
   useQueryWrapper
 } from "services/api/apiHelper";
 import { FaTrashAlt } from "react-icons/fa";
+import { useState } from 'react';
 
+type OrgType = {
+    "name": string,
+    "image": string,
+    "owner": string,
+    "createdAt": string,
+    "updatedAt": string,
+    "id": string
+}
 
 const OrgList = () => {
   const navigate = useNavigate();
@@ -29,10 +38,15 @@ const OrgList = () => {
 
   const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
 
-  const { data, refetch } = useQueryWrapper(
+const [allOrg, setAllOrg] = useState<OrgType[]>([])
+  const handleGetOrgSuccess = (data)=>{
+  setAllOrg(data.data.data)
+  }
+  const { refetch } = useQueryWrapper(
     ["all-organisations"],
-    "/organisations"
-  );
+    "/organisations",
+    {onSuccess:handleGetOrgSuccess}
+    );
 
   function handleDelete(orgDelete, e) {
     mutate({
@@ -67,9 +81,9 @@ const OrgList = () => {
         my={12}
         mx="auto"
       >
-        {data?.data?.length ? (
+        {allOrg.length ? (
           <>
-            {data?.data.map((org) => (
+            {allOrg.map((org) => (
               <Flex
                 key={org.id}
                 cursor="pointer"
@@ -85,7 +99,7 @@ const OrgList = () => {
               >
                 <Flex alignItems="center">
                   <Image
-                    src={org.imageURL}
+                    src={org.image}
                     alt="Dan Abramov"
                     w="45px"
                     h="45px"
