@@ -92,7 +92,7 @@ const AddMember = () => {
   });
   useQueryWrapper(["model"], modelURL, {
     onSuccess: (data) => {
-      setMembersModel(data?.data.data.fields);
+      setMembersModel(data?.data.fields);
     },
   });
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
