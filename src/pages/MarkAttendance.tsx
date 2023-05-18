@@ -89,19 +89,6 @@ const MarkAttendance = () => {
     onSubmitSuccess
   );
 
-  /**
- * 
- *  "date": "12/12/2022",
-    "name": "Helllo Another",
-    "categoryId": "6463b826c38b4ee83e9532bd",
-    "subCategoryId": "6463b868c38b4ee83e9532c4",
-    "organisationId": "64624a7455135204ba5c3ae3",
-    "presentMembers": [
-        "6463db2f61ca077bda9c4dfd"
-    ]
- * 
- */
-
   const sendAttandanceToAPI = () => {
     const presentMembers = allMembers
     .filter(member => member.attend)
