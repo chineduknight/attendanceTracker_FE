@@ -92,7 +92,6 @@ const navigate  = useNavigate()
     });
 
     const fieldsWithoutId = fields.map((field) => _.omit(field, ["id"]));
-    console.log("fieldsWithoutId:", fieldsWithoutId);
 
     mutate({
       url,

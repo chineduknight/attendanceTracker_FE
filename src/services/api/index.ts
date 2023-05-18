@@ -42,11 +42,16 @@ const onResponseError = (error: AxiosError): Promise<AxiosError> => {
     const statusCode = error.response.status;
     const data = error.response.data as ErrorResponse;
     const errMsg = data.error || "Authentication Error";
-    console.log("errMsg:", errMsg);
     if (statusCode === 401) {
       // logout user
       toast.error(errMsg);
-      // useGlobalStore.setState({ user: false });
+      useGlobalStore.setState({
+        user: {
+          token: "",
+          id: "",
+          username: "",
+        },
+      });
     }
   } else {
     // Handle error without response (network error, request cancelled, etc.)
