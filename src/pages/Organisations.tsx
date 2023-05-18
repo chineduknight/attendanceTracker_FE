@@ -41,7 +41,7 @@ const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
 
   const [allOrg, setAllOrg] = useState<OrgType[]>([]);
   const handleGetOrgSuccess = (data) => {
-    setAllOrg(data.data.data);
+    setAllOrg(data.data);
   };
   const { refetch } = useQueryWrapper(["all-organisations"], orgRequest.ORGANISATIONS, {
     onSuccess: handleGetOrgSuccess,
