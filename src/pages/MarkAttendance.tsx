@@ -11,8 +11,7 @@ import {
   Container,
 } from "@chakra-ui/react";
 import { convertParamsToString } from "helpers/stringManipulations";
-
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
@@ -31,7 +30,7 @@ type MemberType = {
 
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
-  const [filterName, setFilterName] = useState<any>([]);
+  const [filterName, setFilterName] = useState<MemberType[]>([]);
   const [org, currentAttendance] = useGlobalStore((state) => [
     state.organisation,
     state.currentAttendance,
@@ -54,30 +53,32 @@ const MarkAttendance = () => {
     onSuccess,
   });
 
-  const updateAttendance = (userId) => {
-    for (let index = 0; index < allMembers.length; index++) {
-      let member = allMembers[index];
-      const tempMembers = allMembers;
-      const isUserToUpdate = member.id === userId;
-      if (isUserToUpdate) {
-        tempMembers[index] = {
-          ...member,
-          attend: !member.attend,
-        };
-        setAllMembers([...tempMembers]);
-        setFilterName([...tempMembers]);
-        break;
-      }
-    }
-  };
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const handleSearch = (e) => {
+  const handleSearch = useCallback((e) => {
     const query = e.target.value.toLowerCase();
-    const filtered = allMembers.filter((member) =>
-      member.name.toLowerCase().includes(query)
+    setSearchQuery(query);
+    setFilterName(
+      allMembers.filter((member) =>
+        member.name.toLowerCase().includes(query)
+      )
     );
-    setFilterName(filtered);
-  };
+  }, [allMembers]);
+  
+  const updateAttendance = useCallback((userId) => {
+    setAllMembers((prevMembers) => {
+      const updatedMembers = prevMembers.map((member) =>
+        member.id === userId ? { ...member, attend: !member.attend } : member
+      );
+      setFilterName(updatedMembers.filter((member) =>
+        member.name.toLowerCase().includes(searchQuery)
+      ));
+      return updatedMembers;
+    });
+  }, [searchQuery]);
+  
+
+
   const navigate = useNavigate();
 
   const onSubmitSuccess = () => {
@@ -89,11 +90,11 @@ const MarkAttendance = () => {
     onSubmitSuccess
   );
 
-  const sendAttandanceToAPI = () => {
+  const sendAttandanceToAPI = useCallback(() => {
     const presentMembers = allMembers
-    .filter(member => member.attend)
-    .map(member => member.id);
-  
+      .filter((member) => member.attend)
+      .map((member) => member.id);
+
     const data = {
       ...currentAttendance,
       organisationId: org.id,
@@ -104,7 +105,7 @@ const MarkAttendance = () => {
       url: attendanceRequest.ATTENDANCE,
       data,
     });
-  };
+  }, [allMembers, currentAttendance, org.id, mutate]);
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -125,7 +126,7 @@ const MarkAttendance = () => {
         <InputGroup mt="4">
           <InputLeftElement pointerEvents="none" />
           <Input
-            type="name"
+            type="search"
             placeholder="Search member"
             onChange={handleSearch}
           />
