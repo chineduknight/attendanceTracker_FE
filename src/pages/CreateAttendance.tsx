@@ -13,6 +13,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import _ from 'lodash';
@@ -38,16 +39,35 @@ const CreateAttendance = () => {
 =======
 import { useForm, SubmitHandler } from "react-hook-form"
 import useGlobalStore, { currentAttendanceType } from 'zStore';
+=======
+import { useForm, SubmitHandler } from "react-hook-form";
+import useGlobalStore, { currentAttendanceType } from "zStore";
+import _ from 'lodash';
+>>>>>>> Added the mark attendace to the API
 
 const CreateAttendance = () => {
   const { register, handleSubmit } = useForm<currentAttendanceType>();
-  const [updateCurrentAttendance] = useGlobalStore(state =>[state.updateCurrentAttendance])
-  const onSubmit: SubmitHandler<currentAttendanceType> = data => {
-    updateCurrentAttendance(data)
-   navigate(PROTECTED_PATHS.MARK_ATTENANCE)
+  const [updateCurrentAttendance] = useGlobalStore((state) => [
+    state.updateCurrentAttendance,
+  ]);
+  const onSubmit: SubmitHandler<currentAttendanceType> = (formData) => {
+    const trimmedFormData = _.mapValues(formData, (value) => {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+      return value;
+    });
   
+    const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
+    updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE);
+  };
+  
+<<<<<<< HEAD
   }
 >>>>>>> added the zustand to the create attendance
+=======
+>>>>>>> Added the mark attendace to the API
 
   const navigate = useNavigate();
 
@@ -80,6 +100,7 @@ const CreateAttendance = () => {
         >
           <form onSubmit={handleSubmit(onSubmit)}>
 <<<<<<< HEAD
+<<<<<<< HEAD
             <FormControl id="name" isRequired>
               <FormLabel>Name</FormLabel>
               <Input type="name" {...register("name", { required: true })} />
@@ -91,6 +112,11 @@ const CreateAttendance = () => {
                 {...register("name", { required: true })}
               />
 >>>>>>> added the zustand to the create attendance
+=======
+            <FormControl id="name" isRequired>
+              <FormLabel>Name</FormLabel>
+              <Input type="name" {...register("name", { required: true })} />
+>>>>>>> Added the mark attendace to the API
             </FormControl>
 
             <FormControl id="category">

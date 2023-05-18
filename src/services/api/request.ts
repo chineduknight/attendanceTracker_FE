@@ -10,3 +10,7 @@ export const orgRequest = {
   MEMBERS:"/organisations/:organisationId/members",
   CONFIG_MODEL:"/organisations/:organisationId/model"
 };
+
+export const attendanceRequest = {
+  ATTENDANCE:"/attendance"
+}
