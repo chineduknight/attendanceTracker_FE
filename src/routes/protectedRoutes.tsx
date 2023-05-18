@@ -10,6 +10,7 @@ const CreateAttendance = WithSuspense(
   lazy(() => import("pages/CreateAttendance"))
 );
 const AddMember = WithSuspense(lazy(() => import("pages/AddMember")));
+const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const Attendance = WithSuspense(lazy(() => import("pages/Attendance")));
 const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AddOrganisation = WithSuspense(
@@ -24,7 +25,8 @@ const {
   ADD_MEMBER,
   CREATE_ATTENDANCE,
   MARK_ATTENANCE,
-  ATTENDANCE
+  ATTENDANCE,
+  ALL_ATTENDANCE
 } = PROTECTED_PATHS;
 
 const PROTECTED_ROUTES = [
@@ -35,9 +37,10 @@ const PROTECTED_ROUTES = [
   { path: ADD_MEMBER, element: <AddMember /> },
   { path: MARK_ATTENANCE, element: <MarkAttendance /> },
   { path: CREATE_ATTENDANCE, element: <CreateAttendance /> },
+  { path: ALL_ATTENDANCE, element: <AllAttendance /> },
   { path: ATTENDANCE, element: <Attendance /> },
 
-  
+
   { path: "/", element: <Navigate to={ALL_ORG} /> },
   // this enables you not to access the public routes when logged in
   ...Object.values(PUBLIC_PATHS).map((route) => {

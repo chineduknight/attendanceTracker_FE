@@ -26,6 +26,7 @@ interface GlobalStoreState {
   setUser: (user: UserType) => void;
   organisation: OrganisationType;
   updateOrganisation: (org: OrganisationType) => void;
+  // updateAttendance: (attend: OrganisationType) => void;
   currentAttendance: currentAttendanceType;
   updateCurrentAttendance: (attendance: currentAttendanceType) => void;
 }

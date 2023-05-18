@@ -43,12 +43,20 @@ const Dashboard = () => {
           Create Model
         </Button>
       </HStack>
-      <Button
-        ml="4"
-        onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
-      >
-        Create Attendance
-      </Button>
+      <HStack spacing="4" p="4" wrap="wrap">
+        <Button
+          ml="4"
+          onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
+        >
+          Create Attendance
+        </Button>
+        <Button
+          ml="4"
+          onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
+        >
+          All Attendance
+        </Button>
+      </HStack>
     </Box>
   );
 };

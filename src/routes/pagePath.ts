@@ -12,5 +12,6 @@ export const PROTECTED_PATHS = {
   CREATE_ATTENDANCE: "/create-attendance",
   MARK_ATTENANCE: "/mark-attendance",
   LOGIN_USER: '/login-user',
+  ALL_ATTENDANCE: '/view-attendance',
   LOGIN: "/login",
 };

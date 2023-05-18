@@ -39,7 +39,6 @@ const AddOrganisation = () => {
   const handleAddOrg = (details) => {
 
     const data = {
-      id: nanoid(),
       name: details.name,
       imageURL: "https://picsum.photos/200/300"
     }
