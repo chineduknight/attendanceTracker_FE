@@ -13,7 +13,6 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
 import { postRequest, useMutationWrapper } from 'services/api/apiHelper';
 import { FaArrowCircleLeft } from 'react-icons/fa'
-import { nanoid } from 'nanoid';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { queryClient } from 'services/api/apiHelper';
 import { orgRequest } from 'services';
@@ -40,7 +39,7 @@ const AddOrganisation = () => {
 
     const data = {
       name: details.name,
-      imageURL: "https://picsum.photos/200/300"
+      image: "https://picsum.photos/200/300"
     }
 
 
