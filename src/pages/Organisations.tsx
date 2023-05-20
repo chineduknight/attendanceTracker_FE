@@ -5,7 +5,7 @@ import {
   Button,
   Text,
   Stack,
-  Image,
+  Avatar,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -31,7 +31,7 @@ type OrgType = {
 
 const OrgList = () => {
   const navigate = useNavigate();
-const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
+  const [setOrg] = useGlobalStore(state => [state.updateOrganisation])
   const onSuccess = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ["all-organistions"] });
@@ -100,13 +100,11 @@ const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
                 }}
               >
                 <Flex alignItems="center">
-                  <Image
-                    src={org.image}
-                    alt="Dan Abramov"
+                  <Avatar
+                    name={org.name}
                     w="45px"
                     h="45px"
-                    objectFit="cover"
-                    borderRadius="50%"
+
                   />
                   <Text ml="4" textAlign="left">
                     {" "}

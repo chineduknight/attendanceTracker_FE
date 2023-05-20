@@ -20,7 +20,7 @@ import { orgRequest } from 'services';
 
 type Inputs = {
   name: string,
-  image: string,
+  // image: string,
 }
 
 const AddOrganisation = () => {
@@ -39,7 +39,7 @@ const AddOrganisation = () => {
 
     const data = {
       name: details.name,
-      image: "https://picsum.photos/200/300"
+      // image: "https://picsum.photos/200/300"
     }
 
 
@@ -113,14 +113,14 @@ const AddOrganisation = () => {
                 {...register("name", { required: true })}
               />
             </FormControl>
-            <FormControl id="password">
+            {/* <FormControl id="password">
               <FormLabel>Image Url</FormLabel>
               <Input
                 type="imageURL"
 
                 {...register("image", { required: true })}
               />
-            </FormControl>
+            </FormControl> */}
             <Stack spacing={6}>
               <Button
                 bg={"blue.400"}
