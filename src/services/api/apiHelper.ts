@@ -1,13 +1,11 @@
-import { useQuery , useMutation, QueryClient } from "react-query";
+import { useQuery , useMutation, QueryClient, QueryKey } from "@tanstack/react-query";
 import axiosInstance from ".";
 import { toast } from "react-toastify";
 
-export const useQueryWrapper = (key: string, url: string, options?: any) => {
+export const useQueryWrapper = (key: QueryKey, url: string, options?: any) => {
   const getAPICall = async () => {
-    const {
-      data: { data },
-    } = await axiosInstance.get(url);
-    return data;
+    const response = await axiosInstance.get(url);
+    return response.data;
   };
   return useQuery(key, getAPICall, options);
 };
@@ -46,7 +44,7 @@ export const useMutationWrapper = (makeAPICall: any, onSuccess?: any, onError?: 
         onError(error);
       } else {
         const err = error as Record<any, any>;
-        const message: any = err?.response?.data?.message;
+        const message: any = err?.response?.data?.error;
         if (Array.isArray(message)) {
           message.map((errorMsg) =>
             toast.error(`${errorMsg ?? "An error occured"}`, {
@@ -61,12 +59,14 @@ export const useMutationWrapper = (makeAPICall: any, onSuccess?: any, onError?: 
   });
 };
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 1000 * 600, // this is in millisecond
-      retry: 0,
-    },
-  },
-});
+// export const queryClient = new QueryClient({
+//   defaultOptions: {
+//     queries: {
+//       refetchOnWindowFocus: false,
+//       staleTime: 1000 * 600, // this is in millisecond
+//       retry: 0,
+//     },
+//   },
+// });
+
+export const queryClient = new QueryClient({});

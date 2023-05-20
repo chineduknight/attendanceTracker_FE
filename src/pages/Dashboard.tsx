@@ -4,13 +4,17 @@ import {
   useColorModeValue,
   Text,
   Button,
-  HStack,
+  Heading,
+  Stack,
 } from "@chakra-ui/react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-// import { FaBook } from 'react-icons'
+
 
 const Dashboard = () => {
+  const location = useLocation()
+  const state: any = location.state;
+
   const navigate = useNavigate();
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -24,20 +28,34 @@ const Dashboard = () => {
           Attendance Tracker
         </Text>
       </Flex>
-      <HStack spacing="4" p="4" wrap="wrap">
+      {/* <Text>Organisation Name</Text> */}
+      <Heading
+        mt="4"
+        fontSize="22px"
+        textAlign='center'>
+        {state?.name}
+      </Heading>
+      <Stack spacing="4" p="4" wrap="wrap">
         <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
           Add Member
         </Button>
         <Button onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}>
           Create Model
         </Button>
-      </HStack>
+    
       <Button
         ml="4"
         onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
       >
         Create Attendance
       </Button>
+      <Button
+        ml="4"
+        onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
+      >
+        All Attendance
+      </Button>
+      </Stack>
     </Box>
   );
 };

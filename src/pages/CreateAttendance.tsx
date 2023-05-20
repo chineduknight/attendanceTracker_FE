@@ -9,40 +9,67 @@ import {
   Input,
   Stack,
 } from "@chakra-ui/react";
-import { FaHome } from 'react-icons/fa'
-import { useState } from "react";
-import { nanoid } from "nanoid";
+
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+<<<<<<< HEAD
+<<<<<<< HEAD
+import { useForm, SubmitHandler } from "react-hook-form";
+import useGlobalStore, { currentAttendanceType } from "zStore";
+import _ from 'lodash';
 
 const CreateAttendance = () => {
-  const navigate = useNavigate();
-  const [fields] = useState([
-    {
-      id: nanoid(),
-      title: "name",
-      type: "text",
-      required: true,
-    },
-    {
-      id: nanoid(),
-      title: "category",
-      type: "text",
-      required: true,
-    },
-    {
-      id: nanoid(),
-      title: "sub category",
-      type: "text",
-      required: true,
-    },
-    {
-      id: nanoid(),
-      title: "date",
-      type: "date",
-      required: true,
-    },
+  const { register, handleSubmit } = useForm<currentAttendanceType>();
+  const [updateCurrentAttendance] = useGlobalStore((state) => [
+    state.updateCurrentAttendance,
   ]);
+  const onSubmit: SubmitHandler<currentAttendanceType> = (formData) => {
+    const trimmedFormData = _.mapValues(formData, (value) => {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+      return value;
+    });
+  
+    const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
+    updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE);
+  };
+  
+=======
+import { useForm, SubmitHandler } from "react-hook-form"
+import useGlobalStore, { currentAttendanceType } from 'zStore';
+=======
+import { useForm, SubmitHandler } from "react-hook-form";
+import useGlobalStore, { currentAttendanceType } from "zStore";
+import _ from 'lodash';
+>>>>>>> Added the mark attendace to the API
+
+const CreateAttendance = () => {
+  const { register, handleSubmit } = useForm<currentAttendanceType>();
+  const [updateCurrentAttendance] = useGlobalStore((state) => [
+    state.updateCurrentAttendance,
+  ]);
+  const onSubmit: SubmitHandler<currentAttendanceType> = (formData) => {
+    const trimmedFormData = _.mapValues(formData, (value) => {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+      return value;
+    });
+  
+    const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
+    updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE);
+  };
+  
+<<<<<<< HEAD
+  }
+>>>>>>> added the zustand to the create attendance
+=======
+>>>>>>> Added the mark attendace to the API
+
+  const navigate = useNavigate();
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -64,37 +91,76 @@ const CreateAttendance = () => {
         <Stack
           spacing={4}
           w={"full"}
+          mt="5rem"
           maxW={"md"}
           bg={useColorModeValue("white", "gray.700")}
           rounded={"xl"}
           boxShadow={"lg"}
           p={6}
         >
-          {fields.map((field) => (
-            <FormControl key={field.id} isRequired={field.required}>
-              <FormLabel textTransform="capitalize" mb="0">
-                {field.title}
-              </FormLabel>
-              <Input type={field.type} />
+          <form onSubmit={handleSubmit(onSubmit)}>
+<<<<<<< HEAD
+<<<<<<< HEAD
+            <FormControl id="name" isRequired>
+              <FormLabel>Name</FormLabel>
+              <Input type="name" {...register("name", { required: true })} />
+=======
+            <FormControl id="name">
+              <FormLabel>Name</FormLabel>
+              <Input
+                type="name"
+                {...register("name", { required: true })}
+              />
+>>>>>>> added the zustand to the create attendance
+=======
+            <FormControl id="name" isRequired>
+              <FormLabel>Name</FormLabel>
+              <Input type="name" {...register("name", { required: true })} />
+>>>>>>> Added the mark attendace to the API
             </FormControl>
-          ))}
 
-          <Box>
-            <Button
-              w="full"
-              mt="40px"
-              onClick={() => navigate(PROTECTED_PATHS.MARK_ATTENANCE)}
-              bg={"blue.400"}
-              color={"white"}
-              _hover={{
-                bg: "blue.500",
-              }}
-              fontWeight="bold"
-              fontSize="15px"
-            >
-              Continue
-            </Button>
-          </Box>
+            <FormControl id="category">
+              <FormLabel>Category</FormLabel>
+              <Input
+                type="category"
+                {...register("category", { required: false })}
+              />
+            </FormControl>
+
+            <FormControl id="sub_category">
+              <FormLabel>Sub Category</FormLabel>
+              <Input
+                type="sub_category"
+                {...register("subCategory", { required: false })}
+              />
+            </FormControl>
+
+            <FormControl id="date" isRequired>
+              <FormLabel>Date</FormLabel>
+              <Input
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                {...register("date", { required: true })}
+              />
+            </FormControl>
+
+            <Box>
+              <Button
+                w="full"
+                mt="40px"
+                bg={"blue.400"}
+                color={"white"}
+                _hover={{
+                  bg: "blue.500",
+                }}
+                fontWeight="bold"
+                fontSize="15px"
+                type="submit"
+              >
+                Continue
+              </Button>
+            </Box>
+          </form>
         </Stack>
       </Flex>
     </Box>

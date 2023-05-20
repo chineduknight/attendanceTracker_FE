@@ -1,15 +1,13 @@
-import { ChakraProvider, Switch } from "@chakra-ui/react";
-import Pages from "pages";
-import { QueryClient, QueryClientProvider } from "react-query";
+import { ChakraProvider } from "@chakra-ui/react";
+import { QueryClientProvider } from '@tanstack/react-query'
 import { ToastContainer } from "react-toastify";
-import { ReactQueryDevtools } from "react-query/devtools";
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import ErrorBoundary from "components/ErrorBoundary";
 import theme from "styles/theme";
+import Pages from "pages";
+import { queryClient } from 'services/api/apiHelper';
 import "react-toastify/dist/ReactToastify.css";
-// import loginUser from "pages/loginUser";
 import "./App.css";
-// import { Router, Route, Switch } from "react-router-dom";
-import Login from "pages/Login";
 
 const RenderDevTool = () => {
   if (process.env.NODE_ENV === "development") {
@@ -17,9 +15,9 @@ const RenderDevTool = () => {
   }
   return null;
 };
+// { process.env.NODE_ENV === 'development' ? <ReactQueryDevtools initialIsOpen={false} /> : null }
 
 const App = () => {
-  const queryClient = new QueryClient();
   return (
     <ChakraProvider theme={theme}>
       <QueryClientProvider client={queryClient}>
@@ -32,5 +30,6 @@ const App = () => {
     </ChakraProvider>
   );
 };
+
 
 export default App;

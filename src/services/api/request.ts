@@ -1,8 +1,19 @@
 export const authRequest = {
-  GET_CUSTOMIZATION: "/dl/customization",
-  GET_LOGO: "/api/dl/lendingCompanyResources?size=1&page=0&name=BASE_LOGO",
+  LOGIN: "/users/login",
+  GET_ME: "/users/me",
+  SIGN_UP: "/users/signup",
 };
 
-export const loanRequest = {
-  CREDIT_SCORE: "/api/dl/loanRequests/:referenceId/creditScore",
+export const orgRequest = {
+  ORGANISATION: "/organisations/:organisationId/members",
+  ORGANISATIONS: "/organisations",
+  MEMBERS:"/organisations/:organisationId/members",
+  CONFIG_MODEL:"/organisations/:organisationId/model"
 };
+
+export const attendanceRequest = {
+  ATTENDANCE:"/attendance",
+  GET_ATTENDANCE:"/attendance/:organisationId/:id",
+  ALL_ATTENDANCE:"/attendance/:organisationId",
+  EXPORT:"/attendance/export/:organisationId/:id"
+}

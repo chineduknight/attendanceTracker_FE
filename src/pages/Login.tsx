@@ -12,8 +12,30 @@ import {
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
+import { useState } from "react";
+import { authRequest } from "services";
+import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import useGlobalStore from "zStore";
 
 const Login = () => {
+  const [username, setUserName] = useState("");
+  const [password, setPassword] = useState("");
+  const [setUser] = useGlobalStore((state) => [state.setUser]);
+  const onSuccess = (data) => {
+    setUser(data.data);
+  };
+  const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    mutate({
+      url: authRequest.LOGIN,
+      data: {
+        username,
+        password,
+      },
+    });
+  };
   return (
     <Flex
       minH={"100vh"}
@@ -34,35 +56,47 @@ const Login = () => {
           boxShadow={"lg"}
           p={8}
         >
-          <Stack spacing={4}>
-            <FormControl id="email">
-              <FormLabel>Email address</FormLabel>
-              <Input type="email" />
-            </FormControl>
-            <FormControl id="password">
-              <FormLabel>Password</FormLabel>
-              <Input type="password" />
-            </FormControl>
-            <Stack spacing={10}>
-              <Stack
-                direction={{ base: "column", sm: "row" }}
-                align={"start"}
-                justify={"space-between"}
-              >
-                <Checkbox>Remember me</Checkbox>
-                <Link color={"blue.400"}>Forgot password?</Link>
+          <form onSubmit={handleSubmit}>
+            <Stack spacing={4}>
+              <FormControl id="text">
+                <FormLabel>Email address</FormLabel>
+                <Input
+                  type="text"
+                  autoComplete="username"
+                  onChange={(e) => setUserName(e.target.value)}
+                />
+              </FormControl>
+              <FormControl id="password">
+                <FormLabel>Password</FormLabel>
+                <Input
+                  type="password"
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </FormControl>
+              <Stack spacing={10}>
+                <Stack
+                  direction={{ base: "column", sm: "row" }}
+                  align={"start"}
+                  justify={"space-between"}
+                >
+                  <Checkbox>Remember me</Checkbox>
+                  <Link color={"blue.400"}>Forgot password?</Link>
+                </Stack>
+                <Button
+                  bg={"blue.400"}
+                  color={"white"}
+                  type="submit"
+                  isLoading={isLoading}
+                  _hover={{
+                    bg: "blue.500",
+                  }}
+                >
+                  Sign in
+                </Button>
               </Stack>
-              <Button
-                bg={"blue.400"}
-                color={"white"}
-                _hover={{
-                  bg: "blue.500",
-                }}
-              >
-                Sign in
-              </Button>
             </Stack>
-          </Stack>
+          </form>
         </Box>
       </Stack>
     </Flex>

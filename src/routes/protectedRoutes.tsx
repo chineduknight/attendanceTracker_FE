@@ -1,6 +1,4 @@
 import WithSuspense from "components/HOC/WithSuspense";
-import LoginUser from "pages/loginUser";
-import Login from 'pages/Login';
 import { lazy } from "react";
 import { Navigate } from "react-router-dom";
 import { PROTECTED_PATHS, PUBLIC_PATHS } from "./pagePath";
@@ -12,7 +10,9 @@ const CreateAttendance = WithSuspense(
   lazy(() => import("pages/CreateAttendance"))
 );
 const AddMember = WithSuspense(lazy(() => import("pages/AddMember")));
-const OrgList = WithSuspense(lazy(() => import("pages/Orglist")));
+const Attendance = WithSuspense(lazy(() => import("pages/Attendance")));
+const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
+const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const AddOrganisation = WithSuspense(
   lazy(() => import("pages/AddOrganisation"))
 );
@@ -25,8 +25,8 @@ const {
   ADD_MEMBER,
   CREATE_ATTENDANCE,
   MARK_ATTENANCE,
-  LOGIN_USER,
-  LOGIN,
+  ATTENDANCE,
+  ALL_ATTENDANCE
 } = PROTECTED_PATHS;
 
 const PROTECTED_ROUTES = [
@@ -37,9 +37,11 @@ const PROTECTED_ROUTES = [
   { path: ADD_MEMBER, element: <AddMember /> },
   { path: MARK_ATTENANCE, element: <MarkAttendance /> },
   { path: CREATE_ATTENDANCE, element: <CreateAttendance /> },
-  { path: LOGIN_USER, element: <LoginUser /> },
-  { path: LOGIN, element: <Login /> },
-  { path: "/", element: <Navigate to={DASHBOARD} /> },
+  { path: ATTENDANCE, element: <Attendance /> },
+  { path: ALL_ATTENDANCE, element: <AllAttendance /> },
+
+  
+  { path: "/", element: <Navigate to={ALL_ORG} /> },
   // this enables you not to access the public routes when logged in
   ...Object.values(PUBLIC_PATHS).map((route) => {
     return {
