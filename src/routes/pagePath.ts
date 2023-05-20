@@ -10,6 +10,7 @@ export const PROTECTED_PATHS = {
   USER_MODEL: "/user-model",
   ADD_MEMBER: "/add-member",
   CREATE_ATTENDANCE: "/create-attendance",
+  ALL_ATTENDANCE: "/all-attendance",
   MARK_ATTENANCE: "/mark-attendance",
   LOGIN_USER: '/login-user',
   LOGIN: "/login",

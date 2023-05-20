@@ -78,14 +78,15 @@ const Attendance = () => {
 
     const presentMembersString =
       presentMembers.length > 0
-        ? "Present Members: " + presentMembers.join(", ")
+        ? "Present Members:" +
+          presentMembers.map((member) => "\n" + member).join("")
         : "";
 
     const absentMembersString =
       absentMembers.length > 0
-        ? "Absent Members: " + absentMembers.join(", ")
+        ? "\nAbsent Members:" +
+          absentMembers.map((member) => "\n" + member).join("")
         : "";
-
     const message = [presentMembersString, absentMembersString]
       .filter(Boolean)
       .join("\n");
@@ -95,21 +96,25 @@ const Attendance = () => {
       message
     )}`;
 
-   
-
     if (navigator.share) {
-      navigator.share({
-        title: 'Attendance Information',
-        text: message,
-      })
-      .then(() => console.log('Successful share'))
-      .catch((error) => console.log('Error sharing', error));
+      navigator
+        .share({
+          title: "Attendance Information",
+          text: message,
+        })
+        .then(() => console.log("Successful share"))
+        .catch((error) => console.log("Error sharing", error));
     } else {
       window.open(whatsappLink);
     }
-    
-
   };
+
+  const downloadURl = convertParamsToString(attendanceRequest.EXPORT, {
+    organisationId: org.id,
+    id: param.id as string,
+  });
+  useQueryWrapper(["export-excel"], downloadURl);
+  const sendToExcel = () => {};
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -124,8 +129,8 @@ const Attendance = () => {
       </Flex>
       <Container>
         <Flex mt="4" justifyContent="space-between">
-          <Box></Box>
-          <Button onClick={handleSendToWhatsapp}>Send to Whatsapp</Button>
+          <Button onClick={handleSendToWhatsapp}>Share</Button>
+          <Button onClick={handleSendToWhatsapp}>Export to Excel</Button>
         </Flex>
 
         <Flex mt="4" alignItems="center" justifyContent="space-between">

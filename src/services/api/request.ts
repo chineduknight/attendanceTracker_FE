@@ -14,4 +14,6 @@ export const orgRequest = {
 export const attendanceRequest = {
   ATTENDANCE:"/attendance",
   GET_ATTENDANCE:"/attendance/:organisationId/:id",
+  ALL_ATTENDANCE:"/attendance/:organisationId",
+  EXPORT:"/attendance/export/:organisationId/:id"
 }

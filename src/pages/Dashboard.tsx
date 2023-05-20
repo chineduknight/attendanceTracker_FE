@@ -4,8 +4,8 @@ import {
   useColorModeValue,
   Text,
   Button,
-  HStack,
   Heading,
+  Stack,
 } from "@chakra-ui/react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -35,20 +35,27 @@ const Dashboard = () => {
         textAlign='center'>
         {state?.name}
       </Heading>
-      <HStack spacing="4" p="4" wrap="wrap">
+      <Stack spacing="4" p="4" wrap="wrap">
         <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
           Add Member
         </Button>
         <Button onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}>
           Create Model
         </Button>
-      </HStack>
+    
       <Button
         ml="4"
         onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
       >
         Create Attendance
       </Button>
+      <Button
+        ml="4"
+        onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
+      >
+        All Attendance
+      </Button>
+      </Stack>
     </Box>
   );
 };
