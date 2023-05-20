@@ -113,8 +113,12 @@ const Attendance = () => {
     organisationId: org.id,
     id: param.id as string,
   });
-  useQueryWrapper(["export-excel"], downloadURl);
-  const sendToExcel = () => {};
+ const {refetch}= useQueryWrapper(["export-excel"], downloadURl,
+  {enabled:false}
+  );
+  const sendToExcel = () => {
+    refetch()
+  };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -130,7 +134,7 @@ const Attendance = () => {
       <Container>
         <Flex mt="4" justifyContent="space-between">
           <Button onClick={handleSendToWhatsapp}>Share</Button>
-          <Button onClick={handleSendToWhatsapp}>Export to Excel</Button>
+          <Button onClick={sendToExcel}>Export to Excel</Button>
         </Flex>
 
         <Flex mt="4" alignItems="center" justifyContent="space-between">
