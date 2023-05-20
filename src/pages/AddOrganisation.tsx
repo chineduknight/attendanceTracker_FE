@@ -20,7 +20,7 @@ import { orgRequest } from 'services';
 
 type Inputs = {
   name: string,
-  imageURL: string,
+  image: string,
 }
 
 const AddOrganisation = () => {
@@ -44,7 +44,7 @@ const AddOrganisation = () => {
 
 
     mutate({
-      url: orgRequest.ORGANISATION,
+      url: orgRequest.ORGANISATIONS,
       data
     })
 
@@ -118,7 +118,7 @@ const AddOrganisation = () => {
               <Input
                 type="imageURL"
 
-                {...register("imageURL", { required: true })}
+                {...register("image", { required: true })}
               />
             </FormControl>
             <Stack spacing={6}>
