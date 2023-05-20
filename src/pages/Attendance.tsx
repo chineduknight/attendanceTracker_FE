@@ -113,11 +113,20 @@ const Attendance = () => {
     organisationId: org.id,
     id: param.id as string,
   });
- const {refetch}= useQueryWrapper(["export-excel"], downloadURl,
-  {enabled:false}
-  );
+  const { refetch,isFetching } = useQueryWrapper(
+    ["export-excel"],
+    downloadURl,
+    {
+      enabled: false,
+      onSuccess: (data) => {
+        console.log("data:", data.data);
+        window.open(data.data);
+      },
+    }
+    );
+    
   const sendToExcel = () => {
-    refetch()
+    refetch();
   };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -134,7 +143,11 @@ const Attendance = () => {
       <Container>
         <Flex mt="4" justifyContent="space-between">
           <Button onClick={handleSendToWhatsapp}>Share</Button>
-          <Button onClick={sendToExcel}>Export to Excel</Button>
+          <Button onClick={sendToExcel} 
+          isLoading={isFetching}
+          >
+            Export to Excel
+          </Button>
         </Flex>
 
         <Flex mt="4" alignItems="center" justifyContent="space-between">
@@ -157,7 +170,7 @@ const Attendance = () => {
           </Box>
         )}
 
-        <Box mt="4" overflow="scroll" maxHeight="80%">
+        <Box mt="4" overflow="scroll" maxH="500px">
           {filterName.map((item) => AttendCard(item))}
         </Box>
       </Container>
