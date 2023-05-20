@@ -28,12 +28,12 @@ const CreateAttendance = () => {
       }
       return value;
     });
-  
+
     const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
     updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
-  
+
 
   const navigate = useNavigate();
 
@@ -70,7 +70,7 @@ const CreateAttendance = () => {
               <Input type="name" {...register("name", { required: true })} />
             </FormControl>
 
-            <FormControl id="category">
+            {/* <FormControl id="category">
               <FormLabel>Category</FormLabel>
               <Input
                 type="category"
@@ -84,7 +84,7 @@ const CreateAttendance = () => {
                 type="sub_category"
                 {...register("subCategory", { required: false })}
               />
-            </FormControl>
+            </FormControl> */}
 
             <FormControl id="date" isRequired>
               <FormLabel>Date</FormLabel>

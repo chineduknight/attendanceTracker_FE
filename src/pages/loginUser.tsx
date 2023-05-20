@@ -22,7 +22,7 @@ type Inputs = {
 
 const Login = () => {
     const { register, handleSubmit } = useForm<Inputs>();
-    const onSubmit: SubmitHandler<Inputs> = data =>{
+    const onSubmit: SubmitHandler<Inputs> = data => {
         // nothing here for now
     }
 
@@ -56,7 +56,7 @@ const Login = () => {
                     >
                         <Stack spacing={4}>
                             <FormControl id="email">
-                                <FormLabel>Email address</FormLabel>
+                                <FormLabel>Username</FormLabel>
                                 <Input
                                     type="email"
                                     {...register("email", { required: true })}
