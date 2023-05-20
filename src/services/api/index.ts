@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 
 export const baseURL = process.env.REACT_APP_BASE_URL;
+console.log(baseURL)
 export * from "./request";
 
 const axiosInstance: AxiosInstance = axios.create({

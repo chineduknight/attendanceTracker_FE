@@ -59,7 +59,7 @@ const Login = () => {
           <form onSubmit={handleSubmit}>
             <Stack spacing={4}>
               <FormControl id="text">
-                <FormLabel>Email address</FormLabel>
+                <FormLabel>Username</FormLabel>
                 <Input
                   type="text"
                   autoComplete="username"

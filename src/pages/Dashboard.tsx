@@ -28,35 +28,37 @@ const Dashboard = () => {
           Attendance Tracker
         </Text>
       </Flex>
-      {/* <Text>Organisation Name</Text> */}
+
       <Heading
         mt="4"
         fontSize="22px"
         textAlign='center'>
         {state?.name}
       </Heading>
-      <HStack spacing="4" p="4" wrap="wrap">
-        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
-          Add Member
-        </Button>
-        <Button onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}>
-          Create Model
-        </Button>
-      </HStack>
-      <HStack spacing="4" p="4" wrap="wrap">
-        <Button
-          ml="4"
-          onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
-        >
-          Create Attendance
-        </Button>
-        <Button
-          ml="4"
-          onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
-        >
-          All Attendance
-        </Button>
-      </HStack>
+      <Box alignItems='center'>
+        <HStack spacing="4" p="4" wrap="wrap">
+          <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
+            Add Member
+          </Button>
+          <Button onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}>
+            Create Model
+          </Button>
+        </HStack>
+        <HStack spacing="4" p="4" wrap="wrap">
+          <Button
+            ml="4"
+            onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
+          >
+            Create Attendance
+          </Button>
+          <Button
+            ml="4"
+            onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
+          >
+            All Attendance
+          </Button>
+        </HStack>
+      </Box>
     </Box>
   );
 };
