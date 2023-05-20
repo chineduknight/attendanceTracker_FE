@@ -78,13 +78,13 @@ const Attendance = () => {
 
     const presentMembersString =
       presentMembers.length > 0
-        ? "Present Members:" +
+        ? "*Present Members:*" +
           presentMembers.map((member) => "\n" + member).join("")
         : "";
 
     const absentMembersString =
       absentMembers.length > 0
-        ? "\nAbsent Members:" +
+        ? "\n*Absent Members:*" +
           absentMembers.map((member) => "\n" + member).join("")
         : "";
     const message = [presentMembersString, absentMembersString]
