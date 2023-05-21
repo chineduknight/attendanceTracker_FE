@@ -83,7 +83,7 @@ const AllAttendance = () => {
           </>
         ) : (
           <Text ml="4" fontWeight="bold">
-            No organisation yet
+            No Attendance here, Kindly Create and attendance
           </Text>
         )}
       </Stack>

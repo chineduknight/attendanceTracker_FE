@@ -38,7 +38,21 @@ const Attendance = () => {
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const onSuccess = (data) => {
     setAttendanceInfo(data.data);
-    const members = data.data.attendance;
+    const unsorted = data.data.attendance;
+    console.log("unsorted:", unsorted)
+    const members =  unsorted.sort((a, b) => {
+      // Sort by isPresent first
+      if (a.isPresent && !b.isPresent) {
+        return -1;
+      }
+      if (!a.isPresent && b.isPresent) {
+        return 1;
+      }
+    
+      // If isPresent is the same for both, sort by name
+      return a.member.name.localeCompare(b.member.name);
+    });
+    
     setAllMembers(members);
     setFilterName(members);
   };

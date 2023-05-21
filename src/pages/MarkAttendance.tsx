@@ -36,7 +36,9 @@ const MarkAttendance = () => {
     state.currentAttendance,
   ]);
   const onSuccess = (data) => {
-    const members = data.data;
+    const unsorted = data.data
+    const members = unsorted.sort((a, b) => a.name.localeCompare(b.name));
+
     const membersWithAttendStatus = members.map((member) => {
       return {
         ...member,
