@@ -5,7 +5,7 @@ import {
   Button,
   Text,
   Stack,
-  Image,
+  Avatar,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -17,8 +17,8 @@ import {
 } from "services/api/apiHelper";
 import { FaTrashAlt } from "react-icons/fa";
 import { useState } from "react";
-import { orgRequest } from 'services';
-import useGlobalStore from 'zStore';
+import { orgRequest } from "services";
+import useGlobalStore from "zStore";
 
 type OrgType = {
   name: string;
@@ -31,7 +31,10 @@ type OrgType = {
 
 const OrgList = () => {
   const navigate = useNavigate();
-const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
+  const [setOrg, setUser] = useGlobalStore((state) => [
+    state.updateOrganisation,
+    state.setUser,
+  ]);
   const onSuccess = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ["all-organistions"] });
@@ -43,9 +46,13 @@ const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
   const handleGetOrgSuccess = (data) => {
     setAllOrg(data.data);
   };
-  const { refetch } = useQueryWrapper(["all-organisations"], orgRequest.ORGANISATIONS, {
-    onSuccess: handleGetOrgSuccess,
-  });
+  const { refetch } = useQueryWrapper(
+    ["all-organisations"],
+    orgRequest.ORGANISATIONS,
+    {
+      onSuccess: handleGetOrgSuccess,
+    }
+  );
 
   function handleDelete(orgDelete, e) {
     mutate({
@@ -55,7 +62,7 @@ const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
   }
 
   function handOrg(org) {
-    setOrg(org)
+    setOrg(org);
     navigate(PROTECTED_PATHS.DASHBOARD, { state: org });
   }
 
@@ -68,10 +75,21 @@ const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
         p="4"
       >
         <Text color="#fff">Attendance Tracker</Text>
-        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
-          + Add Org
+        <Button
+          onClick={() =>
+            setUser({
+              token: "",
+              id: "",
+              username: "",
+            })
+          }
+        >
+          Logout
         </Button>
       </Flex>
+      <Button mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
+        + Add Org
+      </Button>
       <Stack
         spacing={4}
         w={"full"}
@@ -100,14 +118,7 @@ const [setOrg] =useGlobalStore(state =>[state.updateOrganisation])
                 }}
               >
                 <Flex alignItems="center">
-                  <Image
-                    src={org.image}
-                    alt="Dan Abramov"
-                    w="45px"
-                    h="45px"
-                    objectFit="cover"
-                    borderRadius="50%"
-                  />
+                  <Avatar name={org.name} w="45px" h="45px" />
                   <Text ml="4" textAlign="left">
                     {" "}
                     {org.name}
