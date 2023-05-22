@@ -27,7 +27,10 @@ type MemberType = {
   name: string;
   id: string;
 };
-
+type AttendanceInfoType = {
+  present: number;
+  absent: number;
+};
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [filterName, setFilterName] = useState<MemberType[]>([]);
@@ -35,8 +38,12 @@ const MarkAttendance = () => {
     state.organisation,
     state.currentAttendance,
   ]);
+  const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>({
+    present: 0,
+    absent: 0,
+  });
   const onSuccess = (data) => {
-    const unsorted = data.data
+    const unsorted = data.data;
     const members = unsorted.sort((a, b) => a.name.localeCompare(b.name));
 
     const membersWithAttendStatus = members.map((member) => {
@@ -47,6 +54,10 @@ const MarkAttendance = () => {
     });
     setAllMembers(membersWithAttendStatus);
     setFilterName(membersWithAttendStatus);
+    setAttendanceInfo({
+      present: 0,
+      absent: unsorted.length,
+    });
   };
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
@@ -55,31 +66,48 @@ const MarkAttendance = () => {
     onSuccess,
   });
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const handleSearch = useCallback((e) => {
-    const query = e.target.value.toLowerCase();
-    setSearchQuery(query);
-    setFilterName(
-      allMembers.filter((member) =>
-        member.name.toLowerCase().includes(query)
-      )
-    );
-  }, [allMembers]);
-  
-  const updateAttendance = useCallback((userId) => {
-    setAllMembers((prevMembers) => {
-      const updatedMembers = prevMembers.map((member) =>
-        member.id === userId ? { ...member, attend: !member.attend } : member
+  const handleSearch = useCallback(
+    (e) => {
+      const query = e.target.value.toLowerCase();
+      setSearchQuery(query);
+      setFilterName(
+        allMembers.filter((member) => member.name.toLowerCase().includes(query))
       );
-      setFilterName(updatedMembers.filter((member) =>
-        member.name.toLowerCase().includes(searchQuery)
-      ));
-      return updatedMembers;
-    });
-  }, [searchQuery]);
-  
+    },
+    [allMembers]
+  );
 
+  const updateAttendance = useCallback(
+    (userId) => {
+      setAllMembers((prevMembers) => {
+        const updatedMembers = prevMembers.map((member) =>
+          member.id === userId ? { ...member, attend: !member.attend } : member
+        );
+
+        // Calculate present and absent counts
+        const presentCount = updatedMembers.reduce(
+          (count, member) => count + (member.attend ? 1 : 0),
+          0
+        );
+        const absentCount = updatedMembers.length - presentCount;
+        setAttendanceInfo({
+          present: presentCount,
+          absent: absentCount,
+        });
+        // Filter and update the filtered array based on search query
+        const filteredMembers = updatedMembers.filter((member) =>
+          member.name.toLowerCase().includes(searchQuery)
+        );
+
+        setFilterName(filteredMembers);
+
+        return updatedMembers;
+      });
+    },
+    [searchQuery]
+  );
 
   const navigate = useNavigate();
 
@@ -140,7 +168,14 @@ const MarkAttendance = () => {
             </Text>
           </Box>
         )}
-
+        <Flex mt="2" justifyContent="space-between">
+          <Text>
+            Present: <strong>{attendanceInfo?.present} </strong>
+          </Text>
+          <Text>
+            Absent: <strong>{attendanceInfo?.absent} </strong>
+          </Text>
+        </Flex>
         <Box mt="4" overflow="scroll" maxHeight="300px">
           {filterName.map((item) => (
             <Button
@@ -164,6 +199,7 @@ const MarkAttendance = () => {
             w="full"
             mt="4"
             isLoading={isLoading}
+            disabled={attendanceInfo.present === 0}
           >
             Submit
           </Button>
