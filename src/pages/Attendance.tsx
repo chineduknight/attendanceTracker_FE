@@ -53,19 +53,17 @@ const Attendance = () => {
       return a.member.name.localeCompare(b.member.name);
     });
 
-    const { present, absent } = members.reduce(
-      (count, member) => {
-        if (member.isPresent) {
-          count.present++;
-        } else {
-          count.absent++;
-        }
-        return count;
-      },
-      { present: 0, absent: 0 }
+    const presentCount = members.reduce(
+      (count, member) => count + (member.isPresent ? 1 : 0),
+      0
     );
+    const absentCount = members.length - presentCount;
 
-    setAttendanceInfo({ ...data.data, present, absent });
+    setAttendanceInfo({
+      ...data.data,
+      present: presentCount,
+      absent: absentCount,
+    });
 
     setAllMembers(members);
     setFilterName(members);
