@@ -30,6 +30,8 @@ type MemberType = {
 type AttendanceInfoType = {
   name: string;
   date: Date;
+  present: number;
+  absent: number;
 };
 const Attendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
@@ -37,10 +39,8 @@ const Attendance = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const onSuccess = (data) => {
-    setAttendanceInfo(data.data);
     const unsorted = data.data.attendance;
-    console.log("unsorted:", unsorted)
-    const members =  unsorted.sort((a, b) => {
+    const members = unsorted.sort((a, b) => {
       // Sort by isPresent first
       if (a.isPresent && !b.isPresent) {
         return -1;
@@ -48,11 +48,23 @@ const Attendance = () => {
       if (!a.isPresent && b.isPresent) {
         return 1;
       }
-    
+
       // If isPresent is the same for both, sort by name
       return a.member.name.localeCompare(b.member.name);
     });
-    
+
+    const presentCount = members.reduce(
+      (count, member) => count + (member.isPresent ? 1 : 0),
+      0
+    );
+    const absentCount = members.length - presentCount;
+
+    setAttendanceInfo({
+      ...data.data,
+      present: presentCount,
+      absent: absentCount,
+    });
+
     setAllMembers(members);
     setFilterName(members);
   };
@@ -90,18 +102,20 @@ const Attendance = () => {
       .filter((item) => !item.isPresent)
       .map((item) => item.member.name);
 
+    const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate:${formattedDate}\n`;
     const presentMembersString =
       presentMembers.length > 0
-        ? "*Present Members:*" +
+        ? `*Present Members:(${attendanceInfo?.present})*` +
           presentMembers.map((member) => "\n" + member).join("")
         : "";
 
     const absentMembersString =
       absentMembers.length > 0
-        ? "\n*Absent Members:*" +
+        ? `\n*Absent Members:(${attendanceInfo?.absent})*` +
           absentMembers.map((member) => "\n" + member).join("")
         : "";
-    const message = [presentMembersString, absentMembersString]
+
+    const message = [title, presentMembersString, absentMembersString]
       .filter(Boolean)
       .join("\n");
 
@@ -127,18 +141,17 @@ const Attendance = () => {
     organisationId: org.id,
     id: param.id as string,
   });
-  const { refetch,isFetching } = useQueryWrapper(
+  const { refetch, isFetching } = useQueryWrapper(
     ["export-excel"],
     downloadURl,
     {
       enabled: false,
       onSuccess: (data) => {
-        console.log("data:", data.data);
         window.open(data.data);
       },
     }
-    );
-    
+  );
+
   const sendToExcel = () => {
     refetch();
   };
@@ -157,9 +170,7 @@ const Attendance = () => {
       <Container>
         <Flex mt="4" justifyContent="space-between">
           <Button onClick={handleSendToWhatsapp}>Share</Button>
-          <Button onClick={sendToExcel} 
-          isLoading={isFetching}
-          >
+          <Button onClick={sendToExcel} isLoading={isFetching}>
             Export to Excel
           </Button>
         </Flex>
@@ -183,7 +194,14 @@ const Attendance = () => {
             </Text>
           </Box>
         )}
-
+        <Flex mt="2" justifyContent="space-between">
+          <Text>
+            Present: <strong>{attendanceInfo?.present} </strong>
+          </Text>
+          <Text>
+            Absent: <strong>{attendanceInfo?.absent} </strong>
+          </Text>
+        </Flex>
         <Box mt="4" overflow="scroll" maxH="500px">
           {filterName.map((item) => AttendCard(item))}
         </Box>
