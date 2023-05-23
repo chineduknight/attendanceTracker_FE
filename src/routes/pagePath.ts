@@ -9,6 +9,7 @@ export const PROTECTED_PATHS = {
   ATTENDANCE: "/attendance/:id",
   USER_MODEL: "/user-model",
   ADD_MEMBER: "/add-member",
+  VIEW_MEMBER: "/view-member",
   CREATE_ATTENDANCE: "/create-attendance",
   ALL_ATTENDANCE: "/all-attendance",
   MARK_ATTENANCE: "/mark-attendance",

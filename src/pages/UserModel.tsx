@@ -1,5 +1,6 @@
-import { Box, Flex } from "@chakra-ui/layout";
 import {
+  Box,
+  Flex,
   useColorModeValue,
   Text,
   Button,
@@ -11,18 +12,31 @@ import {
   Checkbox,
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { nanoid } from "nanoid";
-import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import {
+  postRequest,
+  useMutationWrapper,
+  useQueryWrapper,
+} from "services/api/apiHelper";
+
 import { orgRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import useGlobalStore from "zStore";
 import _ from "lodash";
 import { toast } from "react-toastify";
-import { useNavigate } from 'react-router-dom';
-import { PROTECTED_PATHS } from 'routes/pagePath';
+import { useNavigate } from "react-router-dom";
+import { PROTECTED_PATHS } from "routes/pagePath";
+import { FaPlusCircle, FaTimesCircle } from "react-icons/fa";
+
+interface FieldType {
+  _id: string;
+  name: string;
+  type: string;
+  required: boolean;
+  }
+
 const UserModel = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const inputType = [
+  const inputTypes = [
     "text",
     "email",
     "number",
@@ -32,72 +46,85 @@ const UserModel = () => {
     "color",
     "password",
   ];
-const navigate  = useNavigate()
-  const [fields, setFields] = useState([
-    {
-      id: nanoid(),
-      name: "name",
-      type: "text",
-      required: true,
-    },
-   
-    {
-      id: nanoid(),
-      name: "",
-      type: "text",
-      required: true,
-    },
-    {
-      id: nanoid(),
-      name: "",
-      type: "text",
-      required: true,
-    },
-  ]);
-  const handleAddMore = () => {
-    setFields([
-      ...fields,
-      {
-        id: nanoid(),
+  const navigate = useNavigate();
+
+  const [fields, setFields] = useState<FieldType[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const url = convertParamsToString(orgRequest.CONFIG_MODEL, {
+    organisationId: org.id,
+  });
+  const getModelSuccess = (response) => {
+    let modelFields = response.data.fields;
+    setIsUpdating(true);
+
+    if (modelFields.length === 0) {
+      const newField = {
+        _id: `field-0`,
         name: "",
         type: "text",
-        required: false,
-      },
-    ]);
+        required: true,
+      };
+      modelFields = [newField];
+      setIsUpdating(false);
+    }
+    setFields(modelFields);
   };
-  const handleChangeInput = (id, event) => {
-    const isCheckBox = event.target.name === "required";
-    const newInputFields = fields.map((field) => {
-      if (id === field.id) {
+  useQueryWrapper(["get-model"], url, { onSuccess: getModelSuccess });
+
+  const handleAddMore = () => {
+    const newField = {
+      _id: `field-${fields.length}`,
+      name: "",
+      type: "text",
+      required: false,
+    };
+
+    setFields([...fields, newField]);
+  };
+
+  const handleRemove = (_id) => {
+    const updatedFields = fields.filter((field) => field._id !== _id);
+    setFields(updatedFields);
+  };
+
+  const handleChangeInput = (_id, event) => {
+    const { name, value, checked } = event.target;
+    const isCheckBox = name === "required";
+
+    const newFields = fields.map((field) => {
+      if (_id === field._id) {
         return {
           ...field,
-          [event.target.name]: isCheckBox
-            ? event.target.checked
-            : event.target.value,
+          [name]: isCheckBox ? checked : value,
         };
       }
       return field;
     });
-    setFields(newInputFields);
+
+    setFields(newFields);
   };
 
   const onSuccess = (data) => {
-    toast.success(data.data);
-    navigate(PROTECTED_PATHS.DASHBOARD)
+    toast.success(
+      isUpdating ? "Model updated successfully" : "Model created successfully"
+    );
+    navigate(PROTECTED_PATHS.ADD_MEMBER);
   };
+
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
+
   const handleSubmit = () => {
     const url = convertParamsToString(orgRequest.CONFIG_MODEL, {
       organisationId: org.id,
     });
 
-    const fieldsWithoutId = fields.map((field) => _.omit(field, ["id"]));
-
+    const fieldsWithoutId = fields.map((field) => _.omit(field, ["_id"]));
     mutate({
       url,
       data: { fields: fieldsWithoutId },
     });
   };
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -107,7 +134,7 @@ const navigate  = useNavigate()
         p="4"
       >
         <Text color="#fff" fontWeight="bold">
-          User Model
+          {isUpdating ? "Update Model" : "Create Model"}
         </Text>
       </Flex>
       <Flex
@@ -124,36 +151,55 @@ const navigate  = useNavigate()
           boxShadow={"lg"}
           p={6}
         >
-          
           {fields.map((field, index) => (
-            <FormControl id={`field-${index}`} isRequired key={field.id}>
+            <FormControl id={`field-${index}`} isRequired key={field._id}>
+              <Flex justifyContent="right">
+                {index > 0 && (
+                  <Button
+                    variant="link"
+                    colorScheme="red"
+                    onClick={() => handleRemove(field._id)}
+                    size="sm"
+                    aria-label="Remove field"
+                    leftIcon={<FaTimesCircle />}
+                    _hover={{ color: "red.500" }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </Flex>
               <Box borderBottom="1px dashed gray" pb="3">
-                <Box>
-                  <FormLabel mb="0">Title</FormLabel>
-                  <Input
-                    placeholder="name"
-                    _placeholder={{ color: "gray.500" }}
-                    type="text"
-                    w="100%"
-                    value={field.name}
-                    name="name"
-                    disabled={index===0}
-                    onChange={(event) => handleChangeInput(field.id, event)}
-                  />
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
+                  <Box flex="1">
+                    <FormLabel mb="0">Title</FormLabel>
+                    <Input
+                      placeholder="name"
+                      _placeholder={{ color: "gray.500" }}
+                      type="text"
+                      w="100%"
+                      value={field.name}
+                      name="name"
+                      disabled={index === 0}
+                      onChange={(event) => handleChangeInput(field._id, event)}
+                    />
+                  </Box>
                 </Box>
                 <Box>
                   <FormLabel mb="0" mt="3">
                     Form Type
                   </FormLabel>
-
                   <Select
                     placeholder="Select option"
                     value={field.type}
                     name="type"
-                    disabled={index===0}
-                    onChange={(event) => handleChangeInput(field.id, event)}
+                    disabled={index === 0}
+                    onChange={(event) => handleChangeInput(field._id, event)}
                   >
-                    {inputType.map((input) => (
+                    {inputTypes.map((input) => (
                       <option key={input} value={input}>
                         {input}
                       </option>
@@ -162,39 +208,33 @@ const navigate  = useNavigate()
                 </Box>
                 <Checkbox
                   mt="2"
-                  disabled={index===0}
+                  disabled={index === 0}
                   defaultChecked={field.required}
                   name="required"
-                  onChange={(event) => {
-                    handleChangeInput(field.id, event);
-                  }}
+                  onChange={(event) => handleChangeInput(field._id, event)}
                 >
-                  required
+                  Required
                 </Checkbox>
               </Box>
             </FormControl>
           ))}
-
           <Button
-            variant="link"
+            leftIcon={<FaPlusCircle />}
+            variant="logout"
             w="max-content"
-            color="#fff"
-            bg="gray"
-            p="2"
-            textDecoration="none"
             onClick={handleAddMore}
           >
-            + Add More
+            Add More
           </Button>
-          <Stack spacing={6}>
+          <Stack spacing={3}>
+            <Button onClick={handleSubmit} isLoading={isLoading}>
+              {isUpdating ? "Update" : "Submit"}
+            </Button>
             <Button
-              onClick={handleSubmit}
-              bg={"blue.400"}
-              color={"white"}
-              _hover={{ bg: "blue.500" }}
-              isLoading={isLoading}
+              variant="outline"
+              onClick={() => navigate(-1)}
             >
-              Submit
+              Cancel
             </Button>
           </Stack>
         </Stack>

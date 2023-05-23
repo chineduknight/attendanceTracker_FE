@@ -11,55 +11,48 @@ import {
 } from "@chakra-ui/react";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
-import { postRequest, useMutationWrapper } from 'services/api/apiHelper';
-import { FaArrowCircleLeft } from 'react-icons/fa'
+import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import { FaArrowCircleLeft } from "react-icons/fa";
 import { useForm, SubmitHandler } from "react-hook-form";
-import { queryClient } from 'services/api/apiHelper';
-import { orgRequest } from 'services';
-
+import { queryClient } from "services/api/apiHelper";
+import { orgRequest } from "services";
 
 type Inputs = {
-  name: string,
+  name: string;
   // image: string,
-}
+};
 
 const AddOrganisation = () => {
-
   const navigate = useNavigate();
 
   const { register, handleSubmit } = useForm<Inputs>();
 
   const onSuccess = (data) => {
-    queryClient.invalidateQueries({ queryKey: ["all-organisations"] })
-  }
+    queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
+  };
 
-  const { mutate } = useMutationWrapper(postRequest, onSuccess)
+  const { mutate } = useMutationWrapper(postRequest, onSuccess);
 
   const handleAddOrg = (details) => {
-
     const data = {
       name: details.name,
       // image: "https://picsum.photos/200/300"
-    }
-
+    };
 
     mutate({
       url: orgRequest.ORGANISATIONS,
-      data
-    })
+      data,
+    });
 
-    navigate(PROTECTED_PATHS.ALL_ORG)
+    navigate(PROTECTED_PATHS.ALL_ORG);
+  };
 
-  }
-
-  const onSubmit: SubmitHandler<Inputs> = details => {
-    handleAddOrg(details)
-  }
-
+  const onSubmit: SubmitHandler<Inputs> = (details) => {
+    handleAddOrg(details);
+  };
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-
       <Flex
         bg="blue.500"
         justifyContent="space-between"
@@ -72,16 +65,16 @@ const AddOrganisation = () => {
       </Flex>
       <Button
         onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
-
-        mt='10px'
-        ml='10px'
+        variant="logout"
+        mt="10px"
+        ml="10px"
         color={"white"}
-
         _hover={{
           bg: "blue.500",
         }}
+        leftIcon={<FaArrowCircleLeft />}
       >
-        <FaArrowCircleLeft /> Back
+        Back
       </Button>
 
       <Flex
@@ -89,9 +82,7 @@ const AddOrganisation = () => {
         justify={"center"}
         bg={useColorModeValue("gray.50", "gray.800")}
       >
-
-        <form onSubmit={handleSubmit(onSubmit)}>
-
+        <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>
           <Stack
             spacing={4}
             w={"full"}
@@ -102,9 +93,7 @@ const AddOrganisation = () => {
             p={6}
             my={12}
           >
-            <FormControl
-              id="email"
-              isRequired>
+            <FormControl id="email" isRequired>
               <FormLabel>Organisation Name</FormLabel>
               <Input
                 placeholder="Seat of wisdom presidium"
@@ -113,31 +102,15 @@ const AddOrganisation = () => {
                 {...register("name", { required: true })}
               />
             </FormControl>
-            {/* <FormControl id="password">
-              <FormLabel>Image Url</FormLabel>
-              <Input
-                type="imageURL"
-
-                {...register("image", { required: true })}
-              />
-            </FormControl> */}
             <Stack spacing={6}>
-              <Button
-                bg={"blue.400"}
-                color={"white"}
-                _hover={{
-                  bg: "blue.500",
-                }}
-                type="submit"
-              >
+              <Button variant="primary" type="submit">
                 Submit
               </Button>
             </Stack>
           </Stack>
         </form>
-
       </Flex>
-    </Box >
+    </Box>
   );
 };
 
