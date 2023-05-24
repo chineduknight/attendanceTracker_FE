@@ -45,7 +45,8 @@ const SubCategory = () => {
     const [updateCurrentAttendance] = useGlobalStore((state) => [
         state.updateCurrentAttendance,
     ]);
-    const onSubmit: SubmitHandler<currentAttendanceType> = (formData) => {
+    const onSubmit: SubmitHandler<currentAttendanceType> = (formData, details) => {
+        handleAddSubCategory(details)
         const trimmedFormData = _.mapValues(formData, (value) => {
             if (typeof value === 'string') {
                 return value.trim();
