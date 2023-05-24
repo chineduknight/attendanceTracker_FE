@@ -5,6 +5,8 @@ import { PROTECTED_PATHS, PUBLIC_PATHS } from "./pagePath";
 
 const Dashboard = WithSuspense(lazy(() => import("pages/Dashboard")));
 const UserModel = WithSuspense(lazy(() => import("pages/UserModel")));
+const Category = WithSuspense(lazy(() => import("pages/Category")));
+const SubCategory = WithSuspense(lazy(() => import("pages/SubCategory")));
 const MarkAttendance = WithSuspense(lazy(() => import("pages/MarkAttendance")));
 const CreateAttendance = WithSuspense(
   lazy(() => import("pages/CreateAttendance"))
@@ -22,6 +24,8 @@ const {
   ADD_ORG,
   ALL_ORG,
   USER_MODEL,
+  CATEGORY,
+  SUB_CATEGORY,
   ADD_MEMBER,
   CREATE_ATTENDANCE,
   MARK_ATTENANCE,
@@ -34,13 +38,15 @@ const PROTECTED_ROUTES = [
   { path: DASHBOARD, element: <Dashboard /> },
   { path: ADD_ORG, element: <AddOrganisation /> },
   { path: USER_MODEL, element: <UserModel /> },
+  { path: CATEGORY, element: <Category /> },
+  { path: SUB_CATEGORY, element: <SubCategory /> },
   { path: ADD_MEMBER, element: <AddMember /> },
   { path: MARK_ATTENANCE, element: <MarkAttendance /> },
   { path: CREATE_ATTENDANCE, element: <CreateAttendance /> },
   { path: ATTENDANCE, element: <Attendance /> },
   { path: ALL_ATTENDANCE, element: <AllAttendance /> },
 
-  
+
   { path: "/", element: <Navigate to={ALL_ORG} /> },
   // this enables you not to access the public routes when logged in
   ...Object.values(PUBLIC_PATHS).map((route) => {

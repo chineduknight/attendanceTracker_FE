@@ -132,6 +132,7 @@ const MarkAttendance = () => {
     };
 
     mutate({
+      // url: `${orgRequest.ORGANISATIONS}/${data.organisationId}/category`,
       url: attendanceRequest.ATTENDANCE,
       data,
     });
