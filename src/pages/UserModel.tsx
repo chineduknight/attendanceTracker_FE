@@ -60,7 +60,7 @@ const UserModel = () => {
     if (modelFields.length === 0) {
       const newField = {
         _id: `field-0`,
-        name: "",
+        name: "name",
         type: "text",
         required: true,
       };
