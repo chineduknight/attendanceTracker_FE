@@ -15,14 +15,38 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import _ from 'lodash';
-// import { queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { orgRequest } from "services";
+import { queryClient, useMutationWrapper } from "services/api/apiHelper";
+
 
 const Category = () => {
+    const onSuccess = (data) => {
+        queryClient.invalidateQueries({ queryKey: ["all-organisations"] })
+    }
+
+    const { mutate } = useMutationWrapper(onSuccess)
+
+    const handleAddCategory = (detail) => {
+
+        const data = {
+            name: detail.name
+        }
+
+
+        mutate({
+            url: orgRequest.CATEGORY,
+            data
+        })
+
+        navigate(PROTECTED_PATHS.ALL_ORG)
+
+    }
     const { register, handleSubmit } = useForm<currentAttendanceType>();
     const [updateCurrentAttendance] = useGlobalStore((state) => [
         state.updateCurrentAttendance,
     ]);
-    const onSubmit: SubmitHandler<currentAttendanceType> = (formData) => {
+    const onSubmit: SubmitHandler<currentAttendanceType> = (formData, detail) => {
+        handleAddCategory(detail)
         const trimmedFormData = _.mapValues(formData, (value) => {
             if (typeof value === 'string') {
                 return value.trim();
@@ -34,19 +58,6 @@ const Category = () => {
         updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
         navigate(PROTECTED_PATHS.MARK_ATTENANCE);
     };
-
-    // const onSuccess = () => {
-
-    //   queryClient.invalidateQueries({ queryKey: ["all-attendance"] });
-    // };
-
-    // const { mutate } = useMutationWrapper(onSuccess);
-    // mutate({
-    //   data?.data
-    // })
-    // data = {
-    //   name: "TEsting",
-    // }
 
 
     const navigate = useNavigate();
@@ -81,7 +92,7 @@ const Category = () => {
                 >
                     <form onSubmit={handleSubmit(onSubmit)}>
                         <FormControl id="category">
-                            <FormLabel>Category</FormLabel>
+                            <FormLabel>Category name</FormLabel>
                             <Input
                                 type="category"
                                 {...register("category", { required: false })}

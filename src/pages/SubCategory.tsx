@@ -34,7 +34,7 @@ const SubCategory = () => {
 
 
         mutate({
-            url: orgRequest.ORGANISATIONS,
+            url: orgRequest.SUBCATEGORY,
             data
         })
 
@@ -58,20 +58,6 @@ const SubCategory = () => {
         updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
         navigate(PROTECTED_PATHS.MARK_ATTENANCE);
     };
-
-    // const onSuccess = () => {
-
-    //   queryClient.invalidateQueries({ queryKey: ["all-attendance"] });
-    // };
-
-    // const { mutate } = useMutationWrapper(onSuccess);
-    // mutate({
-    //   data?.data
-    // })
-    // data = {
-    //   name: "TEsting",
-    //   id: "6463b826c38b4ee83e9532bd"
-    // }
 
 
     const navigate = useNavigate();
@@ -106,7 +92,7 @@ const SubCategory = () => {
                 >
                     <form onSubmit={handleSubmit(onSubmit)}>
                         <FormControl id="sub_category">
-                            <FormLabel>Sub Category</FormLabel>
+                            <FormLabel>Sub-Category name</FormLabel>
                             <Input
                                 type="sub_category"
                                 {...register("subCategory", { required: false })}
