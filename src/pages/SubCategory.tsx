@@ -15,9 +15,32 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import _ from 'lodash';
-// import { queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { orgRequest } from "services";
 
 const SubCategory = () => {
+    const onSuccess = (data) => {
+        queryClient.invalidateQueries({ queryKey: ["all-organisations"] })
+    }
+
+    const { mutate } = useMutationWrapper(postRequest, onSuccess)
+
+    const handleAddSubCategory = (details) => {
+
+        const data = {
+            name: details.name,
+            parentCategoryId: "6463b826c38b4ee83e9532bd"
+        }
+
+
+        mutate({
+            url: orgRequest.ORGANISATIONS,
+            data
+        })
+
+        navigate(PROTECTED_PATHS.ALL_ORG)
+
+    }
     const { register, handleSubmit } = useForm<currentAttendanceType>();
     const [updateCurrentAttendance] = useGlobalStore((state) => [
         state.updateCurrentAttendance,
@@ -61,7 +84,7 @@ const SubCategory = () => {
                 p="4"
             >
                 <Text fontWeight="bold" color="#fff">
-                    Create SubCategory
+                    Create Sub-Category
                 </Text>
             </Flex>
             <Flex
@@ -81,11 +104,11 @@ const SubCategory = () => {
                     p={6}
                 >
                     <form onSubmit={handleSubmit(onSubmit)}>
-                        <FormControl id="category">
+                        <FormControl id="sub_category">
                             <FormLabel>Sub Category</FormLabel>
                             <Input
-                                type="category"
-                                {...register("category", { required: false })}
+                                type="sub_category"
+                                {...register("subCategory", { required: false })}
                             />
                         </FormControl>
                         <Box>

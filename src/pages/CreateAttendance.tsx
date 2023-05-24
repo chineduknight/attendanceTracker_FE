@@ -77,22 +77,6 @@ const CreateAttendance = () => {
               <Input type="name" {...register("name", { required: true })} />
             </FormControl>
 
-            {/* <FormControl id="category">
-              <FormLabel>Category</FormLabel>
-              <Input
-                type="category"
-                {...register("category", { required: false })}
-              />
-            </FormControl>
-
-            <FormControl id="sub_category">
-              <FormLabel>Sub Category</FormLabel>
-              <Input
-                type="sub_category"
-                {...register("subCategory", { required: false })}
-              />
-            </FormControl> */}
-
             <FormControl id="date" isRequired>
               <FormLabel>Date</FormLabel>
               <Input
