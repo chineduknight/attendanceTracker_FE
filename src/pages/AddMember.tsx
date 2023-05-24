@@ -11,7 +11,7 @@ import {
   Stack,
   Heading,
 } from "@chakra-ui/react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
   postRequest,
@@ -41,12 +41,16 @@ interface FormData {
 const AddMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [membersModel, setMembersModel] = useState<MemberField[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const navigate = useNavigate();
+  const params = useParams();
+  console.log("params:", params.memberId)
+  
   const { register, handleSubmit } = useForm<FormData>();
 
   const onSuccess = () => {
-    toast.success("Member added successfully");
+    toast.success(isUpdating ? "Member updated successfully" : "Member added successfully");
     queryClient.invalidateQueries({ queryKey: ["all-members"] });
     navigate(PROTECTED_PATHS.DASHBOARD);
   };
@@ -61,6 +65,8 @@ const AddMember = () => {
     {
       onSuccess: (data) => {
         setMembersModel(data?.data.fields);
+        const isUpdate = params.memberId !== undefined;
+        setIsUpdating(isUpdate);
       },
     }
   );
@@ -106,6 +112,7 @@ const AddMember = () => {
       }
     });
   };
+
   return (
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -115,7 +122,7 @@ const AddMember = () => {
         p="4"
       >
         <Text color="#fff" fontWeight="bold">
-          Add Member
+          {isUpdating ? "Update Member" : "Add Member"}
         </Text>
       </Flex>
       <>
@@ -180,7 +187,7 @@ const AddMember = () => {
                         type="submit"
                         isLoading={isLoading}
                       >
-                        Submit
+                        {isUpdating ? "Update" : "Submit"}
                       </Button>
                     </Box>
                     <Button
