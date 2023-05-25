@@ -8,7 +8,8 @@ export const orgRequest = {
   ORGANISATION: "/organisations/:organisationId/members",
   ORGANISATIONS: "/organisations",
   MEMBERS:"/organisations/:organisationId/members",
-  CONFIG_MODEL:"/organisations/:organisationId/model"
+  CONFIG_MODEL:"/organisations/:organisationId/model",
+  // organisations/:organisationId/members
 };
 
 export const attendanceRequest = {

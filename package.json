@@ -22,6 +22,7 @@
     "lodash": "^4.17.21",
     "nanoid": "^4.0.2",
     "react": "^18.1.0",
+    "react-confirm-alert": "^3.0.6",
     "react-dom": "^18.1.0",
     "react-hook-form": "^7.43.9",
     "react-icon": "^1.0.0",

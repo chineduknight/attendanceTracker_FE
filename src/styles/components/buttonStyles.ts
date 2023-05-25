@@ -2,6 +2,7 @@
 export const ButtonStyles = {
   // style object for base or default style
   baseStyle: {
+    color: "#fff", // ensure text color is white
     outline: "none",
     _focus: { boxShadow: "none" },
   },
@@ -10,17 +11,15 @@ export const ButtonStyles = {
   // styles for different visual variants ("outline", "solid")
   variants: {
     primary: (props) => ({
-      bg: "#ffcc00",
+      bg: "#3f51b5", // indigo shade
       borderRadius: "4px",
       fontSize: "14px",
       fontWeight: "500",
       _hover: {
-        bg: "#ffcc00",
+        bg: "#283593", // darker shade of indigo for hover
         boxShadow: "md",
-        color: "#fff",
         _disabled: {
-          bg: "#ffcc00",
-          color: "black",
+          bg: "#283593",
         },
       },
     }),
@@ -35,21 +34,24 @@ export const ButtonStyles = {
         outline: "none",
       },
     }),
-    secondaryOutline: () => ({
-      bg: "#3E3E3E",
-      border: "1px solid",
+    danger: () => ({
+      bg: "#b71c1c", // deep red color
       borderRadius: "4px",
-      transition: "all 200ms ease",
-      color: "#ffffff",
+      fontSize: "14px",
+      fontWeight: "500",
       _hover: {
-        bg: "transparent",
-        color: "#000000",
-
+        bg: "#d32f2f", // brighter red on hover
         boxShadow: "md",
-        transform: "scale(1.02)",
       },
-      _focus: {
-        outline: "none",
+    }),
+    logout: () => ({
+      bg: "#9e9e9e", // a lighter neutral gray color for better contrast with the blue navbar
+      borderRadius: "4px",
+      fontSize: "14px",
+      fontWeight: "500",
+      _hover: {
+        bg: "#757575", // a slightly darker gray on hover
+        boxShadow: "md",
       },
     }),
   },

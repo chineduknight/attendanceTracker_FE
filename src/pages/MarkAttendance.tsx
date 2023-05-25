@@ -21,6 +21,8 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
+import { confirmAlert } from 'react-confirm-alert';
+
 
 type MemberType = {
   attend: boolean;
@@ -120,6 +122,25 @@ const MarkAttendance = () => {
     onSubmitSuccess
   );
 
+  const onSubmit =()=> {
+    confirmAlert({
+      title: 'Please verify count',
+      message: `Are you sure you want to submit?`,
+      buttons: [
+        {
+          label: 'Yes',
+          className: 'confirm-alert-button confirm-alert-button-yes', // Custom CSS class for "No" button
+          onClick: () => sendAttandanceToAPI()
+        },
+        {
+          className: 'confirm-alert-button confirm-alert-button-no', // Custom CSS class for "No" button
+          label: 'No',
+        }
+      ]
+    });
+  };
+
+
   const sendAttandanceToAPI = useCallback(() => {
     const presentMembers = allMembers
       .filter((member) => member.attend)
@@ -195,7 +216,7 @@ const MarkAttendance = () => {
         </Box>
         <Box>
           <Button
-            onClick={sendAttandanceToAPI}
+            onClick={onSubmit}
             w="full"
             mt="4"
             isLoading={isLoading}

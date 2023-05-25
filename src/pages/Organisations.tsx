@@ -76,6 +76,7 @@ const OrgList = () => {
       >
         <Text color="#fff">Attendance Tracker</Text>
         <Button
+        variant="logout"
           onClick={() =>
             setUser({
               token: "",
@@ -87,7 +88,7 @@ const OrgList = () => {
           Logout
         </Button>
       </Flex>
-      <Button mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
+      <Button  mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
         + Add Org
       </Button>
       <Stack
@@ -124,7 +125,7 @@ const OrgList = () => {
                     {org.name}
                   </Text>
                 </Flex>
-                <Button onClick={(e) => handleDelete(org, e)} bg="#D30000">
+                <Button onClick={(e) => handleDelete(org, e)} variant="danger">
                   <FaTrashAlt color="#fff" />
                 </Button>
               </Flex>
