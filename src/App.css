@@ -3,3 +3,14 @@ body {
   margin: 0;
   font-family: 'Palanquin', sans-serif;
 }
+
+/* Add higher specificity to the button styles */
+.confirm-alert-button.confirm-alert-button-yes {
+  background-color: green;
+  /* Add other styles as needed */
+}
+
+.confirm-alert-button.confirm-alert-button-no {
+  background-color: red;
+  /* Add other styles as needed */
+}

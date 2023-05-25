@@ -7,6 +7,7 @@ import theme from "styles/theme";
 import Pages from "pages";
 import { queryClient } from 'services/api/apiHelper';
 import "react-toastify/dist/ReactToastify.css";
+import 'react-confirm-alert/src/react-confirm-alert.css';
 import "./App.css";
 
 const RenderDevTool = () => {
