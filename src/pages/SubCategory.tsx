@@ -10,10 +10,10 @@ import {
     Stack,
 } from "@chakra-ui/react";
 
-// import { useNavigate } from "react-router-dom";
-// import { PROTECTED_PATHS } from "routes/pagePath";
+
+
 import { useForm, SubmitHandler } from "react-hook-form";
-import useGlobalStore, { currentAttendanceType } from "zStore";
+import { currentAttendanceType } from "zStore";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
 
@@ -39,10 +39,8 @@ const SubCategory = () => {
 
     }
     const { register, handleSubmit } = useForm<currentAttendanceType>();
-    const [updateCurrentAttendance] = useGlobalStore((state) => [
-        state.updateCurrentAttendance,
-    ]);
-    const onSubmit: SubmitHandler<currentAttendanceType> = (formData, details) => {
+
+    const onSubmit: SubmitHandler<currentAttendanceType> = (details) => {
         handleAddSubCategory(details)
     };
 

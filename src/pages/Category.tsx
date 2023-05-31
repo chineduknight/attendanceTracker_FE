@@ -10,28 +10,30 @@ import {
     Stack,
 } from "@chakra-ui/react";
 
-import { useNavigate } from "react-router-dom";
-// import { PROTECTED_PATHS } from "routes/pagePath";
+
+
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
-// import _ from 'lodash';
 import { orgRequest } from "services";
-import { queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { useMutationWrapper } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { toast } from "react-toastify";
 
 
 const Category = () => {
     const [category] = useGlobalStore((state) => [state.organisation]);
-    const onSuccess = (data) => { }
-    // const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
-    //     organisationId: org.id,
-    // });
+    const onSuccess = (data) => {
+        toast.success("category added successfully");
+    }
+
     const { mutate } = useMutationWrapper(onSuccess)
 
     const handleAddCategory = (detail) => {
         const categoryUrl = convertParamsToString(orgRequest.CATEGORY, {
             organisationId: category.id,
+
         });
+        console.log("user's category id", categoryUrl)
         const data = {
             name: detail.name
         }
@@ -47,9 +49,6 @@ const Category = () => {
         handleAddCategory(detail)
 
     };
-
-
-    const navigate = useNavigate();
 
     return (
         <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
