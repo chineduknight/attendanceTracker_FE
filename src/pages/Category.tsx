@@ -21,7 +21,7 @@ import { convertParamsToString } from "helpers/stringManipulations";
 
 
 const Category = () => {
-    const [org] = useGlobalStore((state) => [state.organisation]);
+    const [category] = useGlobalStore((state) => [state.organisation]);
     const onSuccess = (data) => { }
     // const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     //     organisationId: org.id,
@@ -30,7 +30,7 @@ const Category = () => {
 
     const handleAddCategory = (detail) => {
         const categoryUrl = convertParamsToString(orgRequest.CATEGORY, {
-            organisationId: org.id,
+            organisationId: category.id,
         });
         const data = {
             name: detail.name
