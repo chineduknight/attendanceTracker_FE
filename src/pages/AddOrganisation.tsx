@@ -113,14 +113,6 @@ const AddOrganisation = () => {
                 {...register("name", { required: true })}
               />
             </FormControl>
-            {/* <FormControl id="password">
-              <FormLabel>Image Url</FormLabel>
-              <Input
-                type="imageURL"
-
-                {...register("image", { required: true })}
-              />
-            </FormControl> */}
             <Stack spacing={6}>
               <Button
                 bg={"blue.400"}

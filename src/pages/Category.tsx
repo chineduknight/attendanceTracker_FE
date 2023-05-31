@@ -11,52 +11,41 @@ import {
 } from "@chakra-ui/react";
 
 import { useNavigate } from "react-router-dom";
-import { PROTECTED_PATHS } from "routes/pagePath";
+// import { PROTECTED_PATHS } from "routes/pagePath";
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
-import _ from 'lodash';
+// import _ from 'lodash';
 import { orgRequest } from "services";
 import { queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { convertParamsToString } from "helpers/stringManipulations";
 
 
 const Category = () => {
-    const onSuccess = (data) => {
-        queryClient.invalidateQueries({ queryKey: ["all-organisations"] })
-    }
-
+    const [org] = useGlobalStore((state) => [state.organisation]);
+    const onSuccess = (data) => { }
+    // const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
+    //     organisationId: org.id,
+    // });
     const { mutate } = useMutationWrapper(onSuccess)
 
     const handleAddCategory = (detail) => {
-
+        const categoryUrl = convertParamsToString(orgRequest.CATEGORY, {
+            organisationId: org.id,
+        });
         const data = {
             name: detail.name
         }
 
-
         mutate({
-            url: orgRequest.CATEGORY,
+            url: categoryUrl,
             data
         })
-
-        navigate(PROTECTED_PATHS.ALL_ORG)
-
     }
     const { register, handleSubmit } = useForm<currentAttendanceType>();
-    const [updateCurrentAttendance] = useGlobalStore((state) => [
-        state.updateCurrentAttendance,
-    ]);
-    const onSubmit: SubmitHandler<currentAttendanceType> = (formData, detail) => {
-        handleAddCategory(detail)
-        const trimmedFormData = _.mapValues(formData, (value) => {
-            if (typeof value === 'string') {
-                return value.trim();
-            }
-            return value;
-        });
 
-        const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
-        updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
-        navigate(PROTECTED_PATHS.MARK_ATTENANCE);
+    const onSubmit: SubmitHandler<currentAttendanceType> = (detail) => {
+        handleAddCategory(detail)
+
     };
 
 
@@ -95,7 +84,7 @@ const Category = () => {
                             <FormLabel>Category name</FormLabel>
                             <Input
                                 type="category"
-                                {...register("category", { required: false })}
+                                {...register("category", { required: true })}
                             />
                         </FormControl>
                         <Box>

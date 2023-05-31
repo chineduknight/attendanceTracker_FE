@@ -10,18 +10,15 @@ import {
     Stack,
 } from "@chakra-ui/react";
 
-import { useNavigate } from "react-router-dom";
-import { PROTECTED_PATHS } from "routes/pagePath";
+// import { useNavigate } from "react-router-dom";
+// import { PROTECTED_PATHS } from "routes/pagePath";
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
-import _ from 'lodash';
-import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
 
 const SubCategory = () => {
-    const onSuccess = (data) => {
-        queryClient.invalidateQueries({ queryKey: ["all-organisations"] })
-    }
+    const onSuccess = (data) => { }
 
     const { mutate } = useMutationWrapper(postRequest, onSuccess)
 
@@ -38,7 +35,7 @@ const SubCategory = () => {
             data
         })
 
-        navigate(PROTECTED_PATHS.ALL_ORG)
+
 
     }
     const { register, handleSubmit } = useForm<currentAttendanceType>();
@@ -47,20 +44,10 @@ const SubCategory = () => {
     ]);
     const onSubmit: SubmitHandler<currentAttendanceType> = (formData, details) => {
         handleAddSubCategory(details)
-        const trimmedFormData = _.mapValues(formData, (value) => {
-            if (typeof value === 'string') {
-                return value.trim();
-            }
-            return value;
-        });
-
-        const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
-        updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
-        navigate(PROTECTED_PATHS.MARK_ATTENANCE);
     };
 
 
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
 
     return (
         <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -95,7 +82,7 @@ const SubCategory = () => {
                             <FormLabel>Sub-Category name</FormLabel>
                             <Input
                                 type="sub_category"
-                                {...register("subCategory", { required: false })}
+                                {...register("subCategory", { required: true })}
                             />
                         </FormControl>
                         <Box>
