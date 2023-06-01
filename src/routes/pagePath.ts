@@ -5,6 +5,8 @@ export const PUBLIC_PATHS = {
 export const PROTECTED_PATHS = {
   DASHBOARD: "/dashboard",
   ADD_ORG: "/add-org",
+  CATEGORY: "/category",
+  SUB_CATEGORY: "/sub-category",
   ALL_ORG: "/organisations",
   ATTENDANCE: "/attendance/:id",
   USER_MODEL: "/user-model",

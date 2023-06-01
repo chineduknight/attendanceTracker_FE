@@ -16,7 +16,7 @@ const RenderDevTool = () => {
   }
   return null;
 };
-// { process.env.NODE_ENV === 'development' ? <ReactQueryDevtools initialIsOpen={false} /> : null }
+
 
 const App = () => {
   return (

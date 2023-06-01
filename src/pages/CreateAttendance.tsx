@@ -15,6 +15,7 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import _ from 'lodash';
+// import { queryClient, useMutationWrapper } from "services/api/apiHelper";
 
 const CreateAttendance = () => {
   const { register, handleSubmit } = useForm<currentAttendanceType>();
@@ -34,7 +35,6 @@ const CreateAttendance = () => {
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
-
   const navigate = useNavigate();
 
   return (
@@ -49,11 +49,18 @@ const CreateAttendance = () => {
           Create Attendance
         </Text>
       </Flex>
+      <Button mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
+        Add Category
+      </Button>
+      <Button mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}>
+        Add Sub-Category
+      </Button>
       <Flex
         align={"center"}
         justify={"center"}
         bg={useColorModeValue("gray.50", "gray.800")}
       >
+
         <Stack
           spacing={4}
           w={"full"}
@@ -69,22 +76,6 @@ const CreateAttendance = () => {
               <FormLabel>Name</FormLabel>
               <Input type="name" {...register("name", { required: true })} />
             </FormControl>
-
-            {/* <FormControl id="category">
-              <FormLabel>Category</FormLabel>
-              <Input
-                type="category"
-                {...register("category", { required: false })}
-              />
-            </FormControl>
-
-            <FormControl id="sub_category">
-              <FormLabel>Sub Category</FormLabel>
-              <Input
-                type="sub_category"
-                {...register("subCategory", { required: false })}
-              />
-            </FormControl> */}
 
             <FormControl id="date" isRequired>
               <FormLabel>Date</FormLabel>
