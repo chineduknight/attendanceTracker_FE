@@ -18,6 +18,7 @@ import _ from "lodash";
 import { FaPencilAlt, FaArrowCircleLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { Q_KEY } from 'utils/constant';
 
 const ViewMembers = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
@@ -29,7 +30,7 @@ const ViewMembers = () => {
   });
   const [members, setMembers] = useState<any>([]);
 
-  const { isLoading, error } = useQueryWrapper(["all-members"], url, {
+  const { isLoading, error } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
     onSuccess: (res) => {
       setMembers(res.data);
     },
