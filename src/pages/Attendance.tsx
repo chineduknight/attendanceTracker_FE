@@ -74,7 +74,7 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  useQueryWrapper(["all-members"], url, {
+  useQueryWrapper(["Q_KEY.GET_MEMBERS"], url, {
     onSuccess,
   });
 
