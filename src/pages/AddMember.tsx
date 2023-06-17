@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare } from "react-icons/fa";
 import { confirmAlert } from 'react-confirm-alert';
+import { Q_KEY } from 'utils/constant';
 
 interface MemberField {
   _id: string;
@@ -72,7 +73,7 @@ const AddMember = () => {
     toast.success(
       isUpdating ? "Member updated successfully" : "Member added successfully"
     );
-    queryClient.invalidateQueries({ queryKey: ["all-members"] });
+    queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
   };
 

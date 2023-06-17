@@ -9,6 +9,7 @@ import {
   InputGroup,
   InputLeftElement,
   Container,
+  Skeleton,
 } from "@chakra-ui/react";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useState } from "react";
@@ -21,8 +22,8 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
-import { confirmAlert } from 'react-confirm-alert';
-
+import { confirmAlert } from "react-confirm-alert";
+import { Q_KEY } from "utils/constant";
 
 type MemberType = {
   attend: boolean;
@@ -44,6 +45,7 @@ const MarkAttendance = () => {
     present: 0,
     absent: 0,
   });
+  const localStorageKey = `attendance-${org.id}`;
   const onSuccess = (data) => {
     const unsorted = data.data;
     const members = unsorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -54,19 +56,42 @@ const MarkAttendance = () => {
         attend: false,
       };
     });
-    setAllMembers(membersWithAttendStatus);
-    setFilterName(membersWithAttendStatus);
-    setAttendanceInfo({
-      present: 0,
-      absent: unsorted.length,
-    });
+    const localAttendance = localStorage.getItem(localStorageKey);
+    if (localAttendance) {
+      const localMembersWithAttendStatus = JSON.parse(localAttendance);
+      setAllMembers(localMembersWithAttendStatus);
+      setFilterName(localMembersWithAttendStatus);
+
+      const presentCount = localMembersWithAttendStatus.reduce(
+        (count, member) => count + (member.attend ? 1 : 0),
+        0
+      );
+      const absentCount = localMembersWithAttendStatus.length - presentCount;
+      setAttendanceInfo({
+        present: presentCount,
+        absent: absentCount,
+      });
+    } else {
+      setAllMembers(membersWithAttendStatus);
+      setFilterName(membersWithAttendStatus);
+      setAttendanceInfo({
+        present: 0,
+        absent: unsorted.length,
+      });
+    }
   };
+
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
-  useQueryWrapper(["all-members"], url, {
-    onSuccess,
-  });
+  const { isLoading: isGettingMembers } = useQueryWrapper(
+    [Q_KEY.GET_MEMBERS],
+    url,
+    {
+      onSuccess,
+    }
+  );
+  console.log("isGettingMembers:", isGettingMembers);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -104,17 +129,19 @@ const MarkAttendance = () => {
         );
 
         setFilterName(filteredMembers);
-
+        localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
         return updatedMembers;
       });
     },
-    [searchQuery]
+    [localStorageKey, searchQuery]
   );
 
   const navigate = useNavigate();
 
   const onSubmitSuccess = () => {
     navigate(PROTECTED_PATHS.DASHBOARD);
+    // Clear local storage once submitted
+    localStorage.removeItem(localStorageKey);
   };
 
   const { mutate, isLoading } = useMutationWrapper(
@@ -122,24 +149,23 @@ const MarkAttendance = () => {
     onSubmitSuccess
   );
 
-  const onSubmit =()=> {
+  const onSubmit = () => {
     confirmAlert({
-      title: 'Please verify count',
+      title: "Please verify count",
       message: `Are you sure you want to submit?`,
       buttons: [
         {
-          label: 'Yes',
-          className: 'confirm-alert-button confirm-alert-button-yes', // Custom CSS class for "No" button
-          onClick: () => sendAttandanceToAPI()
+          label: "Yes",
+          className: "confirm-alert-button confirm-alert-button-yes", // Custom CSS class for "No" button
+          onClick: () => sendAttandanceToAPI(),
         },
         {
-          className: 'confirm-alert-button confirm-alert-button-no', // Custom CSS class for "No" button
-          label: 'No',
-        }
-      ]
+          className: "confirm-alert-button confirm-alert-button-no", // Custom CSS class for "No" button
+          label: "No",
+        },
+      ],
     });
   };
-
 
   const sendAttandanceToAPI = useCallback(() => {
     const presentMembers = allMembers
@@ -153,6 +179,7 @@ const MarkAttendance = () => {
     };
 
     mutate({
+      // url: `${orgRequest.ORGANISATIONS}/${data.organisationId}/category`,
       url: attendanceRequest.ATTENDANCE,
       data,
     });
@@ -199,32 +226,40 @@ const MarkAttendance = () => {
         </Flex>
         <Box mt="4" overflow="scroll" maxHeight="300px">
           {filterName.map((item) => (
-            <Button
-              variant="unstyled"
-              onClick={() => updateAttendance(item.id)}
-              display="block"
-              w="full"
-              mt="3"
-              border="1px solid green"
-              key={item.id}
-              bg={item.attend ? "green" : ""}
-              color={item.attend ? "#fff" : ""}
-            >
-              {item.name}
-            </Button>
+            <Skeleton key={item.id} isLoaded={!isGettingMembers}>
+              <Button
+                variant="unstyled"
+                onClick={() => updateAttendance(item.id)}
+                display="block"
+                w="full"
+                mt="3"
+                border="1px solid green"
+                bg={item.attend ? "green" : ""}
+                color={item.attend ? "#fff" : ""}
+              >
+                {item.name}
+              </Button>
+            </Skeleton>
           ))}
         </Box>
-        <Box>
-          <Button
-            onClick={onSubmit}
-            w="full"
-            mt="4"
-            isLoading={isLoading}
-            disabled={attendanceInfo.present === 0}
-          >
-            Submit
-          </Button>
-        </Box>
+        <Button
+          onClick={onSubmit}
+          w="full"
+          mt="8"
+          isLoading={isLoading}
+          disabled={attendanceInfo.present === 0}
+        >
+          Submit
+        </Button>
+        <Button
+          onClick={() => navigate(-1)}
+          w="full"
+          variant="logout"
+          mt="4"
+          disabled={isLoading}
+        >
+          Cancel
+        </Button>
       </Container>
     </Box>
   );

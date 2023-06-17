@@ -3,8 +3,8 @@ import { persist } from "zustand/middleware";
 
 export type currentAttendanceType = {
   name: string;
-  category?: string;
-  subCategory?: string;
+  categoryId?: string;
+  subCategoryId?: string;
   date: Date;
   members?: Array<any>;
 };
@@ -50,8 +50,8 @@ const globalStore = <F extends Function>(set: F) => ({
   },
   currentAttendance: {
     name: "",
-    category: "",
-    subCategory: "",
+    categoryId: "",
+    subCategoryId: "",
     date: new Date(),
     members: [],
   },

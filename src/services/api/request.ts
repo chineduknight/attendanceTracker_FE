@@ -6,6 +6,8 @@ export const authRequest = {
 
 export const orgRequest = {
   ORGANISATION: "/organisations/:organisationId/members",
+  CATEGORY: "/organisations/:organisationId/category",
+  SUB_CATEGORY: "/organisations/:organisationId/sub-category",
   ORGANISATIONS: "/organisations",
   MEMBERS:"/organisations/:organisationId/members",
   CONFIG_MODEL:"/organisations/:organisationId/model",
@@ -16,5 +18,5 @@ export const attendanceRequest = {
   ATTENDANCE:"/attendance",
   GET_ATTENDANCE:"/attendance/:organisationId/:id",
   ALL_ATTENDANCE:"/attendance/:organisationId",
-  EXPORT:"/attendance/export/:organisationId/:id"
+  EXPORT:"/attendance/export/:organisationId/:id",
 }
