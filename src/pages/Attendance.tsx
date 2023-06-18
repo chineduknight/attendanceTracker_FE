@@ -17,6 +17,7 @@ import { attendanceRequest } from "services";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
+import { Q_KEY } from 'utils/constant';
 
 type MemberType = {
   isPresent: boolean;
@@ -74,7 +75,7 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  useQueryWrapper(["Q_KEY.GET_MEMBERS"], url, {
+  useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
     onSuccess,
   });
 
