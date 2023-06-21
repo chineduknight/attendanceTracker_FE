@@ -1,4 +1,11 @@
-import { Box, Flex, useColorModeValue, Text, Stack } from "@chakra-ui/react";
+import {
+  Box,
+  Flex,
+  useColorModeValue,
+  Text,
+  Stack,
+  Button,
+} from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useQueryWrapper } from "services/api/apiHelper";
@@ -6,6 +13,8 @@ import { useState } from "react";
 import { attendanceRequest } from "services";
 import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { FaPencilAlt } from "react-icons/fa";
+import { format } from "date-fns";
 
 type AttendanceType = {
   name: string;
@@ -14,19 +23,24 @@ type AttendanceType = {
   createdAt: string;
   updatedAt: string;
   id: string;
+  hasBeenUpdated: boolean;
+  date: string;
+  dateFormated: number;
 };
 
 const AllAttendance = () => {
   const navigate = useNavigate();
   const [org] = useGlobalStore((state) => [state.organisation]);
 
-  const [allOrg, setAllOrg] = useState<AttendanceType[]>([]);
+  const [allAttend, setallAttend] = useState<AttendanceType[]>([]);
   const handleGetOrgSuccess = (data) => {
-    setAllOrg(data.data);
+    setallAttend(data.data);
   };
+
   const url = convertParamsToString(attendanceRequest.ALL_ATTENDANCE, {
     organisationId: org.id,
   });
+
   useQueryWrapper(["all-attendance-12"], url, {
     onSuccess: handleGetOrgSuccess,
   });
@@ -59,11 +73,11 @@ const AllAttendance = () => {
         my={12}
         mx="auto"
       >
-        {allOrg.length ? (
+        {allAttend.length ? (
           <>
-            {allOrg.map((org) => (
+            {allAttend.sort((a, b) => b.dateFormated - a.dateFormated).map((attendance) => (
               <Flex
-                key={org.id}
+                key={attendance.id}
                 cursor="pointer"
                 borderRadius="10px"
                 alignItems="center"
@@ -71,12 +85,39 @@ const AllAttendance = () => {
                 p="4"
                 mb="10px"
                 border="1px solid rebeccapurple"
-                onClick={() => handleNavigate(org)}
+                onClick={() => handleNavigate(attendance)}
               >
-                <Flex alignItems="center">
-                  <Text ml="4" textAlign="left">
-                    {org.name}
+                <Flex
+                  alignItems="center"
+                  justifyContent="space-between"
+                  w="100%"
+                >
+                  <Box>
+
+                  <Text  textAlign="left">
+                    {attendance.name}
                   </Text>
+                  <Text>{format(new Date(attendance.date), "EEE dd MMM yy")}</Text>
+                  </Box>
+                  <Flex>
+                    {attendance.hasBeenUpdated ? null : (
+                      <Button
+                        variant="outline"
+                        colorScheme="blue"
+                        onClick={(e) => {
+                          // This will stop the click event from bubbling up to the parent's onClick
+                          e.stopPropagation();
+                          const pagePath = convertParamsToString(
+                            PROTECTED_PATHS.UPDATE_ATTENANCE,
+                            { attendanceId: attendance.id }
+                          );
+                          navigate(pagePath);
+                        }}
+                      >
+                        <FaPencilAlt />
+                      </Button>
+                    )}
+                  </Flex>
                 </Flex>
               </Flex>
             ))}

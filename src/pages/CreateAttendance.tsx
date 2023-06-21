@@ -37,7 +37,6 @@ export interface CategoryType extends CommonTypeCategory {
 const CreateAttendance = () => {
   const { register, handleSubmit, watch } = useForm<currentAttendanceType>();
   const categorySelected = watch(["categoryId"]);
-  console.log("categorySelected:", categorySelected);
   const [updateCurrentAttendance, org] = useGlobalStore((state) => [
     state.updateCurrentAttendance,
     state.organisation,
@@ -51,7 +50,6 @@ const CreateAttendance = () => {
     });
 
     const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
-    console.log("nonEmptyFormData:", nonEmptyFormData);
     updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
     queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
    

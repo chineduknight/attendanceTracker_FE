@@ -12,7 +12,7 @@ const CreateAttendance = WithSuspense(
   lazy(() => import("pages/CreateAttendance"))
 );
 const AddMember = WithSuspense(lazy(() => import("pages/AddMember")));
-const Attendance = WithSuspense(lazy(() => import("pages/Attendance")));
+const Attendance = WithSuspense(lazy(() => import("pages/ViewAttendance")));
 const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const ViewMembers = WithSuspense(lazy(() => import("pages/ViewMembers")));
@@ -33,7 +33,8 @@ const {
   MARK_ATTENANCE,
   ATTENDANCE,
   ALL_ATTENDANCE,
-  VIEW_MEMBER
+  VIEW_MEMBER,
+  UPDATE_ATTENANCE
 
 } = PROTECTED_PATHS;
 
@@ -47,6 +48,7 @@ const PROTECTED_ROUTES = [
   { path: ADD_MEMBER, element: <AddMember /> },
   { path: UPDATE_MEMBER, element: <AddMember /> },
   { path: MARK_ATTENANCE, element: <MarkAttendance /> },
+  { path: UPDATE_ATTENANCE, element: <MarkAttendance /> },
   { path: CREATE_ATTENDANCE, element: <CreateAttendance /> },
   { path: ATTENDANCE, element: <Attendance /> },
   { path: ALL_ATTENDANCE, element: <AllAttendance /> },
