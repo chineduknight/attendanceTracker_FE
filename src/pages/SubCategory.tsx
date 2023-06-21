@@ -52,7 +52,6 @@ const SubCategory = () => {
   });
   const [allCategory, setAllCategory] = useState<CategoryType[]>([]);
   const onCatSuccess = (res) => {
-    console.log("res:", res.data);
     setAllCategory(res.data);
   };
   const { isLoading: isGettingCat } = useQueryWrapper(

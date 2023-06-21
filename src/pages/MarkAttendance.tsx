@@ -13,17 +13,20 @@ import {
 } from "@chakra-ui/react";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import {
   postRequest,
+  putRequest,
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { confirmAlert } from "react-confirm-alert";
 import { Q_KEY } from "utils/constant";
+import _ from "lodash";
+import { toast } from "react-toastify";
 
 type MemberType = {
   attend: boolean;
@@ -37,14 +40,22 @@ type AttendanceInfoType = {
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [filterName, setFilterName] = useState<MemberType[]>([]);
-  const [org, currentAttendance] = useGlobalStore((state) => [
+  const [org, currentAttendance, setAttendance] = useGlobalStore((state) => [
     state.organisation,
     state.currentAttendance,
+    state.updateCurrentAttendance,
   ]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>({
     present: 0,
     absent: 0,
   });
+  const [memberArray, setMemberArray] = useState<any>([]);
+  const params = useParams();
+  const isUpdate = params.attendanceId !== undefined;
+
+  /**
+   * Okay, so I want to modify this code so that it can handle an update as well for the updating we will have an array of members who have been marked present so in the Data Manipulation section we would need to mark those members as present as well then once the send button is clicked we sent to a different API if its update can you update the code to achieve this
+   */
   const localStorageKey = `attendance-${org.id}`;
   const onSuccess = (data) => {
     const unsorted = data.data;
@@ -53,7 +64,7 @@ const MarkAttendance = () => {
     const membersWithAttendStatus = members.map((member) => {
       return {
         ...member,
-        attend: false,
+        attend: memberArray.includes(member.id),
       };
     });
     const localAttendance = localStorage.getItem(localStorageKey);
@@ -72,11 +83,15 @@ const MarkAttendance = () => {
         absent: absentCount,
       });
     } else {
+      const presentCount = isUpdate ? memberArray.length : 0;
+      const absentCount = isUpdate
+        ? unsorted.length - memberArray.length
+        : unsorted.length;
       setAllMembers(membersWithAttendStatus);
       setFilterName(membersWithAttendStatus);
       setAttendanceInfo({
-        present: 0,
-        absent: unsorted.length,
+        present: presentCount,
+        absent: absentCount,
       });
     }
   };
@@ -84,14 +99,43 @@ const MarkAttendance = () => {
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
-  const { isLoading: isGettingMembers } = useQueryWrapper(
+  const { isLoading: isGettingMembers, refetch } = useQueryWrapper(
     [Q_KEY.GET_MEMBERS],
     url,
     {
       onSuccess,
+      enabled: !isUpdate,
     }
   );
-  console.log("isGettingMembers:", isGettingMembers);
+
+  const onGetAttandanceSuccess = (res) => {
+    const currenctAttendance: any = _.pick(res.data, [
+      "name",
+      "date",
+      "organisationId",
+      "categoryId",
+      "subCategoryId",
+    ]);
+    setAttendance(currenctAttendance);
+    const presentMembers = res.data.attendance
+      .map((attend) => {
+        if (attend.isPresent) {
+          return attend.memberId;
+        }
+        return null;
+      })
+      .filter((attend) => attend !== null);
+    setMemberArray(presentMembers);
+    refetch();
+  };
+  const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
+    organisationId: org.id,
+    id: params.attendanceId as string,
+  });
+  useQueryWrapper([Q_KEY.GET_ATTENDANCE], attendUrl, {
+    onSuccess: onGetAttandanceSuccess,
+    enabled: isUpdate,
+  });
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -139,13 +183,16 @@ const MarkAttendance = () => {
   const navigate = useNavigate();
 
   const onSubmitSuccess = () => {
-    navigate(PROTECTED_PATHS.DASHBOARD);
     // Clear local storage once submitted
     localStorage.removeItem(localStorageKey);
+    toast.success(
+      isUpdate ? "Attendance Updated" : "Attendance Created successfully"
+    );
+    navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
   };
 
   const { mutate, isLoading } = useMutationWrapper(
-    postRequest,
+    isUpdate ? putRequest : postRequest,
     onSubmitSuccess
   );
 
@@ -178,12 +225,24 @@ const MarkAttendance = () => {
       presentMembers,
     };
 
+    const upateUrl = convertParamsToString(
+      attendanceRequest.UPDATE_ATTENDANCE,
+      {
+        attendanceId: params.attendanceId as string,
+      }
+    );
     mutate({
-      // url: `${orgRequest.ORGANISATIONS}/${data.organisationId}/category`,
-      url: attendanceRequest.ATTENDANCE,
+      url: isUpdate ? upateUrl : attendanceRequest.ATTENDANCE,
       data,
     });
-  }, [allMembers, currentAttendance, org.id, mutate]);
+  }, [
+    allMembers,
+    currentAttendance,
+    org.id,
+    params.attendanceId,
+    mutate,
+    isUpdate,
+  ]);
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -198,7 +257,7 @@ const MarkAttendance = () => {
       </Flex>
       <Container>
         <Heading mt="4" fontSize="22px">
-          Members
+          {` Members ${currentAttendance.name}`}
         </Heading>
 
         <InputGroup mt="4">
@@ -249,7 +308,7 @@ const MarkAttendance = () => {
           isLoading={isLoading}
           disabled={attendanceInfo.present === 0}
         >
-          Submit
+          {isUpdate ? "Update" : "Submit"}
         </Button>
         <Button
           onClick={() => navigate(-1)}
