@@ -35,7 +35,6 @@ const Category = () => {
     const data = {
       name: detail.categoryId,
     };
-    console.log("user's category id", data);
 
     mutate({
       url: categoryUrl,
