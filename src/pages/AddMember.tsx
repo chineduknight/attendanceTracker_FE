@@ -10,6 +10,7 @@ import {
   Input,
   Stack,
   Heading,
+  Select,
 } from "@chakra-ui/react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -26,15 +27,9 @@ import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare } from "react-icons/fa";
-import { confirmAlert } from 'react-confirm-alert';
-import { Q_KEY } from 'utils/constant';
-
-interface MemberField {
-  _id: string;
-  name: string;
-  type: string;
-  required: boolean;
-}
+import { confirmAlert } from "react-confirm-alert";
+import { Q_KEY } from "utils/constant";
+import { FieldType } from "./UserModel";
 
 interface FormData {
   [fieldName: string]: string;
@@ -42,7 +37,7 @@ interface FormData {
 
 const AddMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const [membersModel, setMembersModel] = useState<MemberField[]>([]);
+  const [membersModel, setMembersModel] = useState<FieldType[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [currentMember, setcurrentMember] = useState({});
   const navigate = useNavigate();
@@ -115,21 +110,22 @@ const AddMember = () => {
 
   const onSubmit = handleSubmit((data) => {
     confirmAlert({
-      title: 'Confirmation',
-      message: `Are you sure you want to ${isUpdating ? 'update' : 'submit'} the member?`,
+      title: "Confirmation",
+      message: `Are you sure you want to ${
+        isUpdating ? "update" : "submit"
+      } the member?`,
       buttons: [
         {
-          label: 'Yes',
-          onClick: () => handleAddMember(data)
+          label: "Yes",
+          onClick: () => handleAddMember(data),
         },
         {
-          label: 'No',
-          onClick: () => console.log('Member update canceled')
-        }
-      ]
+          label: "No",
+          onClick: () => console.log("Member update canceled"),
+        },
+      ],
     });
   });
-  
 
   // Render the form fields based on the members' model
   const renderFormFields = () => {
@@ -146,6 +142,28 @@ const AddMember = () => {
             />
           </FormControl>
         );
+      } else if (field.type === "option") {
+        const fieldValue = isUpdating ? currentMember[field.name] : "";
+        return (
+          <FormControl
+            key={field._id}
+            id={field.name}
+            isRequired={field.required}
+          >
+            <FormLabel>{capitalize(field.name)}</FormLabel>
+            <Select
+              defaultValue={fieldValue}
+              {...register(field.name, { required: field.required })}
+            >
+              {Array.isArray(field.options) &&
+                field.options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+            </Select>
+          </FormControl>
+        );
       } else {
         const fieldValue = isUpdating ? currentMember[field.name] : ""; // Get the current member field value when updating
         return (
@@ -157,7 +175,7 @@ const AddMember = () => {
             <FormLabel>{capitalize(field.name)}</FormLabel>
             <Input
               type={field.type}
-              defaultValue={fieldValue} // Set the default value for the input field
+              defaultValue={fieldValue}
               {...register(field.name, { required: field.required })}
             />
           </FormControl>
@@ -216,8 +234,7 @@ const AddMember = () => {
                   </Button>
                 </Flex>
               ) : (
-                // <form onSubmit={onSubmit} style={{ width: "90%" }}>
-                <div  style={{ width: "90%" }}>
+                <div style={{ width: "90%" }}>
                   <Stack
                     spacing={4}
                     w={"full"}
@@ -238,7 +255,7 @@ const AddMember = () => {
                         }}
                         fontWeight="bold"
                         fontSize="15px"
-                        type="button" // Change type to "button" instead of "submit"
+                        type="button"
                         isLoading={isLoading}
                         onClick={onSubmit}
                       >

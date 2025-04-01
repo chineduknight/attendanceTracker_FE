@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Flex,
@@ -9,6 +9,8 @@ import {
   Avatar,
   Input,
   Button,
+  Checkbox,
+  CheckboxGroup,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -18,17 +20,39 @@ import _ from "lodash";
 import { FaPencilAlt, FaArrowCircleLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { Q_KEY } from 'utils/constant';
+import { Q_KEY } from "utils/constant";
 
-const ViewMembers = () => {
+const ViewMembers: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFields, setSelectedFields] = useState<string[]>(() => {
+    const stored = localStorage.getItem("selectedFields");
+    return stored ? JSON.parse(stored) : [];
+  });
   const navigate = useNavigate();
-
+  // The keys you always want to exclude
+  const filteredKeys = useMemo(
+    () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
+    []
+  );
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
-  const [members, setMembers] = useState<any>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const allExtraFields = useMemo(() => {
+    return members.length > 0
+      ? Object.keys(_.omit(members[0], filteredKeys))
+      : [];
+  }, [members, filteredKeys]);
+
+  useEffect(() => {
+    localStorage.setItem("selectedFields", JSON.stringify(selectedFields));
+  }, [selectedFields]);
+  useEffect(() => {
+    if (members.length > 0 && selectedFields.length === 0) {
+      setSelectedFields(allExtraFields);
+    }
+  }, [members, allExtraFields, selectedFields]);
 
   const { isLoading, error } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
     onSuccess: (res) => {
@@ -48,21 +72,15 @@ const ViewMembers = () => {
     member.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSearch = (event) => {
+  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
   };
 
-  const removeKeys = (obj, keys) => {
-    return _.omit(obj, keys);
+  // Remove filtered keys from member object and then only pick the ones user selected
+  const getDisplayFields = (member: any) => {
+    const memberEntries = Object.entries(_.omit(member, filteredKeys));
+    return memberEntries.filter(([key]) => selectedFields.includes(key));
   };
-
-  const filteredKeys = [
-    "name",
-    "createdAt",
-    "updatedAt",
-    "organisationId",
-    "id",
-  ];
 
   return (
     <Box minH={"100vh"} bg="gray.50">
@@ -99,11 +117,29 @@ const ViewMembers = () => {
         <Flex justify="center" mb={8}>
           <Input
             placeholder="Search"
-            // w="sm"
             value={searchQuery}
             onChange={handleSearch}
           />
         </Flex>
+
+        <Box mb={8}>
+          <Heading as="h3" size="md" mb={2}>
+            Select additional fields to display:
+          </Heading>
+          <CheckboxGroup
+            value={selectedFields}
+            onChange={(values: string[]) => setSelectedFields(values)}
+          >
+            <Flex gap={4} wrap="wrap">
+              {allExtraFields.map((field) => (
+                <Checkbox key={field} value={field}>
+                  {capitalize(field)}
+                </Checkbox>
+              ))}
+            </Flex>
+          </CheckboxGroup>
+        </Box>
+
         {filteredMembers.length === 0 ? (
           <Box
             bg="#fff"
@@ -123,12 +159,10 @@ const ViewMembers = () => {
                 key={member.id}
                 bg="#fff"
                 p={6}
-                // mx={4}
                 rounded={"xl"}
                 boxShadow={"lg"}
               >
                 <Stack spacing={4}>
-                  {/* Render member details */}
                   <Flex justify="space-between" alignItems="center">
                     <Flex align="center">
                       <Avatar
@@ -153,16 +187,15 @@ const ViewMembers = () => {
                       <FaPencilAlt />
                     </Button>
                   </Flex>
-                  {Object.entries(removeKeys(member, filteredKeys)).map(
-                    ([key, value]: any) => (
-                      <Flex key={key} align="center">
-                        <Text fontWeight="bold" flexShrink={0} mr={2}>
-                          {capitalize(key)}:
-                        </Text>
-                        <Text>{value}</Text>
-                      </Flex>
-                    )
-                  )}
+                  {/* Render only the additional fields that the user has selected */}
+                  {getDisplayFields(member).map(([key, value]) => (
+                    <Flex key={key} align="center">
+                      <Text fontWeight="bold" flexShrink={0} mr={2}>
+                        {capitalize(key)}:
+                      </Text>
+                      <Text>{value}</Text>
+                    </Flex>
+                  ))}
                 </Stack>
               </Box>
             ))}
