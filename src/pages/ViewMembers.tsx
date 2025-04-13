@@ -11,6 +11,7 @@ import {
   Button,
   Checkbox,
   CheckboxGroup,
+  Select,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -29,12 +30,31 @@ const ViewMembers: React.FC = () => {
     const stored = localStorage.getItem("selectedFields");
     return stored ? JSON.parse(stored) : [];
   });
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const navigate = useNavigate();
   // The keys you always want to exclude
   const filteredKeys = useMemo(
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
     []
   );
+  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
+    organisationId: org.id,
+  });
+
+  useQueryWrapper(["get-member-model"], modelURL, {
+    onSuccess: (data) => {
+      const fields = data?.data.fields;
+      const statusField = fields.find((field: any) => field.name === "status");
+      if (statusField && Array.isArray(statusField.options)) {
+        setStatusOptions(statusField.options);
+        // Set default to 'active' if present, otherwise default to "all"
+        setStatusFilter(
+          statusField.options.includes("active") ? "active" : "all"
+        );
+      }
+    },
+  });
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
@@ -68,9 +88,14 @@ const ViewMembers: React.FC = () => {
     return <Text>Error occurred while fetching members.</Text>;
   }
 
-  const filteredMembers = members.filter((member) =>
-    member.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMembers = members.filter((member) => {
+    const matchesSearch = member.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === "all" || member.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
@@ -119,9 +144,26 @@ const ViewMembers: React.FC = () => {
             placeholder="Search"
             value={searchQuery}
             onChange={handleSearch}
+            mr={4}
+            maxW="300px"
           />
-        </Flex>
-
+          <Select
+            placeholder="Filter by status"
+            w="200px"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All</option>
+            {statusOptions.map((option) => (
+              <option key={option} value={option}>
+                {capitalize(option)}
+              </option>
+            ))}
+          </Select>
+        </Flex>{" "}
+        <Text mb={4} fontWeight="bold">
+          Total Members: {filteredMembers.length}{" "}
+        </Text>
         <Box mb={8}>
           <Heading as="h3" size="md" mb={2}>
             Select additional fields to display:
@@ -139,7 +181,6 @@ const ViewMembers: React.FC = () => {
             </Flex>
           </CheckboxGroup>
         </Box>
-
         {filteredMembers.length === 0 ? (
           <Box
             bg="#fff"
