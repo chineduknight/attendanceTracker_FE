@@ -35,7 +35,7 @@ interface FormData {
   [fieldName: string]: string;
 }
 
-const AddMember = () => {
+const AddOrUpdateMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [membersModel, setMembersModel] = useState<FieldType[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -62,7 +62,12 @@ const AddMember = () => {
     }
   }, [params.memberId, refetch]);
 
-  const { register, handleSubmit } = useForm<FormData>();
+  const { register, handleSubmit, reset } = useForm<FormData>();
+  useEffect(() => {
+    if (currentMember && isUpdating) {
+      reset(currentMember);
+    }
+  }, [currentMember, isUpdating, reset]);
 
   const onSuccess = () => {
     toast.success(
@@ -109,6 +114,7 @@ const AddMember = () => {
   };
 
   const onSubmit = handleSubmit((data) => {
+    console.log("data:", data);
     confirmAlert({
       title: "Confirmation",
       message: `Are you sure you want to ${
@@ -235,40 +241,42 @@ const AddMember = () => {
                 </Flex>
               ) : (
                 <div style={{ width: "90%" }}>
-                  <Stack
-                    spacing={4}
-                    w={"full"}
-                    maxW={"md"}
-                    rounded={"xl"}
-                    boxShadow={"lg"}
-                    p={6}
-                  >
-                    {renderFormFields()}
-                    <Box>
-                      <Button
-                        w="full"
-                        mt="40px"
-                        bg={"blue.400"}
-                        color={"white"}
-                        _hover={{
-                          bg: "blue.500",
-                        }}
-                        fontWeight="bold"
-                        fontSize="15px"
-                        type="button"
-                        isLoading={isLoading}
-                        onClick={onSubmit}
-                      >
-                        {isUpdating ? "Update" : "Submit"}
-                      </Button>
-                    </Box>
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+                  <form onSubmit={onSubmit}>
+                    <Stack
+                      spacing={4}
+                      w={"full"}
+                      maxW={"md"}
+                      rounded={"xl"}
+                      boxShadow={"lg"}
+                      p={6}
                     >
-                      Cancel
-                    </Button>
-                  </Stack>
+                      {renderFormFields()}
+                      <Box>
+                        <Button
+                          w="full"
+                          mt="40px"
+                          bg={"blue.400"}
+                          color={"white"}
+                          _hover={{
+                            bg: "blue.500",
+                          }}
+                          fontWeight="bold"
+                          fontSize="15px"
+                          type="submit"
+                          isLoading={isLoading}
+                          // onClick={onSubmit}
+                        >
+                          {isUpdating ? "Update" : "Submit"}
+                        </Button>
+                      </Box>
+                      <Button
+                        variant="outline"
+                        onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+                      >
+                        Cancel
+                      </Button>
+                    </Stack>
+                  </form>
                 </div>
               )}
             </Flex>
@@ -279,4 +287,4 @@ const AddMember = () => {
   );
 };
 
-export default AddMember;
+export default AddOrUpdateMember;
