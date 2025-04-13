@@ -37,7 +37,7 @@ const Login = () => {
       },
     });
   };
-  const [showPassword,setShowPassword] = useBoolean(true)
+  const [showPassword, setShowPassword] = useBoolean(true);
   return (
     <Flex
       minH={"100vh"}
@@ -70,17 +70,19 @@ const Login = () => {
               </FormControl>
               <FormControl id="password">
                 <FormLabel>Password</FormLabel>
-               <Flex>
-
-                <Input
-                  type={showPassword ?"password":"text"}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                <Flex>
+                  <Input
+                    type={showPassword ? "password" : "text"}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                   />
-                  <Button variant="secondary"
-                  onClick={()=>setShowPassword.toggle()}
-                  >{showPassword ?"Show":"hide"}</Button>
-                  </Flex>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowPassword.toggle()}
+                  >
+                    {showPassword ? "Show" : "hide"}
+                  </Button>
+                </Flex>
               </FormControl>
               <Stack spacing={10}>
                 <Stack

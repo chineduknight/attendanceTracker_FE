@@ -27,12 +27,13 @@ import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { FaPlusCircle, FaTimesCircle } from "react-icons/fa";
 
-interface FieldType {
+export interface FieldType {
   _id: string;
   name: string;
   type: string;
   required: boolean;
-  }
+  options?: string | string[];
+}
 
 const UserModel = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
@@ -45,10 +46,11 @@ const UserModel = () => {
     "date",
     "color",
     "password",
+    "option",
   ];
   const navigate = useNavigate();
 
-  const [fields, setFields] = useState<FieldType[]>([]);
+  const [fields, setFields] = useState<Array<FieldType>>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const url = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
@@ -91,7 +93,7 @@ const UserModel = () => {
     const { name, value, checked } = event.target;
     const isCheckBox = name === "required";
 
-    const newFields = fields.map((field) => {
+    const newFields = fields.map((field): FieldType => {
       if (_id === field._id) {
         return {
           ...field,
@@ -119,9 +121,20 @@ const UserModel = () => {
     });
 
     const fieldsWithoutId = fields.map((field) => _.omit(field, ["_id"]));
+
+    const updatedFields = fieldsWithoutId.map((field) => {
+      if (field.options && !Array.isArray(field.options)) {
+        return {
+          ...field,
+          options: field.options.split(",").map((option) => option.trim()),
+        };
+      }
+      return field;
+    });
+
     mutate({
       url,
-      data: { fields: fieldsWithoutId },
+      data: { fields: updatedFields },
     });
   };
 
@@ -151,7 +164,7 @@ const UserModel = () => {
           boxShadow={"lg"}
           p={6}
         >
-          {fields.map((field, index) => (
+          {fields.map((field: FieldType, index: number) => (
             <FormControl id={`field-${index}`} isRequired key={field._id}>
               <Flex justifyContent="right">
                 {index > 0 && (
@@ -206,6 +219,21 @@ const UserModel = () => {
                     ))}
                   </Select>
                 </Box>
+                {field.type === "option" ? (
+                  <Box flex="1">
+                    <FormLabel mb="0">options</FormLabel>
+                    <Input
+                      placeholder="enter options comma separated"
+                      _placeholder={{ color: "gray.500" }}
+                      type="text"
+                      w="100%"
+                      value={field.options}
+                      name="options"
+                      disabled={index === 0}
+                      onChange={(event) => handleChangeInput(field._id, event)}
+                    />
+                  </Box>
+                ) : null}
                 <Checkbox
                   mt="2"
                   disabled={index === 0}
@@ -230,10 +258,7 @@ const UserModel = () => {
             <Button onClick={handleSubmit} isLoading={isLoading}>
               {isUpdating ? "Update" : "Submit"}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate(-1)}
-            >
+            <Button variant="outline" onClick={() => navigate(-1)}>
               Cancel
             </Button>
           </Stack>

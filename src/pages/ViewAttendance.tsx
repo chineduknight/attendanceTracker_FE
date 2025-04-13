@@ -10,14 +10,14 @@ import {
   InputLeftElement,
   Container,
 } from "@chakra-ui/react";
-import { convertParamsToString } from "helpers/stringManipulations";
+import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
 import { attendanceRequest } from "services";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
-import { Q_KEY } from 'utils/constant';
+import { Q_KEY } from "utils/constant";
 
 type MemberType = {
   isPresent: boolean;
@@ -25,6 +25,8 @@ type MemberType = {
   _id: string;
   member: {
     name: string;
+    gender?: string;
+    part?: string;
   };
 };
 
@@ -94,32 +96,77 @@ const Attendance = () => {
   const formattedDate = attendanceInfo?.date
     ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
     : "";
-  const handleSendToWhatsapp = () => {
-    const presentMembers = allMembers
-      .filter((item) => item.isPresent)
-      .map((item) => item.member.name);
 
-    const absentMembers = allMembers
-      .filter((item) => !item.isPresent)
-      .map((item) => item.member.name);
+  const handleSendToWhatsapp = () => {
+    // Group present members by their part
+    const presentMembersByPart = allMembers
+      .filter((item) => item.isPresent)
+      .reduce((acc, item) => {
+        // Use "others" if member.part is missing.
+        const part = item.member.part
+          ? item.member.part.toLowerCase()
+          : "others";
+        if (!acc[part]) {
+          acc[part] = [];
+        }
+        // Add prefix based on gender
+        const prefix =
+          item.member.gender && item.member.gender.toLowerCase() === "male"
+            ? "Bro "
+            : "Sis ";
+        const nameWithPrefix = prefix + item.member.name;
+        acc[part].push(nameWithPrefix);
+        return acc;
+      }, {});
+
+    // Define the desired order for known choir parts.
+    const orderedParts = ["soprano", "alto", "tenor", "bass"];
+    let presentMembersString = "";
+
+    // Process the known parts first.
+    orderedParts.forEach((part) => {
+      if (presentMembersByPart[part] && presentMembersByPart[part].length > 0) {
+        // Sort alphabetically ignoring the prefix.
+        presentMembersByPart[part].sort((a, b) => {
+          const nameA = a.replace(/^(Bro |Sis )/, "").toLowerCase();
+          const nameB = b.replace(/^(Bro |Sis )/, "").toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+        presentMembersString +=
+          `*${capitalize(part)}*\n` +
+          presentMembersByPart[part].join("\n") +
+          "\n\n";
+      }
+    });
+
+    // Process any extra parts (including "others") that are not in the orderedParts array.
+    const extraParts = Object.keys(presentMembersByPart).filter(
+      (part) => !orderedParts.includes(part)
+    );
+    extraParts.sort().forEach((part) => {
+      if (presentMembersByPart[part] && presentMembersByPart[part].length > 0) {
+        presentMembersByPart[part].sort((a, b) => {
+          const nameA = a.replace(/^(Bro |Sis )/, "").toLowerCase();
+          const nameB = b.replace(/^(Bro |Sis )/, "").toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+        presentMembersString +=
+          `*${capitalize(part)}*\n` +
+          presentMembersByPart[part].join("\n") +
+          "\n\n";
+      }
+    });
+
+    // Absent members: Only display the count.
+    const absentCount = allMembers.filter((item) => !item.isPresent).length;
+    const absentMembersString = `*Absent Members:(${absentCount})*`;
 
     const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate:${formattedDate}\n`;
-    const presentMembersString =
-      presentMembers.length > 0
-        ? `*Present Members:(${attendanceInfo?.present})*` +
-          presentMembers.map((member) => "\n" + member).join("")
-        : "";
-
-    const absentMembersString =
-      absentMembers.length > 0
-        ? `\n*Absent Members:(${attendanceInfo?.absent})*` +
-          absentMembers.map((member) => "\n" + member).join("")
-        : "";
-
     const message = [title, presentMembersString, absentMembersString]
       .filter(Boolean)
       .join("\n");
 
+    console.log("message:", message);
     const phoneNumber = "+2348032374369"; // replace with the actual phone number
     const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
       message
@@ -226,5 +273,5 @@ function AttendCard(item: MemberType): JSX.Element {
     >
       {item.member.name}
     </Button>
-  );
+  ) as JSX.Element;
 }
