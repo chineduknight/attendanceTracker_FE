@@ -20,7 +20,7 @@ import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 
 type MemberType = {
-  isPresent: boolean;
+  attendanceStatus: "absent" | "present" | "apology";
   memberId: string;
   _id: string;
   member: {
@@ -43,28 +43,28 @@ const Attendance = () => {
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const onSuccess = (data) => {
     const unsorted = data.data.attendance;
+    const statusOrder = { present: 0, apology: 1, absent: 2 };
     const members = unsorted.sort((a, b) => {
-      // Sort by isPresent first
-      if (a.isPresent && !b.isPresent) {
-        return -1;
-      }
-      if (!a.isPresent && b.isPresent) {
-        return 1;
-      }
-
-      // If isPresent is the same for both, sort by name
-      return a.member.name.localeCompare(b.member.name);
+      return (
+        statusOrder[a.attendanceStatus] - statusOrder[b.attendanceStatus] ||
+        a.member.name.localeCompare(b.member.name)
+      );
     });
 
-    const presentCount = members.reduce(
-      (count, member) => count + (member.isPresent ? 1 : 0),
-      0
-    );
-    const absentCount = members.length - presentCount;
+    const presentCount = members.filter(
+      (member) => member.attendanceStatus === "present"
+    ).length;
+    const apologyCount = members.filter(
+      (member) => member.attendanceStatus === "apology"
+    ).length;
+    const absentCount = members.filter(
+      (member) => member.attendanceStatus === "absent"
+    ).length;
 
     setAttendanceInfo({
       ...data.data,
       present: presentCount,
+      apology: apologyCount, // (Optional: add this if you want to display it)
       absent: absentCount,
     });
 
@@ -100,7 +100,11 @@ const Attendance = () => {
   const handleSendToWhatsapp = () => {
     // Group present members by their part
     const presentMembersByPart = allMembers
-      .filter((item) => item.isPresent)
+      .filter(
+        (item) =>
+          item.attendanceStatus === "present" ||
+          item.attendanceStatus === "apology"
+      )
       .reduce((acc, item) => {
         // Use "others" if member.part is missing.
         const part = item.member.part
@@ -114,7 +118,10 @@ const Attendance = () => {
           item.member.gender && item.member.gender.toLowerCase() === "male"
             ? "Bro "
             : "Sis ";
-        const nameWithPrefix = prefix + item.member.name;
+        const nameWithPrefix =
+          prefix +
+          item.member.name +
+          (item.attendanceStatus === "apology" ? " (Apology)" : "");
         acc[part].push(nameWithPrefix);
         return acc;
       }, {});
@@ -158,10 +165,18 @@ const Attendance = () => {
     });
 
     // Absent members: Only display the count.
-    const absentCount = allMembers.filter((item) => !item.isPresent).length;
+    const absentCount = allMembers.filter(
+      (item) => item.attendanceStatus === "absent"
+    ).length;
     const absentMembersString = `*Absent Members:(${absentCount})*`;
 
-    const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate:${formattedDate}\n`;
+    const presentCount = allMembers.filter(
+      (item) => item.attendanceStatus === "present"
+    ).length;
+    const apologyCount = allMembers.filter(
+      (item) => item.attendanceStatus === "apology"
+    ).length;
+    const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate: ${formattedDate}\nPresent (${presentCount})\nApology (${apologyCount})\n`;
     const message = [title, presentMembersString, absentMembersString]
       .filter(Boolean)
       .join("\n");
@@ -268,8 +283,19 @@ function AttendCard(item: MemberType): JSX.Element {
       mt="3"
       border="1px solid green"
       key={item.memberId}
-      bg={item.isPresent ? "green" : ""}
-      color={item.isPresent ? "#fff" : ""}
+      bg={
+        item.attendanceStatus === "present"
+          ? "green"
+          : item.attendanceStatus === "apology"
+          ? "orange"
+          : ""
+      }
+      color={
+        item.attendanceStatus === "present" ||
+        item.attendanceStatus === "apology"
+          ? "#fff"
+          : ""
+      }
     >
       {item.member.name}
     </Button>

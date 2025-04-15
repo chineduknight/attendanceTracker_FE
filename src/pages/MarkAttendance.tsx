@@ -28,8 +28,8 @@ import { Q_KEY } from "utils/constant";
 import _ from "lodash";
 import { toast } from "react-toastify";
 
-type MemberType = {
-  attend: boolean;
+export type MemberType = {
+  attendanceStatus: "absent" | "present" | "apology";
   name: string;
   id: string;
 };
@@ -153,25 +153,32 @@ const MarkAttendance = () => {
   const updateAttendance = useCallback(
     (userId) => {
       setAllMembers((prevMembers) => {
-        const updatedMembers = prevMembers.map((member) =>
-          member.id === userId ? { ...member, attend: !member.attend } : member
-        );
-
-        // Calculate present and absent counts
-        const presentCount = updatedMembers.reduce(
-          (count, member) => count + (member.attend ? 1 : 0),
-          0
-        );
-        const absentCount = updatedMembers.length - presentCount;
+        const updatedMembers = prevMembers.map((member) => {
+          if (member.id !== userId) return member;
+          // Cycle: absent (or unset) -> present -> apology -> absent...
+          let newStatus = member.attendanceStatus;
+          if (!newStatus || newStatus === "absent") {
+            newStatus = "present";
+          } else if (newStatus === "present") {
+            newStatus = "apology";
+          } else if (newStatus === "apology") {
+            newStatus = "absent";
+          }
+          return { ...member, attendanceStatus: newStatus };
+        });
+        const presentCount = updatedMembers.filter(
+          (m) => m.attendanceStatus === "present"
+        ).length;
+        const absentCount = updatedMembers.filter(
+          (m) => !m.attendanceStatus || m.attendanceStatus === "absent"
+        ).length;
         setAttendanceInfo({
           present: presentCount,
           absent: absentCount,
         });
-        // Filter and update the filtered array based on search query
         const filteredMembers = updatedMembers.filter((member) =>
           member.name.toLowerCase().includes(searchQuery)
         );
-
         setFilterName(filteredMembers);
         localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
         return updatedMembers;
@@ -197,6 +204,7 @@ const MarkAttendance = () => {
   );
 
   const onSubmit = () => {
+    console.log("I am called ");
     confirmAlert({
       title: "Please verify count",
       message: `Are you sure you want to submit?`,
@@ -216,13 +224,17 @@ const MarkAttendance = () => {
 
   const sendAttandanceToAPI = useCallback(() => {
     const presentMembers = allMembers
-      .filter((member) => member.attend)
+      .filter((member) => member.attendanceStatus === "present")
+      .map((member) => member.id);
+    const apologisedMembers = allMembers
+      .filter((member) => member.attendanceStatus === "apology")
       .map((member) => member.id);
 
     const data = {
       ...currentAttendance,
       organisationId: org.id,
       presentMembers,
+      apologisedMembers,
     };
 
     const upateUrl = convertParamsToString(
@@ -293,8 +305,19 @@ const MarkAttendance = () => {
                 w="full"
                 mt="3"
                 border="1px solid green"
-                bg={item.attend ? "green" : ""}
-                color={item.attend ? "#fff" : ""}
+                bg={
+                  item.attendanceStatus === "present"
+                    ? "green"
+                    : item.attendanceStatus === "apology"
+                    ? "orange"
+                    : ""
+                }
+                color={
+                  item.attendanceStatus === "present" ||
+                  item.attendanceStatus === "apology"
+                    ? "#fff"
+                    : ""
+                }
               >
                 {item.name}
               </Button>
