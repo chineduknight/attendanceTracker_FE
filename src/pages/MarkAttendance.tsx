@@ -35,6 +35,7 @@ export type MemberType = {
 };
 type AttendanceInfoType = {
   present: number;
+  apology: number;
   absent: number;
 };
 const MarkAttendance = () => {
@@ -47,50 +48,54 @@ const MarkAttendance = () => {
   ]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>({
     present: 0,
+    apology: 0,
     absent: 0,
   });
-  const [memberArray, setMemberArray] = useState<any>([]);
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
 
-  /**
-   * Okay, so I want to modify this code so that it can handle an update as well for the updating we will have an array of members who have been marked present so in the Data Manipulation section we would need to mark those members as present as well then once the send button is clicked we sent to a different API if its update can you update the code to achieve this
-   */
   const localStorageKey = `attendance-${org.id}`;
-  const onSuccess = (data) => {
+  const onGetMembersSuccess = (data) => {
+    console.log("data:", data);
     const unsorted = data.data;
     const members = unsorted.sort((a, b) => a.name.localeCompare(b.name));
 
-    const membersWithAttendStatus = members.map((member) => {
-      return {
-        ...member,
-        attend: memberArray.includes(member.id),
-      };
-    });
+    // Default every member to "absent"
+    const membersWithAttendStatus = members.map((member) => ({
+      ...member,
+      attendanceStatus: "absent",
+    }));
+
     const localAttendance = localStorage.getItem(localStorageKey);
     if (localAttendance) {
       const localMembersWithAttendStatus = JSON.parse(localAttendance);
       setAllMembers(localMembersWithAttendStatus);
       setFilterName(localMembersWithAttendStatus);
 
-      const presentCount = localMembersWithAttendStatus.reduce(
-        (count, member) => count + (member.attend ? 1 : 0),
-        0
-      );
-      const absentCount = localMembersWithAttendStatus.length - presentCount;
+      const presentCount = localMembersWithAttendStatus.filter(
+        (member) => member.attendanceStatus === "present"
+      ).length;
+      const apologyCount = localMembersWithAttendStatus.filter(
+        (member) => member.attendanceStatus === "apology"
+      ).length;
+      const absentCount = localMembersWithAttendStatus.filter(
+        (member) => member.attendanceStatus === "absent"
+      ).length;
       setAttendanceInfo({
         present: presentCount,
+        apology: apologyCount,
         absent: absentCount,
       });
     } else {
-      const presentCount = isUpdate ? memberArray.length : 0;
-      const absentCount = isUpdate
-        ? unsorted.length - memberArray.length
-        : unsorted.length;
+      // For a new attendance marking, all members default to absent
+      const presentCount = 0;
+      const apologyCount = 0;
+      const absentCount = membersWithAttendStatus.length;
       setAllMembers(membersWithAttendStatus);
       setFilterName(membersWithAttendStatus);
       setAttendanceInfo({
         present: presentCount,
+        apology: apologyCount,
         absent: absentCount,
       });
     }
@@ -103,30 +108,50 @@ const MarkAttendance = () => {
     [Q_KEY.GET_MEMBERS],
     url,
     {
-      onSuccess,
+      onGetMembersSuccess,
       enabled: !isUpdate,
     }
   );
 
   const onGetAttandanceSuccess = (res) => {
-    const currenctAttendance: any = _.pick(res.data, [
+    // Pick general attendance info
+    const currentAttendance: any = _.pick(res.data, [
       "name",
       "date",
       "organisationId",
       "categoryId",
       "subCategoryId",
     ]);
-    setAttendance(currenctAttendance);
-    const presentMembers = res.data.attendance
-      .map((attend) => {
-        if (attend.isPresent) {
-          return attend.memberId;
-        }
-        return null;
-      })
-      .filter((attend) => attend !== null);
-    setMemberArray(presentMembers);
-    refetch();
+    setAttendance(currentAttendance);
+    console.log("res.data.attendance:", res.data.attendance);
+
+    // Transform the attendance record into MemberType objects
+    const updatedMembers = res.data.attendance.map((attend) => ({
+      id: attend.memberId,
+      name: attend.member.name, // assuming this property exists
+      attendanceStatus: attend.attendanceStatus, // uses the new field from the API
+    }));
+
+    // Save to localStorage and update state
+    localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
+    setAllMembers(updatedMembers);
+    setFilterName(updatedMembers);
+
+    // Update counts based on the new attendanceStatus values
+    const presentCount = updatedMembers.filter(
+      (m) => m.attendanceStatus === "present"
+    ).length;
+    const apologyCount = updatedMembers.filter(
+      (m) => m.attendanceStatus === "apology"
+    ).length;
+    const absentCount = updatedMembers.filter(
+      (m) => m.attendanceStatus === "absent"
+    ).length;
+    setAttendanceInfo({
+      present: presentCount,
+      apology: apologyCount,
+      absent: absentCount,
+    });
   };
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
     organisationId: org.id,
@@ -169,11 +194,15 @@ const MarkAttendance = () => {
         const presentCount = updatedMembers.filter(
           (m) => m.attendanceStatus === "present"
         ).length;
+        const apologyCount = updatedMembers.filter(
+          (m) => m.attendanceStatus === "apology"
+        ).length;
         const absentCount = updatedMembers.filter(
           (m) => !m.attendanceStatus || m.attendanceStatus === "absent"
         ).length;
         setAttendanceInfo({
           present: presentCount,
+          apology: apologyCount,
           absent: absentCount,
         });
         const filteredMembers = updatedMembers.filter((member) =>
@@ -290,6 +319,9 @@ const MarkAttendance = () => {
         <Flex mt="2" justifyContent="space-between">
           <Text>
             Present: <strong>{attendanceInfo?.present} </strong>
+          </Text>
+          <Text>
+            Apology: <strong>{attendanceInfo?.apology} </strong>
           </Text>
           <Text>
             Absent: <strong>{attendanceInfo?.absent} </strong>
