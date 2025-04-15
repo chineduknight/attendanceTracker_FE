@@ -34,6 +34,7 @@ type AttendanceInfoType = {
   name: string;
   date: Date;
   present: number;
+  apology: number;
   absent: number;
 };
 const Attendance = () => {
@@ -260,6 +261,9 @@ const Attendance = () => {
         <Flex mt="2" justifyContent="space-between">
           <Text>
             Present: <strong>{attendanceInfo?.present} </strong>
+          </Text>
+          <Text>
+            Apology: <strong>{attendanceInfo?.apology} </strong>
           </Text>
           <Text>
             Absent: <strong>{attendanceInfo?.absent} </strong>

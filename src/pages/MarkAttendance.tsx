@@ -33,10 +33,13 @@ export type MemberType = {
   name: string;
   id: string;
 };
+
 type AttendanceInfoType = {
   present: number;
+  apology: number;
   absent: number;
 };
+
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [filterName, setFilterName] = useState<MemberType[]>([]);
@@ -47,98 +50,124 @@ const MarkAttendance = () => {
   ]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>({
     present: 0,
+    apology: 0,
     absent: 0,
   });
-  const [memberArray, setMemberArray] = useState<any>([]);
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
-
-  /**
-   * Okay, so I want to modify this code so that it can handle an update as well for the updating we will have an array of members who have been marked present so in the Data Manipulation section we would need to mark those members as present as well then once the send button is clicked we sent to a different API if its update can you update the code to achieve this
-   */
   const localStorageKey = `attendance-${org.id}`;
-  const onSuccess = (data) => {
+
+  // Callback for fetching all members (new attendance marking)
+  const onGetMembersSuccess = (data) => {
+    console.log("data:", data);
     const unsorted = data.data;
     const members = unsorted.sort((a, b) => a.name.localeCompare(b.name));
+    // Default every member to "absent"
+    const membersWithAttendStatus = members.map((member) => ({
+      ...member,
+      attendanceStatus: "absent",
+    }));
 
-    const membersWithAttendStatus = members.map((member) => {
-      return {
-        ...member,
-        attend: memberArray.includes(member.id),
-      };
-    });
     const localAttendance = localStorage.getItem(localStorageKey);
     if (localAttendance) {
-      const localMembersWithAttendStatus = JSON.parse(localAttendance);
-      setAllMembers(localMembersWithAttendStatus);
-      setFilterName(localMembersWithAttendStatus);
-
-      const presentCount = localMembersWithAttendStatus.reduce(
-        (count, member) => count + (member.attend ? 1 : 0),
-        0
-      );
-      const absentCount = localMembersWithAttendStatus.length - presentCount;
-      setAttendanceInfo({
-        present: presentCount,
-        absent: absentCount,
-      });
+      const parsedLocal = JSON.parse(localAttendance);
+      if (parsedLocal.length > 0) {
+        setAllMembers(parsedLocal);
+        setFilterName(parsedLocal);
+        const presentCount = parsedLocal.filter(
+          (member) => member.attendanceStatus === "present"
+        ).length;
+        const apologyCount = parsedLocal.filter(
+          (member) => member.attendanceStatus === "apology"
+        ).length;
+        const absentCount = parsedLocal.filter(
+          (member) => member.attendanceStatus === "absent"
+        ).length;
+        setAttendanceInfo({
+          present: presentCount,
+          apology: apologyCount,
+          absent: absentCount,
+        });
+      } else {
+        // If localStorage exists but is empty, use fetched data.
+        setAllMembers(membersWithAttendStatus);
+        setFilterName(membersWithAttendStatus);
+        setAttendanceInfo({
+          present: 0,
+          apology: 0,
+          absent: membersWithAttendStatus.length,
+        });
+      }
     } else {
-      const presentCount = isUpdate ? memberArray.length : 0;
-      const absentCount = isUpdate
-        ? unsorted.length - memberArray.length
-        : unsorted.length;
+      // For a new attendance marking, all members default to absent
       setAllMembers(membersWithAttendStatus);
       setFilterName(membersWithAttendStatus);
       setAttendanceInfo({
-        present: presentCount,
-        absent: absentCount,
+        present: 0,
+        apology: 0,
+        absent: membersWithAttendStatus.length,
       });
     }
   };
 
-  const url = convertParamsToString(orgRequest.MEMBERS, {
-    organisationId: org.id,
-  });
+  // Query to fetch members (only when not updating)
   const { isLoading: isGettingMembers, refetch } = useQueryWrapper(
     [Q_KEY.GET_MEMBERS],
-    url,
+    convertParamsToString(orgRequest.MEMBERS, { organisationId: org.id }),
     {
-      onSuccess,
+      onSuccess: onGetMembersSuccess,
       enabled: !isUpdate,
     }
   );
 
+  // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
-    const currenctAttendance: any = _.pick(res.data, [
+    const currentAtt = _.pick(res.data, [
       "name",
       "date",
       "organisationId",
       "categoryId",
       "subCategoryId",
     ]);
-    setAttendance(currenctAttendance);
-    const presentMembers = res.data.attendance
-      .map((attend) => {
-        if (attend.isPresent) {
-          return attend.memberId;
-        }
-        return null;
-      })
-      .filter((attend) => attend !== null);
-    setMemberArray(presentMembers);
-    refetch();
+    setAttendance(currentAtt);
+    console.log("res.data.attendance:", res.data.attendance);
+    // Transform API response to MemberType array (must include attendanceStatus)
+    const updatedMembers = res.data.attendance.map((attend) => ({
+      id: attend.memberId,
+      name: attend.member.name,
+      attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
+    }));
+    // Store in localStorage and update state
+    localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
+    setAllMembers(updatedMembers);
+    setFilterName(updatedMembers);
+    const presentCount = updatedMembers.filter(
+      (m) => m.attendanceStatus === "present"
+    ).length;
+    const apologyCount = updatedMembers.filter(
+      (m) => m.attendanceStatus === "apology"
+    ).length;
+    const absentCount = updatedMembers.filter(
+      (m) => m.attendanceStatus === "absent"
+    ).length;
+    setAttendanceInfo({
+      present: presentCount,
+      apology: apologyCount,
+      absent: absentCount,
+    });
   };
+
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
     organisationId: org.id,
     id: params.attendanceId as string,
   });
+  // Query for fetching attendance details when updating
   useQueryWrapper([Q_KEY.GET_ATTENDANCE], attendUrl, {
     onSuccess: onGetAttandanceSuccess,
     enabled: isUpdate,
   });
 
   const [searchQuery, setSearchQuery] = useState("");
-
   const handleSearch = useCallback(
     (e) => {
       const query = e.target.value.toLowerCase();
@@ -150,12 +179,12 @@ const MarkAttendance = () => {
     [allMembers]
   );
 
+  // Toggle a member's attendance status by cycling through: absent -> present -> apology -> absent
   const updateAttendance = useCallback(
     (userId) => {
       setAllMembers((prevMembers) => {
         const updatedMembers = prevMembers.map((member) => {
           if (member.id !== userId) return member;
-          // Cycle: absent (or unset) -> present -> apology -> absent...
           let newStatus = member.attendanceStatus;
           if (!newStatus || newStatus === "absent") {
             newStatus = "present";
@@ -169,11 +198,15 @@ const MarkAttendance = () => {
         const presentCount = updatedMembers.filter(
           (m) => m.attendanceStatus === "present"
         ).length;
+        const apologyCount = updatedMembers.filter(
+          (m) => m.attendanceStatus === "apology"
+        ).length;
         const absentCount = updatedMembers.filter(
-          (m) => !m.attendanceStatus || m.attendanceStatus === "absent"
+          (m) => m.attendanceStatus === "absent"
         ).length;
         setAttendanceInfo({
           present: presentCount,
+          apology: apologyCount,
           absent: absentCount,
         });
         const filteredMembers = updatedMembers.filter((member) =>
@@ -188,7 +221,6 @@ const MarkAttendance = () => {
   );
 
   const navigate = useNavigate();
-
   const onSubmitSuccess = () => {
     // Clear local storage once submitted
     localStorage.removeItem(localStorageKey);
@@ -204,19 +236,18 @@ const MarkAttendance = () => {
   );
 
   const onSubmit = () => {
-    console.log("I am called ");
     confirmAlert({
       title: "Please verify count",
       message: `Are you sure you want to submit?`,
       buttons: [
         {
           label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes", // Custom CSS class for "No" button
+          className: "confirm-alert-button confirm-alert-button-yes",
           onClick: () => sendAttandanceToAPI(),
         },
         {
-          className: "confirm-alert-button confirm-alert-button-no", // Custom CSS class for "No" button
           label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
         },
       ],
     });
@@ -255,6 +286,7 @@ const MarkAttendance = () => {
     mutate,
     isUpdate,
   ]);
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -271,7 +303,6 @@ const MarkAttendance = () => {
         <Heading mt="4" fontSize="22px">
           {` Members ${currentAttendance.name}`}
         </Heading>
-
         <InputGroup mt="4">
           <InputLeftElement pointerEvents="none" />
           <Input
@@ -289,10 +320,13 @@ const MarkAttendance = () => {
         )}
         <Flex mt="2" justifyContent="space-between">
           <Text>
-            Present: <strong>{attendanceInfo?.present} </strong>
+            Present: <strong>{attendanceInfo?.present}</strong>
           </Text>
           <Text>
-            Absent: <strong>{attendanceInfo?.absent} </strong>
+            Apology: <strong>{attendanceInfo?.apology}</strong>
+          </Text>
+          <Text>
+            Absent: <strong>{attendanceInfo?.absent}</strong>
           </Text>
         </Flex>
         <Box mt="4" overflow="scroll" maxHeight="300px">
