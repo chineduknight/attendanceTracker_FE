@@ -33,11 +33,13 @@ export type MemberType = {
   name: string;
   id: string;
 };
+
 type AttendanceInfoType = {
   present: number;
   apology: number;
   absent: number;
 };
+
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [filterName, setFilterName] = useState<MemberType[]>([]);
@@ -53,13 +55,13 @@ const MarkAttendance = () => {
   });
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
-
   const localStorageKey = `attendance-${org.id}`;
+
+  // Callback for fetching all members (new attendance marking)
   const onGetMembersSuccess = (data) => {
     console.log("data:", data);
     const unsorted = data.data;
     const members = unsorted.sort((a, b) => a.name.localeCompare(b.name));
-
     // Default every member to "absent"
     const membersWithAttendStatus = members.map((member) => ({
       ...member,
@@ -68,76 +70,77 @@ const MarkAttendance = () => {
 
     const localAttendance = localStorage.getItem(localStorageKey);
     if (localAttendance) {
-      const localMembersWithAttendStatus = JSON.parse(localAttendance);
-      setAllMembers(localMembersWithAttendStatus);
-      setFilterName(localMembersWithAttendStatus);
-
-      const presentCount = localMembersWithAttendStatus.filter(
-        (member) => member.attendanceStatus === "present"
-      ).length;
-      const apologyCount = localMembersWithAttendStatus.filter(
-        (member) => member.attendanceStatus === "apology"
-      ).length;
-      const absentCount = localMembersWithAttendStatus.filter(
-        (member) => member.attendanceStatus === "absent"
-      ).length;
-      setAttendanceInfo({
-        present: presentCount,
-        apology: apologyCount,
-        absent: absentCount,
-      });
+      const parsedLocal = JSON.parse(localAttendance);
+      if (parsedLocal.length > 0) {
+        setAllMembers(parsedLocal);
+        setFilterName(parsedLocal);
+        const presentCount = parsedLocal.filter(
+          (member) => member.attendanceStatus === "present"
+        ).length;
+        const apologyCount = parsedLocal.filter(
+          (member) => member.attendanceStatus === "apology"
+        ).length;
+        const absentCount = parsedLocal.filter(
+          (member) => member.attendanceStatus === "absent"
+        ).length;
+        setAttendanceInfo({
+          present: presentCount,
+          apology: apologyCount,
+          absent: absentCount,
+        });
+      } else {
+        // If localStorage exists but is empty, use fetched data.
+        setAllMembers(membersWithAttendStatus);
+        setFilterName(membersWithAttendStatus);
+        setAttendanceInfo({
+          present: 0,
+          apology: 0,
+          absent: membersWithAttendStatus.length,
+        });
+      }
     } else {
       // For a new attendance marking, all members default to absent
-      const presentCount = 0;
-      const apologyCount = 0;
-      const absentCount = membersWithAttendStatus.length;
       setAllMembers(membersWithAttendStatus);
       setFilterName(membersWithAttendStatus);
       setAttendanceInfo({
-        present: presentCount,
-        apology: apologyCount,
-        absent: absentCount,
+        present: 0,
+        apology: 0,
+        absent: membersWithAttendStatus.length,
       });
     }
   };
 
-  const url = convertParamsToString(orgRequest.MEMBERS, {
-    organisationId: org.id,
-  });
+  // Query to fetch members (only when not updating)
   const { isLoading: isGettingMembers, refetch } = useQueryWrapper(
     [Q_KEY.GET_MEMBERS],
-    url,
+    convertParamsToString(orgRequest.MEMBERS, { organisationId: org.id }),
     {
-      onGetMembersSuccess,
+      onSuccess: onGetMembersSuccess,
       enabled: !isUpdate,
     }
   );
 
+  // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
-    // Pick general attendance info
-    const currentAttendance: any = _.pick(res.data, [
+    const currentAtt = _.pick(res.data, [
       "name",
       "date",
       "organisationId",
       "categoryId",
       "subCategoryId",
     ]);
-    setAttendance(currentAttendance);
+    setAttendance(currentAtt);
     console.log("res.data.attendance:", res.data.attendance);
-
-    // Transform the attendance record into MemberType objects
+    // Transform API response to MemberType array (must include attendanceStatus)
     const updatedMembers = res.data.attendance.map((attend) => ({
       id: attend.memberId,
-      name: attend.member.name, // assuming this property exists
-      attendanceStatus: attend.attendanceStatus, // uses the new field from the API
+      name: attend.member.name,
+      attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
     }));
-
-    // Save to localStorage and update state
+    // Store in localStorage and update state
     localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
     setAllMembers(updatedMembers);
     setFilterName(updatedMembers);
-
-    // Update counts based on the new attendanceStatus values
     const presentCount = updatedMembers.filter(
       (m) => m.attendanceStatus === "present"
     ).length;
@@ -153,17 +156,18 @@ const MarkAttendance = () => {
       absent: absentCount,
     });
   };
+
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
     organisationId: org.id,
     id: params.attendanceId as string,
   });
+  // Query for fetching attendance details when updating
   useQueryWrapper([Q_KEY.GET_ATTENDANCE], attendUrl, {
     onSuccess: onGetAttandanceSuccess,
     enabled: isUpdate,
   });
 
   const [searchQuery, setSearchQuery] = useState("");
-
   const handleSearch = useCallback(
     (e) => {
       const query = e.target.value.toLowerCase();
@@ -175,12 +179,12 @@ const MarkAttendance = () => {
     [allMembers]
   );
 
+  // Toggle a member's attendance status by cycling through: absent -> present -> apology -> absent
   const updateAttendance = useCallback(
     (userId) => {
       setAllMembers((prevMembers) => {
         const updatedMembers = prevMembers.map((member) => {
           if (member.id !== userId) return member;
-          // Cycle: absent (or unset) -> present -> apology -> absent...
           let newStatus = member.attendanceStatus;
           if (!newStatus || newStatus === "absent") {
             newStatus = "present";
@@ -198,7 +202,7 @@ const MarkAttendance = () => {
           (m) => m.attendanceStatus === "apology"
         ).length;
         const absentCount = updatedMembers.filter(
-          (m) => !m.attendanceStatus || m.attendanceStatus === "absent"
+          (m) => m.attendanceStatus === "absent"
         ).length;
         setAttendanceInfo({
           present: presentCount,
@@ -217,7 +221,6 @@ const MarkAttendance = () => {
   );
 
   const navigate = useNavigate();
-
   const onSubmitSuccess = () => {
     // Clear local storage once submitted
     localStorage.removeItem(localStorageKey);
@@ -233,19 +236,18 @@ const MarkAttendance = () => {
   );
 
   const onSubmit = () => {
-    console.log("I am called ");
     confirmAlert({
       title: "Please verify count",
       message: `Are you sure you want to submit?`,
       buttons: [
         {
           label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes", // Custom CSS class for "No" button
+          className: "confirm-alert-button confirm-alert-button-yes",
           onClick: () => sendAttandanceToAPI(),
         },
         {
-          className: "confirm-alert-button confirm-alert-button-no", // Custom CSS class for "No" button
           label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
         },
       ],
     });
@@ -284,6 +286,7 @@ const MarkAttendance = () => {
     mutate,
     isUpdate,
   ]);
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -300,7 +303,6 @@ const MarkAttendance = () => {
         <Heading mt="4" fontSize="22px">
           {` Members ${currentAttendance.name}`}
         </Heading>
-
         <InputGroup mt="4">
           <InputLeftElement pointerEvents="none" />
           <Input
@@ -318,13 +320,13 @@ const MarkAttendance = () => {
         )}
         <Flex mt="2" justifyContent="space-between">
           <Text>
-            Present: <strong>{attendanceInfo?.present} </strong>
+            Present: <strong>{attendanceInfo?.present}</strong>
           </Text>
           <Text>
-            Apology: <strong>{attendanceInfo?.apology} </strong>
+            Apology: <strong>{attendanceInfo?.apology}</strong>
           </Text>
           <Text>
-            Absent: <strong>{attendanceInfo?.absent} </strong>
+            Absent: <strong>{attendanceInfo?.absent}</strong>
           </Text>
         </Flex>
         <Box mt="4" overflow="scroll" maxHeight="300px">
