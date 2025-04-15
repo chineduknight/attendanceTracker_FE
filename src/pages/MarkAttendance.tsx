@@ -111,7 +111,7 @@ const MarkAttendance = () => {
   };
 
   // Query to fetch members (only when not updating)
-  const { isLoading: isGettingMembers, refetch } = useQueryWrapper(
+  const { isLoading: isGettingMembers } = useQueryWrapper(
     [Q_KEY.GET_MEMBERS],
     convertParamsToString(orgRequest.MEMBERS, { organisationId: org.id }),
     {
