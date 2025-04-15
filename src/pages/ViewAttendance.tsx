@@ -65,7 +65,7 @@ const Attendance = () => {
     setAttendanceInfo({
       ...data.data,
       present: presentCount,
-      apology: apologyCount, // (Optional: add this if you want to display it)
+      apology: apologyCount,
       absent: absentCount,
     });
 

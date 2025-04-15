@@ -130,7 +130,6 @@ const MarkAttendance = () => {
       "subCategoryId",
     ]);
     setAttendance(currentAtt);
-    console.log("res.data.attendance:", res.data.attendance);
     // Transform API response to MemberType array (must include attendanceStatus)
     const updatedMembers = res.data.attendance.map((attend) => ({
       id: attend.memberId,
@@ -223,7 +222,9 @@ const MarkAttendance = () => {
   const navigate = useNavigate();
   const onSubmitSuccess = () => {
     // Clear local storage once submitted
+    console.log("clearing local storage");
     localStorage.removeItem(localStorageKey);
+    console.log("cleared local storage");
     toast.success(
       isUpdate ? "Attendance Updated" : "Attendance Created successfully"
     );

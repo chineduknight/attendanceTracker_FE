@@ -13,7 +13,7 @@ import { useState } from "react";
 import { attendanceRequest } from "services";
 import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { FaPencilAlt } from "react-icons/fa";
+import { FaArrowCircleLeft, FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 
 type AttendanceType = {
@@ -62,6 +62,16 @@ const AllAttendance = () => {
       >
         <Text color="#fff">Attendance Tracker</Text>
       </Flex>
+      <Button
+        variant="logout"
+        colorScheme="blue"
+        onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+        mr={2}
+        leftIcon={<FaArrowCircleLeft />}
+        m="2"
+      >
+        Back
+      </Button>
       <Stack
         spacing={4}
         w={"full"}
@@ -70,57 +80,59 @@ const AllAttendance = () => {
         rounded={"xl"}
         boxShadow={"lg"}
         p={6}
-        my={12}
+        mb={12}
+        mt={{ base: 0, md: -10 }}
         mx="auto"
       >
         {allAttend.length ? (
           <>
-            {allAttend.sort((a, b) => b.dateFormated - a.dateFormated).map((attendance) => (
-              <Flex
-                key={attendance.id}
-                cursor="pointer"
-                borderRadius="10px"
-                alignItems="center"
-                justifyContent="space-between"
-                p="4"
-                mb="10px"
-                border="1px solid rebeccapurple"
-                onClick={() => handleNavigate(attendance)}
-              >
+            {allAttend
+              .sort((a, b) => b.dateFormated - a.dateFormated)
+              .map((attendance) => (
                 <Flex
+                  key={attendance.id}
+                  cursor="pointer"
+                  borderRadius="10px"
                   alignItems="center"
                   justifyContent="space-between"
-                  w="100%"
+                  p="4"
+                  mb="10px"
+                  border="1px solid rebeccapurple"
+                  onClick={() => handleNavigate(attendance)}
                 >
-                  <Box>
-
-                  <Text  textAlign="left">
-                    {attendance.name}
-                  </Text>
-                  <Text>{format(new Date(attendance.date), "EEE dd MMM yy")}</Text>
-                  </Box>
-                  <Flex>
-                    {attendance.hasBeenUpdated ? null : (
-                      <Button
-                        variant="outline"
-                        colorScheme="blue"
-                        onClick={(e) => {
-                          // This will stop the click event from bubbling up to the parent's onClick
-                          e.stopPropagation();
-                          const pagePath = convertParamsToString(
-                            PROTECTED_PATHS.UPDATE_ATTENANCE,
-                            { attendanceId: attendance.id }
-                          );
-                          navigate(pagePath);
-                        }}
-                      >
-                        <FaPencilAlt />
-                      </Button>
-                    )}
+                  <Flex
+                    alignItems="center"
+                    justifyContent="space-between"
+                    w="100%"
+                  >
+                    <Box>
+                      <Text textAlign="left">{attendance.name}</Text>
+                      <Text>
+                        {format(new Date(attendance.date), "EEE dd MMM yy")}
+                      </Text>
+                    </Box>
+                    <Flex>
+                      {attendance.hasBeenUpdated ? null : (
+                        <Button
+                          variant="outline"
+                          colorScheme="blue"
+                          onClick={(e) => {
+                            // This will stop the click event from bubbling up to the parent's onClick
+                            e.stopPropagation();
+                            const pagePath = convertParamsToString(
+                              PROTECTED_PATHS.UPDATE_ATTENANCE,
+                              { attendanceId: attendance.id }
+                            );
+                            navigate(pagePath);
+                          }}
+                        >
+                          <FaPencilAlt />
+                        </Button>
+                      )}
+                    </Flex>
                   </Flex>
                 </Flex>
-              </Flex>
-            ))}
+              ))}
           </>
         ) : (
           <Text ml="4" fontWeight="bold">
