@@ -20,7 +20,8 @@ import { queryClient, useQueryWrapper } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
 import { useState } from "react";
-import { Q_KEY } from 'utils/constant';
+import { Q_KEY } from "utils/constant";
+import { FaArrowCircleLeft } from "react-icons/fa";
 
 type CommonTypeCategory = {
   name: string;
@@ -52,7 +53,7 @@ const CreateAttendance = () => {
     const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
     updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
     queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
-   
+
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
     // Q_KEY.GET_MEMBERS
   };
@@ -63,7 +64,7 @@ const CreateAttendance = () => {
   const onSuccess = (res) => {
     setAllCategory(res.data);
   };
-   useQueryWrapper(["get-all-category"], catUrl, {
+  useQueryWrapper(["get-all-category"], catUrl, {
     onSuccess,
   });
 
@@ -81,16 +82,32 @@ const CreateAttendance = () => {
           Create Attendance
         </Text>
       </Flex>
-      <Button mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
-        Add Category
-      </Button>
       <Button
-        mt="4"
-        ml="6"
-        onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}
+        variant="logout"
+        colorScheme="blue"
+        onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+        mr={2}
+        leftIcon={<FaArrowCircleLeft />}
+        m="2"
       >
-        Add Sub-Category
+        Back
       </Button>
+      <Flex>
+        <Button
+          mt="4"
+          ml="2"
+          onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}
+        >
+          Add Category
+        </Button>
+        <Button
+          mt="4"
+          ml="6"
+          onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}
+        >
+          Add Sub-Category
+        </Button>
+      </Flex>
       <Flex
         align={"center"}
         justify={"center"}
