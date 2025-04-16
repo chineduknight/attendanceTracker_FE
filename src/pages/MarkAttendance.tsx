@@ -301,9 +301,21 @@ const MarkAttendance = () => {
         </Text>
       </Flex>
       <Container>
-        <Heading mt="4" fontSize="22px">
-          {` Members ${currentAttendance.name}`}
-        </Heading>
+        <Flex alignItems="center" justifyContent="space-between">
+          <Heading mt="4" fontSize="22px">
+            {` Members ${currentAttendance.name}`}
+          </Heading>
+          <Button
+            variant="logout"
+            onClick={() => {
+              localStorage.removeItem(localStorageKey);
+
+              window.location.reload();
+            }}
+          >
+            Refresh
+          </Button>
+        </Flex>
         <InputGroup mt="4">
           <InputLeftElement pointerEvents="none" />
           <Input
