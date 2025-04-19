@@ -221,10 +221,7 @@ const MarkAttendance = () => {
 
   const navigate = useNavigate();
   const onSubmitSuccess = () => {
-    // Clear local storage once submitted
-    console.log("clearing local storage");
     localStorage.removeItem(localStorageKey);
-    console.log("cleared local storage");
     toast.success(
       isUpdate ? "Attendance Updated" : "Attendance Created successfully"
     );
@@ -262,13 +259,14 @@ const MarkAttendance = () => {
       .filter((member) => member.attendanceStatus === "apology")
       .map((member) => member.id);
 
-    const data = {
+    const data: any = {
       ...currentAttendance,
       organisationId: org.id,
       presentMembers,
-      apologisedMembers,
     };
-
+    if (apologisedMembers.length) {
+      data.apologisedMembers = apologisedMembers;
+    }
     const upateUrl = convertParamsToString(
       attendanceRequest.UPDATE_ATTENDANCE,
       {
