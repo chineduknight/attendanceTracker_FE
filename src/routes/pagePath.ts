@@ -17,6 +17,7 @@ export const PROTECTED_PATHS = {
   ALL_ATTENDANCE: "/all-attendance",
   MARK_ATTENANCE: "/mark-attendance",
   UPDATE_ATTENANCE: "/mark-attendance/:attendanceId",
-  LOGIN_USER: '/login-user',
+  LOGIN_USER: "/login-user",
   LOGIN: "/login",
+  ANALYTICS: "/analytics",
 };
