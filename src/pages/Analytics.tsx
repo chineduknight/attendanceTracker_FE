@@ -18,37 +18,96 @@ import {
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { useNavigate } from "react-router-dom";
-import { FaArrowCircleLeft } from "react-icons/fa";
+import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { attendanceRequest } from "services";
+import { convertParamsToString } from "helpers/stringManipulations";
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
+  const [hasSearched, setHasSearched] = useState(false);
   const navigate = useNavigate();
+  const canRunQuery = Boolean(fromDate && toDate && org.id);
+
+  const queryString = useMemo(() => {
+    if (!canRunQuery) return "";
+    return `fromDate=${fromDate}&toDate=${toDate}&sort=present:desc`;
+  }, [canRunQuery, fromDate, toDate]);
 
   // build the request URL once both dates are set
   const url = useMemo(() => {
-    if (!fromDate || !toDate) return null;
-    return `/attendance/${org.id}/analytics?fromDate=${fromDate}&toDate=${toDate}`;
-  }, [fromDate, toDate, org.id]);
+    if (!canRunQuery) return "";
+    const analyticsPath = convertParamsToString(attendanceRequest.ANALYTICS, {
+      organisationId: org.id,
+    });
+    return `${analyticsPath}?${queryString}`;
+  }, [canRunQuery, org.id, queryString]);
 
   // react‑query wrapper: don't run until we call refetch()
   const {
     data: analyticsResponse,
-    isLoading,
+    isFetching,
     error,
     refetch,
   } = useQueryWrapper(
     ["attendanceAnalytics", fromDate, toDate],
-    url || "", // Provide an empty string as a fallback
+    url,
     {
       enabled: false,
-    }
+    },
+  );
+
+  const exportExcelUrl = useMemo(() => {
+    if (!canRunQuery) return "";
+    const path = convertParamsToString(
+      attendanceRequest.ANALYTICS_EXPORT_EXCEL,
+      {
+        organisationId: org.id,
+      },
+    );
+    return `${path}?${queryString}`;
+  }, [canRunQuery, org.id, queryString]);
+
+  const exportPdfUrl = useMemo(() => {
+    if (!canRunQuery) return "";
+    const path = convertParamsToString(attendanceRequest.ANALYTICS_EXPORT_PDF, {
+      organisationId: org.id,
+    });
+    return `${path}?${queryString}`;
+  }, [canRunQuery, org.id, queryString]);
+
+  const { refetch: refetchExcel, isFetching: isExportingExcel } =
+    useQueryWrapper(
+      ["attendanceAnalyticsExportExcel", fromDate, toDate, org.id],
+      exportExcelUrl,
+      {
+        enabled: false,
+        onSuccess: (response: any) => {
+          if (response?.data) {
+            window.open(response.data, "_blank");
+          }
+        },
+      },
+    );
+
+  const { refetch: refetchPdf, isFetching: isExportingPdf } = useQueryWrapper(
+    ["attendanceAnalyticsExportPdf", fromDate, toDate, org.id],
+    exportPdfUrl,
+    {
+      enabled: false,
+      onSuccess: (response: any) => {
+        if (response?.data) {
+          window.open(response.data, "_blank");
+        }
+      },
+    },
   );
 
   const handleSearch = () => {
-    if (fromDate && toDate) {
+    if (canRunQuery) {
+      setHasSearched(true);
       refetch();
     }
   };
@@ -56,14 +115,14 @@ const AttendanceAnalyticsPage: React.FC = () => {
   // pull out keys & data rows
   const keys: string[] = useMemo(
     () => analyticsResponse?.data.keys || [],
-    [analyticsResponse?.data.keys]
+    [analyticsResponse?.data.keys],
   );
   const rows: any[] = analyticsResponse?.data.analytics || [];
 
   // detect which columns are dates
   const dateKeys = useMemo(
     () => keys.filter((k) => /\d{4}-\d{2}-\d{2}$/.test(k)),
-    [keys]
+    [keys],
   );
 
   // static totals
@@ -99,27 +158,61 @@ const AttendanceAnalyticsPage: React.FC = () => {
           >
             Back
           </Button>
+          <Flex mb={3} mt={2} gap={2} justifyContent="flex-end" flexWrap="wrap">
+            <Button
+              leftIcon={<FaFileExcel />}
+              onClick={() => refetchExcel()}
+              isLoading={isExportingExcel}
+              isDisabled={!canRunQuery}
+              bg="green.500"
+              color="white"
+              _hover={{ bg: "green.600" }}
+            >
+              Export Excel
+            </Button>
+            <Button
+              leftIcon={<FaFilePdf />}
+              onClick={() => refetchPdf()}
+              isLoading={isExportingPdf}
+              isDisabled={!canRunQuery}
+              bg="red.500"
+              color="white"
+              _hover={{ bg: "red.600" }}
+            >
+              Export PDF
+            </Button>
+          </Flex>
           {/* Date selectors + button */}
           <Flex mb={6} gap={2} align="center">
             <Input
               type="date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setHasSearched(false);
+              }}
               max={toDate || undefined}
             />
             <Input
               type="date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setHasSearched(false);
+              }}
               min={fromDate || undefined}
             />
-            <Button colorScheme="blue" onClick={handleSearch}>
+            <Button
+              colorScheme="blue"
+              onClick={handleSearch}
+              isDisabled={!canRunQuery}
+            >
               Search
             </Button>
           </Flex>
 
           {/* Loading & error */}
-          {isLoading && <Spinner />}
+          {isFetching && <Spinner />}
           {error && (
             <Text color="red.500" mb={4}>
               Error fetching analytics.
@@ -127,7 +220,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
           )}
 
           {/* Table */}
-          {!isLoading && !error && rows.length > 0 && (
+          {!isFetching && !error && hasSearched && rows.length > 0 && (
             <Box overflowX="auto">
               <Table variant="striped" size="sm">
                 <Thead>
@@ -192,7 +285,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
           )}
 
           {/* No data message */}
-          {!isLoading && !error && rows.length === 0 && (
+          {!isFetching && !error && hasSearched && rows.length === 0 && (
             <Text>No attendance records found for this range.</Text>
           )}
         </>

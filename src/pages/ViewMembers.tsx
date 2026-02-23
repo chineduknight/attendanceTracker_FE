@@ -18,7 +18,11 @@ import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import _ from "lodash";
-import { FaPencilAlt, FaArrowCircleLeft } from "react-icons/fa";
+import {
+  FaPencilAlt,
+  FaArrowCircleLeft,
+  FaFileExcel,
+} from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { Q_KEY } from "utils/constant";
@@ -79,6 +83,15 @@ const ViewMembers: React.FC = () => {
       setMembers(res.data);
     },
   });
+  const { refetch: exportMembers, isFetching: isExportingMembers } =
+    useQueryWrapper(["export-members", org.id], `${url}/export`, {
+      enabled: false,
+      onSuccess: (response: any) => {
+        if (response?.data) {
+          window.open(response.data, "_blank");
+        }
+      },
+    });
 
   if (isLoading) {
     return <Text>Loading...</Text>;
@@ -131,13 +144,26 @@ const ViewMembers: React.FC = () => {
           >
             Back
           </Button>
-          <Button
-            variant="primary"
-            colorScheme="blue"
-            onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-          >
-            Add Member
-          </Button>
+          <Flex gap={2}>
+            <Button
+              leftIcon={<FaFileExcel />}
+              onClick={() => exportMembers()}
+              isLoading={isExportingMembers}
+              isDisabled={!org.id}
+              bg="green.500"
+              color="white"
+              _hover={{ bg: "green.600" }}
+            >
+              Export Member List
+            </Button>
+            <Button
+              variant="primary"
+              colorScheme="blue"
+              onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
+            >
+              Add Member
+            </Button>
+          </Flex>
         </Flex>
         <Flex justify="center" mb={8}>
           <Input
