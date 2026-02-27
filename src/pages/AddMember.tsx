@@ -26,10 +26,11 @@ import useGlobalStore from "zStore";
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { FaPlusSquare } from "react-icons/fa";
+import { FaArrowCircleLeft, FaPlusSquare } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { Q_KEY } from "utils/constant";
 import { FieldType } from "./UserModel";
+import LoadingSpinner from "components/LoadingSpinner";
 
 interface FormData {
   [fieldName: string]: string;
@@ -71,7 +72,7 @@ const AddOrUpdateMember = () => {
 
   const onSuccess = () => {
     toast.success(
-      isUpdating ? "Member updated successfully" : "Member added successfully"
+      isUpdating ? "Member updated successfully" : "Member added successfully",
     );
     queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
@@ -81,7 +82,7 @@ const AddOrUpdateMember = () => {
     organisationId: org.id,
   });
 
-  const { isLoading: isGettingMembers } = useQueryWrapper(
+  const { isFetching: isGettingMembers } = useQueryWrapper(
     ["get-member-model"],
     modelURL,
     {
@@ -90,7 +91,7 @@ const AddOrUpdateMember = () => {
         const isUpdate = params.memberId !== undefined;
         setIsUpdating(isUpdate);
       },
-    }
+    },
   );
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
@@ -202,23 +203,31 @@ const AddOrUpdateMember = () => {
           {isUpdating ? "Update Member" : "Add Member"}
         </Text>
       </Flex>
+      <Flex justify="space-between" alignItems="center" mx="6" mt="4">
+        <Button
+          variant="logout"
+          colorScheme="blue"
+          onClick={() => navigate(-1)}
+          leftIcon={<FaArrowCircleLeft />}
+        >
+          Back
+        </Button>
+        {!isGettingMembers && membersModel.length !== 0 && (
+          <Button
+            leftIcon={<FaPlusSquare />}
+            colorScheme="blue"
+            variant="outline"
+            onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+          >
+            Update Model
+          </Button>
+        )}
+      </Flex>
       <>
         {isGettingMembers ? (
-          <Box>Loading...</Box>
+          <LoadingSpinner h="40vh" />
         ) : (
           <Box>
-            <Flex justify="right" mr="6" mt="4">
-              {membersModel.length !== 0 && (
-                <Button
-                  leftIcon={<FaPlusSquare />}
-                  colorScheme="blue"
-                  variant="outline"
-                  onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-                >
-                  Update Model
-                </Button>
-              )}
-            </Flex>
             <Flex mt="40px" align={"center"} justify={"center"}>
               {!isGettingMembers && membersModel.length === 0 ? (
                 <Flex

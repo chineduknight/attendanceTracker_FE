@@ -20,4 +20,7 @@ export const attendanceRequest = {
   GET_ATTENDANCE:"/attendance/:organisationId/:id",
   ALL_ATTENDANCE:"/attendance/:organisationId",
   EXPORT:"/attendance/export/:organisationId/:id",
-}
+  ANALYTICS: "/attendance/:organisationId/analytics",
+  ANALYTICS_EXPORT_EXCEL: "/attendance/:organisationId/analytics/export/excel",
+  ANALYTICS_EXPORT_PDF: "/attendance/:organisationId/analytics/export/pdf",
+};
