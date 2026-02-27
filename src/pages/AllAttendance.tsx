@@ -15,6 +15,7 @@ import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { FaArrowCircleLeft, FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
+import LoadingSpinner from "components/LoadingSpinner";
 
 type AttendanceType = {
   name: string;
@@ -41,7 +42,7 @@ const AllAttendance = () => {
     organisationId: org.id,
   });
 
-  useQueryWrapper(["all-attendance-12"], url, {
+  const { isLoading } = useQueryWrapper(["all-attendance-12"], url, {
     onSuccess: handleGetOrgSuccess,
   });
 
@@ -84,7 +85,9 @@ const AllAttendance = () => {
         mt={{ base: 0, md: -10 }}
         mx="auto"
       >
-        {allAttend.length ? (
+        {isLoading ? (
+          <LoadingSpinner h="30vh" text="Loading attendance..." />
+        ) : allAttend.length ? (
           <>
             {allAttend
               .sort((a, b) => b.dateFormated - a.dateFormated)

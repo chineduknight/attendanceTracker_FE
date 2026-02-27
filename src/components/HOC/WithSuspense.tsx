@@ -1,12 +1,15 @@
-/* eslint-disable react/display-name */
-import { Suspense } from "react";
-import Loader from "../Loader";
+import { ComponentType, Suspense } from "react";
+import LoadingSpinner from "../LoadingSpinner";
 
 const WithSuspense =
-  (Component, showLoader = false) =>
-  (props) => {
+  <P extends object>(Component: ComponentType<P>, showLoader = true) =>
+  (props: P) => {
     return (
-      <Suspense fallback={showLoader ? <Loader /> : "..."}>
+      <Suspense
+        fallback={
+          showLoader ? <LoadingSpinner h="100vh" text="Loading page..." /> : null
+        }
+      >
         <Component {...props} />
       </Suspense>
     );
