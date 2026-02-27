@@ -20,21 +20,62 @@ import useGlobalStore from "zStore";
 import { useNavigate } from "react-router-dom";
 import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { attendanceRequest } from "services";
-import { convertParamsToString } from "helpers/stringManipulations";
+import { attendanceRequest, orgRequest } from "services";
+import { capitalize, convertParamsToString } from "helpers/stringManipulations";
+import ReactSelect, { MultiValue } from "react-select";
+
+type StatusOption = {
+  value: string;
+  label: string;
+};
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
+  const [statusOptions, setStatusOptions] = useState<string[]>([
+    "active",
+    "inactive",
+  ]);
   const navigate = useNavigate();
   const canRunQuery = Boolean(fromDate && toDate && org.id);
 
+  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
+    organisationId: org.id,
+  });
+
+  useQueryWrapper(["get-member-model", org.id], modelURL, {
+    enabled: Boolean(org.id),
+    onSuccess: (data) => {
+      const fields = data?.data?.fields;
+      const statusField = fields?.find((field: any) => field.name === "status");
+      if (statusField && Array.isArray(statusField.options)) {
+        setStatusOptions(statusField.options);
+      }
+    },
+  });
+
+  const selectedStatuses = useMemo(
+    () => statusFilter.filter((status) => status !== "all"),
+    [statusFilter],
+  );
+
   const queryString = useMemo(() => {
     if (!canRunQuery) return "";
-    return `fromDate=${fromDate}&toDate=${toDate}&sort=present:desc`;
-  }, [canRunQuery, fromDate, toDate]);
+    const queryParams = new URLSearchParams({
+      fromDate,
+      toDate,
+      sort: "present:desc",
+    });
+
+    if (selectedStatuses.length) {
+      queryParams.set("status", selectedStatuses.join(","));
+    }
+
+    return queryParams.toString();
+  }, [canRunQuery, fromDate, toDate, selectedStatuses]);
 
   // build the request URL once both dates are set
   const url = useMemo(() => {
@@ -52,7 +93,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
     error,
     refetch,
   } = useQueryWrapper(
-    ["attendanceAnalytics", fromDate, toDate],
+    [
+      "attendanceAnalytics",
+      fromDate,
+      toDate,
+      org.id,
+      selectedStatuses.join(","),
+    ],
     url,
     {
       enabled: false,
@@ -80,7 +127,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
   const { refetch: refetchExcel, isFetching: isExportingExcel } =
     useQueryWrapper(
-      ["attendanceAnalyticsExportExcel", fromDate, toDate, org.id],
+      [
+        "attendanceAnalyticsExportExcel",
+        fromDate,
+        toDate,
+        org.id,
+        selectedStatuses.join(","),
+      ],
       exportExcelUrl,
       {
         enabled: false,
@@ -93,7 +146,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
     );
 
   const { refetch: refetchPdf, isFetching: isExportingPdf } = useQueryWrapper(
-    ["attendanceAnalyticsExportPdf", fromDate, toDate, org.id],
+    [
+      "attendanceAnalyticsExportPdf",
+      fromDate,
+      toDate,
+      org.id,
+      selectedStatuses.join(","),
+    ],
     exportPdfUrl,
     {
       enabled: false,
@@ -118,6 +177,25 @@ const AttendanceAnalyticsPage: React.FC = () => {
     [analyticsResponse?.data.keys],
   );
   const rows: any[] = analyticsResponse?.data.analytics || [];
+
+  const statusSelectOptions = useMemo<StatusOption[]>(
+    () => [
+      { value: "all", label: "All" },
+      ...statusOptions.map((option) => ({
+        value: option,
+        label: capitalize(option),
+      })),
+    ],
+    [statusOptions],
+  );
+
+  const selectedStatusOptions = useMemo(
+    () =>
+      statusSelectOptions.filter((option) =>
+        statusFilter.includes(option.value),
+      ),
+    [statusFilter, statusSelectOptions],
+  );
 
   // detect which columns are dates
   const dateKeys = useMemo(
@@ -146,7 +224,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
           Attendance Analytics
         </Text>
       </Flex>
-      <Box p={6}>
+      <Box p={2}>
         <>
           <Button
             variant="logout"
@@ -183,7 +261,12 @@ const AttendanceAnalyticsPage: React.FC = () => {
             </Button>
           </Flex>
           {/* Date selectors + button */}
-          <Flex mb={6} gap={2} align="center">
+          <Flex
+            mb={6}
+            gap={2}
+            align="center"
+            direction={{ base: "column", md: "row" }}
+          >
             <Input
               type="date"
               value={fromDate}
@@ -191,6 +274,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
                 setFromDate(e.target.value);
                 setHasSearched(false);
               }}
+              w={{ base: "100%", md: "auto" }}
               max={toDate || undefined}
             />
             <Input
@@ -200,12 +284,43 @@ const AttendanceAnalyticsPage: React.FC = () => {
                 setToDate(e.target.value);
                 setHasSearched(false);
               }}
+              w={{ base: "100%", md: "auto" }}
               min={fromDate || undefined}
             />
+            <Box w={{ base: "100%", md: "260px" }}>
+              <ReactSelect
+                isMulti
+                placeholder="Filter members by status"
+                options={statusSelectOptions}
+                value={selectedStatusOptions}
+                closeMenuOnSelect={false}
+                onChange={(selected: MultiValue<StatusOption>) => {
+                  const values = selected.map((item) => item.value);
+                  if (values.length === 0) {
+                    setStatusFilter(["all"]);
+                    setHasSearched(false);
+                    return;
+                  }
+                  if (values.includes("all") && values.length > 1) {
+                    setStatusFilter(values.filter((value) => value !== "all"));
+                    setHasSearched(false);
+                    return;
+                  }
+                  if (values.includes("all")) {
+                    setStatusFilter(["all"]);
+                    setHasSearched(false);
+                    return;
+                  }
+                  setStatusFilter(values);
+                  setHasSearched(false);
+                }}
+              />
+            </Box>
             <Button
               colorScheme="blue"
               onClick={handleSearch}
               isDisabled={!canRunQuery}
+              w={{ base: "100%", md: "auto" }}
             >
               Search
             </Button>
@@ -225,6 +340,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
               <Table variant="striped" size="sm">
                 <Thead>
                   <Tr>
+                    <Th isNumeric>SN</Th>
                     <Th>Name</Th>
                     {totalKeys.map((label) => (
                       <Th key={label} isNumeric>
@@ -237,8 +353,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {rows.map((row) => (
+                  {rows.map((row, index) => (
                     <Tr key={row.memberId}>
+                      <Td isNumeric>{index + 1}</Td>
                       <Td>{row.name}</Td>
 
                       {totalKeys.map((label) => (

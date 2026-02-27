@@ -12,12 +12,14 @@ import {
 } from "@chakra-ui/react";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { attendanceRequest } from "services";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
+import LoadingSpinner from "components/LoadingSpinner";
+import { FaArrowCircleLeft, FaFileExcel, FaShareAlt } from "react-icons/fa";
 
 type MemberType = {
   attendanceStatus: "absent" | "present" | "apology";
@@ -42,6 +44,7 @@ const Attendance = () => {
   const [filterName, setFilterName] = useState<MemberType[]>([]);
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
+  const navigate = useNavigate();
   const onSuccess = (data) => {
     const unsorted = data.data.attendance;
     const statusOrder = { present: 0, apology: 1, absent: 2 };
@@ -78,7 +81,7 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
+  const { isFetching: isLoadingAttendance } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
     onSuccess,
   });
 
@@ -232,46 +235,71 @@ const Attendance = () => {
         </Text>
       </Flex>
       <Container>
-        <Flex mt="4" justifyContent="space-between">
-          <Button onClick={handleSendToWhatsapp}>Share</Button>
-          <Button onClick={sendToExcel} isLoading={isFetching}>
-            Export to Excel
-          </Button>
-        </Flex>
+        {isLoadingAttendance ? (
+          <LoadingSpinner h="40vh" text="Loading attendance..." />
+        ) : (
+          <>
+            <Flex mt="4" justifyContent="space-between">
+              <Button
+                variant="logout"
+                colorScheme="blue"
+                onClick={() => navigate(-1)}
+                leftIcon={<FaArrowCircleLeft />}
+              >
+                Back
+              </Button>
+              <Flex gap={2}>
+                <Button onClick={handleSendToWhatsapp} leftIcon={<FaShareAlt />}>
+                  Share
+                </Button>
+                <Button
+                  onClick={sendToExcel}
+                  isLoading={isFetching}
+                  leftIcon={<FaFileExcel />}
+                  bg="green.500"
+                  color="white"
+                  _hover={{ bg: "green.600" }}
+                >
+                  Export to Excel
+                </Button>
+              </Flex>
+            </Flex>
 
-        <Flex mt="4" alignItems="center" justifyContent="space-between">
-          <Heading fontSize="22px">{attendanceInfo?.name}</Heading>
-          <Text>{formattedDate}</Text>
-        </Flex>
-        <InputGroup mt="4">
-          <InputLeftElement pointerEvents="none" />
-          <Input
-            type="search"
-            placeholder="Search member"
-            onChange={handleSearch}
-          />
-        </InputGroup>
-        {filterName.length === 0 && (
-          <Box mt="4">
-            <Text ml="4" fontWeight="bold">
-              No member found
-            </Text>
-          </Box>
+            <Flex mt="4" alignItems="center" justifyContent="space-between">
+              <Heading fontSize="22px">{attendanceInfo?.name}</Heading>
+              <Text>{formattedDate}</Text>
+            </Flex>
+            <InputGroup mt="4">
+              <InputLeftElement pointerEvents="none" />
+              <Input
+                type="search"
+                placeholder="Search member"
+                onChange={handleSearch}
+              />
+            </InputGroup>
+            {filterName.length === 0 && (
+              <Box mt="4">
+                <Text ml="4" fontWeight="bold">
+                  No member found
+                </Text>
+              </Box>
+            )}
+            <Flex mt="2" justifyContent="space-between">
+              <Text>
+                Present: <strong>{attendanceInfo?.present} </strong>
+              </Text>
+              <Text>
+                Apology: <strong>{attendanceInfo?.apology} </strong>
+              </Text>
+              <Text>
+                Absent: <strong>{attendanceInfo?.absent} </strong>
+              </Text>
+            </Flex>
+            <Box mt="4" overflow="scroll" maxH="500px">
+              {filterName.map((item) => AttendCard(item))}
+            </Box>
+          </>
         )}
-        <Flex mt="2" justifyContent="space-between">
-          <Text>
-            Present: <strong>{attendanceInfo?.present} </strong>
-          </Text>
-          <Text>
-            Apology: <strong>{attendanceInfo?.apology} </strong>
-          </Text>
-          <Text>
-            Absent: <strong>{attendanceInfo?.absent} </strong>
-          </Text>
-        </Flex>
-        <Box mt="4" overflow="scroll" maxH="500px">
-          {filterName.map((item) => AttendCard(item))}
-        </Box>
       </Container>
     </Box>
   );

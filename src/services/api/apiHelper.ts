@@ -44,6 +44,13 @@ export const useMutationWrapper = (makeAPICall: any, onSuccess?: any, onError?: 
         onError(error);
       } else {
         const err = error as Record<any, any>;
+        const statusCode = err?.response?.status;
+
+        // 401 errors are already handled by the global axios interceptor.
+        if (statusCode === 401) {
+          return;
+        }
+
         const message: any = err?.response?.data?.error;
         if (Array.isArray(message)) {
           message.map((errorMsg) =>

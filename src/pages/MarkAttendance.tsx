@@ -9,7 +9,6 @@ import {
   InputGroup,
   InputLeftElement,
   Container,
-  Skeleton,
 } from "@chakra-ui/react";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useState } from "react";
@@ -27,6 +26,7 @@ import { confirmAlert } from "react-confirm-alert";
 import { Q_KEY } from "utils/constant";
 import _ from "lodash";
 import { toast } from "react-toastify";
+import LoadingSpinner from "components/LoadingSpinner";
 
 export type MemberType = {
   attendanceStatus: "absent" | "present" | "apology";
@@ -161,10 +161,16 @@ const MarkAttendance = () => {
     id: params.attendanceId as string,
   });
   // Query for fetching attendance details when updating
-  useQueryWrapper([Q_KEY.GET_ATTENDANCE], attendUrl, {
-    onSuccess: onGetAttandanceSuccess,
-    enabled: isUpdate,
-  });
+  const { isLoading: isGettingAttendance } = useQueryWrapper(
+    [Q_KEY.GET_ATTENDANCE],
+    attendUrl,
+    {
+      onSuccess: onGetAttandanceSuccess,
+      enabled: isUpdate,
+    }
+  );
+
+  const isLoadingData = isUpdate ? isGettingAttendance : isGettingMembers;
 
   const [searchQuery, setSearchQuery] = useState("");
   const handleSearch = useCallback(
@@ -314,79 +320,84 @@ const MarkAttendance = () => {
             Refresh
           </Button>
         </Flex>
-        <InputGroup mt="4">
-          <InputLeftElement pointerEvents="none" />
-          <Input
-            type="search"
-            placeholder="Search member"
-            onChange={handleSearch}
-          />
-        </InputGroup>
-        {filterName.length === 0 && (
-          <Box mt="4">
-            <Text ml="4" fontWeight="bold">
-              No member found
-            </Text>
-          </Box>
+        {isLoadingData ? (
+          <LoadingSpinner h="45vh" text="Loading members..." />
+        ) : (
+          <>
+            <InputGroup mt="4">
+              <InputLeftElement pointerEvents="none" />
+              <Input
+                type="search"
+                placeholder="Search member"
+                onChange={handleSearch}
+              />
+            </InputGroup>
+            {filterName.length === 0 && (
+              <Box mt="4">
+                <Text ml="4" fontWeight="bold">
+                  No member found
+                </Text>
+              </Box>
+            )}
+            <Flex mt="2" justifyContent="space-between">
+              <Text>
+                Present: <strong>{attendanceInfo?.present}</strong>
+              </Text>
+              <Text>
+                Apology: <strong>{attendanceInfo?.apology}</strong>
+              </Text>
+              <Text>
+                Absent: <strong>{attendanceInfo?.absent}</strong>
+              </Text>
+            </Flex>
+            <Box mt="4" overflow="scroll" maxHeight="300px">
+              {filterName.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="unstyled"
+                  onClick={() => updateAttendance(item.id)}
+                  display="block"
+                  w="full"
+                  mt="3"
+                  border="1px solid green"
+                  bg={
+                    item.attendanceStatus === "present"
+                      ? "green"
+                      : item.attendanceStatus === "apology"
+                      ? "orange"
+                      : ""
+                  }
+                  color={
+                    item.attendanceStatus === "present" ||
+                    item.attendanceStatus === "apology"
+                      ? "#fff"
+                      : ""
+                  }
+                >
+                  {item.name}
+                </Button>
+              ))}
+            </Box>
+            <Button
+              onClick={onSubmit}
+              w="full"
+              mt="8"
+              isLoading={isLoading}
+              disabled={attendanceInfo.present === 0}
+            >
+              {isUpdate ? "Update" : "Submit"}
+            </Button>
+            <Button
+              onClick={() => navigate(-1)}
+              w="full"
+              variant="logout"
+              mt="4"
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+          </>
         )}
-        <Flex mt="2" justifyContent="space-between">
-          <Text>
-            Present: <strong>{attendanceInfo?.present}</strong>
-          </Text>
-          <Text>
-            Apology: <strong>{attendanceInfo?.apology}</strong>
-          </Text>
-          <Text>
-            Absent: <strong>{attendanceInfo?.absent}</strong>
-          </Text>
-        </Flex>
-        <Box mt="4" overflow="scroll" maxHeight="300px">
-          {filterName.map((item) => (
-            <Skeleton key={item.id} isLoaded={!isGettingMembers}>
-              <Button
-                variant="unstyled"
-                onClick={() => updateAttendance(item.id)}
-                display="block"
-                w="full"
-                mt="3"
-                border="1px solid green"
-                bg={
-                  item.attendanceStatus === "present"
-                    ? "green"
-                    : item.attendanceStatus === "apology"
-                    ? "orange"
-                    : ""
-                }
-                color={
-                  item.attendanceStatus === "present" ||
-                  item.attendanceStatus === "apology"
-                    ? "#fff"
-                    : ""
-                }
-              >
-                {item.name}
-              </Button>
-            </Skeleton>
-          ))}
-        </Box>
-        <Button
-          onClick={onSubmit}
-          w="full"
-          mt="8"
-          isLoading={isLoading}
-          disabled={attendanceInfo.present === 0}
-        >
-          {isUpdate ? "Update" : "Submit"}
-        </Button>
-        <Button
-          onClick={() => navigate(-1)}
-          w="full"
-          variant="logout"
-          mt="4"
-          disabled={isLoading}
-        >
-          Cancel
-        </Button>
       </Container>
     </Box>
   );
