@@ -27,6 +27,7 @@ type MemberType = {
   _id: string;
   member: {
     name: string;
+    status: string;
     gender?: string;
     part?: string;
   };
@@ -56,13 +57,13 @@ const Attendance = () => {
     });
 
     const presentCount = members.filter(
-      (member) => member.attendanceStatus === "present"
+      (member) => member.attendanceStatus === "present",
     ).length;
     const apologyCount = members.filter(
-      (member) => member.attendanceStatus === "apology"
+      (member) => member.attendanceStatus === "apology",
     ).length;
     const absentCount = members.filter(
-      (member) => member.attendanceStatus === "absent"
+      (member) => member.attendanceStatus === "absent",
     ).length;
 
     setAttendanceInfo({
@@ -81,20 +82,24 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { isFetching: isLoadingAttendance } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
-    onSuccess,
-  });
+  const { isFetching: isLoadingAttendance } = useQueryWrapper(
+    [Q_KEY.GET_MEMBERS],
+    url,
+    {
+      onSuccess,
+    },
+  );
 
   const handleSearch = useCallback(
     (e) => {
       const query = e.target.value.toLowerCase();
       setFilterName(
         allMembers.filter((member) =>
-          member.member.name.toLowerCase().includes(query)
-        )
+          member.member.name.toLowerCase().includes(query),
+        ),
       );
     },
-    [allMembers]
+    [allMembers],
   );
 
   const formattedDate = attendanceInfo?.date
@@ -107,7 +112,7 @@ const Attendance = () => {
       .filter(
         (item) =>
           item.attendanceStatus === "present" ||
-          item.attendanceStatus === "apology"
+          item.attendanceStatus === "apology",
       )
       .reduce((acc, item) => {
         // Use "others" if member.part is missing.
@@ -152,7 +157,7 @@ const Attendance = () => {
 
     // Process any extra parts (including "others") that are not in the orderedParts array.
     const extraParts = Object.keys(presentMembersByPart).filter(
-      (part) => !orderedParts.includes(part)
+      (part) => !orderedParts.includes(part),
     );
     extraParts.sort().forEach((part) => {
       if (presentMembersByPart[part] && presentMembersByPart[part].length > 0) {
@@ -169,16 +174,20 @@ const Attendance = () => {
     });
 
     // Absent members: Only display the count.
-    const absentCount = allMembers.filter(
-      (item) => item.attendanceStatus === "absent"
+    const allAbsentMembers = allMembers.filter(
+      (item) => item.attendanceStatus === "absent",
+    );
+    console.log("allAbsentMembers:", allAbsentMembers);
+    const absentCount = allAbsentMembers.filter(
+      (item) => item.member.status === "active",
     ).length;
     const absentMembersString = `*Absent Members:(${absentCount})*`;
 
     const presentCount = allMembers.filter(
-      (item) => item.attendanceStatus === "present"
+      (item) => item.attendanceStatus === "present",
     ).length;
     const apologyCount = allMembers.filter(
-      (item) => item.attendanceStatus === "apology"
+      (item) => item.attendanceStatus === "apology",
     ).length;
     const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate: ${formattedDate}\nPresent (${presentCount})\nApology (${apologyCount})\n`;
     const message = [title, presentMembersString, absentMembersString]
@@ -188,7 +197,7 @@ const Attendance = () => {
     console.log("message:", message);
     const phoneNumber = "+2348032374369"; // replace with the actual phone number
     const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
-      message
+      message,
     )}`;
 
     if (navigator.share) {
@@ -216,7 +225,7 @@ const Attendance = () => {
       onSuccess: (data) => {
         window.open(data.data);
       },
-    }
+    },
   );
 
   const sendToExcel = () => {
@@ -249,7 +258,10 @@ const Attendance = () => {
                 Back
               </Button>
               <Flex gap={2}>
-                <Button onClick={handleSendToWhatsapp} leftIcon={<FaShareAlt />}>
+                <Button
+                  onClick={handleSendToWhatsapp}
+                  leftIcon={<FaShareAlt />}
+                >
                   Share
                 </Button>
                 <Button
