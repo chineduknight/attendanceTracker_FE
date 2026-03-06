@@ -13,15 +13,33 @@ import {
   FaClipboardList,
   FaEye,
   FaChartBar,
+  FaBirthdayCake,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { IconType } from "react-icons";
+
+type DashboardAction = {
+  label: string;
+  icon: IconType;
+  colorScheme: string;
+  path: string;
+};
+
+const DASHBOARD_ACTIONS: DashboardAction[] = [
+  { label: "Add Member", icon: FaUserPlus, colorScheme: "teal", path: PROTECTED_PATHS.ADD_MEMBER },
+  { label: "View Members", icon: FaEye, colorScheme: "blue", path: PROTECTED_PATHS.VIEW_MEMBER },
+  { label: "Create Attendance", icon: FaCalendarPlus, colorScheme: "yellow", path: PROTECTED_PATHS.CREATE_ATTENDANCE },
+  { label: "All Attendance", icon: FaClipboardList, colorScheme: "purple", path: PROTECTED_PATHS.ALL_ATTENDANCE },
+  { label: "Analytics", icon: FaChartBar, colorScheme: "orange", path: PROTECTED_PATHS.ANALYTICS },
+  { label: "Birthday", icon: FaBirthdayCake, colorScheme: "pink", path: PROTECTED_PATHS.BIRTHDAY },
+];
 
 const Dashboard = () => {
   const location = useLocation();
   const state: any = location.state;
-
   const navigate = useNavigate();
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -44,47 +62,17 @@ const Dashboard = () => {
         gap={6}
         p={4}
       >
-        <Button
-          leftIcon={<FaUserPlus />}
-          colorScheme="teal"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-        >
-          Add Member
-        </Button>
-        <Button
-          leftIcon={<FaEye />}
-          colorScheme="blue"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.VIEW_MEMBER)}
-        >
-          View Members
-        </Button>
-
-        <Button
-          leftIcon={<FaCalendarPlus />}
-          colorScheme="yellow"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
-        >
-          Create Attendance
-        </Button>
-        <Button
-          leftIcon={<FaClipboardList />}
-          colorScheme="purple"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
-        >
-          All Attendance
-        </Button>
-        <Button
-          leftIcon={<FaChartBar />}
-          colorScheme="purple"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.ANALYTICS)}
-        >
-          Analytics
-        </Button>
+        {DASHBOARD_ACTIONS.map(({ label, icon: Icon, colorScheme, path }) => (
+          <Button
+            key={label}
+            leftIcon={<Icon />}
+            colorScheme={colorScheme}
+            variant="outline"
+            onClick={() => navigate(path)}
+          >
+            {label}
+          </Button>
+        ))}
       </Grid>
     </Box>
   );

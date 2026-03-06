@@ -11,6 +11,9 @@ export const orgRequest = {
   ORGANISATIONS: "/organisations",
   MEMBERS:"/organisations/:organisationId/members",
   CONFIG_MODEL:"/organisations/:organisationId/model",
+  BIRTHDAY: "/organisations/:organisationId/members/birthday",
+  BIRTHDAY_EXPORT_PDF: "/organisations/:organisationId/members/birthday/export/pdf",
+  BIRTHDAY_EXPORT_EXCEL: "/organisations/:organisationId/members/birthday/export",
   // organisations/:organisationId/members
 };
 

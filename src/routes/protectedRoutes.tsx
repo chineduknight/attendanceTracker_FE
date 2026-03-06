@@ -17,6 +17,7 @@ const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const ViewMembers = WithSuspense(lazy(() => import("pages/ViewMembers")));
 const Analytics = WithSuspense(lazy(() => import("pages/Analytics")));
+const Birthday = WithSuspense(lazy(() => import("pages/Birthday")));
 const AddOrganisation = WithSuspense(
   lazy(() => import("pages/AddOrganisation"))
 );
@@ -37,6 +38,7 @@ const {
   VIEW_MEMBER,
   UPDATE_ATTENANCE,
   ANALYTICS,
+  BIRTHDAY,
 } = PROTECTED_PATHS;
 
 const PROTECTED_ROUTES = [
@@ -55,6 +57,7 @@ const PROTECTED_ROUTES = [
   { path: ALL_ATTENDANCE, element: <AllAttendance /> },
   { path: VIEW_MEMBER, element: <ViewMembers /> },
   { path: ANALYTICS, element: <Analytics /> },
+  { path: BIRTHDAY, element: <Birthday /> },
 
   { path: "/", element: <Navigate to={ALL_ORG} /> },
   // this enables you not to access the public routes when logged in
