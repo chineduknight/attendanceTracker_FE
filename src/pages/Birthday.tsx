@@ -27,6 +27,7 @@ import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
 import ReactSelect, { MultiValue } from "react-select";
+import { toast } from "react-toastify";
 
 type StatusOption = {
   value: string;
@@ -45,6 +46,48 @@ const Birthday: React.FC = () => {
     "inactive",
   ]);
   const [hasSearched, setHasSearched] = useState(false);
+
+  const getErrorMessage = (err: any, fallback: string): string => {
+    const statusCode = err?.response?.status;
+    if (statusCode === 401) {
+      return "";
+    }
+
+    const apiError = err?.response?.data?.error;
+    if (Array.isArray(apiError)) {
+      return apiError.filter(Boolean).join(", ");
+    }
+    if (typeof apiError === "string" && apiError.trim()) {
+      return apiError;
+    }
+    return fallback;
+  };
+
+  const handleExportSuccess = (response: any, format: "PDF" | "Excel") => {
+    const exportUrl =
+      typeof response?.data === "string" ? response.data.trim() : "";
+
+    if (exportUrl) {
+      window.open(exportUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const responseError =
+      typeof response?.error === "string"
+        ? response.error
+        : `Failed to export ${format}.`;
+    toast.error(responseError);
+  };
+
+  const handleExportError = (err: any, format: "PDF" | "Excel") => {
+    const message = getErrorMessage(
+      err,
+      `Failed to export ${format}. Please try again.`,
+    );
+    if (message) {
+      toast.error(message);
+    }
+  };
 
   const canSearch = Boolean(fromDate && toDate && org.id);
 
@@ -130,9 +173,10 @@ const Birthday: React.FC = () => {
     {
       enabled: false,
       onSuccess: (response: any) => {
-        if (response?.data) {
-          window.open(response.data, "_blank");
-        }
+        handleExportSuccess(response, "PDF");
+      },
+      onError: (err: any) => {
+        handleExportError(err, "PDF");
       },
     },
   );
@@ -150,9 +194,10 @@ const Birthday: React.FC = () => {
       {
         enabled: false,
         onSuccess: (response: any) => {
-          if (response?.data) {
-            window.open(response.data, "_blank");
-          }
+          handleExportSuccess(response, "Excel");
+        },
+        onError: (err: any) => {
+          handleExportError(err, "Excel");
         },
       },
     );
@@ -182,9 +227,10 @@ const Birthday: React.FC = () => {
     () => statusSelectOptions.filter((o) => statusFilter.includes(o.value)),
     [statusFilter, statusSelectOptions],
   );
+  const pageBg: string = useColorModeValue("gray.50", "gray.800");
 
   return (
-    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
+    <Box minH="100vh" bg={pageBg}>
       <Flex
         bg="pink.400"
         justifyContent="space-between"
@@ -198,141 +244,139 @@ const Birthday: React.FC = () => {
       </Flex>
 
       <Box p={4}>
-        <>
+        <Button
+          variant="ghost"
+          colorScheme="pink"
+          onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
+          leftIcon={<FaArrowCircleLeft />}
+          mb={4}
+        >
+          Back
+        </Button>
+
+        {/* Export */}
+        <Flex mb={3} justifyContent="flex-end" gap={2}>
           <Button
-            variant="ghost"
-            colorScheme="pink"
-            onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-            leftIcon={<FaArrowCircleLeft />}
-            mb={4}
+            leftIcon={<FaFileExcel />}
+            onClick={() => refetchExcel()}
+            isLoading={isExportingExcel}
+            isDisabled={!canSearch}
+            bg="green.500"
+            color="white"
+            _hover={{ bg: "green.600" }}
           >
-            Back
+            Export Excel
           </Button>
-
-          {/* Export */}
-          <Flex mb={3} justifyContent="flex-end" gap={2}>
-            <Button
-              leftIcon={<FaFileExcel />}
-              onClick={() => refetchExcel()}
-              isLoading={isExportingExcel}
-              isDisabled={!canSearch}
-              bg="green.500"
-              color="white"
-              _hover={{ bg: "green.600" }}
-            >
-              Export Excel
-            </Button>
-            <Button
-              leftIcon={<FaFilePdf />}
-              onClick={() => refetchPdf()}
-              isLoading={isExportingPdf}
-              isDisabled={!canSearch}
-              bg="red.500"
-              color="white"
-              _hover={{ bg: "red.600" }}
-            >
-              Export PDF
-            </Button>
-          </Flex>
-
-          {/* Filters */}
-          <Flex
-            mb={6}
-            gap={2}
-            align="center"
-            direction={{ base: "column", md: "row" }}
+          <Button
+            leftIcon={<FaFilePdf />}
+            onClick={() => refetchPdf()}
+            isLoading={isExportingPdf}
+            isDisabled={!canSearch}
+            bg="red.500"
+            color="white"
+            _hover={{ bg: "red.600" }}
           >
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => {
-                setFromDate(e.target.value);
-                setHasSearched(false);
-              }}
-              placeholder="From date"
-              w={{ base: "100%", md: "auto" }}
-              max={toDate || undefined}
-            />
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => {
-                setToDate(e.target.value);
-                setHasSearched(false);
-              }}
-              placeholder="To date"
-              w={{ base: "100%", md: "auto" }}
-              min={fromDate || undefined}
-            />
-            <Box w={{ base: "100%", md: "260px" }}>
-              <ReactSelect
-                isMulti
-                placeholder="Filter by status"
-                options={statusSelectOptions}
-                value={selectedStatusOptions}
-                closeMenuOnSelect={false}
-                onChange={(selected: MultiValue<StatusOption>) => {
-                  const values = selected.map((item) => item.value);
-                  setHasSearched(false);
-                  if (
-                    values.length === 0 ||
-                    (values.includes("all") && values.length === 1)
-                  ) {
-                    setStatusFilter(["all"]);
-                    return;
-                  }
-                  if (values.includes("all") && values.length > 1) {
-                    setStatusFilter(values.filter((v) => v !== "all"));
-                    return;
-                  }
-                  setStatusFilter(values);
-                }}
-              />
-            </Box>
-            <Button
-              colorScheme="pink"
-              onClick={handleSearch}
-              isDisabled={!canSearch}
-              w={{ base: "100%", md: "auto" }}
-            >
-              Find
-            </Button>
-          </Flex>
+            Export PDF
+          </Button>
+        </Flex>
 
-          {isFetching && <Spinner />}
-          {error && (
-            <Text color="red.500" mb={4}>
-              Error fetching birthday data.
-            </Text>
-          )}
+        {/* Filters */}
+        <Flex
+          mb={6}
+          gap={2}
+          align="center"
+          direction={{ base: "column", md: "row" }}
+        >
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(e) => {
+              setFromDate(e.target.value);
+              setHasSearched(false);
+            }}
+            placeholder="From date"
+            w={{ base: "100%", md: "auto" }}
+            max={toDate || undefined}
+          />
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(e) => {
+              setToDate(e.target.value);
+              setHasSearched(false);
+            }}
+            placeholder="To date"
+            w={{ base: "100%", md: "auto" }}
+            min={fromDate || undefined}
+          />
+          <Box w={{ base: "100%", md: "260px" }}>
+            <ReactSelect
+              isMulti
+              placeholder="Filter by status"
+              options={statusSelectOptions}
+              value={selectedStatusOptions}
+              closeMenuOnSelect={false}
+              onChange={(selected: MultiValue<StatusOption>) => {
+                const values = selected.map((item) => item.value);
+                setHasSearched(false);
+                if (
+                  values.length === 0 ||
+                  (values.includes("all") && values.length === 1)
+                ) {
+                  setStatusFilter(["all"]);
+                  return;
+                }
+                if (values.includes("all") && values.length > 1) {
+                  setStatusFilter(values.filter((v) => v !== "all"));
+                  return;
+                }
+                setStatusFilter(values);
+              }}
+            />
+          </Box>
+          <Button
+            colorScheme="pink"
+            onClick={handleSearch}
+            isDisabled={!canSearch}
+            w={{ base: "100%", md: "auto" }}
+          >
+            Find
+          </Button>
+        </Flex>
 
-          {!isFetching && !error && hasSearched && members.length > 0 && (
-            <Box overflowX="auto">
-              <Table variant="striped" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th isNumeric>SN</Th>
-                    <Th>Name</Th>
-                    <Th>Date of Birth</Th>
+        {isFetching && <Spinner />}
+        {Boolean(error) && (
+          <Text color="red.500" mb={4}>
+            Error fetching birthday data.
+          </Text>
+        )}
+
+        {!isFetching && !error && hasSearched && members.length > 0 && (
+          <Box overflowX="auto">
+            <Table variant="striped" size="sm">
+              <Thead>
+                <Tr>
+                  <Th isNumeric>SN</Th>
+                  <Th>Name</Th>
+                  <Th>Date of Birth</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {members.map((member: any, index: number) => (
+                  <Tr key={member._id || index}>
+                    <Td isNumeric>{index + 1}</Td>
+                    <Td>{member.name}</Td>
+                    <Td>{member.dob}</Td>
                   </Tr>
-                </Thead>
-                <Tbody>
-                  {members.map((member: any, index: number) => (
-                    <Tr key={member._id || index}>
-                      <Td isNumeric>{index + 1}</Td>
-                      <Td>{member.name}</Td>
-                      <Td>{member.dob}</Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </Box>
-          )}
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
+        )}
 
-          {!isFetching && !error && hasSearched && members.length === 0 && (
-            <Text>No birthdays found for this date range.</Text>
-          )}
-        </>
+        {!isFetching && !error && hasSearched && members.length === 0 && (
+          <Text>No birthdays found for this date range.</Text>
+        )}
       </Box>
     </Box>
   );
