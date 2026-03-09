@@ -293,6 +293,7 @@ const Birthday: React.FC = () => {
             onChange={(e) => {
               setFromDate(e.target.value);
               setHasSearched(false);
+              if (!toDate) setToDate(e.target.value);
             }}
             placeholder="From date"
             w={{ base: "100%", md: "auto" }}

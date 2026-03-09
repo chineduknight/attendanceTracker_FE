@@ -16,6 +16,7 @@ import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
+import { format, parseISO, isValid } from "date-fns";
 import _ from "lodash";
 import {
   FaPencilAlt,
@@ -60,10 +61,7 @@ const ViewMembers: React.FC = () => {
       const statusField = fields.find((field: any) => field.name === "status");
       if (statusField && Array.isArray(statusField.options)) {
         setStatusOptions(statusField.options);
-        // Set default to 'active' if present, otherwise default to "all"
-        setStatusFilter(
-          statusField.options.includes("active") ? ["active"] : ["all"],
-        );
+        setStatusFilter(["all"]);
       }
     },
   });
@@ -205,6 +203,14 @@ const ViewMembers: React.FC = () => {
     return memberEntries.filter(([key]) => selectedFields.includes(key));
   };
 
+  const formatFieldValue = (value: any): string => {
+    if (typeof value === "string" && /\d{4}/.test(value)) {
+      const parsed = parseISO(value);
+      if (isValid(parsed)) return format(parsed, "dd-MMM-yyyy");
+    }
+    return String(value ?? "");
+  };
+
   return (
     <Box minH={"100vh"} bg="gray.50">
       <Flex
@@ -278,7 +284,13 @@ const ViewMembers: React.FC = () => {
         {isLoading ? (
           <LoadingSpinner h="45vh" text="Loading members..." />
         ) : error ? (
-          <Box bg="#fff" py="8" rounded={"xl"} boxShadow={"lg"} textAlign="center">
+          <Box
+            bg="#fff"
+            py="8"
+            rounded={"xl"}
+            boxShadow={"lg"}
+            textAlign="center"
+          >
             <Text color="red.500" fontWeight="bold">
               Error occurred while fetching members.
             </Text>
@@ -312,7 +324,9 @@ const ViewMembers: React.FC = () => {
                       return;
                     }
                     if (values.includes("all") && values.length > 1) {
-                      setStatusFilter(values.filter((value) => value !== "all"));
+                      setStatusFilter(
+                        values.filter((value) => value !== "all"),
+                      );
                       return;
                     }
                     if (values.includes("all")) {
@@ -397,7 +411,7 @@ const ViewMembers: React.FC = () => {
                           <Text fontWeight="bold" flexShrink={0} mr={2}>
                             {capitalize(key)}:
                           </Text>
-                          <Text>{value}</Text>
+                          <Text>{formatFieldValue(value)}</Text>
                         </Flex>
                       ))}
                     </Stack>
