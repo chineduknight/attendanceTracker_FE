@@ -233,7 +233,9 @@ const Birthday: React.FC = () => {
       const parsed = parseISO(dob);
       return isValid(parsed) ? format(parsed, "EEE, dd MMM") : dob;
     };
-    const header = `🎂 Birthdays (${formatRangeDate(fromDate)} to ${formatRangeDate(toDate)})\n\n`;
+    const header = `🎂 Birthdays (${formatRangeDate(
+      fromDate,
+    )} to ${formatRangeDate(toDate)})\n\n`;
     const list = members
       .map((m: any, i: number) => `${i + 1}. ${m.name} - ${formatDob(m.dob)}`)
       .join("\n");
@@ -300,7 +302,7 @@ const Birthday: React.FC = () => {
             leftIcon={<FaShareAlt />}
             onClick={onOpen}
             isDisabled={!hasSearched || members.length === 0}
-            colorScheme="pink"
+            colorScheme="gray"
           >
             Share
           </Button>
