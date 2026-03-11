@@ -13,12 +13,23 @@ import {
   Td,
   Spinner,
   useColorModeValue,
+  Drawer,
+  DrawerBody,
+  DrawerHeader,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerCloseButton,
+  useDisclosure,
+  VStack,
 } from "@chakra-ui/react";
 import {
   FaArrowCircleLeft,
   FaBirthdayCake,
   FaFileExcel,
   FaFilePdf,
+  FaShareAlt,
+  FaWhatsapp,
+  FaCopy,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -26,6 +37,7 @@ import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
+import { format, parseISO, isValid } from "date-fns";
 import ReactSelect, { MultiValue } from "react-select";
 import { toast } from "react-toastify";
 
@@ -37,6 +49,7 @@ type StatusOption = {
 const Birthday: React.FC = () => {
   const navigate = useNavigate();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -91,7 +104,6 @@ const Birthday: React.FC = () => {
 
   const canSearch = Boolean(fromDate && toDate && org.id);
 
-  // fetch status options from model
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
   });
@@ -212,6 +224,34 @@ const Birthday: React.FC = () => {
   const members: any[] =
     birthdayResponse?.data?.members || birthdayResponse?.data || [];
 
+  const buildShareText = () => {
+    const formatRangeDate = (d: string) => {
+      const parsed = parseISO(d);
+      return isValid(parsed) ? format(parsed, "dd-MMM") : d;
+    };
+    const formatDob = (dob: string) => {
+      const parsed = parseISO(dob);
+      return isValid(parsed) ? format(parsed, "EEE, dd MMM") : dob;
+    };
+    const header = `🎂 Birthdays (${formatRangeDate(fromDate)} to ${formatRangeDate(toDate)})\n\n`;
+    const list = members
+      .map((m: any, i: number) => `${i + 1}. ${m.name} - ${formatDob(m.dob)}`)
+      .join("\n");
+    return header + list;
+  };
+
+  const handleWhatsApp = () => {
+    const text = encodeURIComponent(buildShareText());
+    window.open(`https://wa.me/?text=${text}`, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyToClipboard = () => {
+    navigator.clipboard
+      .writeText(buildShareText())
+      .then(() => toast.success("Copied to clipboard!"))
+      .catch(() => toast.error("Failed to copy. Please try again."));
+  };
+
   const statusSelectOptions = useMemo<StatusOption[]>(
     () => [
       { value: "all", label: "All" },
@@ -254,29 +294,15 @@ const Birthday: React.FC = () => {
           Back
         </Button>
 
-        {/* Export */}
-        <Flex mb={3} justifyContent="flex-end" gap={2}>
+        {/* Share button */}
+        <Flex mb={3} justifyContent="flex-end">
           <Button
-            leftIcon={<FaFileExcel />}
-            onClick={() => refetchExcel()}
-            isLoading={isExportingExcel}
-            isDisabled={!canSearch}
-            bg="green.500"
-            color="white"
-            _hover={{ bg: "green.600" }}
+            leftIcon={<FaShareAlt />}
+            onClick={onOpen}
+            isDisabled={!hasSearched || members.length === 0}
+            colorScheme="pink"
           >
-            Export Excel
-          </Button>
-          <Button
-            leftIcon={<FaFilePdf />}
-            onClick={() => refetchPdf()}
-            isLoading={isExportingPdf}
-            isDisabled={!canSearch}
-            bg="red.500"
-            color="white"
-            _hover={{ bg: "red.600" }}
-          >
-            Export PDF
+            Share
           </Button>
         </Flex>
 
@@ -379,6 +405,63 @@ const Birthday: React.FC = () => {
           <Text>No birthdays found for this date range.</Text>
         )}
       </Box>
+
+      {/* Share drawer */}
+      <Drawer isOpen={isOpen} placement="bottom" onClose={onClose}>
+        <DrawerOverlay />
+        <DrawerContent borderTopRadius="xl">
+          <DrawerCloseButton />
+          <DrawerHeader>Share Birthdays</DrawerHeader>
+          <DrawerBody pb={8}>
+            <VStack spacing={3}>
+              <Button
+                w="100%"
+                size="lg"
+                leftIcon={<FaFileExcel />}
+                bg="green.500"
+                color="white"
+                _hover={{ bg: "green.600" }}
+                isLoading={isExportingExcel}
+                onClick={() => refetchExcel()}
+              >
+                Export Excel
+              </Button>
+              <Button
+                w="100%"
+                size="lg"
+                leftIcon={<FaFilePdf />}
+                bg="red.500"
+                color="white"
+                _hover={{ bg: "red.600" }}
+                isLoading={isExportingPdf}
+                onClick={() => refetchPdf()}
+              >
+                Export PDF
+              </Button>
+              <Button
+                w="100%"
+                size="lg"
+                leftIcon={<FaWhatsapp />}
+                bg="#25D366"
+                color="white"
+                _hover={{ bg: "#1ebe5d" }}
+                onClick={handleWhatsApp}
+              >
+                Share on WhatsApp
+              </Button>
+              <Button
+                w="100%"
+                size="lg"
+                leftIcon={<FaCopy />}
+                colorScheme="gray"
+                onClick={handleCopyToClipboard}
+              >
+                Copy to Clipboard
+              </Button>
+            </VStack>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Box>
   );
 };
