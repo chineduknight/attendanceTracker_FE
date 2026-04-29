@@ -6,6 +6,7 @@ import {
   Button,
   Heading,
   Grid,
+  HStack,
 } from "@chakra-ui/react";
 import {
   FaUserPlus,
@@ -14,10 +15,12 @@ import {
   FaEye,
   FaChartBar,
   FaBirthdayCake,
+  FaArrowLeft,
 } from "react-icons/fa";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { IconType } from "react-icons";
+import useGlobalStore from "zStore";
 
 type DashboardAction = {
   label: string;
@@ -36,9 +39,26 @@ const DASHBOARD_ACTIONS: DashboardAction[] = [
 ];
 
 const Dashboard = () => {
-  const location = useLocation();
-  const state: any = location.state;
   const navigate = useNavigate();
+  const [organisation, setUser, updateOrganisation] = useGlobalStore((state) => [
+    state.organisation,
+    state.setUser,
+    state.updateOrganisation,
+  ]);
+
+  function handleLogout() {
+    setUser({
+      token: "",
+      id: "",
+      username: "",
+    });
+    updateOrganisation({
+      name: "",
+      image: "",
+      owner: "",
+      id: "",
+    });
+  }
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -51,10 +71,22 @@ const Dashboard = () => {
         <Text fontWeight="bold" color="#fff">
           Attendance Tracker
         </Text>
+        <HStack spacing={3}>
+          <Button
+            variant="logout"
+            leftIcon={<FaArrowLeft />}
+            onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
+          >
+            Organisations
+          </Button>
+          <Button variant="logout" onClick={handleLogout}>
+            Logout
+          </Button>
+        </HStack>
       </Flex>
 
       <Heading mt="4" fontSize="22px" textAlign="center">
-        {state?.name}
+        {organisation?.name || "Dashboard"}
       </Heading>
 
       <Grid
