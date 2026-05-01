@@ -16,6 +16,7 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import { FaTrashAlt } from "react-icons/fa";
+import { confirmAlert } from "react-confirm-alert";
 import { useState } from "react";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
@@ -55,10 +56,25 @@ const OrgList = () => {
   );
 
   function handleDelete(orgDelete, e) {
-    mutate({
-      url: `/organisations/${orgDelete.id}`,
-    });
     e.stopPropagation();
+    confirmAlert({
+      title: "Delete organisation",
+      message: `Are you sure you want to delete "${orgDelete.name}"?`,
+      buttons: [
+        {
+          label: "Yes",
+          className: "confirm-alert-button confirm-alert-button-yes",
+          onClick: () =>
+            mutate({
+              url: `/organisations/${orgDelete.id}`,
+            }),
+        },
+        {
+          label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
+        },
+      ],
+    });
   }
 
   function handOrg(org) {
