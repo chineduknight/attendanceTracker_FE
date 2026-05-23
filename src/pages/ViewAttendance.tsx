@@ -11,7 +11,7 @@ import {
   Container,
 } from "@chakra-ui/react";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import { useCallback, useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { attendanceRequest } from "services";
 import { useQueryWrapper } from "services/api/apiHelper";
@@ -20,6 +20,12 @@ import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
 import { FaArrowCircleLeft, FaFileExcel, FaShareAlt } from "react-icons/fa";
+import ReactSelect, { MultiValue } from "react-select";
+
+type StatusOption = {
+  value: string;
+  label: string;
+};
 
 type MemberType = {
   attendanceStatus: "absent" | "present" | "apology";
@@ -42,7 +48,8 @@ type AttendanceInfoType = {
 };
 const Attendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
-  const [filterName, setFilterName] = useState<MemberType[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
@@ -74,7 +81,6 @@ const Attendance = () => {
     });
 
     setAllMembers(members);
-    setFilterName(members);
   };
   const param = useParams();
   const url = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -91,16 +97,34 @@ const Attendance = () => {
   );
 
   const handleSearch = useCallback(
-    (e) => {
-      const query = e.target.value.toLowerCase();
-      setFilterName(
-        allMembers.filter((member) =>
-          member.member.name.toLowerCase().includes(query),
-        ),
-      );
-    },
-    [allMembers],
+    (e) => setSearchQuery(e.target.value),
+    [],
   );
+
+  const statusOptions = useMemo<StatusOption[]>(() => {
+    const unique = Array.from(new Set(allMembers.map((m) => m.member.status).filter(Boolean)));
+    return [
+      { value: "all", label: "All" },
+      ...unique.map((s) => ({ value: s, label: capitalize(s) })),
+    ];
+  }, [allMembers]);
+
+  const selectedStatusOptions = useMemo(
+    () => statusOptions.filter((o) => statusFilter.includes(o.value)),
+    [statusOptions, statusFilter],
+  );
+
+  const filteredMembers = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return allMembers.filter((m) => {
+      const matchesName = m.member.name.toLowerCase().includes(query);
+      const matchesStatus =
+        statusFilter.includes("all") ||
+        statusFilter.length === 0 ||
+        statusFilter.includes(m.member.status);
+      return matchesName && matchesStatus;
+    });
+  }, [allMembers, searchQuery, statusFilter]);
 
   const formattedDate = attendanceInfo?.date
     ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
@@ -281,15 +305,45 @@ const Attendance = () => {
               <Heading fontSize="22px">{attendanceInfo?.name}</Heading>
               <Text>{formattedDate}</Text>
             </Flex>
-            <InputGroup mt="4">
-              <InputLeftElement pointerEvents="none" />
-              <Input
-                type="search"
-                placeholder="Search member"
-                onChange={handleSearch}
-              />
-            </InputGroup>
-            {filterName.length === 0 && (
+            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
+              <InputGroup>
+                <InputLeftElement pointerEvents="none" />
+                <Input
+                  type="search"
+                  placeholder="Search member"
+                  onChange={handleSearch}
+                />
+              </InputGroup>
+              <Box minW={{ base: "100%", sm: "200px" }}>
+                <ReactSelect
+                  isMulti
+                  placeholder="Filter by status"
+                  options={statusOptions}
+                  value={selectedStatusOptions}
+                  closeMenuOnSelect={false}
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+                  onChange={(selected: MultiValue<StatusOption>) => {
+                    const values = selected.map((o) => o.value);
+                    if (values.length === 0) {
+                      setStatusFilter(["all"]);
+                      return;
+                    }
+                    if (values.includes("all") && values.length > 1) {
+                      setStatusFilter(values.filter((v) => v !== "all"));
+                      return;
+                    }
+                    if (values.includes("all")) {
+                      setStatusFilter(["all"]);
+                      return;
+                    }
+                    setStatusFilter(values);
+                  }}
+                />
+              </Box>
+            </Flex>
+            {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
                   No member found
@@ -298,17 +352,17 @@ const Attendance = () => {
             )}
             <Flex mt="2" justifyContent="space-between">
               <Text>
-                Present: <strong>{attendanceInfo?.present} </strong>
+                Present: <strong>{filteredMembers.filter((m) => m.attendanceStatus === "present").length} </strong>
               </Text>
               <Text>
-                Apology: <strong>{attendanceInfo?.apology} </strong>
+                Apology: <strong>{filteredMembers.filter((m) => m.attendanceStatus === "apology").length} </strong>
               </Text>
               <Text>
-                Absent: <strong>{attendanceInfo?.absent} </strong>
+                Absent: <strong>{filteredMembers.filter((m) => m.attendanceStatus === "absent").length} </strong>
               </Text>
             </Flex>
             <Box mt="4" overflow="scroll" maxH="500px">
-              {filterName.map((item) => AttendCard(item))}
+              {filteredMembers.map((item) => AttendCard(item))}
             </Box>
           </>
         )}
@@ -319,6 +373,11 @@ const Attendance = () => {
 
 export default Attendance;
 function AttendCard(item: MemberType): JSX.Element {
+  const isPresent = item.attendanceStatus === "present";
+  const isApology = item.attendanceStatus === "apology";
+  const bg: string = isPresent ? "green" : isApology ? "orange" : "";
+  const color: string = isPresent || isApology ? "#fff" : "";
+
   return (
     <Button
       variant="unstyled"
@@ -327,19 +386,7 @@ function AttendCard(item: MemberType): JSX.Element {
       mt="3"
       border="1px solid green"
       key={item.memberId}
-      bg={
-        item.attendanceStatus === "present"
-          ? "green"
-          : item.attendanceStatus === "apology"
-          ? "orange"
-          : ""
-      }
-      color={
-        item.attendanceStatus === "present" ||
-        item.attendanceStatus === "apology"
-          ? "#fff"
-          : ""
-      }
+      style={{ backgroundColor: bg, color }}
     >
       {item.member.name}
     </Button>
