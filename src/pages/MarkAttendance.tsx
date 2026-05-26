@@ -11,7 +11,7 @@ import {
   Container,
 } from "@chakra-ui/react";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
@@ -226,7 +226,9 @@ const MarkAttendance = () => {
   );
 
   const navigate = useNavigate();
+  const isSubmittingRef = useRef(false);
   const onSubmitSuccess = () => {
+    isSubmittingRef.current = false;
     localStorage.removeItem(localStorageKey);
     toast.success(
       isUpdate ? "Attendance Updated" : "Attendance Created successfully"
@@ -236,7 +238,8 @@ const MarkAttendance = () => {
 
   const { mutate, isLoading } = useMutationWrapper(
     isUpdate ? putRequest : postRequest,
-    onSubmitSuccess
+    onSubmitSuccess,
+    () => { isSubmittingRef.current = false; }
   );
 
   const onSubmit = () => {
@@ -258,6 +261,8 @@ const MarkAttendance = () => {
   };
 
   const sendAttandanceToAPI = useCallback(() => {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     const presentMembers = allMembers
       .filter((member) => member.attendanceStatus === "present")
       .map((member) => member.id);

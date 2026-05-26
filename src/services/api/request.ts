@@ -21,6 +21,7 @@ export const attendanceRequest = {
   ATTENDANCE:"/attendance",
   UPDATE_ATTENDANCE:"/attendance/:attendanceId",
   GET_ATTENDANCE:"/attendance/:organisationId/:id",
+  DELETE_ATTENDANCE:"/attendance/:organisationId/:id",
   ALL_ATTENDANCE:"/attendance/:organisationId",
   EXPORT:"/attendance/export/:organisationId/:id",
   ANALYTICS: "/attendance/:organisationId/analytics",

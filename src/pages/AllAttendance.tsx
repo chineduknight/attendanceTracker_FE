@@ -116,6 +116,9 @@ const AllAttendance = () => {
                       <Text>
                         {format(new Date(attendance.date), "EEE dd MMM yy")}
                       </Text>
+                      <Text fontSize="xs" color="gray.500">
+                        Created: {format(new Date(attendance.createdAt), "EEE dd MMM yy, hh:mm a")}
+                      </Text>
                     </Box>
                     <Flex>
                       {attendance.hasBeenUpdated ? null : (

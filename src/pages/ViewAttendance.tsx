@@ -13,13 +13,15 @@ import {
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { confirmAlert } from "react-confirm-alert";
+import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest } from "services";
-import { useQueryWrapper } from "services/api/apiHelper";
+import { deleteRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
-import { FaArrowCircleLeft, FaFileExcel, FaShareAlt } from "react-icons/fa";
+import { FaArrowCircleLeft, FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 
@@ -270,6 +272,41 @@ const Attendance = () => {
   const sendToExcel = () => {
     refetch();
   };
+
+  const deleteUrl = convertParamsToString(attendanceRequest.DELETE_ATTENDANCE, {
+    organisationId: org.id,
+    id: param.id as string,
+  });
+
+  const { mutate: deleteAttendance, isLoading: isDeleting } = useMutationWrapper(
+    deleteRequest,
+    () => {
+      queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
+      navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+    },
+    (error: any) => {
+      const message = error?.response?.data?.error ?? "Failed to delete attendance.";
+      toast.error(message);
+    },
+  );
+
+  const handleDelete = () => {
+    confirmAlert({
+      title: "Delete Attendance",
+      message: "Are you sure you want to delete this attendance record? This cannot be undone.",
+      buttons: [
+        {
+          label: "Yes",
+          className: "confirm-alert-button confirm-alert-button-yes",
+          onClick: () => deleteAttendance({ url: deleteUrl }),
+        },
+        {
+          label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
+        },
+      ],
+    });
+  };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -400,6 +437,19 @@ const Attendance = () => {
             <Box mt="4" overflow="scroll" maxH="500px">
               {filteredMembers.map((item) => AttendCard(item))}
             </Box>
+            <Button
+              onClick={handleDelete}
+              isLoading={isDeleting}
+              leftIcon={<FaTrash />}
+              bg="red.500"
+              color="white"
+              _hover={{ bg: "red.600" }}
+              w="full"
+              mt="4"
+              mb="8"
+            >
+              Delete Attendance
+            </Button>
           </>
         )}
       </Container>
