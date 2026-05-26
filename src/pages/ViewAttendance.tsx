@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
 import { FaArrowCircleLeft, FaFileExcel, FaShareAlt } from "react-icons/fa";
+import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 
 type StatusOption = {
@@ -54,7 +55,7 @@ const Attendance = () => {
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
   const onSuccess = (data) => {
-    const unsorted = data.data.attendance;
+    const unsorted = data.data.attendance.filter((a) => a.member != null);
     const statusOrder = { present: 0, apology: 1, absent: 2 };
     const members = unsorted.sort((a, b) => {
       return (
@@ -88,21 +89,22 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { isFetching: isLoadingAttendance } = useQueryWrapper(
+  const { isFetching: isFetchingAttendance } = useQueryWrapper(
     [Q_KEY.GET_MEMBERS],
     url,
     {
       onSuccess,
+      refetchOnWindowFocus: false,
     },
   );
+  const isLoadingAttendance = isFetchingAttendance && allMembers.length === 0;
 
-  const handleSearch = useCallback(
-    (e) => setSearchQuery(e.target.value),
-    [],
-  );
+  const handleSearch = useCallback((e) => setSearchQuery(e.target.value), []);
 
   const statusOptions = useMemo<StatusOption[]>(() => {
-    const unique = Array.from(new Set(allMembers.map((m) => m.member.status).filter(Boolean)));
+    const unique = Array.from(
+      new Set(allMembers.map((m) => m.member.status).filter(Boolean)),
+    );
     return [
       { value: "all", label: "All" },
       ...unique.map((s) => ({ value: s, label: capitalize(s) })),
@@ -237,17 +239,30 @@ const Attendance = () => {
     }
   };
 
-  const downloadURl = convertParamsToString(attendanceRequest.EXPORT, {
-    organisationId: org.id,
-    id: param.id as string,
-  });
+  const downloadURl = useMemo(() => {
+    const base = convertParamsToString(attendanceRequest.EXPORT, {
+      organisationId: org.id,
+      id: param.id as string,
+    });
+    const activeStatuses = statusFilter.filter((s) => s !== "all");
+    return activeStatuses.length > 0
+      ? `${base}?status=${activeStatuses.join(",")}`
+      : base;
+  }, [org.id, param.id, statusFilter]);
+
   const { refetch, isFetching } = useQueryWrapper(
-    ["export-excel"],
+    ["export-excel", org.id, param.id, statusFilter.join(",")],
     downloadURl,
     {
       enabled: false,
+      refetchOnWindowFocus: false,
       onSuccess: (data) => {
         window.open(data.data);
+      },
+      onError: (error: any) => {
+        const message =
+          error?.response?.data?.error ?? "Failed to export. Please try again.";
+        toast.error(message);
       },
     },
   );
@@ -352,13 +367,34 @@ const Attendance = () => {
             )}
             <Flex mt="2" justifyContent="space-between">
               <Text>
-                Present: <strong>{filteredMembers.filter((m) => m.attendanceStatus === "present").length} </strong>
+                Present:{" "}
+                <strong>
+                  {
+                    filteredMembers.filter(
+                      (m) => m.attendanceStatus === "present",
+                    ).length
+                  }{" "}
+                </strong>
               </Text>
               <Text>
-                Apology: <strong>{filteredMembers.filter((m) => m.attendanceStatus === "apology").length} </strong>
+                Apology:{" "}
+                <strong>
+                  {
+                    filteredMembers.filter(
+                      (m) => m.attendanceStatus === "apology",
+                    ).length
+                  }{" "}
+                </strong>
               </Text>
               <Text>
-                Absent: <strong>{filteredMembers.filter((m) => m.attendanceStatus === "absent").length} </strong>
+                Absent:{" "}
+                <strong>
+                  {
+                    filteredMembers.filter(
+                      (m) => m.attendanceStatus === "absent",
+                    ).length
+                  }{" "}
+                </strong>
               </Text>
             </Flex>
             <Box mt="4" overflow="scroll" maxH="500px">
