@@ -131,11 +131,15 @@ const MarkAttendance = () => {
     ]);
     setAttendance(currentAtt);
     // Transform API response to MemberType array (must include attendanceStatus)
-    const updatedMembers = res.data.attendance.map((attend) => ({
-      id: attend.memberId,
-      name: attend.member.name,
-      attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
-    }));
+    // Filter out entries whose member was deleted (member == null), otherwise
+    // reading attend.member.name throws and the list renders empty.
+    const updatedMembers = res.data.attendance
+      .filter((attend) => attend.member != null)
+      .map((attend) => ({
+        id: attend.memberId,
+        name: attend.member.name,
+        attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
+      }));
     // Store in localStorage and update state
     localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
     setAllMembers(updatedMembers);
