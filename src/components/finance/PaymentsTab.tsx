@@ -84,7 +84,7 @@ const PaymentsTab = ({ organisationId }: Props) => {
           memberId={memberId}
           memberName={selectedMember.name}
           onSuccess={() =>
-            queryClient.invalidateQueries(["finance-compliance", organisationId, obligationId])
+            queryClient.invalidateQueries(["finance-compliance", organisationId])
           }
         />
       )}

@@ -41,7 +41,10 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   const { data, isLoading } = useQueryWrapper(["finance-members", organisationId], memUrl);
   const members: Array<Record<string, any>> = data?.data ?? [];
 
-  const invalidate = () => queryClient.invalidateQueries(["finance-members", organisationId]);
+  const invalidate = () => {
+    queryClient.invalidateQueries(["finance-members", organisationId]);
+    queryClient.invalidateQueries(["finance-compliance", organisationId]);
+  };
   const { mutate, mutateAsync } = useMutationWrapper(patchRequest);
 
   const patchOne = (memberId: string, financialStartDate: string | null) => {
