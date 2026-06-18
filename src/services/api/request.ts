@@ -28,3 +28,17 @@ export const attendanceRequest = {
   ANALYTICS_EXPORT_EXCEL: "/attendance/:organisationId/analytics/export/excel",
   ANALYTICS_EXPORT_PDF: "/attendance/:organisationId/analytics/export/pdf",
 };
+
+export const financeRequest = {
+  OBLIGATIONS: "/finance/obligations",
+  LIST_OBLIGATIONS: "/finance/:organisationId/obligations",
+  ONE_OBLIGATION: "/finance/:organisationId/obligations/:id",
+  UPDATE_OBLIGATION: "/finance/obligations/:id",
+  PAYMENTS: "/finance/payments",
+  COMPLIANCE: "/finance/:organisationId/obligations/:id/compliance",
+  COMPLIANCE_EXPORT_EXCEL:
+    "/finance/:organisationId/obligations/:id/compliance/export/excel",
+  COMPLIANCE_EXPORT_PDF:
+    "/finance/:organisationId/obligations/:id/compliance/export/pdf",
+  FINANCIAL_START_DATE: "/finance/members/:memberId/financial-start-date",
+};
