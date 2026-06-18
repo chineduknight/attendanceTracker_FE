@@ -12,11 +12,14 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import BackButton from "components/BackButton";
+import ObligationsTab from "components/finance/ObligationsTab";
+import useGlobalStore from "zStore";
 
 const Finance = () => {
   const navigate = useNavigate();
   const [selectedObligationId, setSelectedObligationId] = useState<string>("");
   const [tabIndex, setTabIndex] = useState<number>(0);
+  const [organisation] = useGlobalStore((s) => [s.organisation]);
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -38,7 +41,14 @@ const Finance = () => {
           </TabList>
           <TabPanels>
             <TabPanel>
-              <Text>Obligations coming soon</Text>
+              <ObligationsTab
+                organisationId={organisation.id}
+                selectedObligationId={selectedObligationId}
+                onSelectObligation={(id) => {
+                  setSelectedObligationId(id);
+                  setTabIndex(1);
+                }}
+              />
             </TabPanel>
             <TabPanel>
               <Text>Compliance coming soon</Text>
