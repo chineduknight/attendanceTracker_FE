@@ -13,12 +13,14 @@ import {
 import { useNavigate } from "react-router-dom";
 import BackButton from "components/BackButton";
 import ObligationsTab from "components/finance/ObligationsTab";
+import ComplianceTab from "components/finance/ComplianceTab";
 import useGlobalStore from "zStore";
 
 const Finance = () => {
   const navigate = useNavigate();
   const [selectedObligationId, setSelectedObligationId] = useState<string>("");
   const [tabIndex, setTabIndex] = useState<number>(0);
+  const [prefillMemberId, setPrefillMemberId] = useState<string>("");
   const [organisation] = useGlobalStore((s) => [s.organisation]);
 
   return (
@@ -51,7 +53,14 @@ const Finance = () => {
               />
             </TabPanel>
             <TabPanel>
-              <Text>Compliance coming soon</Text>
+              <ComplianceTab
+                organisationId={organisation.id}
+                obligationId={selectedObligationId}
+                onSetStartDate={(memberId) => {
+                  setPrefillMemberId(memberId);
+                  setTabIndex(3);
+                }}
+              />
             </TabPanel>
             <TabPanel>
               <Text>Payments coming soon</Text>
