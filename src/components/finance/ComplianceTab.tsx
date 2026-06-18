@@ -287,6 +287,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
           obligation={obligation}
           memberId={payFor.memberId}
           memberName={payFor.name}
+          complianceRow={payFor}
           onSuccess={invalidate}
         />
       )}

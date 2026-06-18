@@ -24,7 +24,7 @@ import {
   buildLevyCorrectionPayload,
 } from "helpers/financePayloads";
 import { MONTHS } from "helpers/financeConstants";
-import { Obligation } from "components/finance/financeTypes";
+import { Obligation, ComplianceRow } from "components/finance/financeTypes";
 
 interface Props {
   isOpen: boolean;
@@ -34,6 +34,10 @@ interface Props {
   memberId: string;
   memberName: string;
   onSuccess: () => void;
+  /** The member's current compliance row for this obligation (dues only).
+   *  When provided, the Correct grid pre-fills paid months, locks them and any
+   *  pre-start months, and forces sequential entry (no gaps). */
+  complianceRow?: ComplianceRow;
 }
 
 type Mode = "record" | "correct";
@@ -46,11 +50,60 @@ const RecordPaymentModal = ({
   memberId,
   memberName,
   onSuccess,
+  complianceRow,
 }: Props) => {
   const [mode, setMode] = useState<Mode>("record");
   const [amount, setAmount] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
   const [monthly, setMonthly] = useState<Record<string, string>>({});
+
+  const amountPerMonth = obligation.amountPerMonth ?? 0;
+  const monthsMap = complianceRow?.months ?? {};
+  // Only drive the smart grid when we actually have the member's dues row.
+  const hasRow = !!complianceRow && obligation.type === "dues";
+
+  // Leading "not-due" months (from January) are the months before the member's
+  // financial start date — the first month they are accountable.
+  const startMonth = (() => {
+    if (!hasRow) return 1;
+    let s = 1;
+    for (let m = 1; m <= 12; m++) {
+      if (monthsMap[String(m)] === "not-due") s = m + 1;
+      else break;
+    }
+    return Math.min(s, 12);
+  })();
+
+  // Payments fill sequentially, so paid months are contiguous and at most one
+  // month is partial. Derive each month's current amount from the row.
+  const paidCount = Object.values(monthsMap).filter((st) => st === "paid").length;
+  const partialAmount = Math.max(
+    0,
+    (complianceRow?.totalPaid ?? 0) - paidCount * amountPerMonth
+  );
+
+  const prefillFor = (month: number): string => {
+    const st = monthsMap[String(month)];
+    if (st === "paid") return String(amountPerMonth);
+    if (st === "partial") return partialAmount ? String(partialAmount) : "";
+    return "";
+  };
+
+  // A month is locked (shown but not editable) when it's before the member's
+  // start date, or it has already been fully paid.
+  const isLockedMonth = (month: number) =>
+    hasRow && (month < startMonth || monthsMap[String(month)] === "paid");
+
+  // An editable month is only enabled once every earlier in-scope month is
+  // filled — this prevents gaps (e.g. paying Dec while May is empty).
+  const isMonthEnabled = (month: number): boolean => {
+    if (!hasRow) return true; // no row -> free 12-box grid (fallback)
+    if (isLockedMonth(month)) return false;
+    for (let k = startMonth; k < month; k++) {
+      if ((monthly[String(k)] ?? "") === "") return false;
+    }
+    return true;
+  };
 
   const done = () => {
     toast.success("Payment saved");
@@ -67,7 +120,17 @@ const RecordPaymentModal = ({
     setMode(next);
     setAmount("");
     setAmountPaid("");
-    setMonthly({});
+    if (next === "correct" && hasRow) {
+      // Seed the grid with what's already paid (paid + partial months).
+      const seed: Record<string, string> = {};
+      for (let m = startMonth; m <= 12; m++) {
+        const v = prefillFor(m);
+        if (v !== "") seed[String(m)] = v;
+      }
+      setMonthly(seed);
+    } else {
+      setMonthly({});
+    }
   };
 
   const submit = () => {
@@ -123,22 +186,35 @@ const RecordPaymentModal = ({
               )}
             </FormControl>
           ) : obligation.type === "dues" ? (
-            <SimpleGrid columns={[2, 3, 4]} spacing={3}>
-              {MONTHS.map((m) => (
-                <FormControl key={m.value}>
-                  <FormLabel htmlFor={`month-${m.value}`}>{m.label}</FormLabel>
-                  <Input
-                    id={`month-${m.value}`}
-                    aria-label={m.label}
-                    type="number"
-                    value={monthly[String(m.value)] ?? ""}
-                    onChange={(e) =>
-                      setMonthly((prev) => ({ ...prev, [String(m.value)]: e.target.value }))
-                    }
-                  />
-                </FormControl>
-              ))}
-            </SimpleGrid>
+            <>
+              {hasRow && (
+                <Text fontSize="sm" color="gray.500" mb={3}>
+                  Paid and pre-start months are locked. Enter payments from the
+                  first unpaid month onward — earlier months must be filled first.
+                </Text>
+              )}
+              <SimpleGrid columns={[2, 3, 4]} spacing={3}>
+                {MONTHS.map((m) => {
+                  const key = String(m.value);
+                  const disabled = !isMonthEnabled(m.value);
+                  return (
+                    <FormControl key={m.value} isDisabled={disabled}>
+                      <FormLabel htmlFor={`month-${m.value}`}>{m.label}</FormLabel>
+                      <Input
+                        id={`month-${m.value}`}
+                        aria-label={m.label}
+                        type="number"
+                        isDisabled={disabled}
+                        value={monthly[key] ?? ""}
+                        onChange={(e) =>
+                          setMonthly((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                      />
+                    </FormControl>
+                  );
+                })}
+              </SimpleGrid>
+            </>
           ) : (
             <FormControl>
               <FormLabel htmlFor="amountPaid">Total amount paid</FormLabel>

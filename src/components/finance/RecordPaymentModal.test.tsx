@@ -53,6 +53,56 @@ test("correct mode on levy shows a single amountPaid input", () => {
   expect(screen.getByLabelText(/total amount paid/i)).toBeInTheDocument();
 });
 
+test("correct mode locks paid months, pre-fills them, and gates entry sequentially", () => {
+  // Jan–Mar paid (500 each), rest unpaid, accountable from January.
+  const row: any = {
+    memberId: "m1",
+    name: "Ada",
+    accountable: true,
+    totalPaid: 1500,
+    paidUpToMonth: 3,
+    months: {
+      "1": "paid", "2": "paid", "3": "paid", "4": "unpaid", "5": "unpaid",
+      "6": "unpaid", "7": "unpaid", "8": "unpaid", "9": "unpaid", "10": "unpaid",
+      "11": "unpaid", "12": "unpaid",
+    },
+  };
+  render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} complianceRow={row} />));
+  fireEvent.click(screen.getByText(/correct/i));
+
+  // Paid months are locked and pre-filled with the monthly amount.
+  expect(screen.getByLabelText("Jan")).toBeDisabled();
+  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+  // First unpaid month is editable; the one after it is gated until it's filled.
+  expect(screen.getByLabelText("Apr")).toBeEnabled();
+  expect(screen.getByLabelText("May")).toBeDisabled();
+
+  fireEvent.change(screen.getByLabelText("Apr"), { target: { value: "500" } });
+  expect(screen.getByLabelText("May")).toBeEnabled();
+});
+
+test("correct mode locks months before the member's financial start date", () => {
+  // Member becomes accountable in June -> Jan–May are not-due.
+  const row: any = {
+    memberId: "m1",
+    name: "Ada",
+    accountable: true,
+    totalPaid: 0,
+    paidUpToMonth: 0,
+    months: {
+      "1": "not-due", "2": "not-due", "3": "not-due", "4": "not-due", "5": "not-due",
+      "6": "unpaid", "7": "unpaid", "8": "unpaid", "9": "unpaid", "10": "unpaid",
+      "11": "unpaid", "12": "unpaid",
+    },
+  };
+  render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} complianceRow={row} />));
+  fireEvent.click(screen.getByText(/correct/i));
+
+  expect(screen.getByLabelText("Jan")).toBeDisabled();
+  expect(screen.getByLabelText("May")).toBeDisabled();
+  expect(screen.getByLabelText("Jun")).toBeEnabled();
+});
+
 test("correct mode on dues builds monthlyPaid with only filled months as numbers", async () => {
   render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} />));
   fireEvent.click(screen.getByText(/correct/i));

@@ -4,7 +4,7 @@ import { FaMoneyBillWave } from "react-icons/fa";
 import { financeRequest, orgRequest } from "services";
 import { useQueryWrapper, queryClient } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { Obligation } from "components/finance/financeTypes";
+import { Obligation, ComplianceRow } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
 
 interface Props {
@@ -27,10 +27,26 @@ const PaymentsTab = ({ organisationId }: Props) => {
     memUrl
   );
 
+  // Fetch the selected obligation's compliance so the Correct grid can pre-fill
+  // and lock months. Shares the cache key with the Compliance tab.
+  const complianceUrl = obligationId
+    ? convertParamsToString(financeRequest.COMPLIANCE, {
+        organisationId,
+        id: obligationId,
+      })
+    : "";
+  const { data: compData } = useQueryWrapper(
+    ["finance-compliance", organisationId, obligationId],
+    complianceUrl,
+    { enabled: Boolean(obligationId) }
+  );
+
   const obligations: Obligation[] = obData?.data ?? [];
   const members: Array<Record<string, any>> = memData?.data ?? [];
   const selectedObligation = obligations.find((o) => o.id === obligationId);
   const selectedMember = members.find((m) => (m.id ?? m._id) === memberId);
+  const complianceRows: ComplianceRow[] = compData?.data?.rows ?? [];
+  const selectedRow = complianceRows.find((r) => r.memberId === memberId);
 
   if (obLoading || memLoading) return <Spinner />;
 
@@ -86,6 +102,7 @@ const PaymentsTab = ({ organisationId }: Props) => {
           obligation={selectedObligation}
           memberId={memberId}
           memberName={selectedMember.name}
+          complianceRow={selectedRow}
           onSuccess={() =>
             queryClient.invalidateQueries(["finance-compliance", organisationId])
           }
