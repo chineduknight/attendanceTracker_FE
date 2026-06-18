@@ -42,7 +42,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   const members: Array<Record<string, any>> = data?.data ?? [];
 
   const invalidate = () => queryClient.invalidateQueries(["finance-members", organisationId]);
-  const { mutate } = useMutationWrapper(patchRequest);
+  const { mutate, mutateAsync } = useMutationWrapper(patchRequest);
 
   const patchOne = (memberId: string, financialStartDate: string | null) => {
     const url = convertParamsToString(financeRequest.FINANCIAL_START_DATE, { memberId });
@@ -57,12 +57,23 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
     );
   };
 
-  const applyBulk = () => {
+  const applyBulk = async () => {
     if (!bulkDate) return toast.error("Pick a date");
     const ids = Object.keys(selected).filter((id) => selected[id]);
     if (!ids.length) return toast.error("Select members");
-    ids.forEach((id) => patchOne(id, bulkDate));
-    toast.success(`Applied to ${ids.length} member(s)`);
+    const promises: Promise<unknown>[] = ids.map((id) => {
+      const url = convertParamsToString(financeRequest.FINANCIAL_START_DATE, { memberId: id });
+      return mutateAsync({ url, data: { organisationId, financialStartDate: bulkDate } });
+    });
+    const results = await Promise.allSettled(promises);
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed === 0) {
+      toast.success(`Applied to ${ok} member(s)`);
+    } else {
+      toast.warn(`Applied to ${ok}, ${failed} failed`);
+    }
+    invalidate();
   };
 
   if (isLoading) return <Spinner />;
@@ -124,6 +135,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
                       <Button
                         size="xs"
                         colorScheme="blue"
+                        isDisabled={!rowDates[id] && !m.financialStartDate}
                         onClick={() => patchOne(id, rowDates[id] ?? m.financialStartDate ?? "")}
                       >
                         Save
