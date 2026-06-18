@@ -63,6 +63,13 @@ const RecordPaymentModal = ({
 
   const base = { organisationId, obligationId: obligation.id, memberId };
 
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setAmount("");
+    setAmountPaid("");
+    setMonthly({});
+  };
+
   const submit = () => {
     if (mode === "record") {
       if (!amount) return toast.error("Enter an amount");
@@ -76,6 +83,7 @@ const RecordPaymentModal = ({
       });
       correct({ url: financeRequest.PAYMENTS, data: buildDuesCorrectionPayload({ ...base, monthlyPaid }) });
     } else {
+      if (!amountPaid) return toast.error("Enter an amount");
       correct({ url: financeRequest.PAYMENTS, data: buildLevyCorrectionPayload({ ...base, amountPaid: Number(amountPaid) }) });
     }
   };
@@ -88,10 +96,10 @@ const RecordPaymentModal = ({
         <ModalCloseButton />
         <ModalBody>
           <ButtonGroup isAttached mb={4}>
-            <Button colorScheme={mode === "record" ? "green" : "gray"} onClick={() => setMode("record")}>
+            <Button colorScheme={mode === "record" ? "green" : "gray"} onClick={() => switchMode("record")}>
               Record
             </Button>
-            <Button colorScheme={mode === "correct" ? "green" : "gray"} onClick={() => setMode("correct")}>
+            <Button colorScheme={mode === "correct" ? "green" : "gray"} onClick={() => switchMode("correct")}>
               Correct
             </Button>
           </ButtonGroup>
