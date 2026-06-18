@@ -21,4 +21,5 @@ export const PROTECTED_PATHS = {
   LOGIN: "/login",
   ANALYTICS: "/analytics",
   BIRTHDAY: "/birthday",
+  FINANCE: "/finance",
 };

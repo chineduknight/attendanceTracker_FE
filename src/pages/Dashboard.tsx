@@ -16,6 +16,7 @@ import {
   FaChartBar,
   FaBirthdayCake,
   FaArrowLeft,
+  FaMoneyBillWave,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -36,6 +37,7 @@ const DASHBOARD_ACTIONS: DashboardAction[] = [
   { label: "All Attendance", icon: FaClipboardList, colorScheme: "purple", path: PROTECTED_PATHS.ALL_ATTENDANCE },
   { label: "Analytics", icon: FaChartBar, colorScheme: "orange", path: PROTECTED_PATHS.ANALYTICS },
   { label: "Birthday", icon: FaBirthdayCake, colorScheme: "pink", path: PROTECTED_PATHS.BIRTHDAY },
+  { label: "Finance", icon: FaMoneyBillWave, colorScheme: "green", path: PROTECTED_PATHS.FINANCE },
 ];
 
 const Dashboard = () => {
