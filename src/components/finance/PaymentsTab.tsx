@@ -67,6 +67,7 @@ const PaymentsTab = ({ organisationId }: Props) => {
         </Select>
         <Button
           colorScheme="green"
+          variant="solid"
           leftIcon={<FaMoneyBillWave />}
           isDisabled={!obligationId || !memberId}
           onClick={() => setOpen(true)}

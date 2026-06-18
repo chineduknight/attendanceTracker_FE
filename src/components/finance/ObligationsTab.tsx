@@ -151,7 +151,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
     <Box>
       <Flex justify="space-between" align="center" mb={4}>
         <Heading size="md">Obligations</Heading>
-        <Button colorScheme="teal" leftIcon={<FaPlus />} onClick={openCreate}>
+        <Button colorScheme="teal" variant="solid" leftIcon={<FaPlus />} onClick={openCreate}>
           Create obligation
         </Button>
       </Flex>
@@ -182,6 +182,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
                 <Button
                   size="sm"
                   colorScheme="blue"
+                  variant="solid"
                   leftIcon={<FaEye />}
                   onClick={() => onSelectObligation(ob.id)}
                 >
@@ -280,7 +281,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
             <Button variant="ghost" mr={3} onClick={closeModal}>
               Cancel
             </Button>
-            <Button colorScheme="teal" onClick={submit} isLoading={creating || renaming}>
+            <Button colorScheme="teal" variant="solid" onClick={submit} isLoading={creating || renaming}>
               {editing ? "Save" : "Create"}
             </Button>
           </ModalFooter>

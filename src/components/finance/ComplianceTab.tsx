@@ -265,6 +265,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                     <Button
                       size="xs"
                       colorScheme="green"
+                      variant="solid"
                       leftIcon={<FaMoneyBillWave />}
                       onClick={() => setPayFor(row)}
                     >

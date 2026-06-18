@@ -95,7 +95,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
           value={bulkDate}
           onChange={(e) => setBulkDate(e.target.value)}
         />
-        <Button colorScheme="purple" leftIcon={<FaUserCheck />} onClick={applyBulk}>
+        <Button colorScheme="purple" variant="solid" leftIcon={<FaUserCheck />} onClick={applyBulk}>
           Set start date for selected
         </Button>
       </Flex>
@@ -139,6 +139,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
                       <Button
                         size="xs"
                         colorScheme="purple"
+                        variant="outline"
                         isDisabled={!rowDates[id] && !m.financialStartDate}
                         onClick={() => patchOne(id, rowDates[id] ?? m.financialStartDate ?? "")}
                       >
