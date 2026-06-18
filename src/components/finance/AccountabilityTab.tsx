@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import {
   Box,
   Button,
@@ -25,11 +25,20 @@ import {
   queryClient,
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
+import ConfirmModal from "components/finance/ConfirmModal";
 
 interface Props {
   organisationId: string;
   prefillMemberId: string;
 }
+
+type PendingConfirm = {
+  title: string;
+  body: ReactNode;
+  confirmLabel: string;
+  confirmColorScheme: string;
+  action: () => void;
+};
 
 const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   const [selected, setSelected] = useState<Record<string, boolean>>(() =>
@@ -37,6 +46,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   );
   const [bulkDate, setBulkDate] = useState("");
   const [rowDates, setRowDates] = useState<Record<string, string>>({});
+  const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
 
   const memUrl = convertParamsToString(orgRequest.MEMBERS, { organisationId });
   const { data, isLoading } = useQueryWrapper(["finance-members", organisationId], memUrl);
@@ -80,6 +90,48 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
     invalidate();
   };
 
+  // --- Confirmation triggers (financial start date is a critical action) ---
+  const runConfirm = () => {
+    confirm?.action();
+    setConfirm(null);
+  };
+
+  const requestSave = (m: Record<string, any>) => {
+    const id = m.id ?? m._id;
+    const date = rowDates[id] ?? m.financialStartDate ?? "";
+    setConfirm({
+      title: "Set financial start date",
+      body: `Set ${m.name}'s financial start date to ${date}? They will be financially accountable from that month onward.`,
+      confirmLabel: "Yes, set date",
+      confirmColorScheme: "purple",
+      action: () => patchOne(id, date),
+    });
+  };
+
+  const requestClear = (m: Record<string, any>) => {
+    const id = m.id ?? m._id;
+    setConfirm({
+      title: "Clear financial start date",
+      body: `Clear ${m.name}'s financial start date? They will no longer be financially accountable.`,
+      confirmLabel: "Yes, clear",
+      confirmColorScheme: "red",
+      action: () => patchOne(id, null),
+    });
+  };
+
+  const requestBulk = () => {
+    if (!bulkDate) return toast.error("Pick a date");
+    const ids = Object.keys(selected).filter((id) => selected[id]);
+    if (!ids.length) return toast.error("Select members");
+    setConfirm({
+      title: "Set start date for selected",
+      body: `Set the financial start date to ${bulkDate} for ${ids.length} selected member(s)? They will be financially accountable from that month onward.`,
+      confirmLabel: `Yes, set ${ids.length}`,
+      confirmColorScheme: "purple",
+      action: applyBulk,
+    });
+  };
+
   if (isLoading) return <Spinner />;
 
   return (
@@ -95,7 +147,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
           value={bulkDate}
           onChange={(e) => setBulkDate(e.target.value)}
         />
-        <Button colorScheme="purple" variant="solid" leftIcon={<FaUserCheck />} onClick={applyBulk}>
+        <Button colorScheme="purple" variant="solid" leftIcon={<FaUserCheck />} onClick={requestBulk}>
           Set start date for selected
         </Button>
       </Flex>
@@ -141,7 +193,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
                         colorScheme="purple"
                         variant="outline"
                         isDisabled={!rowDates[id] && !m.financialStartDate}
-                        onClick={() => patchOne(id, rowDates[id] ?? m.financialStartDate ?? "")}
+                        onClick={() => requestSave(m)}
                       >
                         Save
                       </Button>
@@ -149,7 +201,8 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
                         size="xs"
                         colorScheme="red"
                         variant="outline"
-                        onClick={() => patchOne(id, null)}
+                        isDisabled={!m.financialStartDate}
+                        onClick={() => requestClear(m)}
                       >
                         Clear
                       </Button>
@@ -161,6 +214,16 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
           </Tbody>
         </Table>
       </Box>
+
+      <ConfirmModal
+        isOpen={!!confirm}
+        title={confirm?.title ?? ""}
+        body={confirm?.body ?? ""}
+        confirmLabel={confirm?.confirmLabel}
+        confirmColorScheme={confirm?.confirmColorScheme}
+        onConfirm={runConfirm}
+        onClose={() => setConfirm(null)}
+      />
     </Box>
   );
 };

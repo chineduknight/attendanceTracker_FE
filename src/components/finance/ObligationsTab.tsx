@@ -22,8 +22,6 @@ import {
   Badge,
 } from "@chakra-ui/react";
 import { FaPlus, FaEye, FaPen, FaTrash } from "react-icons/fa";
-import { confirmAlert } from "react-confirm-alert";
-import "react-confirm-alert/src/react-confirm-alert.css";
 import { toast } from "react-toastify";
 import { financeRequest } from "services";
 import {
@@ -36,6 +34,7 @@ import {
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { formatMoney } from "helpers/financeConstants";
+import ConfirmModal from "components/finance/ConfirmModal";
 import { Obligation, ObligationType } from "components/finance/financeTypes";
 
 interface Props {
@@ -47,6 +46,7 @@ interface Props {
 const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligation }: Props) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [editing, setEditing] = useState<Obligation | null>(null);
+  const [toDelete, setToDelete] = useState<Obligation | null>(null);
   const [type, setType] = useState<ObligationType>("dues");
   const [name, setName] = useState("");
   const [year, setYear] = useState("");
@@ -125,24 +125,14 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
     createMutate({ url: financeRequest.OBLIGATIONS, data });
   };
 
-  const remove = (ob: Obligation) => {
-    confirmAlert({
-      title: "Delete obligation",
-      message: `Delete "${ob.name}"? This cannot be undone.`,
-      buttons: [
-        {
-          label: "Yes, delete",
-          onClick: () => {
-            const url = convertParamsToString(financeRequest.ONE_OBLIGATION, {
-              organisationId,
-              id: ob.id,
-            });
-            deleteMutate({ url });
-          },
-        },
-        { label: "Cancel", onClick: () => undefined },
-      ],
+  const confirmDelete = () => {
+    if (!toDelete) return;
+    const url = convertParamsToString(financeRequest.ONE_OBLIGATION, {
+      organisationId,
+      id: toDelete.id,
     });
+    deleteMutate({ url });
+    setToDelete(null);
   };
 
   if (isLoading) return <Spinner />;
@@ -202,7 +192,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
                   colorScheme="red"
                   variant="ghost"
                   leftIcon={<FaTrash />}
-                  onClick={() => remove(ob)}
+                  onClick={() => setToDelete(ob)}
                 >
                   Delete
                 </Button>
@@ -287,6 +277,17 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      <ConfirmModal
+        isOpen={!!toDelete}
+        title="Delete obligation"
+        body={`Delete "${toDelete?.name}"? This cannot be undone.`}
+        confirmLabel="Yes, delete"
+        cancelLabel="No"
+        confirmColorScheme="red"
+        onConfirm={confirmDelete}
+        onClose={() => setToDelete(null)}
+      />
     </Box>
   );
 };
