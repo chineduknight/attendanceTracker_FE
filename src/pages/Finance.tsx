@@ -14,6 +14,8 @@ import { useNavigate } from "react-router-dom";
 import BackButton from "components/BackButton";
 import ObligationsTab from "components/finance/ObligationsTab";
 import ComplianceTab from "components/finance/ComplianceTab";
+import PaymentsTab from "components/finance/PaymentsTab";
+import AccountabilityTab from "components/finance/AccountabilityTab";
 import useGlobalStore from "zStore";
 
 const Finance = () => {
@@ -63,10 +65,13 @@ const Finance = () => {
               />
             </TabPanel>
             <TabPanel>
-              <Text>Payments coming soon</Text>
+              <PaymentsTab organisationId={organisation.id} />
             </TabPanel>
             <TabPanel>
-              <Text>Accountability coming soon</Text>
+              <AccountabilityTab
+                organisationId={organisation.id}
+                prefillMemberId={prefillMemberId}
+              />
             </TabPanel>
           </TabPanels>
         </Tabs>
