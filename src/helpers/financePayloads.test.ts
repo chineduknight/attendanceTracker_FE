@@ -4,6 +4,7 @@ import {
   buildLevyCorrectionPayload,
 } from "helpers/financePayloads";
 import { monthStatusColor } from "helpers/financeConstants";
+import type { MonthStatus } from "components/finance/financeTypes";
 
 describe("finance payload builders", () => {
   const base = { organisationId: "org1", obligationId: "ob1", memberId: "m1" };
@@ -44,5 +45,6 @@ describe("monthStatusColor", () => {
     expect(monthStatusColor("partial")).toBe("yellow.100");
     expect(monthStatusColor("unpaid")).toBe("red.100");
     expect(monthStatusColor("not-due")).toBe("gray.100");
+    expect(monthStatusColor("unknown" as MonthStatus)).toBe("gray.100");
   });
 });
