@@ -18,7 +18,7 @@ import {
   Tr,
   Badge,
 } from "@chakra-ui/react";
-import { FaFileExcel, FaFilePdf } from "react-icons/fa";
+import { FaFileExcel, FaFilePdf, FaMoneyBillWave } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { financeRequest } from "services";
 import { useQueryWrapper, queryClient } from "services/api/apiHelper";
@@ -147,6 +147,8 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
           <Button
             leftIcon={<FaFileExcel />}
             size="sm"
+            colorScheme="green"
+            variant="outline"
             isLoading={isExportingExcel}
             onClick={() => refetchExcel()}
           >
@@ -155,6 +157,8 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
           <Button
             leftIcon={<FaFilePdf />}
             size="sm"
+            colorScheme="red"
+            variant="outline"
             isLoading={isExportingPdf}
             onClick={() => refetchPdf()}
           >
@@ -218,6 +222,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                         <Badge colorScheme="gray">not accountable</Badge>
                         <Button
                           size="xs"
+                          colorScheme="purple"
                           variant="outline"
                           onClick={() => onSetStartDate(row.memberId)}
                         >
@@ -260,6 +265,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                     <Button
                       size="xs"
                       colorScheme="green"
+                      leftIcon={<FaMoneyBillWave />}
                       onClick={() => setPayFor(row)}
                     >
                       Record payment

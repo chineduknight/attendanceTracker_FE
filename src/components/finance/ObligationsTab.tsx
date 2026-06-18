@@ -21,6 +21,7 @@ import {
   useDisclosure,
   Badge,
 } from "@chakra-ui/react";
+import { FaPlus, FaEye, FaPen, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import "react-confirm-alert/src/react-confirm-alert.css";
 import { toast } from "react-toastify";
@@ -150,7 +151,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
     <Box>
       <Flex justify="space-between" align="center" mb={4}>
         <Heading size="md">Obligations</Heading>
-        <Button colorScheme="green" onClick={openCreate}>
+        <Button colorScheme="teal" leftIcon={<FaPlus />} onClick={openCreate}>
           Create obligation
         </Button>
       </Flex>
@@ -165,7 +166,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
               p={4}
               borderWidth="1px"
               borderRadius="md"
-              borderColor={ob.id === selectedObligationId ? "green.400" : "gray.200"}
+              borderColor={ob.id === selectedObligationId ? "blue.400" : "gray.200"}
               bg="white"
             >
               <Flex justify="space-between" align="center" mb={2}>
@@ -178,13 +179,30 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
                   : `${ob.date} · ${formatMoney(ob.amount ?? 0)}`}
               </Text>
               <Flex gap={2} mt={3}>
-                <Button size="sm" colorScheme="blue" onClick={() => onSelectObligation(ob.id)}>
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  leftIcon={<FaEye />}
+                  onClick={() => onSelectObligation(ob.id)}
+                >
                   View compliance
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => openEdit(ob)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  colorScheme="gray"
+                  leftIcon={<FaPen />}
+                  onClick={() => openEdit(ob)}
+                >
                   Rename
                 </Button>
-                <Button size="sm" colorScheme="red" variant="ghost" onClick={() => remove(ob)}>
+                <Button
+                  size="sm"
+                  colorScheme="red"
+                  variant="ghost"
+                  leftIcon={<FaTrash />}
+                  onClick={() => remove(ob)}
+                >
                   Delete
                 </Button>
               </Flex>
@@ -262,7 +280,7 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
             <Button variant="ghost" mr={3} onClick={closeModal}>
               Cancel
             </Button>
-            <Button colorScheme="green" onClick={submit} isLoading={creating || renaming}>
+            <Button colorScheme="teal" onClick={submit} isLoading={creating || renaming}>
               {editing ? "Save" : "Create"}
             </Button>
           </ModalFooter>

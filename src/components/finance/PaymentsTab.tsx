@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Box, Button, Flex, Heading, Select, Text, Spinner } from "@chakra-ui/react";
+import { FaMoneyBillWave } from "react-icons/fa";
 import { financeRequest, orgRequest } from "services";
 import { useQueryWrapper, queryClient } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -66,10 +67,11 @@ const PaymentsTab = ({ organisationId }: Props) => {
         </Select>
         <Button
           colorScheme="green"
+          leftIcon={<FaMoneyBillWave />}
           isDisabled={!obligationId || !memberId}
           onClick={() => setOpen(true)}
         >
-          Open
+          Record payment
         </Button>
       </Flex>
 

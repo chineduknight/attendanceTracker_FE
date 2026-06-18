@@ -15,6 +15,7 @@ import {
   Text,
   Spinner,
 } from "@chakra-ui/react";
+import { FaUserCheck } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { financeRequest, orgRequest } from "services";
 import {
@@ -94,7 +95,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
           value={bulkDate}
           onChange={(e) => setBulkDate(e.target.value)}
         />
-        <Button colorScheme="green" onClick={applyBulk}>
+        <Button colorScheme="purple" leftIcon={<FaUserCheck />} onClick={applyBulk}>
           Set start date for selected
         </Button>
       </Flex>
@@ -137,13 +138,18 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
                       />
                       <Button
                         size="xs"
-                        colorScheme="blue"
+                        colorScheme="purple"
                         isDisabled={!rowDates[id] && !m.financialStartDate}
                         onClick={() => patchOne(id, rowDates[id] ?? m.financialStartDate ?? "")}
                       >
                         Save
                       </Button>
-                      <Button size="xs" variant="outline" onClick={() => patchOne(id, null)}>
+                      <Button
+                        size="xs"
+                        colorScheme="red"
+                        variant="outline"
+                        onClick={() => patchOne(id, null)}
+                      >
                         Clear
                       </Button>
                     </Flex>

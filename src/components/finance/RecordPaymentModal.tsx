@@ -96,10 +96,10 @@ const RecordPaymentModal = ({
         <ModalCloseButton />
         <ModalBody>
           <ButtonGroup isAttached mb={4}>
-            <Button colorScheme={mode === "record" ? "green" : "gray"} onClick={() => switchMode("record")}>
+            <Button colorScheme={mode === "record" ? "blue" : "gray"} onClick={() => switchMode("record")}>
               Record
             </Button>
-            <Button colorScheme={mode === "correct" ? "green" : "gray"} onClick={() => switchMode("correct")}>
+            <Button colorScheme={mode === "correct" ? "blue" : "gray"} onClick={() => switchMode("correct")}>
               Correct
             </Button>
           </ButtonGroup>
