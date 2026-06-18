@@ -83,6 +83,21 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
     );
   };
 
+  const handleExportError = (err: any, fmt: "Excel" | "PDF") => {
+    const statusCode = err?.response?.status;
+    if (statusCode === 401) return;
+    const apiError = err?.response?.data?.error;
+    let message: string;
+    if (Array.isArray(apiError)) {
+      message = apiError.filter(Boolean).join(", ");
+    } else if (typeof apiError === "string" && apiError.trim()) {
+      message = apiError;
+    } else {
+      message = `Failed to export ${fmt}. Please try again.`;
+    }
+    toast.error(message);
+  };
+
   const { refetch: refetchExcel, isFetching: isExportingExcel } =
     useQueryWrapper(
       ["finance-compliance-export-excel", organisationId, obligationId],
@@ -90,7 +105,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
       {
         enabled: false,
         onSuccess: (r: any) => handleExportSuccess(r, "Excel"),
-        onError: () => toast.error("Failed to export Excel."),
+        onError: (err: any) => handleExportError(err, "Excel"),
       }
     );
 
@@ -100,7 +115,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
     {
       enabled: false,
       onSuccess: (r: any) => handleExportSuccess(r, "PDF"),
-      onError: () => toast.error("Failed to export PDF."),
+      onError: (err: any) => handleExportError(err, "PDF"),
     }
   );
 
@@ -197,8 +212,8 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                 return (
                   <Tr key={row.memberId}>
                     <Td>{row.name}</Td>
-                    {/* colSpan: dues = 12 months + Paid/Balance/% + Action = 15; levy = Status/Paid/Balance + Action = 4 */}
-                    <Td colSpan={isDues ? 15 : 4}>
+                    {/* colSpan: dues = 12 months + Paid/Balance/% + Action = 16; levy = Status/Paid/Balance + Action = 4 */}
+                    <Td colSpan={isDues ? 16 : 4}>
                       <Flex align="center" gap={3}>
                         <Badge colorScheme="gray">not accountable</Badge>
                         <Button
