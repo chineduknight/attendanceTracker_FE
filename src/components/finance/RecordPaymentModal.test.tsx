@@ -103,18 +103,70 @@ test("correct mode locks months before the member's financial start date", () =>
   expect(screen.getByLabelText("Jun")).toBeEnabled();
 });
 
-test("correct mode on dues builds monthlyPaid with only filled months as numbers", async () => {
+const paidJanToMar: any = {
+  memberId: "m1",
+  name: "Ada",
+  accountable: true,
+  totalPaid: 1500,
+  paidUpToMonth: 3,
+  months: {
+    "1": "paid", "2": "paid", "3": "paid", "4": "unpaid", "5": "unpaid",
+    "6": "unpaid", "7": "unpaid", "8": "unpaid", "9": "unpaid", "10": "unpaid",
+    "11": "unpaid", "12": "unpaid",
+  },
+};
+
+test("a month accepts no more than the monthly amount", () => {
+  render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} />));
+  fireEvent.click(screen.getByText(/correct/i));
+  fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "9999" } });
+  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+});
+
+test("clearing the boundary month relocks the next and reopens the previous one", () => {
+  render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} complianceRow={paidJanToMar} />));
+  fireEvent.click(screen.getByText(/correct/i));
+
+  // Jan–Mar paid, Apr is the active month, Mar (last paid) is editable.
+  expect(screen.getByLabelText("Apr")).toBeEnabled();
+  expect(screen.getByLabelText("Mar")).toBeEnabled();
+  expect(screen.getByLabelText("Feb")).toBeDisabled();
+
+  // Delete March -> April locks, February reopens, January stays locked.
+  fireEvent.change(screen.getByLabelText("Mar"), { target: { value: "" } });
+  expect(screen.getByLabelText("Apr")).toBeDisabled();
+  expect(screen.getByLabelText("Feb")).toBeEnabled();
+  expect(screen.getByLabelText("Jan")).toBeDisabled();
+});
+
+test("Fill all and Clear all set every accountable month", () => {
   render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} />));
   fireEvent.click(screen.getByText(/correct/i));
 
-  fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "100" } });
-  fireEvent.change(screen.getByLabelText("Mar"), { target: { value: "200" } });
+  fireEvent.click(screen.getByText("Fill all"));
+  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+  expect(screen.getByLabelText("Dec")).toHaveValue(500);
+
+  fireEvent.click(screen.getByText("Clear all"));
+  expect(screen.getByLabelText("Jan")).toHaveValue(null);
+  // Back to only the first month editable.
+  expect(screen.getByLabelText("Jan")).toBeEnabled();
+  expect(screen.getByLabelText("Feb")).toBeDisabled();
+});
+
+test("correct mode on dues builds monthlyPaid sequentially with numbers", async () => {
+  render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} />));
+  fireEvent.click(screen.getByText(/correct/i));
+
+  // Fill January fully so February unlocks, then leave February partial.
+  fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "500" } });
+  fireEvent.change(screen.getByLabelText("Feb"), { target: { value: "300" } });
 
   fireEvent.click(screen.getByText("Save"));
 
   await waitFor(() => {
     expect(putRequest).toHaveBeenCalledTimes(1);
     const payload = (putRequest as jest.Mock).mock.calls[0][0].data;
-    expect(payload.monthlyPaid).toEqual({ "1": 100, "3": 200 });
+    expect(payload.monthlyPaid).toEqual({ "1": 500, "2": 300 });
   });
 });

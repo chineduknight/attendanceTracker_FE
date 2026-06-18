@@ -9,6 +9,7 @@ import {
   ModalCloseButton,
   Button,
   ButtonGroup,
+  Flex,
   FormControl,
   FormLabel,
   Input,
@@ -23,7 +24,7 @@ import {
   buildDuesCorrectionPayload,
   buildLevyCorrectionPayload,
 } from "helpers/financePayloads";
-import { MONTHS } from "helpers/financeConstants";
+import { MONTHS, formatMoney } from "helpers/financeConstants";
 import { Obligation, ComplianceRow } from "components/finance/financeTypes";
 
 interface Props {
@@ -59,13 +60,11 @@ const RecordPaymentModal = ({
 
   const amountPerMonth = obligation.amountPerMonth ?? 0;
   const monthsMap = complianceRow?.months ?? {};
-  // Only drive the smart grid when we actually have the member's dues row.
-  const hasRow = !!complianceRow && obligation.type === "dues";
+  const isDues = obligation.type === "dues";
 
   // Leading "not-due" months (from January) are the months before the member's
   // financial start date — the first month they are accountable.
   const startMonth = (() => {
-    if (!hasRow) return 1;
     let s = 1;
     for (let m = 1; m <= 12; m++) {
       if (monthsMap[String(m)] === "not-due") s = m + 1;
@@ -89,21 +88,44 @@ const RecordPaymentModal = ({
     return "";
   };
 
-  // A month is locked (shown but not editable) when it's before the member's
-  // start date, or it has already been fully paid.
-  const isLockedMonth = (month: number) =>
-    hasRow && (month < startMonth || monthsMap[String(month)] === "paid");
+  // A month is "complete" when it holds the full monthly amount.
+  const valueOf = (month: number) => monthly[String(month)] ?? "";
+  const isComplete = (month: number) =>
+    valueOf(month) !== "" && Number(valueOf(month)) >= amountPerMonth;
 
-  // An editable month is only enabled once every earlier in-scope month is
-  // filled — this prevents gaps (e.g. paying Dec while May is empty).
-  const isMonthEnabled = (month: number): boolean => {
-    if (!hasRow) return true; // no row -> free 12-box grid (fallback)
-    if (isLockedMonth(month)) return false;
-    for (let k = startMonth; k < month; k++) {
-      if ((monthly[String(k)] ?? "") === "") return false;
+  // The active boundary: the first month (from the start month) that isn't yet
+  // fully paid. Only this month and the last fully-paid month before it are
+  // editable — so entry stays sequential but the most recent payment can still
+  // be reduced or deleted (which reopens the month before it).
+  const cursor = (() => {
+    for (let m = startMonth; m <= 12; m++) {
+      if (!isComplete(m)) return m;
     }
-    return true;
+    return 13; // every accountable month is fully paid
+  })();
+
+  const isMonthEditable = (month: number) =>
+    month >= startMonth && (month === cursor || month === cursor - 1);
+
+  // Each month accepts at most the monthly amount (a final month may be partial).
+  const setMonthValue = (month: number, raw: string) => {
+    let v = raw;
+    if (v !== "") {
+      let n = Number(v);
+      if (Number.isNaN(n) || n < 0) n = 0;
+      if (amountPerMonth > 0 && n > amountPerMonth) n = amountPerMonth;
+      v = String(n);
+    }
+    setMonthly((prev) => ({ ...prev, [String(month)]: v }));
   };
+
+  const fillAll = () => {
+    const next: Record<string, string> = {};
+    for (let m = startMonth; m <= 12; m++) next[String(m)] = String(amountPerMonth);
+    setMonthly(next);
+  };
+
+  const clearAll = () => setMonthly({});
 
   const done = () => {
     toast.success("Payment saved");
@@ -120,7 +142,7 @@ const RecordPaymentModal = ({
     setMode(next);
     setAmount("");
     setAmountPaid("");
-    if (next === "correct" && hasRow) {
+    if (next === "correct" && isDues) {
       // Seed the grid with what's already paid (paid + partial months).
       const seed: Record<string, string> = {};
       for (let m = startMonth; m <= 12; m++) {
@@ -185,18 +207,17 @@ const RecordPaymentModal = ({
                 </Text>
               )}
             </FormControl>
-          ) : obligation.type === "dues" ? (
+          ) : isDues ? (
             <>
-              {hasRow && (
-                <Text fontSize="sm" color="gray.500" mb={3}>
-                  Paid and pre-start months are locked. Enter payments from the
-                  first unpaid month onward — earlier months must be filled first.
-                </Text>
-              )}
+              <Text fontSize="sm" color="gray.500" mb={3}>
+                Fill months in order from the first available one (up to{" "}
+                {formatMoney(amountPerMonth)} each). A month unlocks once the
+                previous is fully paid; clearing a month reopens the one before it.
+              </Text>
               <SimpleGrid columns={[2, 3, 4]} spacing={3}>
                 {MONTHS.map((m) => {
                   const key = String(m.value);
-                  const disabled = !isMonthEnabled(m.value);
+                  const disabled = !isMonthEditable(m.value);
                   return (
                     <FormControl key={m.value} isDisabled={disabled}>
                       <FormLabel htmlFor={`month-${m.value}`}>{m.label}</FormLabel>
@@ -204,16 +225,24 @@ const RecordPaymentModal = ({
                         id={`month-${m.value}`}
                         aria-label={m.label}
                         type="number"
+                        min={0}
+                        max={amountPerMonth}
                         isDisabled={disabled}
                         value={monthly[key] ?? ""}
-                        onChange={(e) =>
-                          setMonthly((prev) => ({ ...prev, [key]: e.target.value }))
-                        }
+                        onChange={(e) => setMonthValue(m.value, e.target.value)}
                       />
                     </FormControl>
                   );
                 })}
               </SimpleGrid>
+              <Flex gap={3} mt={4}>
+                <Button size="sm" variant="outline" colorScheme="blue" onClick={fillAll}>
+                  Fill all
+                </Button>
+                <Button size="sm" variant="outline" colorScheme="gray" onClick={clearAll}>
+                  Clear all
+                </Button>
+              </Flex>
             </>
           ) : (
             <FormControl>
