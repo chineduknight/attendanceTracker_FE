@@ -15,6 +15,7 @@ import {
   Tbody,
   Td,
   Text,
+  Tfoot,
   Th,
   Thead,
   Tr,
@@ -39,7 +40,15 @@ interface Props {
   onSetStartDate: (memberId: string) => void;
 }
 
-type StatusFilter = "all" | "paid" | "partial" | "unpaid" | "not-accountable";
+type StatusFilter =
+  | "all"
+  | "paid"
+  | "partial"
+  | "unpaid"
+  | "outstanding"
+  | "not-accountable";
+
+type SortKey = "" | "name" | "paid" | "balance" | "compliance";
 
 const OVERALL_BADGE_COLOR: Record<string, string> = {
   paid: "green",
@@ -47,10 +56,28 @@ const OVERALL_BADGE_COLOR: Record<string, string> = {
   unpaid: "red",
 };
 
+// Sticky styles keep the # and Name columns visible while the month grid scrolls.
+const STICKY_NUM = { position: "sticky" as const, left: 0, bg: "white", zIndex: 1 };
+const STICKY_NAME = {
+  position: "sticky" as const,
+  left: "44px",
+  bg: "white",
+  zIndex: 1,
+};
+
+const LEGEND = [
+  { status: "paid" as const, label: "Paid" },
+  { status: "partial" as const, label: "Partial" },
+  { status: "unpaid" as const, label: "Unpaid" },
+  { status: "not-due" as const, label: "Not due / before start" },
+];
+
 const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) => {
   const [payFor, setPayFor] = useState<ComplianceRow | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // --- ALL hooks unconditionally at the top ---
 
@@ -164,21 +191,61 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
     return (row.status as "paid" | "partial" | "unpaid") ?? "unpaid";
   };
 
+  const paidOf = (row: ComplianceRow) => (isDues ? row.totalPaid : row.paid) ?? 0;
+  const balanceOf = (row: ComplianceRow) => row.balance ?? 0;
+
   const term = search.trim().toLowerCase();
   const filteredRows = payload.rows.filter((row) => {
     if (term && !row.name.toLowerCase().includes(term)) return false;
     if (statusFilter === "all") return true;
     if (statusFilter === "not-accountable") return !row.accountable;
     if (!row.accountable) return false; // status filters apply to accountable members
+    if (statusFilter === "outstanding") return overallStatus(row) !== "paid";
     return overallStatus(row) === statusFilter;
   });
+
+  const displayRows = sortKey
+    ? [...filteredRows].sort((a, b) => {
+        // Non-accountable rows have no figures — always keep them last.
+        if (a.accountable !== b.accountable) return a.accountable ? -1 : 1;
+        let cmp = 0;
+        if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+        else if (sortKey === "paid") cmp = paidOf(a) - paidOf(b);
+        else if (sortKey === "balance") cmp = balanceOf(a) - balanceOf(b);
+        else if (sortKey === "compliance")
+          cmp = (a.compliance ?? 0) - (b.compliance ?? 0);
+        return sortDir === "asc" ? cmp : -cmp;
+      })
+    : filteredRows;
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+  const sortArrow = (key: SortKey) =>
+    sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
+  const accountableShown = displayRows.filter((r) => r.accountable);
+  const totalsPaid = accountableShown.reduce((s, r) => s + paidOf(r), 0);
+  const totalsBalance = accountableShown.reduce((s, r) => s + balanceOf(r), 0);
 
   const totalCols = isDues ? 18 : 6; // #, Name, [grid...], Action
 
   return (
     <Box>
       <Flex justify="space-between" align="center" mb={4} wrap="wrap" gap={2}>
-        <Heading size="md">{obligation?.name} compliance</Heading>
+        <Box>
+          <Heading size="md">{obligation?.name} compliance</Heading>
+          <Text fontSize="sm" color="gray.600">
+            {isDues
+              ? `${formatMoney(obligation?.amountPerMonth ?? 0)} / month`
+              : `${formatMoney(obligation?.amount ?? 0)} one-off levy`}
+          </Text>
+        </Box>
         <Flex gap={2}>
           <Button
             leftIcon={<FaFileExcel />}
@@ -240,40 +307,71 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
           <option value="paid">Paid</option>
           <option value="partial">Partial</option>
           <option value="unpaid">Unpaid</option>
+          <option value="outstanding">Outstanding (owing)</option>
           <option value="not-accountable">Not accountable</option>
         </Select>
         <Text fontSize="sm" color="gray.500">
-          Showing {filteredRows.length} of {payload.rows.length}
+          Showing {displayRows.length} of {payload.rows.length}
         </Text>
+      </Flex>
+
+      <Flex gap={4} mb={3} wrap="wrap" align="center">
+        {LEGEND.map((item) => (
+          <Flex key={item.status} align="center" gap={1.5}>
+            <Box
+              w="14px"
+              h="14px"
+              borderRadius="sm"
+              borderWidth="1px"
+              borderColor="gray.300"
+              bg={monthStatusColor(item.status)}
+            />
+            <Text fontSize="xs" color="gray.600">
+              {item.label}
+            </Text>
+          </Flex>
+        ))}
       </Flex>
 
       <Box overflowX="auto">
         <Table size="sm" variant="simple">
           <Thead>
             <Tr>
-              <Th>#</Th>
-              <Th>Name</Th>
+              <Th sx={STICKY_NUM}>#</Th>
+              <Th sx={STICKY_NAME} cursor="pointer" onClick={() => toggleSort("name")}>
+                Name{sortArrow("name")}
+              </Th>
               {isDues ? (
                 <>
                   {MONTHS.map((m) => (
                     <Th key={m.value}>{m.label}</Th>
                   ))}
-                  <Th>Paid</Th>
-                  <Th>Balance</Th>
-                  <Th>%</Th>
+                  <Th cursor="pointer" onClick={() => toggleSort("paid")}>
+                    Paid{sortArrow("paid")}
+                  </Th>
+                  <Th cursor="pointer" onClick={() => toggleSort("balance")}>
+                    Balance{sortArrow("balance")}
+                  </Th>
+                  <Th cursor="pointer" onClick={() => toggleSort("compliance")}>
+                    %{sortArrow("compliance")}
+                  </Th>
                 </>
               ) : (
                 <>
                   <Th>Status</Th>
-                  <Th>Paid</Th>
-                  <Th>Balance</Th>
+                  <Th cursor="pointer" onClick={() => toggleSort("paid")}>
+                    Paid{sortArrow("paid")}
+                  </Th>
+                  <Th cursor="pointer" onClick={() => toggleSort("balance")}>
+                    Balance{sortArrow("balance")}
+                  </Th>
                 </>
               )}
               <Th>Action</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {filteredRows.length === 0 && (
+            {displayRows.length === 0 && (
               <Tr>
                 <Td colSpan={totalCols}>
                   <Text color="gray.500" py={2}>
@@ -282,12 +380,12 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                 </Td>
               </Tr>
             )}
-            {filteredRows.map((row, index) => {
+            {displayRows.map((row, index) => {
               if (!row.accountable) {
                 return (
                   <Tr key={row.memberId}>
-                    <Td>{index + 1}</Td>
-                    <Td>{row.name}</Td>
+                    <Td sx={STICKY_NUM}>{index + 1}</Td>
+                    <Td sx={STICKY_NAME}>{row.name}</Td>
                     {/* colSpan: dues = 12 months + Paid/Balance/% + Action = 16; levy = Status/Paid/Balance + Action = 4 */}
                     <Td colSpan={isDues ? 16 : 4}>
                       <Flex align="center" gap={3}>
@@ -308,8 +406,8 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
               const os = overallStatus(row);
               return (
                 <Tr key={row.memberId}>
-                  <Td>{index + 1}</Td>
-                  <Td>
+                  <Td sx={STICKY_NUM}>{index + 1}</Td>
+                  <Td sx={STICKY_NAME}>
                     <Flex align="center" gap={2}>
                       <Text>{row.name}</Text>
                       {isDues && (
@@ -325,7 +423,9 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                           <Td
                             key={m.value}
                             bg={monthStatusColor(status)}
-                            title={status}
+                            title={`${m.label}: ${status} — click to record`}
+                            cursor="pointer"
+                            onClick={() => setPayFor(row)}
                           />
                         );
                       })}
@@ -357,6 +457,31 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
               );
             })}
           </Tbody>
+          {accountableShown.length > 0 && (
+            <Tfoot>
+              <Tr fontWeight="bold">
+                <Td sx={STICKY_NUM} />
+                <Td sx={STICKY_NAME}>Total</Td>
+                {isDues ? (
+                  <>
+                    {MONTHS.map((m) => (
+                      <Td key={m.value} />
+                    ))}
+                    <Td>{formatMoney(totalsPaid)}</Td>
+                    <Td>{formatMoney(totalsBalance)}</Td>
+                    <Td />
+                  </>
+                ) : (
+                  <>
+                    <Td />
+                    <Td>{formatMoney(totalsPaid)}</Td>
+                    <Td>{formatMoney(totalsBalance)}</Td>
+                  </>
+                )}
+                <Td />
+              </Tr>
+            </Tfoot>
+          )}
         </Table>
       </Box>
 
