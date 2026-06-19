@@ -227,6 +227,15 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
   const paidOf = (row: ComplianceRow) => (isDues ? row.totalPaid : row.paid) ?? 0;
   const balanceOf = (row: ComplianceRow) => row.balance ?? 0;
 
+  // The API's `compliance` field counts fully-paid months, so a sub-month
+  // partial reads 0%. Compute an amount-based percentage so any payment shows.
+  const compliancePct = (row: ComplianceRow) => {
+    const expected = row.totalExpected ?? paidOf(row) + balanceOf(row);
+    if (!expected) return 0;
+    return (paidOf(row) / expected) * 100;
+  };
+  const formatPct = (n: number) => (n > 0 && n < 1 ? "<1%" : `${Math.round(n)}%`);
+
   const term = search.trim().toLowerCase();
   const filteredRows = payload.rows.filter((row) => {
     if (term && !row.name.toLowerCase().includes(term)) return false;
@@ -246,7 +255,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
         else if (sortKey === "paid") cmp = paidOf(a) - paidOf(b);
         else if (sortKey === "balance") cmp = balanceOf(a) - balanceOf(b);
         else if (sortKey === "compliance")
-          cmp = (a.compliance ?? 0) - (b.compliance ?? 0);
+          cmp = compliancePct(a) - compliancePct(b);
         return sortDir === "asc" ? cmp : -cmp;
       })
     : filteredRows;
@@ -467,7 +476,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                       })}
                       <Td>{formatMoney(row.totalPaid ?? 0)}</Td>
                       <Td>{formatMoney(row.balance ?? 0)}</Td>
-                      <Td>{row.compliance ?? 0}%</Td>
+                      <Td>{formatPct(compliancePct(row))}</Td>
                     </>
                   ) : (
                     <>
