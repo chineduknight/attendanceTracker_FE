@@ -4,6 +4,8 @@ import {
   Button,
   Flex,
   Heading,
+  Input,
+  Select,
   SimpleGrid,
   Spinner,
   Stat,
@@ -37,8 +39,18 @@ interface Props {
   onSetStartDate: (memberId: string) => void;
 }
 
+type StatusFilter = "all" | "paid" | "partial" | "unpaid" | "not-accountable";
+
+const OVERALL_BADGE_COLOR: Record<string, string> = {
+  paid: "green",
+  partial: "yellow",
+  unpaid: "red",
+};
+
 const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) => {
   const [payFor, setPayFor] = useState<ComplianceRow | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   // --- ALL hooks unconditionally at the top ---
 
@@ -139,6 +151,30 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
   const invalidate = () =>
     queryClient.invalidateQueries(["finance-compliance", organisationId, obligationId]);
 
+  // A member's overall status across the obligation, used for the status filter
+  // and the per-row summary badge.
+  const overallStatus = (row: ComplianceRow): "paid" | "partial" | "unpaid" => {
+    if (isDues) {
+      const due = Object.values(row.months ?? {}).filter((s) => s !== "not-due");
+      if (due.length === 0) return "paid";
+      if (due.every((s) => s === "paid")) return "paid";
+      if (due.every((s) => s === "unpaid")) return "unpaid";
+      return "partial";
+    }
+    return (row.status as "paid" | "partial" | "unpaid") ?? "unpaid";
+  };
+
+  const term = search.trim().toLowerCase();
+  const filteredRows = payload.rows.filter((row) => {
+    if (term && !row.name.toLowerCase().includes(term)) return false;
+    if (statusFilter === "all") return true;
+    if (statusFilter === "not-accountable") return !row.accountable;
+    if (!row.accountable) return false; // status filters apply to accountable members
+    return overallStatus(row) === statusFilter;
+  });
+
+  const totalCols = isDues ? 18 : 6; // #, Name, [grid...], Action
+
   return (
     <Box>
       <Flex justify="space-between" align="center" mb={4} wrap="wrap" gap={2}>
@@ -186,10 +222,36 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
         </Stat>
       </SimpleGrid>
 
+      <Flex gap={3} mb={3} wrap="wrap" align="center">
+        <Input
+          placeholder="Search by name"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          maxW="xs"
+          size="sm"
+        />
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          maxW="2xs"
+          size="sm"
+        >
+          <option value="all">All statuses</option>
+          <option value="paid">Paid</option>
+          <option value="partial">Partial</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="not-accountable">Not accountable</option>
+        </Select>
+        <Text fontSize="sm" color="gray.500">
+          Showing {filteredRows.length} of {payload.rows.length}
+        </Text>
+      </Flex>
+
       <Box overflowX="auto">
         <Table size="sm" variant="simple">
           <Thead>
             <Tr>
+              <Th>#</Th>
               <Th>Name</Th>
               {isDues ? (
                 <>
@@ -211,10 +273,20 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
             </Tr>
           </Thead>
           <Tbody>
-            {payload.rows.map((row) => {
+            {filteredRows.length === 0 && (
+              <Tr>
+                <Td colSpan={totalCols}>
+                  <Text color="gray.500" py={2}>
+                    No members match your search or filter.
+                  </Text>
+                </Td>
+              </Tr>
+            )}
+            {filteredRows.map((row, index) => {
               if (!row.accountable) {
                 return (
                   <Tr key={row.memberId}>
+                    <Td>{index + 1}</Td>
                     <Td>{row.name}</Td>
                     {/* colSpan: dues = 12 months + Paid/Balance/% + Action = 16; levy = Status/Paid/Balance + Action = 4 */}
                     <Td colSpan={isDues ? 16 : 4}>
@@ -233,9 +305,18 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                   </Tr>
                 );
               }
+              const os = overallStatus(row);
               return (
                 <Tr key={row.memberId}>
-                  <Td>{row.name}</Td>
+                  <Td>{index + 1}</Td>
+                  <Td>
+                    <Flex align="center" gap={2}>
+                      <Text>{row.name}</Text>
+                      {isDues && (
+                        <Badge colorScheme={OVERALL_BADGE_COLOR[os]}>{os}</Badge>
+                      )}
+                    </Flex>
+                  </Td>
                   {isDues ? (
                     <>
                       {MONTHS.map((m) => {
