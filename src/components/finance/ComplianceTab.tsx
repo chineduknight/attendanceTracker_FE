@@ -56,13 +56,46 @@ const OVERALL_BADGE_COLOR: Record<string, string> = {
   unpaid: "red",
 };
 
-// Sticky styles keep the # and Name columns visible while the month grid scrolls.
-const STICKY_NUM = { position: "sticky" as const, left: 0, bg: "white", zIndex: 1 };
-const STICKY_NAME = {
+// Sticky styles keep the # and Name columns visible while the month grid scrolls
+// horizontally, and the header row visible while the body scrolls vertically.
+// zIndex order: body sticky col (1) < sticky header row (2) < sticky corner (3).
+const NUM_W = "44px";
+const STICKY_NUM = {
   position: "sticky" as const,
-  left: "44px",
+  left: 0,
+  width: NUM_W,
+  minWidth: NUM_W,
   bg: "white",
   zIndex: 1,
+};
+const STICKY_NAME = {
+  position: "sticky" as const,
+  left: NUM_W,
+  bg: "white",
+  zIndex: 1,
+};
+const HEADER_CELL = { position: "sticky" as const, top: 0, bg: "white", zIndex: 2 };
+const HEADER_NUM = {
+  position: "sticky" as const,
+  top: 0,
+  left: 0,
+  width: NUM_W,
+  minWidth: NUM_W,
+  bg: "white",
+  zIndex: 3,
+};
+const HEADER_NAME = {
+  position: "sticky" as const,
+  top: 0,
+  left: NUM_W,
+  bg: "white",
+  zIndex: 3,
+};
+// Vertical gridlines so each month cell maps clearly to its column.
+const MONTH_CELL = {
+  borderLeftWidth: "1px",
+  borderRightWidth: "1px",
+  borderColor: "gray.200",
 };
 
 const LEGEND = [
@@ -333,41 +366,43 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
         ))}
       </Flex>
 
-      <Box overflowX="auto">
+      <Box overflow="auto" maxH={["60vh", "70vh"]}>
         <Table size="sm" variant="simple">
           <Thead>
             <Tr>
-              <Th sx={STICKY_NUM}>#</Th>
-              <Th sx={STICKY_NAME} cursor="pointer" onClick={() => toggleSort("name")}>
+              <Th sx={HEADER_NUM}>#</Th>
+              <Th sx={HEADER_NAME} cursor="pointer" onClick={() => toggleSort("name")}>
                 Name{sortArrow("name")}
               </Th>
               {isDues ? (
                 <>
                   {MONTHS.map((m) => (
-                    <Th key={m.value}>{m.label}</Th>
+                    <Th key={m.value} sx={{ ...HEADER_CELL, ...MONTH_CELL }}>
+                      {m.label}
+                    </Th>
                   ))}
-                  <Th cursor="pointer" onClick={() => toggleSort("paid")}>
+                  <Th sx={HEADER_CELL} cursor="pointer" onClick={() => toggleSort("paid")}>
                     Paid{sortArrow("paid")}
                   </Th>
-                  <Th cursor="pointer" onClick={() => toggleSort("balance")}>
+                  <Th sx={HEADER_CELL} cursor="pointer" onClick={() => toggleSort("balance")}>
                     Balance{sortArrow("balance")}
                   </Th>
-                  <Th cursor="pointer" onClick={() => toggleSort("compliance")}>
+                  <Th sx={HEADER_CELL} cursor="pointer" onClick={() => toggleSort("compliance")}>
                     %{sortArrow("compliance")}
                   </Th>
                 </>
               ) : (
                 <>
-                  <Th>Status</Th>
-                  <Th cursor="pointer" onClick={() => toggleSort("paid")}>
+                  <Th sx={HEADER_CELL}>Status</Th>
+                  <Th sx={HEADER_CELL} cursor="pointer" onClick={() => toggleSort("paid")}>
                     Paid{sortArrow("paid")}
                   </Th>
-                  <Th cursor="pointer" onClick={() => toggleSort("balance")}>
+                  <Th sx={HEADER_CELL} cursor="pointer" onClick={() => toggleSort("balance")}>
                     Balance{sortArrow("balance")}
                   </Th>
                 </>
               )}
-              <Th>Action</Th>
+              <Th sx={HEADER_CELL}>Action</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -423,6 +458,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                           <Td
                             key={m.value}
                             bg={monthStatusColor(status)}
+                            sx={MONTH_CELL}
                             title={`${m.label}: ${status} — click to record`}
                             cursor="pointer"
                             onClick={() => setPayFor(row)}
@@ -465,7 +501,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
                 {isDues ? (
                   <>
                     {MONTHS.map((m) => (
-                      <Td key={m.value} />
+                      <Td key={m.value} sx={MONTH_CELL} />
                     ))}
                     <Td>{formatMoney(totalsPaid)}</Td>
                     <Td>{formatMoney(totalsBalance)}</Td>
