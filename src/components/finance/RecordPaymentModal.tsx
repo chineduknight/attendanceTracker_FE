@@ -26,6 +26,14 @@ import {
 } from "helpers/financePayloads";
 import { MONTHS, formatMoney } from "helpers/financeConstants";
 import { Obligation, ComplianceRow } from "components/finance/financeTypes";
+import ConfirmModal from "components/finance/ConfirmModal";
+
+type PendingCorrection = {
+  body: string;
+  confirmLabel: string;
+  confirmColorScheme: string;
+  run: () => void;
+};
 
 interface Props {
   isOpen: boolean;
@@ -57,6 +65,7 @@ const RecordPaymentModal = ({
   const [amount, setAmount] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
   const [monthly, setMonthly] = useState<Record<string, string>>({});
+  const [pendingCorrection, setPendingCorrection] = useState<PendingCorrection | null>(null);
 
   const amountPerMonth = obligation.amountPerMonth ?? 0;
   const monthsMap = complianceRow?.months ?? {};
@@ -161,16 +170,45 @@ const RecordPaymentModal = ({
       record({ url: financeRequest.PAYMENTS, data: buildRecordPaymentPayload({ ...base, amount: Number(amount) }) });
       return;
     }
+    // Corrections overwrite the member's record, so confirm before submitting.
     if (obligation.type === "dues") {
       const monthlyPaid: Record<string, number> = {};
       Object.entries(monthly).forEach(([m, v]) => {
         if (v !== "") monthlyPaid[m] = Number(v);
       });
-      correct({ url: financeRequest.PAYMENTS, data: buildDuesCorrectionPayload({ ...base, monthlyPaid }) });
+      const count = Object.keys(monthlyPaid).length;
+      const total = Object.values(monthlyPaid).reduce((s, n) => s + n, 0);
+      setPendingCorrection({
+        body:
+          count === 0
+            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.`
+            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.`,
+        confirmLabel: count === 0 ? "Yes, clear" : "Yes, update",
+        confirmColorScheme: count === 0 ? "red" : "purple",
+        run: () =>
+          correct({
+            url: financeRequest.PAYMENTS,
+            data: buildDuesCorrectionPayload({ ...base, monthlyPaid }),
+          }),
+      });
     } else {
       if (!amountPaid) return toast.error("Enter an amount");
-      correct({ url: financeRequest.PAYMENTS, data: buildLevyCorrectionPayload({ ...base, amountPaid: Number(amountPaid) }) });
+      setPendingCorrection({
+        body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.`,
+        confirmLabel: "Yes, update",
+        confirmColorScheme: "purple",
+        run: () =>
+          correct({
+            url: financeRequest.PAYMENTS,
+            data: buildLevyCorrectionPayload({ ...base, amountPaid: Number(amountPaid) }),
+          }),
+      });
     }
+  };
+
+  const runCorrection = () => {
+    pendingCorrection?.run();
+    setPendingCorrection(null);
   };
 
   return (
@@ -265,6 +303,16 @@ const RecordPaymentModal = ({
           </Button>
         </ModalFooter>
       </ModalContent>
+
+      <ConfirmModal
+        isOpen={!!pendingCorrection}
+        title="Confirm correction"
+        body={pendingCorrection?.body ?? ""}
+        confirmLabel={pendingCorrection?.confirmLabel}
+        confirmColorScheme={pendingCorrection?.confirmColorScheme}
+        onConfirm={runCorrection}
+        onClose={() => setPendingCorrection(null)}
+      />
     </Modal>
   );
 };

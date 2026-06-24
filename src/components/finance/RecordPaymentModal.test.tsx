@@ -162,11 +162,31 @@ test("correct mode on dues builds monthlyPaid sequentially with numbers", async 
   fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "500" } });
   fireEvent.change(screen.getByLabelText("Feb"), { target: { value: "300" } });
 
+  // Save opens a confirmation; the correction only fires after confirming.
   fireEvent.click(screen.getByText("Save"));
+  expect(putRequest).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Yes, update"));
 
   await waitFor(() => {
     expect(putRequest).toHaveBeenCalledTimes(1);
     const payload = (putRequest as jest.Mock).mock.calls[0][0].data;
     expect(payload.monthlyPaid).toEqual({ "1": 500, "2": 300 });
+  });
+});
+
+test("clearing all and saving asks to confirm before clearing the record", async () => {
+  render(wrap(<RecordPaymentModal {...baseProps} obligation={dues} complianceRow={paidJanToMar} />));
+  fireEvent.click(screen.getByText(/correct/i));
+
+  fireEvent.click(screen.getByText("Clear all"));
+  fireEvent.click(screen.getByText("Save"));
+  // Destructive confirm shown, nothing sent yet.
+  expect(putRequest).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Yes, clear"));
+
+  await waitFor(() => {
+    expect(putRequest).toHaveBeenCalledTimes(1);
+    const payload = (putRequest as jest.Mock).mock.calls[0][0].data;
+    expect(payload.monthlyPaid).toEqual({});
   });
 });
