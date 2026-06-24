@@ -23,11 +23,57 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import ReactSelect, { MultiValue } from "react-select";
+import { toast } from "react-toastify";
+import {
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  startOfQuarter,
+  endOfQuarter,
+  subQuarters,
+  startOfYear,
+  endOfYear,
+  format,
+} from "date-fns";
 
 type StatusOption = {
   value: string;
   label: string;
 };
+
+const DATE_INPUT_FORMAT = "yyyy-MM-dd";
+
+const DATE_PRESETS: {
+  label: string;
+  getRange: (today: Date) => { from: Date; to: Date };
+}[] = [
+  {
+    label: "This Month",
+    getRange: (t) => ({ from: startOfMonth(t), to: endOfMonth(t) }),
+  },
+  {
+    label: "Last Month",
+    getRange: (t) => ({
+      from: startOfMonth(subMonths(t, 1)),
+      to: endOfMonth(subMonths(t, 1)),
+    }),
+  },
+  {
+    label: "This Quarter",
+    getRange: (t) => ({ from: startOfQuarter(t), to: endOfQuarter(t) }),
+  },
+  {
+    label: "Last Quarter",
+    getRange: (t) => ({
+      from: startOfQuarter(subQuarters(t, 1)),
+      to: endOfQuarter(subQuarters(t, 1)),
+    }),
+  },
+  {
+    label: "This Year",
+    getRange: (t) => ({ from: startOfYear(t), to: endOfYear(t) }),
+  },
+];
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
@@ -41,6 +87,35 @@ const AttendanceAnalyticsPage: React.FC = () => {
   ]);
   const navigate = useNavigate();
   const canRunQuery = Boolean(fromDate && toDate && org.id);
+
+  const handleExportSuccess = (response: any, format: "PDF" | "Excel") => {
+    const exportUrl =
+      typeof response?.data === "string" ? response.data.trim() : "";
+    if (exportUrl) {
+      window.open(exportUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const responseError =
+      typeof response?.error === "string"
+        ? response.error
+        : `Failed to export ${format}.`;
+    toast.error(responseError);
+  };
+
+  const handleExportError = (err: any, format: "PDF" | "Excel") => {
+    const statusCode = err?.response?.status;
+    if (statusCode === 401) return;
+    const apiError = err?.response?.data?.error;
+    let message: string;
+    if (Array.isArray(apiError)) {
+      message = apiError.filter(Boolean).join(", ");
+    } else if (typeof apiError === "string" && apiError.trim()) {
+      message = apiError;
+    } else {
+      message = `Failed to export ${format}. Please try again.`;
+    }
+    toast.error(message);
+  };
 
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
@@ -137,11 +212,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
       exportExcelUrl,
       {
         enabled: false,
-        onSuccess: (response: any) => {
-          if (response?.data) {
-            window.open(response.data, "_blank");
-          }
-        },
+        onSuccess: (response: any) => handleExportSuccess(response, "Excel"),
+      onError: (err: any) => handleExportError(err, "Excel"),
       },
     );
 
@@ -156,11 +228,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
     exportPdfUrl,
     {
       enabled: false,
-      onSuccess: (response: any) => {
-        if (response?.data) {
-          window.open(response.data, "_blank");
-        }
-      },
+      onSuccess: (response: any) => handleExportSuccess(response, "PDF"),
+      onError: (err: any) => handleExportError(err, "PDF"),
     },
   );
 
@@ -169,6 +238,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
       setHasSearched(true);
       refetch();
     }
+  };
+
+  const applyPreset = (getRange: (today: Date) => { from: Date; to: Date }) => {
+    const { from, to } = getRange(new Date());
+    setFromDate(format(from, DATE_INPUT_FORMAT));
+    setToDate(format(to, DATE_INPUT_FORMAT));
+    setHasSearched(false);
   };
 
   // pull out keys & data rows
@@ -260,6 +336,21 @@ const AttendanceAnalyticsPage: React.FC = () => {
               Export PDF
             </Button>
           </Flex>
+          {/* Quick date range presets */}
+          <Flex mb={3} gap={2} flexWrap="wrap">
+            {DATE_PRESETS.map((preset) => (
+              <Button
+                key={preset.label}
+                size="sm"
+                variant="outline"
+                colorScheme="blue"
+                onClick={() => applyPreset(preset.getRange)}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </Flex>
+
           {/* Date selectors + button */}
           <Flex
             mb={6}

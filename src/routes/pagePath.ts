@@ -20,4 +20,6 @@ export const PROTECTED_PATHS = {
   LOGIN_USER: "/login-user",
   LOGIN: "/login",
   ANALYTICS: "/analytics",
+  BIRTHDAY: "/birthday",
+  FINANCE: "/finance",
 };

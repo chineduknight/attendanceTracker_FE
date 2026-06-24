@@ -11,15 +11,24 @@ import {
   Container,
 } from "@chakra-ui/react";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import { useCallback, useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { confirmAlert } from "react-confirm-alert";
+import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest } from "services";
-import { useQueryWrapper } from "services/api/apiHelper";
+import { deleteRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
-import { FaArrowCircleLeft, FaFileExcel, FaShareAlt } from "react-icons/fa";
+import { FaArrowCircleLeft, FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
+import { toast } from "react-toastify";
+import ReactSelect, { MultiValue } from "react-select";
+
+type StatusOption = {
+  value: string;
+  label: string;
+};
 
 type MemberType = {
   attendanceStatus: "absent" | "present" | "apology";
@@ -27,6 +36,7 @@ type MemberType = {
   _id: string;
   member: {
     name: string;
+    status: string;
     gender?: string;
     part?: string;
   };
@@ -41,12 +51,13 @@ type AttendanceInfoType = {
 };
 const Attendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
-  const [filterName, setFilterName] = useState<MemberType[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
   const onSuccess = (data) => {
-    const unsorted = data.data.attendance;
+    const unsorted = data.data.attendance.filter((a) => a.member != null);
     const statusOrder = { present: 0, apology: 1, absent: 2 };
     const members = unsorted.sort((a, b) => {
       return (
@@ -56,13 +67,13 @@ const Attendance = () => {
     });
 
     const presentCount = members.filter(
-      (member) => member.attendanceStatus === "present"
+      (member) => member.attendanceStatus === "present",
     ).length;
     const apologyCount = members.filter(
-      (member) => member.attendanceStatus === "apology"
+      (member) => member.attendanceStatus === "apology",
     ).length;
     const absentCount = members.filter(
-      (member) => member.attendanceStatus === "absent"
+      (member) => member.attendanceStatus === "absent",
     ).length;
 
     setAttendanceInfo({
@@ -73,7 +84,6 @@ const Attendance = () => {
     });
 
     setAllMembers(members);
-    setFilterName(members);
   };
   const param = useParams();
   const url = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -81,21 +91,44 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { isFetching: isLoadingAttendance } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
-    onSuccess,
-  });
-
-  const handleSearch = useCallback(
-    (e) => {
-      const query = e.target.value.toLowerCase();
-      setFilterName(
-        allMembers.filter((member) =>
-          member.member.name.toLowerCase().includes(query)
-        )
-      );
+  const { isFetching: isFetchingAttendance } = useQueryWrapper(
+    [Q_KEY.GET_MEMBERS],
+    url,
+    {
+      onSuccess,
+      refetchOnWindowFocus: false,
     },
-    [allMembers]
   );
+  const isLoadingAttendance = isFetchingAttendance && allMembers.length === 0;
+
+  const handleSearch = useCallback((e) => setSearchQuery(e.target.value), []);
+
+  const statusOptions = useMemo<StatusOption[]>(() => {
+    const unique = Array.from(
+      new Set(allMembers.map((m) => m.member.status).filter(Boolean)),
+    );
+    return [
+      { value: "all", label: "All" },
+      ...unique.map((s) => ({ value: s, label: capitalize(s) })),
+    ];
+  }, [allMembers]);
+
+  const selectedStatusOptions = useMemo(
+    () => statusOptions.filter((o) => statusFilter.includes(o.value)),
+    [statusOptions, statusFilter],
+  );
+
+  const filteredMembers = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return allMembers.filter((m) => {
+      const matchesName = m.member.name.toLowerCase().includes(query);
+      const matchesStatus =
+        statusFilter.includes("all") ||
+        statusFilter.length === 0 ||
+        statusFilter.includes(m.member.status);
+      return matchesName && matchesStatus;
+    });
+  }, [allMembers, searchQuery, statusFilter]);
 
   const formattedDate = attendanceInfo?.date
     ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
@@ -107,7 +140,7 @@ const Attendance = () => {
       .filter(
         (item) =>
           item.attendanceStatus === "present" ||
-          item.attendanceStatus === "apology"
+          item.attendanceStatus === "apology",
       )
       .reduce((acc, item) => {
         // Use "others" if member.part is missing.
@@ -152,7 +185,7 @@ const Attendance = () => {
 
     // Process any extra parts (including "others") that are not in the orderedParts array.
     const extraParts = Object.keys(presentMembersByPart).filter(
-      (part) => !orderedParts.includes(part)
+      (part) => !orderedParts.includes(part),
     );
     extraParts.sort().forEach((part) => {
       if (presentMembersByPart[part] && presentMembersByPart[part].length > 0) {
@@ -169,16 +202,20 @@ const Attendance = () => {
     });
 
     // Absent members: Only display the count.
-    const absentCount = allMembers.filter(
-      (item) => item.attendanceStatus === "absent"
+    const allAbsentMembers = allMembers.filter(
+      (item) => item.attendanceStatus === "absent",
+    );
+    console.log("allAbsentMembers:", allAbsentMembers);
+    const absentCount = allAbsentMembers.filter(
+      (item) => item.member.status === "active",
     ).length;
     const absentMembersString = `*Absent Members:(${absentCount})*`;
 
     const presentCount = allMembers.filter(
-      (item) => item.attendanceStatus === "present"
+      (item) => item.attendanceStatus === "present",
     ).length;
     const apologyCount = allMembers.filter(
-      (item) => item.attendanceStatus === "apology"
+      (item) => item.attendanceStatus === "apology",
     ).length;
     const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate: ${formattedDate}\nPresent (${presentCount})\nApology (${apologyCount})\n`;
     const message = [title, presentMembersString, absentMembersString]
@@ -188,7 +225,7 @@ const Attendance = () => {
     console.log("message:", message);
     const phoneNumber = "+2348032374369"; // replace with the actual phone number
     const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
-      message
+      message,
     )}`;
 
     if (navigator.share) {
@@ -204,23 +241,71 @@ const Attendance = () => {
     }
   };
 
-  const downloadURl = convertParamsToString(attendanceRequest.EXPORT, {
-    organisationId: org.id,
-    id: param.id as string,
-  });
+  const downloadURl = useMemo(() => {
+    const base = convertParamsToString(attendanceRequest.EXPORT, {
+      organisationId: org.id,
+      id: param.id as string,
+    });
+    const activeStatuses = statusFilter.filter((s) => s !== "all");
+    return activeStatuses.length > 0
+      ? `${base}?status=${activeStatuses.join(",")}`
+      : base;
+  }, [org.id, param.id, statusFilter]);
+
   const { refetch, isFetching } = useQueryWrapper(
-    ["export-excel"],
+    ["export-excel", org.id, param.id, statusFilter.join(",")],
     downloadURl,
     {
       enabled: false,
+      refetchOnWindowFocus: false,
       onSuccess: (data) => {
         window.open(data.data);
       },
-    }
+      onError: (error: any) => {
+        const message =
+          error?.response?.data?.error ?? "Failed to export. Please try again.";
+        toast.error(message);
+      },
+    },
   );
 
   const sendToExcel = () => {
     refetch();
+  };
+
+  const deleteUrl = convertParamsToString(attendanceRequest.DELETE_ATTENDANCE, {
+    organisationId: org.id,
+    id: param.id as string,
+  });
+
+  const { mutate: deleteAttendance, isLoading: isDeleting } = useMutationWrapper(
+    deleteRequest,
+    () => {
+      queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
+      navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+    },
+    (error: any) => {
+      const message = error?.response?.data?.error ?? "Failed to delete attendance.";
+      toast.error(message);
+    },
+  );
+
+  const handleDelete = () => {
+    confirmAlert({
+      title: "Delete Attendance",
+      message: "Are you sure you want to delete this attendance record? This cannot be undone.",
+      buttons: [
+        {
+          label: "Yes",
+          className: "confirm-alert-button confirm-alert-button-yes",
+          onClick: () => deleteAttendance({ url: deleteUrl }),
+        },
+        {
+          label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
+        },
+      ],
+    });
   };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -249,7 +334,10 @@ const Attendance = () => {
                 Back
               </Button>
               <Flex gap={2}>
-                <Button onClick={handleSendToWhatsapp} leftIcon={<FaShareAlt />}>
+                <Button
+                  onClick={handleSendToWhatsapp}
+                  leftIcon={<FaShareAlt />}
+                >
                   Share
                 </Button>
                 <Button
@@ -269,15 +357,45 @@ const Attendance = () => {
               <Heading fontSize="22px">{attendanceInfo?.name}</Heading>
               <Text>{formattedDate}</Text>
             </Flex>
-            <InputGroup mt="4">
-              <InputLeftElement pointerEvents="none" />
-              <Input
-                type="search"
-                placeholder="Search member"
-                onChange={handleSearch}
-              />
-            </InputGroup>
-            {filterName.length === 0 && (
+            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
+              <InputGroup>
+                <InputLeftElement pointerEvents="none" />
+                <Input
+                  type="search"
+                  placeholder="Search member"
+                  onChange={handleSearch}
+                />
+              </InputGroup>
+              <Box minW={{ base: "100%", sm: "200px" }}>
+                <ReactSelect
+                  isMulti
+                  placeholder="Filter by status"
+                  options={statusOptions}
+                  value={selectedStatusOptions}
+                  closeMenuOnSelect={false}
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+                  onChange={(selected: MultiValue<StatusOption>) => {
+                    const values = selected.map((o) => o.value);
+                    if (values.length === 0) {
+                      setStatusFilter(["all"]);
+                      return;
+                    }
+                    if (values.includes("all") && values.length > 1) {
+                      setStatusFilter(values.filter((v) => v !== "all"));
+                      return;
+                    }
+                    if (values.includes("all")) {
+                      setStatusFilter(["all"]);
+                      return;
+                    }
+                    setStatusFilter(values);
+                  }}
+                />
+              </Box>
+            </Flex>
+            {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
                   No member found
@@ -286,18 +404,52 @@ const Attendance = () => {
             )}
             <Flex mt="2" justifyContent="space-between">
               <Text>
-                Present: <strong>{attendanceInfo?.present} </strong>
+                Present:{" "}
+                <strong>
+                  {
+                    filteredMembers.filter(
+                      (m) => m.attendanceStatus === "present",
+                    ).length
+                  }{" "}
+                </strong>
               </Text>
               <Text>
-                Apology: <strong>{attendanceInfo?.apology} </strong>
+                Apology:{" "}
+                <strong>
+                  {
+                    filteredMembers.filter(
+                      (m) => m.attendanceStatus === "apology",
+                    ).length
+                  }{" "}
+                </strong>
               </Text>
               <Text>
-                Absent: <strong>{attendanceInfo?.absent} </strong>
+                Absent:{" "}
+                <strong>
+                  {
+                    filteredMembers.filter(
+                      (m) => m.attendanceStatus === "absent",
+                    ).length
+                  }{" "}
+                </strong>
               </Text>
             </Flex>
             <Box mt="4" overflow="scroll" maxH="500px">
-              {filterName.map((item) => AttendCard(item))}
+              {filteredMembers.map((item) => AttendCard(item))}
             </Box>
+            <Button
+              onClick={handleDelete}
+              isLoading={isDeleting}
+              leftIcon={<FaTrash />}
+              bg="red.500"
+              color="white"
+              _hover={{ bg: "red.600" }}
+              w="full"
+              mt="4"
+              mb="8"
+            >
+              Delete Attendance
+            </Button>
           </>
         )}
       </Container>
@@ -307,6 +459,11 @@ const Attendance = () => {
 
 export default Attendance;
 function AttendCard(item: MemberType): JSX.Element {
+  const isPresent = item.attendanceStatus === "present";
+  const isApology = item.attendanceStatus === "apology";
+  const bg: string = isPresent ? "green" : isApology ? "orange" : "";
+  const color: string = isPresent || isApology ? "#fff" : "";
+
   return (
     <Button
       variant="unstyled"
@@ -315,19 +472,7 @@ function AttendCard(item: MemberType): JSX.Element {
       mt="3"
       border="1px solid green"
       key={item.memberId}
-      bg={
-        item.attendanceStatus === "present"
-          ? "green"
-          : item.attendanceStatus === "apology"
-          ? "orange"
-          : ""
-      }
-      color={
-        item.attendanceStatus === "present" ||
-        item.attendanceStatus === "apology"
-          ? "#fff"
-          : ""
-      }
+      style={{ backgroundColor: bg, color }}
     >
       {item.member.name}
     </Button>

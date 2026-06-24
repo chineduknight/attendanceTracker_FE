@@ -32,6 +32,8 @@ type AttendanceType = {
 const AllAttendance = () => {
   const navigate = useNavigate();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const pageBg = useColorModeValue("gray.50", "gray.800");
+  const cardBg = useColorModeValue("white", "gray.700");
 
   const [allAttend, setallAttend] = useState<AttendanceType[]>([]);
   const handleGetOrgSuccess = (data) => {
@@ -42,9 +44,10 @@ const AllAttendance = () => {
     organisationId: org.id,
   });
 
-  const { isLoading } = useQueryWrapper(["all-attendance-12"], url, {
+  const { isFetching } = useQueryWrapper(["all-attendance-12"], url, {
     onSuccess: handleGetOrgSuccess,
   });
+  const isLoading = isFetching && allAttend.length === 0;
 
   function handleNavigate(attendanceInfo) {
     const url = convertParamsToString(PROTECTED_PATHS.ATTENDANCE, {
@@ -54,7 +57,7 @@ const AllAttendance = () => {
   }
 
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+    <Box minH={"100vh"} bg={pageBg}>
       <Flex
         bg="blue.500"
         justifyContent="space-between"
@@ -77,7 +80,7 @@ const AllAttendance = () => {
         spacing={4}
         w={"full"}
         maxW={"md"}
-        bg={useColorModeValue("white", "gray.700")}
+        bg={cardBg}
         rounded={"xl"}
         boxShadow={"lg"}
         p={6}
@@ -112,6 +115,9 @@ const AllAttendance = () => {
                       <Text textAlign="left">{attendance.name}</Text>
                       <Text>
                         {format(new Date(attendance.date), "EEE dd MMM yy")}
+                      </Text>
+                      <Text fontSize="xs" color="gray.500">
+                        Created: {format(new Date(attendance.createdAt), "EEE dd MMM yy, hh:mm a")}
                       </Text>
                     </Box>
                     <Flex>

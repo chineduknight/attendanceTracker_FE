@@ -6,6 +6,7 @@ import {
   Button,
   Heading,
   Grid,
+  HStack,
 } from "@chakra-ui/react";
 import {
   FaUserPlus,
@@ -13,15 +14,54 @@ import {
   FaClipboardList,
   FaEye,
   FaChartBar,
+  FaBirthdayCake,
+  FaArrowLeft,
+  FaMoneyBillWave,
 } from "react-icons/fa";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { IconType } from "react-icons";
+import useGlobalStore from "zStore";
+
+type DashboardAction = {
+  label: string;
+  icon: IconType;
+  colorScheme: string;
+  path: string;
+};
+
+const DASHBOARD_ACTIONS: DashboardAction[] = [
+  { label: "Add Member", icon: FaUserPlus, colorScheme: "teal", path: PROTECTED_PATHS.ADD_MEMBER },
+  { label: "View Members", icon: FaEye, colorScheme: "blue", path: PROTECTED_PATHS.VIEW_MEMBER },
+  { label: "Create Attendance", icon: FaCalendarPlus, colorScheme: "yellow", path: PROTECTED_PATHS.CREATE_ATTENDANCE },
+  { label: "All Attendance", icon: FaClipboardList, colorScheme: "purple", path: PROTECTED_PATHS.ALL_ATTENDANCE },
+  { label: "Analytics", icon: FaChartBar, colorScheme: "orange", path: PROTECTED_PATHS.ANALYTICS },
+  { label: "Birthday", icon: FaBirthdayCake, colorScheme: "pink", path: PROTECTED_PATHS.BIRTHDAY },
+  { label: "Finance", icon: FaMoneyBillWave, colorScheme: "green", path: PROTECTED_PATHS.FINANCE },
+];
 
 const Dashboard = () => {
-  const location = useLocation();
-  const state: any = location.state;
-
   const navigate = useNavigate();
+  const [organisation, setUser, updateOrganisation] = useGlobalStore((state) => [
+    state.organisation,
+    state.setUser,
+    state.updateOrganisation,
+  ]);
+
+  function handleLogout() {
+    setUser({
+      token: "",
+      id: "",
+      username: "",
+    });
+    updateOrganisation({
+      name: "",
+      image: "",
+      owner: "",
+      id: "",
+    });
+  }
+
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex
@@ -33,10 +73,22 @@ const Dashboard = () => {
         <Text fontWeight="bold" color="#fff">
           Attendance Tracker
         </Text>
+        <HStack spacing={3}>
+          <Button
+            variant="logout"
+            leftIcon={<FaArrowLeft />}
+            onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
+          >
+            Organisations
+          </Button>
+          <Button variant="logout" onClick={handleLogout}>
+            Logout
+          </Button>
+        </HStack>
       </Flex>
 
       <Heading mt="4" fontSize="22px" textAlign="center">
-        {state?.name}
+        {organisation?.name || "Dashboard"}
       </Heading>
 
       <Grid
@@ -44,47 +96,17 @@ const Dashboard = () => {
         gap={6}
         p={4}
       >
-        <Button
-          leftIcon={<FaUserPlus />}
-          colorScheme="teal"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-        >
-          Add Member
-        </Button>
-        <Button
-          leftIcon={<FaEye />}
-          colorScheme="blue"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.VIEW_MEMBER)}
-        >
-          View Members
-        </Button>
-
-        <Button
-          leftIcon={<FaCalendarPlus />}
-          colorScheme="yellow"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.CREATE_ATTENDANCE)}
-        >
-          Create Attendance
-        </Button>
-        <Button
-          leftIcon={<FaClipboardList />}
-          colorScheme="purple"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.ALL_ATTENDANCE)}
-        >
-          All Attendance
-        </Button>
-        <Button
-          leftIcon={<FaChartBar />}
-          colorScheme="purple"
-          variant="outline"
-          onClick={() => navigate(PROTECTED_PATHS.ANALYTICS)}
-        >
-          Analytics
-        </Button>
+        {DASHBOARD_ACTIONS.map(({ label, icon: Icon, colorScheme, path }) => (
+          <Button
+            key={label}
+            leftIcon={<Icon />}
+            colorScheme={colorScheme}
+            variant="outline"
+            onClick={() => navigate(path)}
+          >
+            {label}
+          </Button>
+        ))}
       </Grid>
     </Box>
   );

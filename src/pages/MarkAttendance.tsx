@@ -11,7 +11,7 @@ import {
   Container,
 } from "@chakra-ui/react";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
@@ -131,11 +131,15 @@ const MarkAttendance = () => {
     ]);
     setAttendance(currentAtt);
     // Transform API response to MemberType array (must include attendanceStatus)
-    const updatedMembers = res.data.attendance.map((attend) => ({
-      id: attend.memberId,
-      name: attend.member.name,
-      attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
-    }));
+    // Filter out entries whose member was deleted (member == null), otherwise
+    // reading attend.member.name throws and the list renders empty.
+    const updatedMembers = res.data.attendance
+      .filter((attend) => attend.member != null)
+      .map((attend) => ({
+        id: attend.memberId,
+        name: attend.member.name,
+        attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
+      }));
     // Store in localStorage and update state
     localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
     setAllMembers(updatedMembers);
@@ -226,7 +230,9 @@ const MarkAttendance = () => {
   );
 
   const navigate = useNavigate();
+  const isSubmittingRef = useRef(false);
   const onSubmitSuccess = () => {
+    isSubmittingRef.current = false;
     localStorage.removeItem(localStorageKey);
     toast.success(
       isUpdate ? "Attendance Updated" : "Attendance Created successfully"
@@ -236,7 +242,8 @@ const MarkAttendance = () => {
 
   const { mutate, isLoading } = useMutationWrapper(
     isUpdate ? putRequest : postRequest,
-    onSubmitSuccess
+    onSubmitSuccess,
+    () => { isSubmittingRef.current = false; }
   );
 
   const onSubmit = () => {
@@ -258,6 +265,8 @@ const MarkAttendance = () => {
   };
 
   const sendAttandanceToAPI = useCallback(() => {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     const presentMembers = allMembers
       .filter((member) => member.attendanceStatus === "present")
       .map((member) => member.id);
