@@ -32,14 +32,14 @@ const OrgList = () => {
   ]);
   const onSuccess = () => {
     refetch();
-    queryClient.invalidateQueries({ queryKey: ["all-organistions"] });
+    queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
   };
 
   const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
 
   const [allOrg, setAllOrg] = useState<OrganisationSummary[]>([]);
-  const handleGetOrgSuccess = (data) => {
-    setAllOrg(data.data);
+  const handleGetOrgSuccess = (res: { data: OrganisationSummary[] }) => {
+    setAllOrg(res.data);
   };
   const { refetch } = useQueryWrapper(
     ["all-organisations"],

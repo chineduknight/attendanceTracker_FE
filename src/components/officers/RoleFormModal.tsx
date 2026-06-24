@@ -32,6 +32,7 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
 
   const onSuccess = () => {
     queryClient.invalidateQueries(["roles", organisationId]);
+    queryClient.invalidateQueries(["officers", organisationId]);
     onClose();
   };
   const { mutate: create, isLoading: creating } = useMutationWrapper(postRequest, onSuccess);

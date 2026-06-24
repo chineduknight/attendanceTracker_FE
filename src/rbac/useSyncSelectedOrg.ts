@@ -15,6 +15,7 @@ export function useSyncSelectedOrg(): { refresh: () => void } {
     updateOrganisation((fresh as OrganisationType) ?? EMPTY_ORG);
   };
 
+  // Shares the ["all-organisations"] key with Organisations.tsx — React Query dedupes the request; each observer's onSuccess still fires independently.
   const { refetch } = useQueryWrapper(
     ["all-organisations"],
     orgRequest.ORGANISATIONS,

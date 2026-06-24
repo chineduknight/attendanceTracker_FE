@@ -21,9 +21,10 @@ const RolesTab = ({ organisationId }: Props) => {
   const { data, isLoading } = useQueryWrapper(["roles", organisationId], url);
   const roles: Role[] = data?.data ?? [];
 
-  const { mutate: remove } = useMutationWrapper(deleteRequest, () =>
-    queryClient.invalidateQueries(["roles", organisationId])
-  );
+  const { mutate: remove } = useMutationWrapper(deleteRequest, () => {
+    queryClient.invalidateQueries(["roles", organisationId]);
+    queryClient.invalidateQueries(["officers", organisationId]);
+  });
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (r: Role) => { setEditing(r); setFormOpen(true); };
