@@ -20,6 +20,7 @@ import { confirmAlert } from "react-confirm-alert";
 import { useState } from "react";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
+import SetEmailModal from "components/auth/SetEmailModal";
 
 type OrgType = {
   name: string;
@@ -84,6 +85,7 @@ const OrgList = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+      <SetEmailModal />
       <Flex
         bg="blue.500"
         justifyContent="space-between"
