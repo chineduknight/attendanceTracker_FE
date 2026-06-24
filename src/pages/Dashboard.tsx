@@ -17,27 +17,33 @@ import {
   FaBirthdayCake,
   FaArrowLeft,
   FaMoneyBillWave,
+  FaUserShield,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { IconType } from "react-icons";
 import useGlobalStore, { EMPTY_USER, EMPTY_ORG } from "zStore";
+import { Can } from "rbac/Can";
+import { PermissionKey } from "rbac/permissions";
+import { useSyncSelectedOrg } from "rbac/useSyncSelectedOrg";
 
 type DashboardAction = {
   label: string;
   icon: IconType;
   colorScheme: string;
   path: string;
+  perm: PermissionKey;
 };
 
 const DASHBOARD_ACTIONS: DashboardAction[] = [
-  { label: "Add Member", icon: FaUserPlus, colorScheme: "teal", path: PROTECTED_PATHS.ADD_MEMBER },
-  { label: "View Members", icon: FaEye, colorScheme: "blue", path: PROTECTED_PATHS.VIEW_MEMBER },
-  { label: "Create Attendance", icon: FaCalendarPlus, colorScheme: "yellow", path: PROTECTED_PATHS.CREATE_ATTENDANCE },
-  { label: "All Attendance", icon: FaClipboardList, colorScheme: "purple", path: PROTECTED_PATHS.ALL_ATTENDANCE },
-  { label: "Analytics", icon: FaChartBar, colorScheme: "orange", path: PROTECTED_PATHS.ANALYTICS },
-  { label: "Birthday", icon: FaBirthdayCake, colorScheme: "pink", path: PROTECTED_PATHS.BIRTHDAY },
-  { label: "Finance", icon: FaMoneyBillWave, colorScheme: "green", path: PROTECTED_PATHS.FINANCE },
+  { label: "Add Member", icon: FaUserPlus, colorScheme: "teal", path: PROTECTED_PATHS.ADD_MEMBER, perm: "members.view" },
+  { label: "View Members", icon: FaEye, colorScheme: "blue", path: PROTECTED_PATHS.VIEW_MEMBER, perm: "members.view" },
+  { label: "Create Attendance", icon: FaCalendarPlus, colorScheme: "yellow", path: PROTECTED_PATHS.CREATE_ATTENDANCE, perm: "attendance.view" },
+  { label: "All Attendance", icon: FaClipboardList, colorScheme: "purple", path: PROTECTED_PATHS.ALL_ATTENDANCE, perm: "attendance.view" },
+  { label: "Analytics", icon: FaChartBar, colorScheme: "orange", path: PROTECTED_PATHS.ANALYTICS, perm: "attendance.view" },
+  { label: "Birthday", icon: FaBirthdayCake, colorScheme: "pink", path: PROTECTED_PATHS.BIRTHDAY, perm: "members.view" },
+  { label: "Finance", icon: FaMoneyBillWave, colorScheme: "green", path: PROTECTED_PATHS.FINANCE, perm: "finance.view" },
+  { label: "Officers & Roles", icon: FaUserShield, colorScheme: "blue", path: PROTECTED_PATHS.OFFICERS_ROLES, perm: "officers.view" },
 ];
 
 const Dashboard = () => {
@@ -47,6 +53,7 @@ const Dashboard = () => {
     state.setUser,
     state.updateOrganisation,
   ]);
+  useSyncSelectedOrg();
 
   function handleLogout() {
     setUser(EMPTY_USER);
@@ -87,16 +94,17 @@ const Dashboard = () => {
         gap={6}
         p={4}
       >
-        {DASHBOARD_ACTIONS.map(({ label, icon: Icon, colorScheme, path }) => (
-          <Button
-            key={label}
-            leftIcon={<Icon />}
-            colorScheme={colorScheme}
-            variant="outline"
-            onClick={() => navigate(path)}
-          >
-            {label}
-          </Button>
+        {DASHBOARD_ACTIONS.map(({ label, icon: Icon, colorScheme, path, perm }) => (
+          <Can key={label} perm={perm}>
+            <Button
+              leftIcon={<Icon />}
+              colorScheme={colorScheme}
+              variant="outline"
+              onClick={() => navigate(path)}
+            >
+              {label}
+            </Button>
+          </Can>
         ))}
       </Grid>
     </Box>
