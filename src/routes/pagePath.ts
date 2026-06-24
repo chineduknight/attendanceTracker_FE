@@ -1,5 +1,6 @@
 export const PUBLIC_PATHS = {
   LOGIN: "/login",
+  SIGN_UP: "/signup",
 };
 
 export const PROTECTED_PATHS = {
