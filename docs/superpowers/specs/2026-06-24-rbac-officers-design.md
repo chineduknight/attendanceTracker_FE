@@ -235,7 +235,10 @@ RBAC-facing strings in one place (the consistent substitute for i18n in this pro
   payloads; unknown-key guarding deferred to server (422 surfaced).
 - **`PermissionGrid`** — pre-check from given permissions; emits correct selection on toggle.
 
-Test runner/setup to be confirmed during planning and matched to the existing convention.
+Runner: CRA `react-scripts test` (Jest) + `@testing-library/react` with `src/setupTests.ts`,
+following existing precedent (`helpers/financePayloads.test.ts`,
+`components/finance/RecordPaymentModal.test.tsx`, `pages/Finance.test.tsx`). Pure builders get
+plain unit tests; primitives/components get Testing Library render tests.
 
 ---
 
