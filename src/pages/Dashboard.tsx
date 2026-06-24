@@ -21,7 +21,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { IconType } from "react-icons";
-import useGlobalStore from "zStore";
+import useGlobalStore, { EMPTY_USER, EMPTY_ORG } from "zStore";
 
 type DashboardAction = {
   label: string;
@@ -49,17 +49,8 @@ const Dashboard = () => {
   ]);
 
   function handleLogout() {
-    setUser({
-      token: "",
-      id: "",
-      username: "",
-    });
-    updateOrganisation({
-      name: "",
-      image: "",
-      owner: "",
-      id: "",
-    });
+    setUser(EMPTY_USER);
+    updateOrganisation(EMPTY_ORG);
   }
 
   return (
