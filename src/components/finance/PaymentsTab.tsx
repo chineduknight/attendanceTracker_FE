@@ -6,6 +6,7 @@ import { useQueryWrapper, queryClient } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { Obligation, ComplianceRow } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
+import { Can } from "rbac/Can";
 
 interface Props {
   organisationId: string;
@@ -81,15 +82,17 @@ const PaymentsTab = ({ organisationId }: Props) => {
             );
           })}
         </Select>
-        <Button
-          colorScheme="green"
-          variant="solid"
-          leftIcon={<FaMoneyBillWave />}
-          isDisabled={!obligationId || !memberId}
-          onClick={() => setOpen(true)}
-        >
-          Record payment
-        </Button>
+        <Can perm="finance.manage">
+          <Button
+            colorScheme="green"
+            variant="solid"
+            leftIcon={<FaMoneyBillWave />}
+            isDisabled={!obligationId || !memberId}
+            onClick={() => setOpen(true)}
+          >
+            Record payment
+          </Button>
+        </Can>
       </Flex>
 
       {!obligations.length && <Text mt={4}>Create an obligation first.</Text>}

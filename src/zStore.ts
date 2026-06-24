@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { PermissionKey } from "rbac/permissions";
 
 export type currentAttendanceType = {
   name: string;
@@ -8,44 +9,61 @@ export type currentAttendanceType = {
   date: Date;
   members?: Array<any>;
 };
-type UserType = {
+
+export type UserType = {
   token: string;
   id: string;
   username: string;
+  email: string;
+  needsEmail: boolean;
 };
 
-type OrganisationType = {
+export type OrganisationType = {
   name: string;
   image: string;
   owner: string;
   id: string;
+  status: string;
+  isOwner: boolean;
+  roleName: string;
+  permissions: PermissionKey[];
+};
+
+export const EMPTY_USER: UserType = {
+  token: "",
+  id: "",
+  username: "",
+  email: "",
+  needsEmail: false,
+};
+
+export const EMPTY_ORG: OrganisationType = {
+  name: "",
+  image: "",
+  owner: "",
+  id: "",
+  status: "",
+  isOwner: false,
+  roleName: "",
+  permissions: [],
 };
 
 interface GlobalStoreState {
   user: UserType;
   setUser: (user: UserType) => void;
   organisation: OrganisationType;
-  updateOrganisation: (org: OrganisationType) => void;
+  updateOrganisation: (organisation: OrganisationType) => void;
   currentAttendance: currentAttendanceType;
   updateCurrentAttendance: (attendance: currentAttendanceType) => void;
 }
 
 const globalStore = <F extends Function>(set: F) => ({
-  user: {
-    token: "",
-    id: "",
-    username: "",
-  },
-  setUser: (user) => {
+  user: EMPTY_USER,
+  setUser: (user: UserType) => {
     set({ user });
   },
-  organisation: {
-    name: "",
-    image: "",
-    owner: "",
-    id: "",
-  },
-  updateOrganisation: (organisation: any) => {
+  organisation: EMPTY_ORG,
+  updateOrganisation: (organisation: OrganisationType) => {
     set({ organisation });
   },
   currentAttendance: {

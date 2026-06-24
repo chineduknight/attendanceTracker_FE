@@ -26,6 +26,7 @@ import {
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import ConfirmModal from "components/finance/ConfirmModal";
+import { Can } from "rbac/Can";
 
 interface Props {
   organisationId: string;
@@ -140,17 +141,19 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
         Member accountability
       </Heading>
 
-      <Flex gap={3} mb={4} align="center" wrap="wrap">
-        <Input
-          type="date"
-          maxW="xs"
-          value={bulkDate}
-          onChange={(e) => setBulkDate(e.target.value)}
-        />
-        <Button colorScheme="purple" variant="solid" leftIcon={<FaUserCheck />} onClick={requestBulk}>
-          Set start date for selected
-        </Button>
-      </Flex>
+      <Can perm="finance.manage">
+        <Flex gap={3} mb={4} align="center" wrap="wrap">
+          <Input
+            type="date"
+            maxW="xs"
+            value={bulkDate}
+            onChange={(e) => setBulkDate(e.target.value)}
+          />
+          <Button colorScheme="purple" variant="solid" leftIcon={<FaUserCheck />} onClick={requestBulk}>
+            Set start date for selected
+          </Button>
+        </Flex>
+      </Can>
 
       <Box overflowX="auto">
         <Table size="sm">
@@ -178,35 +181,37 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
                   <Td>{m.name}</Td>
                   <Td>{m.financialStartDate ?? <Text as="span" color="gray.400">none</Text>}</Td>
                   <Td>
-                    <Flex gap={2} align="center">
-                      <Input
-                        type="date"
-                        size="sm"
-                        maxW="40"
-                        value={rowDates[id] ?? m.financialStartDate ?? ""}
-                        onChange={(e) =>
-                          setRowDates((prev) => ({ ...prev, [id]: e.target.value }))
-                        }
-                      />
-                      <Button
-                        size="xs"
-                        colorScheme="purple"
-                        variant="outline"
-                        isDisabled={!rowDates[id] && !m.financialStartDate}
-                        onClick={() => requestSave(m)}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        size="xs"
-                        colorScheme="red"
-                        variant="outline"
-                        isDisabled={!m.financialStartDate}
-                        onClick={() => requestClear(m)}
-                      >
-                        Clear
-                      </Button>
-                    </Flex>
+                    <Can perm="finance.manage">
+                      <Flex gap={2} align="center">
+                        <Input
+                          type="date"
+                          size="sm"
+                          maxW="40"
+                          value={rowDates[id] ?? m.financialStartDate ?? ""}
+                          onChange={(e) =>
+                            setRowDates((prev) => ({ ...prev, [id]: e.target.value }))
+                          }
+                        />
+                        <Button
+                          size="xs"
+                          colorScheme="purple"
+                          variant="outline"
+                          isDisabled={!rowDates[id] && !m.financialStartDate}
+                          onClick={() => requestSave(m)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="xs"
+                          colorScheme="red"
+                          variant="outline"
+                          isDisabled={!m.financialStartDate}
+                          onClick={() => requestClear(m)}
+                        >
+                          Clear
+                        </Button>
+                      </Flex>
+                    </Can>
                   </Td>
                 </Tr>
               );

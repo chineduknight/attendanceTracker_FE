@@ -6,6 +6,7 @@ import {
   Text,
   Stack,
   Avatar,
+  Badge,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -19,16 +20,9 @@ import { FaTrashAlt } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { useState } from "react";
 import { orgRequest } from "services";
-import useGlobalStore from "zStore";
-
-type OrgType = {
-  name: string;
-  image: string;
-  owner: string;
-  createdAt: string;
-  updatedAt: string;
-  id: string;
-};
+import useGlobalStore, { EMPTY_USER } from "zStore";
+import SetEmailModal from "components/auth/SetEmailModal";
+import { OrganisationSummary } from "rbac/types";
 
 const OrgList = () => {
   const navigate = useNavigate();
@@ -38,14 +32,14 @@ const OrgList = () => {
   ]);
   const onSuccess = () => {
     refetch();
-    queryClient.invalidateQueries({ queryKey: ["all-organistions"] });
+    queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
   };
 
   const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
 
-  const [allOrg, setAllOrg] = useState<OrgType[]>([]);
-  const handleGetOrgSuccess = (data) => {
-    setAllOrg(data.data);
+  const [allOrg, setAllOrg] = useState<OrganisationSummary[]>([]);
+  const handleGetOrgSuccess = (res: { data: OrganisationSummary[] }) => {
+    setAllOrg(res.data);
   };
   const { refetch } = useQueryWrapper(
     ["all-organisations"],
@@ -84,6 +78,7 @@ const OrgList = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+      <SetEmailModal />
       <Flex
         bg="blue.500"
         justifyContent="space-between"
@@ -93,13 +88,7 @@ const OrgList = () => {
         <Text color="#fff">Attendance Tracker</Text>
         <Button
         variant="logout"
-          onClick={() =>
-            setUser({
-              token: "",
-              id: "",
-              username: "",
-            })
-          }
+          onClick={() => setUser(EMPTY_USER)}
         >
           Logout
         </Button>
@@ -140,10 +129,13 @@ const OrgList = () => {
                     {" "}
                     {org.name}
                   </Text>
+                  {org.roleName && <Badge ml={2}>{org.roleName}</Badge>}
                 </Flex>
-                <Button onClick={(e) => handleDelete(org, e)} variant="danger">
-                  <FaTrashAlt color="#fff" />
-                </Button>
+                {org.isOwner && (
+                  <Button onClick={(e) => handleDelete(org, e)} variant="danger">
+                    <FaTrashAlt color="#fff" />
+                  </Button>
+                )}
               </Flex>
             ))}
           </>

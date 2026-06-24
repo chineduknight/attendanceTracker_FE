@@ -1,5 +1,6 @@
 export const PUBLIC_PATHS = {
   LOGIN: "/login",
+  SIGN_UP: "/signup",
 };
 
 export const PROTECTED_PATHS = {
@@ -22,4 +23,5 @@ export const PROTECTED_PATHS = {
   ANALYTICS: "/analytics",
   BIRTHDAY: "/birthday",
   FINANCE: "/finance",
+  OFFICERS_ROLES: "/officers-roles",
 };

@@ -36,6 +36,7 @@ import { convertParamsToString } from "helpers/stringManipulations";
 import { formatMoney } from "helpers/financeConstants";
 import ConfirmModal from "components/finance/ConfirmModal";
 import { Obligation, ObligationType } from "components/finance/financeTypes";
+import { Can } from "rbac/Can";
 
 interface Props {
   organisationId: string;
@@ -141,9 +142,11 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
     <Box>
       <Flex justify="space-between" align="center" mb={4}>
         <Heading size="md">Obligations</Heading>
-        <Button colorScheme="teal" variant="solid" leftIcon={<FaPlus />} onClick={openCreate}>
-          Create obligation
-        </Button>
+        <Can perm="finance.manage">
+          <Button colorScheme="teal" variant="solid" leftIcon={<FaPlus />} onClick={openCreate}>
+            Create obligation
+          </Button>
+        </Can>
       </Flex>
 
       {obligations.length === 0 ? (
@@ -178,24 +181,26 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
                 >
                   View compliance
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  colorScheme="gray"
-                  leftIcon={<FaPen />}
-                  onClick={() => openEdit(ob)}
-                >
-                  Rename
-                </Button>
-                <Button
-                  size="sm"
-                  colorScheme="red"
-                  variant="ghost"
-                  leftIcon={<FaTrash />}
-                  onClick={() => setToDelete(ob)}
-                >
-                  Delete
-                </Button>
+                <Can perm="finance.manage">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    colorScheme="gray"
+                    leftIcon={<FaPen />}
+                    onClick={() => openEdit(ob)}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    size="sm"
+                    colorScheme="red"
+                    variant="ghost"
+                    leftIcon={<FaTrash />}
+                    onClick={() => setToDelete(ob)}
+                  >
+                    Delete
+                  </Button>
+                </Can>
               </Flex>
             </Box>
           ))}
@@ -271,9 +276,11 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
             <Button variant="ghost" mr={3} onClick={closeModal}>
               Cancel
             </Button>
-            <Button colorScheme="teal" variant="solid" onClick={submit} isLoading={creating || renaming}>
-              {editing ? "Save" : "Create"}
-            </Button>
+            <Can perm="finance.manage">
+              <Button colorScheme="teal" variant="solid" onClick={submit} isLoading={creating || renaming}>
+                {editing ? "Save" : "Create"}
+              </Button>
+            </Can>
           </ModalFooter>
         </ModalContent>
       </Modal>
