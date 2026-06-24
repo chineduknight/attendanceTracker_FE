@@ -6,6 +6,7 @@ import {
   Text,
   Stack,
   Avatar,
+  Badge,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -19,17 +20,9 @@ import { FaTrashAlt } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { useState } from "react";
 import { orgRequest } from "services";
-import useGlobalStore from "zStore";
+import useGlobalStore, { EMPTY_USER } from "zStore";
 import SetEmailModal from "components/auth/SetEmailModal";
-
-type OrgType = {
-  name: string;
-  image: string;
-  owner: string;
-  createdAt: string;
-  updatedAt: string;
-  id: string;
-};
+import { OrganisationSummary } from "rbac/types";
 
 const OrgList = () => {
   const navigate = useNavigate();
@@ -44,7 +37,7 @@ const OrgList = () => {
 
   const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
 
-  const [allOrg, setAllOrg] = useState<OrgType[]>([]);
+  const [allOrg, setAllOrg] = useState<OrganisationSummary[]>([]);
   const handleGetOrgSuccess = (data) => {
     setAllOrg(data.data);
   };
@@ -95,13 +88,7 @@ const OrgList = () => {
         <Text color="#fff">Attendance Tracker</Text>
         <Button
         variant="logout"
-          onClick={() =>
-            setUser({
-              token: "",
-              id: "",
-              username: "",
-            })
-          }
+          onClick={() => setUser(EMPTY_USER)}
         >
           Logout
         </Button>
@@ -142,10 +129,13 @@ const OrgList = () => {
                     {" "}
                     {org.name}
                   </Text>
+                  {org.roleName && <Badge ml={2}>{org.roleName}</Badge>}
                 </Flex>
-                <Button onClick={(e) => handleDelete(org, e)} variant="danger">
-                  <FaTrashAlt color="#fff" />
-                </Button>
+                {org.isOwner && (
+                  <Button onClick={(e) => handleDelete(org, e)} variant="danger">
+                    <FaTrashAlt color="#fff" />
+                  </Button>
+                )}
               </Flex>
             ))}
           </>

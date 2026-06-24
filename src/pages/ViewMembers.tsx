@@ -29,6 +29,7 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { Q_KEY } from "utils/constant";
 import ReactSelect, { MultiValue } from "react-select";
 import LoadingSpinner from "components/LoadingSpinner";
+import { Can } from "rbac/Can";
 
 type StatusOption = {
   value: string;
@@ -241,14 +242,16 @@ const ViewMembers: React.FC = () => {
           >
             Back
           </Button>
-          <Button
-            variant="primary"
-            colorScheme="blue"
-            onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-            w={{ base: "100%", sm: "auto" }}
-          >
-            Add Member
-          </Button>
+          <Can perm="members.manage">
+            <Button
+              variant="primary"
+              colorScheme="blue"
+              onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
+              w={{ base: "100%", sm: "auto" }}
+            >
+              Add Member
+            </Button>
+          </Can>
         </Flex>
         <Flex
           gap={2}
@@ -391,19 +394,21 @@ const ViewMembers: React.FC = () => {
                           />
                           <Text fontWeight="bold">{member.name}</Text>
                         </Flex>
-                        <Button
-                          variant="outline"
-                          colorScheme="blue"
-                          onClick={() => {
-                            const pagePath = convertParamsToString(
-                              PROTECTED_PATHS.UPDATE_MEMBER,
-                              { memberId: member.id },
-                            );
-                            navigate(pagePath);
-                          }}
-                        >
-                          <FaPencilAlt />
-                        </Button>
+                        <Can perm="members.manage">
+                          <Button
+                            variant="outline"
+                            colorScheme="blue"
+                            onClick={() => {
+                              const pagePath = convertParamsToString(
+                                PROTECTED_PATHS.UPDATE_MEMBER,
+                                { memberId: member.id },
+                              );
+                              navigate(pagePath);
+                            }}
+                          >
+                            <FaPencilAlt />
+                          </Button>
+                        </Can>
                       </Flex>
                       {/* Render only the additional fields that the user has selected */}
                       {getDisplayFields(member).map(([key, value]) => (
