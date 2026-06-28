@@ -3,6 +3,8 @@ export const authRequest = {
   GET_ME: "/users/me",
   SIGN_UP: "/users/signup",
   SET_EMAIL: "/users/me/email",
+  FORGOT_PASSWORD: "/users/forgot-password",
+  RESET_PASSWORD: "/users/reset-password",
 };
 
 export const orgRequest = {

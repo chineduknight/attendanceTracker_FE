@@ -3,7 +3,7 @@ import {
   Button, Heading, Link, useColorModeValue,
 } from "@chakra-ui/react";
 import { useForm, SubmitHandler } from "react-hook-form";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import { authRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { PUBLIC_PATHS } from "routes/pagePath";
@@ -17,10 +17,13 @@ interface SignupInputs {
 
 const Signup = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [setUser] = useGlobalStore((s) => [s.setUser]);
   const {
     register, handleSubmit, formState: { errors },
-  } = useForm<SignupInputs>();
+  } = useForm<SignupInputs>({
+    defaultValues: { email: searchParams.get("email") ?? "" },
+  });
 
   const onSuccess = (res: { data: { token: string } }) => {
     // signup returns { message, token } only; hydrate minimally then /users/me refreshes the rest

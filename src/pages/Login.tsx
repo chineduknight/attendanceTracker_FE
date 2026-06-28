@@ -93,7 +93,13 @@ const Login = () => {
                   justify={"space-between"}
                 >
                   <Checkbox>Remember me</Checkbox>
-                  <Link color={"blue.400"}>Forgot password?</Link>
+                  <Link
+                    as={RouterLink}
+                    to={PUBLIC_PATHS.FORGOT_PASSWORD}
+                    color={"blue.400"}
+                  >
+                    Forgot password?
+                  </Link>
                 </Stack>
                 <Button
                   bg={"blue.400"}
