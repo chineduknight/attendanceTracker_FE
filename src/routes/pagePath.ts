@@ -1,5 +1,8 @@
 export const PUBLIC_PATHS = {
   LOGIN: "/login",
+  SIGN_UP: "/signup",
+  FORGOT_PASSWORD: "/forgot-password",
+  RESET_PASSWORD: "/reset-password",
 };
 
 export const PROTECTED_PATHS = {
@@ -21,4 +24,6 @@ export const PROTECTED_PATHS = {
   LOGIN: "/login",
   ANALYTICS: "/analytics",
   BIRTHDAY: "/birthday",
+  FINANCE: "/finance",
+  OFFICERS_ROLES: "/officers-roles",
 };

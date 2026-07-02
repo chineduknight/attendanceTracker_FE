@@ -14,8 +14,10 @@ import {
   useBoolean,
 } from "@chakra-ui/react";
 import { useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { authRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import { PUBLIC_PATHS } from "routes/pagePath";
 import useGlobalStore from "zStore";
 
 const Login = () => {
@@ -61,7 +63,7 @@ const Login = () => {
           <form onSubmit={handleSubmit}>
             <Stack spacing={4}>
               <FormControl id="text">
-                <FormLabel>Username</FormLabel>
+                <FormLabel>Username or email</FormLabel>
                 <Input
                   type="text"
                   autoComplete="username"
@@ -91,7 +93,13 @@ const Login = () => {
                   justify={"space-between"}
                 >
                   <Checkbox>Remember me</Checkbox>
-                  <Link color={"blue.400"}>Forgot password?</Link>
+                  <Link
+                    as={RouterLink}
+                    to={PUBLIC_PATHS.FORGOT_PASSWORD}
+                    color={"blue.400"}
+                  >
+                    Forgot password?
+                  </Link>
                 </Stack>
                 <Button
                   bg={"blue.400"}
@@ -107,6 +115,12 @@ const Login = () => {
               </Stack>
             </Stack>
           </form>
+          <Text mt={4} textAlign="center" fontSize="sm">
+            New here?{" "}
+            <Link as={RouterLink} to={PUBLIC_PATHS.SIGN_UP} color="blue.400">
+              Create an account
+            </Link>
+          </Text>
         </Box>
       </Stack>
     </Flex>

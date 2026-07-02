@@ -5,7 +5,7 @@ import axios, {
   AxiosError,
 } from "axios";
 import { toast } from "react-toastify";
-import useGlobalStore from "zStore";
+import useGlobalStore, { EMPTY_USER } from "zStore";
 
 export const baseURL = process.env.REACT_APP_BASE_URL;
 export * from "./request";
@@ -45,13 +45,7 @@ const onResponseError = (error: AxiosError): Promise<AxiosError> => {
     if (statusCode === 401) {
       // logout user
       toast.error(errMsg);
-      useGlobalStore.setState({
-        user: {
-          token: "",
-          id: "",
-          username: "",
-        },
-      });
+      useGlobalStore.setState({ user: EMPTY_USER });
     }
   } else {
     // Handle error without response (network error, request cancelled, etc.)
