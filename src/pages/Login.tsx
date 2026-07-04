@@ -11,10 +11,10 @@ import {
   Heading,
   Text,
   useColorModeValue,
-  useBoolean,
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import PasswordInput from "components/PasswordInput";
 import { authRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { PUBLIC_PATHS } from "routes/pagePath";
@@ -39,7 +39,6 @@ const Login = () => {
       },
     });
   };
-  const [showPassword, setShowPassword] = useBoolean(true);
   return (
     <Flex
       minH={"100vh"}
@@ -72,19 +71,10 @@ const Login = () => {
               </FormControl>
               <FormControl id="password">
                 <FormLabel>Password</FormLabel>
-                <Flex>
-                  <Input
-                    type={showPassword ? "password" : "text"}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowPassword.toggle()}
-                  >
-                    {showPassword ? "Show" : "hide"}
-                  </Button>
-                </Flex>
+                <PasswordInput
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
               </FormControl>
               <Stack spacing={10}>
                 <Stack

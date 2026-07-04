@@ -5,6 +5,7 @@ import {
   Text,
   Stack,
   Button,
+  Badge,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -12,21 +13,27 @@ import { useQueryWrapper } from "services/api/apiHelper";
 import { useState } from "react";
 import { attendanceRequest } from "services";
 import useGlobalStore from "zStore";
-import { convertParamsToString } from "helpers/stringManipulations";
+import {
+  capitalizeFirstLetter,
+  convertParamsToString,
+} from "helpers/stringManipulations";
 import { FaArrowCircleLeft, FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
 
+type PersonRef = { id: string; name: string };
+
 type AttendanceType = {
   name: string;
-  image: string;
-  owner: string;
   createdAt: string;
   updatedAt: string;
   id: string;
   hasBeenUpdated: boolean;
   date: string;
   dateFormated: number;
+  category?: { name: string; status: string } | null;
+  createdBy?: PersonRef | null;
+  updatedBy?: PersonRef | null;
 };
 
 const AllAttendance = () => {
@@ -112,12 +119,26 @@ const AllAttendance = () => {
                     w="100%"
                   >
                     <Box>
-                      <Text textAlign="left">{attendance.name}</Text>
-                      <Text>
-                        {format(new Date(attendance.date), "EEE dd MMM yy")}
-                      </Text>
-                      <Text fontSize="xs" color="gray.500">
-                        Created: {format(new Date(attendance.createdAt), "EEE dd MMM yy, hh:mm a")}
+                      <Flex alignItems="center" gap={2}>
+                        <Text textAlign="left" fontWeight="semibold">
+                          {capitalizeFirstLetter(attendance.name)}
+                        </Text>
+                        {attendance.hasBeenUpdated && (
+                          <Badge colorScheme="orange" fontSize="0.65rem">
+                            Edited
+                          </Badge>
+                        )}
+                      </Flex>
+                      {attendance.category?.name && (
+                        <Badge colorScheme="purple" mt={1}>
+                          {attendance.category.name}
+                        </Badge>
+                      )}
+                      <Text fontSize="xs" color="gray.500" mt={1}>
+                        {attendance.createdBy?.name &&
+                          `by ${attendance.createdBy.name}, `}
+                        {format(new Date(attendance.date), "EEE dd MMM yy")},{" "}
+                        {format(new Date(attendance.createdAt), "hh:mm a")}
                       </Text>
                     </Box>
                     <Flex>
@@ -130,7 +151,7 @@ const AllAttendance = () => {
                             e.stopPropagation();
                             const pagePath = convertParamsToString(
                               PROTECTED_PATHS.UPDATE_ATTENANCE,
-                              { attendanceId: attendance.id }
+                              { attendanceId: attendance.id },
                             );
                             navigate(pagePath);
                           }}

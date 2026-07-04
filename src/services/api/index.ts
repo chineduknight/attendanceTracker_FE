@@ -6,6 +6,7 @@ import axios, {
 } from "axios";
 import { toast } from "react-toastify";
 import useGlobalStore, { EMPTY_USER } from "zStore";
+import { authRequest } from "./request";
 
 export const baseURL = process.env.REACT_APP_BASE_URL;
 export * from "./request";
@@ -42,7 +43,11 @@ const onResponseError = (error: AxiosError): Promise<AxiosError> => {
     const statusCode = error.response.status;
     const data = error.response.data as ErrorResponse;
     const errMsg = data.error || "Authentication Error";
-    if (statusCode === 401) {
+    // The change-password endpoint returns 401 for a wrong *current password* —
+    // a form error, not a dead session. Let ChangePasswordModal decide how to
+    // handle it instead of blindly logging the user out here.
+    const isUpdatePassword = error.config?.url?.endsWith(authRequest.UPDATE_PASSWORD);
+    if (statusCode === 401 && !isUpdatePassword) {
       // logout user
       toast.error(errMsg);
       useGlobalStore.setState({ user: EMPTY_USER });
