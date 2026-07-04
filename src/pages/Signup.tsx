@@ -4,6 +4,7 @@ import {
 } from "@chakra-ui/react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
+import PasswordInput from "components/PasswordInput";
 import { authRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { PUBLIC_PATHS } from "routes/pagePath";
@@ -13,14 +14,17 @@ interface SignupInputs {
   username: string;
   email: string;
   password: string;
+  confirmPassword: string;
 }
+
+const PASSWORD_MIN_LENGTH = 6;
 
 const Signup = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [setUser] = useGlobalStore((s) => [s.setUser]);
   const {
-    register, handleSubmit, formState: { errors },
+    register, handleSubmit, watch, formState: { errors },
   } = useForm<SignupInputs>({
     defaultValues: { email: searchParams.get("email") ?? "" },
   });
@@ -38,7 +42,7 @@ const Signup = () => {
   };
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
 
-  const onSubmit: SubmitHandler<SignupInputs> = (data) =>
+  const onSubmit: SubmitHandler<SignupInputs> = ({ confirmPassword, ...data }) =>
     mutate({ url: authRequest.SIGN_UP, data });
 
   return (
@@ -66,11 +70,29 @@ const Signup = () => {
               </FormControl>
               <FormControl isInvalid={!!errors.password}>
                 <FormLabel>Password</FormLabel>
-                <Input
-                  type="password"
-                  {...register("password", { required: "Password is required" })}
+                <PasswordInput
+                  autoComplete="new-password"
+                  {...register("password", {
+                    required: "Password is required",
+                    minLength: {
+                      value: PASSWORD_MIN_LENGTH,
+                      message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+                    },
+                  })}
                 />
                 <FormErrorMessage>{errors.password?.message}</FormErrorMessage>
+              </FormControl>
+              <FormControl isInvalid={!!errors.confirmPassword}>
+                <FormLabel>Confirm password</FormLabel>
+                <PasswordInput
+                  autoComplete="new-password"
+                  {...register("confirmPassword", {
+                    required: "Please confirm your password",
+                    validate: (value) =>
+                      value === watch("password") || "Passwords do not match",
+                  })}
+                />
+                <FormErrorMessage>{errors.confirmPassword?.message}</FormErrorMessage>
               </FormControl>
               <Button type="submit" bg="blue.400" color="white" isLoading={isLoading} _hover={{ bg: "blue.500" }}>
                 Sign up
