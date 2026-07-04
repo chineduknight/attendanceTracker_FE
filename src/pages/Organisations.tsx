@@ -20,16 +20,14 @@ import { FaTrashAlt } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { useState } from "react";
 import { orgRequest } from "services";
-import useGlobalStore, { EMPTY_USER } from "zStore";
+import useGlobalStore from "zStore";
 import SetEmailModal from "components/auth/SetEmailModal";
+import AppHeader from "components/AppHeader";
 import { OrganisationSummary } from "rbac/types";
 
 const OrgList = () => {
   const navigate = useNavigate();
-  const [setOrg, setUser] = useGlobalStore((state) => [
-    state.updateOrganisation,
-    state.setUser,
-  ]);
+  const [setOrg] = useGlobalStore((state) => [state.updateOrganisation]);
   const onSuccess = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
@@ -79,20 +77,7 @@ const OrgList = () => {
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <SetEmailModal />
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text color="#fff">Attendance Tracker</Text>
-        <Button
-        variant="logout"
-          onClick={() => setUser(EMPTY_USER)}
-        >
-          Logout
-        </Button>
-      </Flex>
+      <AppHeader />
       <Button  mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
         + Add Org
       </Button>

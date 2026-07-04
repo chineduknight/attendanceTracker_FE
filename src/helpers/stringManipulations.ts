@@ -9,6 +9,12 @@ export function capitalize(text = ''): string {
   return text.slice(0, 1).toUpperCase() + text.slice(1).toLowerCase()
 }
 
+/** Upper-cases the first letter only, leaving the rest untouched (preserves acronyms). */
+export function capitalizeFirstLetter(text = ''): string {
+  if (!text || typeof text !== 'string') return ''
+  return text.slice(0, 1).toUpperCase() + text.slice(1)
+}
+
 export function capitalizeEachWordInSentence(
   text: string,
   seperator = ' '
