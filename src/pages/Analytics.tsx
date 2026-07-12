@@ -27,6 +27,10 @@ import {
   getStatusMeta,
   AttendanceStatus,
 } from "components/analytics/statusMeta";
+import {
+  openExportUrl,
+  handleExportError,
+} from "components/analytics/analyticsExport";
 import ReactSelect, { MultiValue } from "react-select";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -150,35 +154,6 @@ const AttendanceAnalyticsPage: React.FC = () => {
   const navigate = useNavigate();
   const canRunQuery = Boolean(fromDate && toDate && org.id);
 
-  const handleExportSuccess = (response: any, format: "PDF" | "Excel") => {
-    const exportUrl =
-      typeof response?.data === "string" ? response.data.trim() : "";
-    if (exportUrl) {
-      window.open(exportUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const responseError =
-      typeof response?.error === "string"
-        ? response.error
-        : `Failed to export ${format}.`;
-    toast.error(responseError);
-  };
-
-  const handleExportError = (err: any, format: "PDF" | "Excel") => {
-    const statusCode = err?.response?.status;
-    if (statusCode === 401) return;
-    const apiError = err?.response?.data?.error;
-    let message: string;
-    if (Array.isArray(apiError)) {
-      message = apiError.filter(Boolean).join(", ");
-    } else if (typeof apiError === "string" && apiError.trim()) {
-      message = apiError;
-    } else {
-      message = `Failed to export ${format}. Please try again.`;
-    }
-    toast.error(message);
-  };
-
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
   });
@@ -274,7 +249,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
       exportExcelUrl,
       {
         enabled: false,
-        onSuccess: (response: any) => handleExportSuccess(response, "Excel"),
+        onSuccess: (response: any) => openExportUrl(response, "Excel"),
         onError: (err: any) => handleExportError(err, "Excel"),
       },
     );
@@ -290,7 +265,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     exportPdfUrl,
     {
       enabled: false,
-      onSuccess: (response: any) => handleExportSuccess(response, "PDF"),
+      onSuccess: (response: any) => openExportUrl(response, "PDF"),
       onError: (err: any) => handleExportError(err, "PDF"),
     },
   );
