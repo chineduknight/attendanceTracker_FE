@@ -7,8 +7,9 @@ import { getStatusMeta, STATUS_META, AttendanceStatus } from "components/analyti
 const cellColor = (status: AttendanceStatus) => `${getStatusMeta(status).color}.500`;
 
 const groupByMonth = (verdicts: MemberVerdict[]) => {
+  const sorted = [...verdicts].sort((a, b) => a.date.localeCompare(b.date));
   const groups: { label: string; items: MemberVerdict[] }[] = [];
-  verdicts.forEach((verdict) => {
+  sorted.forEach((verdict) => {
     const label = format(parseISO(verdict.date), "MMM yyyy");
     const last = groups[groups.length - 1];
     if (last && last.label === label) last.items.push(verdict);

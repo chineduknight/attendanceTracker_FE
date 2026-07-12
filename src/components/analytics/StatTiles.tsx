@@ -1,5 +1,6 @@
 import React from "react";
 import { SimpleGrid, Box, Text } from "@chakra-ui/react";
+import { getStatusMeta } from "components/analytics/statusMeta";
 
 interface StatTilesProps {
   present: number;
@@ -9,9 +10,9 @@ interface StatTilesProps {
 }
 
 const TILES: { key: keyof StatTilesProps; label: string; bg: string }[] = [
-  { key: "present", label: "Present", bg: "green.500" },
-  { key: "absent", label: "Absent", bg: "red.500" },
-  { key: "apology", label: "Apology", bg: "orange.500" },
+  { key: "present", label: "Present", bg: `${getStatusMeta("present").color}.500` },
+  { key: "absent", label: "Absent", bg: `${getStatusMeta("absent").color}.500` },
+  { key: "apology", label: "Apology", bg: `${getStatusMeta("apology").color}.500` },
   { key: "totalSessions", label: "Total Sessions", bg: "blue.500" },
 ];
 

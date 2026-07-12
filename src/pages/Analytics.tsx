@@ -418,6 +418,14 @@ const AttendanceAnalyticsPage: React.FC = () => {
                         cursor={row.memberId ? "pointer" : "default"}
                         _hover={row.memberId ? { bg: "blue.50" } : undefined}
                         title={row.memberId ? "View member analytics" : undefined}
+                        role={row.memberId ? "button" : undefined}
+                        tabIndex={row.memberId ? 0 : undefined}
+                        onKeyDown={(e) => {
+                          if (row.memberId && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            goToMemberAnalytics(row.memberId);
+                          }
+                        }}
                       >
                         <Td isNumeric>{index + 1}</Td>
                         <Td>{row.name}</Td>
