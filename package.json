@@ -23,6 +23,7 @@
     "nanoid": "^4.0.2",
     "react": "^18.1.0",
     "react-confirm-alert": "^3.0.6",
+    "react-datepicker": "^4",
     "react-dom": "^18.1.0",
     "react-hook-form": "^7.43.9",
     "react-icon": "^1.0.0",
@@ -64,6 +65,7 @@
     ]
   },
   "devDependencies": {
+    "@types/react-datepicker": "^4.19.0",
     "@typescript-eslint/eslint-plugin": "^5.23.0",
     "@typescript-eslint/parser": "^5.23.0",
     "eslint": "^8.0.1",
@@ -81,6 +83,9 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --cache --fix",
     "*.{js,jsx,ts,tsx,css,md}": "prettier --write"
+  },
+  "resolutions": {
+    "@types/react": "^18.2.0"
   },
   "packageManager": "yarn@1.22.22"
 }
