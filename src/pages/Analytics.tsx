@@ -31,7 +31,6 @@ import {
   handleExportError,
 } from "components/analytics/analyticsExport";
 import ReactSelect, { MultiValue } from "react-select";
-import { toast } from "react-toastify";
 import { format, parseISO } from "date-fns";
 import {
   useDateRange,
@@ -75,6 +74,16 @@ const AttendanceAnalyticsPage: React.FC = () => {
     "inactive",
   ]);
   const navigate = useNavigate();
+
+  const goToMemberAnalytics = (memberId: string) => {
+    const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, { memberId });
+    const params = new URLSearchParams();
+    if (fromDate) params.set("fromDate", fromDate);
+    if (toDate) params.set("toDate", toDate);
+    const search = params.toString();
+    navigate(search ? `${path}?${search}` : path);
+  };
+
   const canRunQuery = Boolean(fromDate && toDate && org.id);
 
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
@@ -403,7 +412,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {rows.map((row, index) => (
-                      <Tr key={row.memberId}>
+                      <Tr
+                        key={row.memberId}
+                        onClick={() => row.memberId && goToMemberAnalytics(row.memberId)}
+                        cursor={row.memberId ? "pointer" : "default"}
+                        _hover={row.memberId ? { bg: "blue.50" } : undefined}
+                        title={row.memberId ? "View member analytics" : undefined}
+                      >
                         <Td isNumeric>{index + 1}</Td>
                         <Td>{row.name}</Td>
 
