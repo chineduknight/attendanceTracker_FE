@@ -24,7 +24,7 @@ const StreakCard: React.FC<StreakCardProps> = ({ currentStreak, longestStreak, a
     <Box
       borderRadius="16px" p={5} color="white"
       bgGradient="linear(135deg, purple.600, blue.600)"
-      boxShadow="0 10px 24px rgba(79,70,229,.35)"
+      boxShadow="0 10px 24px rgba(107,70,193,.35)"
     >
       <Flex justify="space-between" align="center" gap={4} flexWrap="wrap">
         <Box>

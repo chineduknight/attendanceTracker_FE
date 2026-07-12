@@ -6,7 +6,7 @@ export const STATUS_META: Record<
 > = {
   present: { color: "green", short: "P", full: "Present" },
   absent: { color: "red", short: "A", full: "Absent" },
-  apology: { color: "yellow", short: "AP", full: "Apology" },
+  apology: { color: "orange", short: "AP", full: "Apology" },
 };
 
 export const EMPTY_STATUS_META = { color: "gray", short: "-", full: "No record" };

@@ -4,11 +4,7 @@ import { format, parseISO } from "date-fns";
 import { MemberVerdict } from "components/analytics/memberAnalyticsTypes";
 import { getStatusMeta, STATUS_META, AttendanceStatus } from "components/analytics/statusMeta";
 
-const CELL_COLOR: Record<AttendanceStatus, string> = {
-  present: "green.500",
-  apology: "orange.500",
-  absent: "red.500",
-};
+const cellColor = (status: AttendanceStatus) => `${getStatusMeta(status).color}.500`;
 
 const groupByMonth = (verdicts: MemberVerdict[]) => {
   const groups: { label: string; items: MemberVerdict[] }[] = [];
@@ -39,7 +35,7 @@ const AttendanceTimeline: React.FC<{ verdicts: MemberVerdict[] }> = ({ verdicts 
                 >
                   <Box
                     data-cell="verdict" w="16px" h="16px" borderRadius="4px"
-                    bg={CELL_COLOR[verdict.status] ?? "gray.200"}
+                    bg={cellColor(verdict.status)}
                   />
                 </Tooltip>
               </WrapItem>
@@ -50,7 +46,7 @@ const AttendanceTimeline: React.FC<{ verdicts: MemberVerdict[] }> = ({ verdicts 
       <Flex gap={4} mt={2} fontSize="xs" color="gray.600" flexWrap="wrap">
         {(Object.keys(STATUS_META) as AttendanceStatus[]).map((status) => (
           <Flex key={status} align="center" gap={1}>
-            <Box w="12px" h="12px" borderRadius="3px" bg={CELL_COLOR[status]} />
+            <Box w="12px" h="12px" borderRadius="3px" bg={cellColor(status)} />
             <Text>{STATUS_META[status].full}</Text>
           </Flex>
         ))}
