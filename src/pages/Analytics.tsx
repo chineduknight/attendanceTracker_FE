@@ -22,6 +22,11 @@ import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
+import {
+  STATUS_META,
+  getStatusMeta,
+  AttendanceStatus,
+} from "components/analytics/statusMeta";
 import ReactSelect, { MultiValue } from "react-select";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -84,22 +89,6 @@ const VERTICAL_LABEL_SX = {
   transform: "rotate(180deg)",
   whiteSpace: "nowrap",
 } as const;
-
-type AttendanceStatus = "present" | "absent" | "apology";
-
-const STATUS_META: Record<
-  AttendanceStatus,
-  { color: string; short: string; full: string }
-> = {
-  present: { color: "green", short: "P", full: "Present" },
-  absent: { color: "red", short: "A", full: "Absent" },
-  apology: { color: "yellow", short: "AP", full: "Apology" },
-};
-
-const EMPTY_STATUS_META = { color: "gray", short: "-", full: "No record" };
-
-const getStatusMeta = (status: string | undefined) =>
-  STATUS_META[status as AttendanceStatus] ?? EMPTY_STATUS_META;
 
 // extract the yyyy-MM-dd suffix from a date column key and render it compactly
 const formatDayHeader = (key: string) => {
