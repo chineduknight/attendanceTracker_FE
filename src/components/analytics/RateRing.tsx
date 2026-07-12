@@ -7,7 +7,7 @@ interface RateRingProps {
   trackColor?: string;
 }
 
-const RateRing: React.FC<RateRingProps> = ({ rate, size = 76, trackColor = "#22d3ee" }) => {
+const RateRing: React.FC<RateRingProps> = ({ rate, size = 76, trackColor = "#0BC5EA" }) => {
   const clamped = Math.max(0, Math.min(100, Math.round(rate)));
   const inner = size - 18;
   return (

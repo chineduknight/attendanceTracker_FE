@@ -26,7 +26,7 @@ const MemberHero: React.FC<MemberHeroProps> = ({ name, fields }) => {
   return (
     <Flex
       align="center" gap={4} borderRadius="14px" p={5} color="white"
-      sx={{ background: "linear-gradient(135deg, #a855f7, #3b82f6, #22d3ee)" }}
+      bgGradient="linear(135deg, purple.500, blue.500, cyan.400)"
       boxShadow="0 8px 20px rgba(59,130,246,.35)"
     >
       <Flex
