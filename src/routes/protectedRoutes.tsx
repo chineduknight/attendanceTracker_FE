@@ -17,6 +17,7 @@ const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const ViewMembers = WithSuspense(lazy(() => import("pages/ViewMembers")));
 const Analytics = WithSuspense(lazy(() => import("pages/Analytics")));
+const MemberAnalytics = WithSuspense(lazy(() => import("pages/MemberAnalytics")));
 const Birthday = WithSuspense(lazy(() => import("pages/Birthday")));
 const Finance = WithSuspense(lazy(() => import("pages/Finance")));
 const OfficersRoles = WithSuspense(lazy(() => import("pages/OfficersRoles")));
@@ -40,6 +41,7 @@ const {
   VIEW_MEMBER,
   UPDATE_ATTENANCE,
   ANALYTICS,
+  MEMBER_ANALYTICS,
   BIRTHDAY,
   FINANCE,
   OFFICERS_ROLES,
@@ -61,6 +63,7 @@ const PROTECTED_ROUTES = [
   { path: ALL_ATTENDANCE, element: <AllAttendance /> },
   { path: VIEW_MEMBER, element: <ViewMembers /> },
   { path: ANALYTICS, element: <Analytics /> },
+  { path: MEMBER_ANALYTICS, element: <MemberAnalytics /> },
   { path: BIRTHDAY, element: <Birthday /> },
   { path: FINANCE, element: <Finance /> },
   { path: OFFICERS_ROLES, element: <OfficersRoles /> },

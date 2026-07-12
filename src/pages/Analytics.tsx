@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import {
   Box,
   Flex,
-  Input,
   Button,
   Table,
   Thead,
@@ -22,100 +21,70 @@ import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import ReactSelect, { MultiValue } from "react-select";
-import { toast } from "react-toastify";
 import {
-  startOfMonth,
-  endOfMonth,
-  subMonths,
-  startOfQuarter,
-  endOfQuarter,
-  subQuarters,
-  startOfYear,
-  endOfYear,
-  format,
-} from "date-fns";
+  STATUS_META,
+  getStatusMeta,
+  AttendanceStatus,
+} from "components/analytics/statusMeta";
+import {
+  openExportUrl,
+  handleExportError,
+} from "components/analytics/analyticsExport";
+import ReactSelect, { MultiValue } from "react-select";
+import { format, parseISO } from "date-fns";
+import {
+  useDateRange,
+  formatRangeLabel,
+} from "components/analytics/useDateRange";
+import DateRangeControls from "components/analytics/DateRangeControls";
 
 type StatusOption = {
   value: string;
   label: string;
 };
 
-const DATE_INPUT_FORMAT = "yyyy-MM-dd";
+const DAY_HEADER_FORMAT = "EEE d, MMM"; // e.g. "Tue 3, Jul"
 
-const DATE_PRESETS: {
-  label: string;
-  getRange: (today: Date) => { from: Date; to: Date };
-}[] = [
-  {
-    label: "This Month",
-    getRange: (t) => ({ from: startOfMonth(t), to: endOfMonth(t) }),
-  },
-  {
-    label: "Last Month",
-    getRange: (t) => ({
-      from: startOfMonth(subMonths(t, 1)),
-      to: endOfMonth(subMonths(t, 1)),
-    }),
-  },
-  {
-    label: "This Quarter",
-    getRange: (t) => ({ from: startOfQuarter(t), to: endOfQuarter(t) }),
-  },
-  {
-    label: "Last Quarter",
-    getRange: (t) => ({
-      from: startOfQuarter(subQuarters(t, 1)),
-      to: endOfQuarter(subQuarters(t, 1)),
-    }),
-  },
-  {
-    label: "This Year",
-    getRange: (t) => ({ from: startOfYear(t), to: endOfYear(t) }),
-  },
-];
+// rotate narrow column headers so single-letter cells don't waste width.
+// applied to an inner span (not the th) so the cell stays in normal writing
+// mode and can center the label horizontally over its column.
+const VERTICAL_LABEL_SX = {
+  display: "inline-block",
+  writingMode: "vertical-rl",
+  transform: "rotate(180deg)",
+  whiteSpace: "nowrap",
+} as const;
+
+// extract the yyyy-MM-dd suffix from a date column key and render it compactly
+const formatDayHeader = (key: string) => {
+  const isoDate = key.match(/\d{4}-\d{2}-\d{2}$/)?.[0];
+  return isoDate ? format(parseISO(isoDate), DAY_HEADER_FORMAT) : key;
+};
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
   const [hasSearched, setHasSearched] = useState(false);
+  const {
+    fromDate, toDate, setFromDate, setToDate,
+    activePreset, applyPreset, handleDateChange,
+  } = useDateRange({ onChange: () => setHasSearched(false) });
   const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
   const [statusOptions, setStatusOptions] = useState<string[]>([
     "active",
     "inactive",
   ]);
   const navigate = useNavigate();
+
+  const goToMemberAnalytics = (memberId: string) => {
+    const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, { memberId });
+    const params = new URLSearchParams();
+    if (fromDate) params.set("fromDate", fromDate);
+    if (toDate) params.set("toDate", toDate);
+    const search = params.toString();
+    navigate(search ? `${path}?${search}` : path);
+  };
+
   const canRunQuery = Boolean(fromDate && toDate && org.id);
-
-  const handleExportSuccess = (response: any, format: "PDF" | "Excel") => {
-    const exportUrl =
-      typeof response?.data === "string" ? response.data.trim() : "";
-    if (exportUrl) {
-      window.open(exportUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const responseError =
-      typeof response?.error === "string"
-        ? response.error
-        : `Failed to export ${format}.`;
-    toast.error(responseError);
-  };
-
-  const handleExportError = (err: any, format: "PDF" | "Excel") => {
-    const statusCode = err?.response?.status;
-    if (statusCode === 401) return;
-    const apiError = err?.response?.data?.error;
-    let message: string;
-    if (Array.isArray(apiError)) {
-      message = apiError.filter(Boolean).join(", ");
-    } else if (typeof apiError === "string" && apiError.trim()) {
-      message = apiError;
-    } else {
-      message = `Failed to export ${format}. Please try again.`;
-    }
-    toast.error(message);
-  };
 
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
@@ -142,7 +111,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     const queryParams = new URLSearchParams({
       fromDate,
       toDate,
-      sort: "present:desc",
+      sort: "ranking",
     });
 
     if (selectedStatuses.length) {
@@ -212,8 +181,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
       exportExcelUrl,
       {
         enabled: false,
-        onSuccess: (response: any) => handleExportSuccess(response, "Excel"),
-      onError: (err: any) => handleExportError(err, "Excel"),
+        onSuccess: (response: any) => openExportUrl(response, "Excel"),
+        onError: (err: any) => handleExportError(err, "Excel"),
       },
     );
 
@@ -228,7 +197,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     exportPdfUrl,
     {
       enabled: false,
-      onSuccess: (response: any) => handleExportSuccess(response, "PDF"),
+      onSuccess: (response: any) => openExportUrl(response, "PDF"),
       onError: (err: any) => handleExportError(err, "PDF"),
     },
   );
@@ -238,13 +207,6 @@ const AttendanceAnalyticsPage: React.FC = () => {
       setHasSearched(true);
       refetch();
     }
-  };
-
-  const applyPreset = (getRange: (today: Date) => { from: Date; to: Date }) => {
-    const { from, to } = getRange(new Date());
-    setFromDate(format(from, DATE_INPUT_FORMAT));
-    setToDate(format(to, DATE_INPUT_FORMAT));
-    setHasSearched(false);
   };
 
   // pull out keys & data rows
@@ -336,86 +298,59 @@ const AttendanceAnalyticsPage: React.FC = () => {
               Export PDF
             </Button>
           </Flex>
-          {/* Quick date range presets */}
-          <Flex mb={3} gap={2} flexWrap="wrap">
-            {DATE_PRESETS.map((preset) => (
-              <Button
-                key={preset.label}
-                size="sm"
-                variant="outline"
-                colorScheme="blue"
-                onClick={() => applyPreset(preset.getRange)}
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </Flex>
-
-          {/* Date selectors + button */}
-          <Flex
-            mb={6}
-            gap={2}
-            align="center"
-            direction={{ base: "column", md: "row" }}
-          >
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => {
-                setFromDate(e.target.value);
-                setHasSearched(false);
-              }}
-              w={{ base: "100%", md: "auto" }}
-              max={toDate || undefined}
-            />
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => {
-                setToDate(e.target.value);
-                setHasSearched(false);
-              }}
-              w={{ base: "100%", md: "auto" }}
-              min={fromDate || undefined}
-            />
-            <Box w={{ base: "100%", md: "260px" }}>
-              <ReactSelect
-                isMulti
-                placeholder="Filter members by status"
-                options={statusSelectOptions}
-                value={selectedStatusOptions}
-                closeMenuOnSelect={false}
-                onChange={(selected: MultiValue<StatusOption>) => {
-                  const values = selected.map((item) => item.value);
-                  if (values.length === 0) {
-                    setStatusFilter(["all"]);
-                    setHasSearched(false);
-                    return;
-                  }
-                  if (values.includes("all") && values.length > 1) {
-                    setStatusFilter(values.filter((value) => value !== "all"));
-                    setHasSearched(false);
-                    return;
-                  }
-                  if (values.includes("all")) {
-                    setStatusFilter(["all"]);
-                    setHasSearched(false);
-                    return;
-                  }
-                  setStatusFilter(values);
-                  setHasSearched(false);
-                }}
-              />
-            </Box>
-            <Button
-              colorScheme="blue"
-              onClick={handleSearch}
-              isDisabled={!canRunQuery}
-              w={{ base: "100%", md: "auto" }}
-            >
-              Search
-            </Button>
-          </Flex>
+          {/* Date range presets + selectors + status filter + search */}
+          <DateRangeControls
+            fromDate={fromDate}
+            toDate={toDate}
+            activePreset={activePreset}
+            applyPreset={applyPreset}
+            setFromDate={setFromDate}
+            setToDate={setToDate}
+            handleDateChange={handleDateChange}
+            trailing={
+              <>
+                <Box w={{ base: "100%", md: "260px" }}>
+                  <ReactSelect
+                    isMulti
+                    placeholder="Filter members by status"
+                    options={statusSelectOptions}
+                    value={selectedStatusOptions}
+                    closeMenuOnSelect={false}
+                    onChange={(selected: MultiValue<StatusOption>) => {
+                      const values = selected.map((item) => item.value);
+                      if (values.length === 0) {
+                        setStatusFilter(["all"]);
+                        setHasSearched(false);
+                        return;
+                      }
+                      if (values.includes("all") && values.length > 1) {
+                        setStatusFilter(
+                          values.filter((value) => value !== "all"),
+                        );
+                        setHasSearched(false);
+                        return;
+                      }
+                      if (values.includes("all")) {
+                        setStatusFilter(["all"]);
+                        setHasSearched(false);
+                        return;
+                      }
+                      setStatusFilter(values);
+                      setHasSearched(false);
+                    }}
+                  />
+                </Box>
+                <Button
+                  colorScheme="blue"
+                  onClick={handleSearch}
+                  isDisabled={!canRunQuery}
+                  w={{ base: "100%", md: "auto" }}
+                >
+                  Search
+                </Button>
+              </>
+            }
+          />
 
           {/* Loading & error */}
           {isFetching && <Spinner />}
@@ -427,68 +362,97 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
           {/* Table */}
           {!isFetching && !error && hasSearched && rows.length > 0 && (
-            <Box overflowX="auto">
-              <Table variant="striped" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th isNumeric>SN</Th>
-                    <Th>Name</Th>
-                    {totalKeys.map((label) => (
-                      <Th key={label} isNumeric>
-                        {label}
-                      </Th>
-                    ))}
-                    {dateKeys.map((d) => (
-                      <Th key={d}>{d.split(" On ")[1]}</Th>
-                    ))}
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {rows.map((row, index) => (
-                    <Tr key={row.memberId}>
-                      <Td isNumeric>{index + 1}</Td>
-                      <Td>{row.name}</Td>
+            <Box>
+              {/* Applied range + status legend */}
+              <Flex
+                mb={3}
+                gap={3}
+                align="center"
+                justify="space-between"
+                flexWrap="wrap"
+              >
+                <Text fontWeight="semibold">
+                  {formatRangeLabel(fromDate, toDate)}
+                </Text>
+                <Flex gap={4} flexWrap="wrap">
+                  {(Object.keys(STATUS_META) as AttendanceStatus[]).map(
+                    (status) => (
+                      <Flex key={status} align="center" gap={1}>
+                        <Badge colorScheme={STATUS_META[status].color}>
+                          {STATUS_META[status].short}
+                        </Badge>
+                        <Text fontSize="sm">{STATUS_META[status].full}</Text>
+                      </Flex>
+                    ),
+                  )}
+                </Flex>
+              </Flex>
 
+              <Box overflowX="auto">
+                <Table variant="striped" size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th isNumeric>SN</Th>
+                      <Th>Name</Th>
                       {totalKeys.map((label) => (
-                        <Td key={label} isNumeric>
-                          {row[totalsMap[label]]}
-                        </Td>
+                        <Th key={label} textAlign="center" verticalAlign="bottom">
+                          <Box as="span" sx={VERTICAL_LABEL_SX}>
+                            {label}
+                          </Box>
+                        </Th>
                       ))}
-
-                      {dateKeys.map((d) => {
-                        const status = row[d] as string as
-                          | "present"
-                          | "absent"
-                          | "apology"
-                          | undefined;
-                        let color: string, label: string;
-                        switch (status) {
-                          case "present":
-                            color = "green";
-                            label = "P";
-                            break;
-                          case "absent":
-                            color = "red";
-                            label = "A";
-                            break;
-                          case "apology":
-                            color = "yellow";
-                            label = "AP";
-                            break;
-                          default:
-                            color = "gray";
-                            label = "-";
-                        }
-                        return (
-                          <Td key={d} textAlign="center">
-                            <Badge colorScheme={color}>{label}</Badge>
-                          </Td>
-                        );
-                      })}
+                      {dateKeys.map((d) => (
+                        <Th key={d} textAlign="center" verticalAlign="bottom">
+                          <Box as="span" sx={VERTICAL_LABEL_SX}>
+                            {formatDayHeader(d)}
+                          </Box>
+                        </Th>
+                      ))}
                     </Tr>
-                  ))}
-                </Tbody>
-              </Table>
+                  </Thead>
+                  <Tbody>
+                    {rows.map((row, index) => (
+                      <Tr
+                        key={row.memberId}
+                        onClick={() => row.memberId && goToMemberAnalytics(row.memberId)}
+                        cursor={row.memberId ? "pointer" : "default"}
+                        _hover={row.memberId ? { bg: "blue.50" } : undefined}
+                        title={row.memberId ? "View member analytics" : undefined}
+                        role={row.memberId ? "button" : undefined}
+                        tabIndex={row.memberId ? 0 : undefined}
+                        onKeyDown={(e) => {
+                          if (row.memberId && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            goToMemberAnalytics(row.memberId);
+                          }
+                        }}
+                      >
+                        <Td isNumeric>{index + 1}</Td>
+                        <Td>{row.name}</Td>
+
+                        {totalKeys.map((label) => (
+                          <Td key={label} textAlign="center">
+                            <Badge
+                              colorScheme={getStatusMeta(label.toLowerCase()).color}
+                            >
+                              {row[totalsMap[label]] ?? 0}
+                            </Badge>
+                          </Td>
+                        ))}
+
+                        {dateKeys.map((d) => {
+                          const meta = getStatusMeta(row[d] as string);
+                          return (
+                            <Td key={d} textAlign="center">
+                              <Badge colorScheme={meta.color}>{meta.short}</Badge>
+                            </Td>
+                          );
+                        })}
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </Box>
             </Box>
           )}
 
