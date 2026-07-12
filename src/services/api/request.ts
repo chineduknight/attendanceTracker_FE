@@ -31,6 +31,11 @@ export const attendanceRequest = {
   ANALYTICS: "/attendance/:organisationId/analytics",
   ANALYTICS_EXPORT_EXCEL: "/attendance/:organisationId/analytics/export/excel",
   ANALYTICS_EXPORT_PDF: "/attendance/:organisationId/analytics/export/pdf",
+  MEMBER_ANALYTICS: "/attendance/:organisationId/analytics/member/:memberId",
+  MEMBER_ANALYTICS_EXPORT_EXCEL:
+    "/attendance/:organisationId/analytics/member/:memberId/export/excel",
+  MEMBER_ANALYTICS_EXPORT_PDF:
+    "/attendance/:organisationId/analytics/member/:memberId/export/pdf",
 };
 
 export const financeRequest = {

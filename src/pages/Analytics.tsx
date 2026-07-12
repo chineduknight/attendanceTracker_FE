@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import {
   Box,
   Flex,
-  Input,
   Button,
   Table,
   Thead,
@@ -22,62 +21,33 @@ import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import ReactSelect, { MultiValue } from "react-select";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { toast } from "react-toastify";
 import {
-  startOfMonth,
-  endOfMonth,
-  subMonths,
-  startOfQuarter,
-  endOfQuarter,
-  subQuarters,
-  startOfYear,
-  endOfYear,
-  format,
-  parseISO,
-} from "date-fns";
+  STATUS_META,
+  getStatusMeta,
+  AttendanceStatus,
+} from "components/analytics/statusMeta";
+import {
+  openExportUrl,
+  handleExportError,
+} from "components/analytics/analyticsExport";
+import ReactSelect, { MultiValue } from "react-select";
+import { format, parseISO } from "date-fns";
+import {
+  useDateRange,
+  formatRangeLabel,
+} from "components/analytics/useDateRange";
+import DateRangeControls from "components/analytics/DateRangeControls";
 
 type StatusOption = {
   value: string;
   label: string;
 };
 
-const DATE_INPUT_FORMAT = "yyyy-MM-dd";
 const DAY_HEADER_FORMAT = "EEE d, MMM"; // e.g. "Tue 3, Jul"
 
 // rotate narrow column headers so single-letter cells don't waste width.
 // applied to an inner span (not the th) so the cell stays in normal writing
 // mode and can center the label horizontally over its column.
-// keep the react-datepicker input full-width and vertically center its
-// clear (×) button, which otherwise sits misaligned against a Chakra input
-const DATE_PICKER_WRAPPER_SX = {
-  ".react-datepicker-wrapper": { width: "100%" },
-  ".react-datepicker__close-icon": {
-    top: 0,
-    right: "0.5rem",
-    marginRight: "0.5rem",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    padding: 0,
-  },
-  ".react-datepicker__close-icon::after": {
-    display: "block",
-    backgroundColor: "transparent",
-    color: "gray.400",
-    height: "auto",
-    width: "auto",
-    padding: 0,
-    fontSize: "20px",
-    lineHeight: 1,
-  },
-  ".react-datepicker__close-icon:hover::after": {
-    color: "gray.600",
-  },
-} as const;
-
 const VERTICAL_LABEL_SX = {
   display: "inline-block",
   writingMode: "vertical-rl",
@@ -85,110 +55,36 @@ const VERTICAL_LABEL_SX = {
   whiteSpace: "nowrap",
 } as const;
 
-type AttendanceStatus = "present" | "absent" | "apology";
-
-const STATUS_META: Record<
-  AttendanceStatus,
-  { color: string; short: string; full: string }
-> = {
-  present: { color: "green", short: "P", full: "Present" },
-  absent: { color: "red", short: "A", full: "Absent" },
-  apology: { color: "yellow", short: "AP", full: "Apology" },
-};
-
-const EMPTY_STATUS_META = { color: "gray", short: "-", full: "No record" };
-
-const getStatusMeta = (status: string | undefined) =>
-  STATUS_META[status as AttendanceStatus] ?? EMPTY_STATUS_META;
-
 // extract the yyyy-MM-dd suffix from a date column key and render it compactly
 const formatDayHeader = (key: string) => {
   const isoDate = key.match(/\d{4}-\d{2}-\d{2}$/)?.[0];
   return isoDate ? format(parseISO(isoDate), DAY_HEADER_FORMAT) : key;
 };
 
-const formatRangeLabel = (fromISO: string, toISO: string) => {
-  const from = parseISO(fromISO);
-  const to = parseISO(toISO);
-  const sameYear = from.getFullYear() === to.getFullYear();
-  const fromLabel = format(from, sameYear ? "MMM d" : "MMM d, yyyy");
-  return `${fromLabel} – ${format(to, "MMM d, yyyy")}`;
-};
-
-const DATE_PRESETS: {
-  label: string;
-  getRange: (today: Date) => { from: Date; to: Date };
-}[] = [
-  {
-    label: "This Month",
-    getRange: (t) => ({ from: startOfMonth(t), to: endOfMonth(t) }),
-  },
-  {
-    label: "Last Month",
-    getRange: (t) => ({
-      from: startOfMonth(subMonths(t, 1)),
-      to: endOfMonth(subMonths(t, 1)),
-    }),
-  },
-  {
-    label: "This Quarter",
-    getRange: (t) => ({ from: startOfQuarter(t), to: endOfQuarter(t) }),
-  },
-  {
-    label: "Last Quarter",
-    getRange: (t) => ({
-      from: startOfQuarter(subQuarters(t, 1)),
-      to: endOfQuarter(subQuarters(t, 1)),
-    }),
-  },
-  {
-    label: "This Year",
-    getRange: (t) => ({ from: startOfYear(t), to: endOfYear(t) }),
-  },
-];
-
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
-  const [activePreset, setActivePreset] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const {
+    fromDate, toDate, setFromDate, setToDate,
+    activePreset, applyPreset, handleDateChange,
+  } = useDateRange({ onChange: () => setHasSearched(false) });
   const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
   const [statusOptions, setStatusOptions] = useState<string[]>([
     "active",
     "inactive",
   ]);
   const navigate = useNavigate();
+
+  const goToMemberAnalytics = (memberId: string) => {
+    const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, { memberId });
+    const params = new URLSearchParams();
+    if (fromDate) params.set("fromDate", fromDate);
+    if (toDate) params.set("toDate", toDate);
+    const search = params.toString();
+    navigate(search ? `${path}?${search}` : path);
+  };
+
   const canRunQuery = Boolean(fromDate && toDate && org.id);
-
-  const handleExportSuccess = (response: any, format: "PDF" | "Excel") => {
-    const exportUrl =
-      typeof response?.data === "string" ? response.data.trim() : "";
-    if (exportUrl) {
-      window.open(exportUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const responseError =
-      typeof response?.error === "string"
-        ? response.error
-        : `Failed to export ${format}.`;
-    toast.error(responseError);
-  };
-
-  const handleExportError = (err: any, format: "PDF" | "Excel") => {
-    const statusCode = err?.response?.status;
-    if (statusCode === 401) return;
-    const apiError = err?.response?.data?.error;
-    let message: string;
-    if (Array.isArray(apiError)) {
-      message = apiError.filter(Boolean).join(", ");
-    } else if (typeof apiError === "string" && apiError.trim()) {
-      message = apiError;
-    } else {
-      message = `Failed to export ${format}. Please try again.`;
-    }
-    toast.error(message);
-  };
 
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
@@ -285,7 +181,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
       exportExcelUrl,
       {
         enabled: false,
-        onSuccess: (response: any) => handleExportSuccess(response, "Excel"),
+        onSuccess: (response: any) => openExportUrl(response, "Excel"),
         onError: (err: any) => handleExportError(err, "Excel"),
       },
     );
@@ -301,7 +197,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     exportPdfUrl,
     {
       enabled: false,
-      onSuccess: (response: any) => handleExportSuccess(response, "PDF"),
+      onSuccess: (response: any) => openExportUrl(response, "PDF"),
       onError: (err: any) => handleExportError(err, "PDF"),
     },
   );
@@ -312,28 +208,6 @@ const AttendanceAnalyticsPage: React.FC = () => {
       refetch();
     }
   };
-
-  const applyPreset = (preset: (typeof DATE_PRESETS)[number]) => {
-    const { from, to } = preset.getRange(new Date());
-    setFromDate(format(from, DATE_INPUT_FORMAT));
-    setToDate(format(to, DATE_INPUT_FORMAT));
-    setActivePreset(preset.label);
-    setHasSearched(false);
-  };
-
-  const handleDateChange =
-    (setter: (value: string) => void) => (date: Date | null) => {
-      setter(date ? format(date, DATE_INPUT_FORMAT) : "");
-      setActivePreset(null);
-      setHasSearched(false);
-    };
-
-  const fromDateValue = fromDate ? parseISO(fromDate) : null;
-  const toDateValue = toDate ? parseISO(toDate) : null;
-  // attendance can't exist in the future, so cap both pickers at today
-  const today = new Date();
-  const fromMaxDate =
-    toDateValue && toDateValue < today ? toDateValue : today;
 
   // pull out keys & data rows
   const keys: string[] = useMemo(
@@ -424,99 +298,59 @@ const AttendanceAnalyticsPage: React.FC = () => {
               Export PDF
             </Button>
           </Flex>
-          {/* Quick date range presets */}
-          <Flex mb={3} gap={2} flexWrap="wrap">
-            {DATE_PRESETS.map((preset) => {
-              const isActive = activePreset === preset.label;
-              return (
+          {/* Date range presets + selectors + status filter + search */}
+          <DateRangeControls
+            fromDate={fromDate}
+            toDate={toDate}
+            activePreset={activePreset}
+            applyPreset={applyPreset}
+            setFromDate={setFromDate}
+            setToDate={setToDate}
+            handleDateChange={handleDateChange}
+            trailing={
+              <>
+                <Box w={{ base: "100%", md: "260px" }}>
+                  <ReactSelect
+                    isMulti
+                    placeholder="Filter members by status"
+                    options={statusSelectOptions}
+                    value={selectedStatusOptions}
+                    closeMenuOnSelect={false}
+                    onChange={(selected: MultiValue<StatusOption>) => {
+                      const values = selected.map((item) => item.value);
+                      if (values.length === 0) {
+                        setStatusFilter(["all"]);
+                        setHasSearched(false);
+                        return;
+                      }
+                      if (values.includes("all") && values.length > 1) {
+                        setStatusFilter(
+                          values.filter((value) => value !== "all"),
+                        );
+                        setHasSearched(false);
+                        return;
+                      }
+                      if (values.includes("all")) {
+                        setStatusFilter(["all"]);
+                        setHasSearched(false);
+                        return;
+                      }
+                      setStatusFilter(values);
+                      setHasSearched(false);
+                    }}
+                  />
+                </Box>
                 <Button
-                  key={preset.label}
-                  size="sm"
-                  variant={isActive ? "solid" : "outline"}
                   colorScheme="blue"
-                  aria-pressed={isActive}
-                  onClick={() => applyPreset(preset)}
+                  onClick={handleSearch}
+                  isDisabled={!canRunQuery}
+                  w={{ base: "100%", md: "auto" }}
                 >
-                  {preset.label}
+                  Search
                 </Button>
-              );
-            })}
-          </Flex>
-
-          {/* Date selectors + button */}
-          <Flex
-            mb={6}
-            gap={2}
-            align="center"
-            direction={{ base: "column", md: "row" }}
-          >
-            <Box w={{ base: "100%", md: "auto" }} sx={DATE_PICKER_WRAPPER_SX}>
-              <DatePicker
-                selected={fromDateValue}
-                onChange={handleDateChange(setFromDate)}
-                selectsStart
-                startDate={fromDateValue}
-                endDate={toDateValue}
-                maxDate={fromMaxDate}
-                dateFormat="MMM d, yyyy"
-                placeholderText="From date"
-                isClearable
-                customInput={<Input pr="2rem" />}
-              />
-            </Box>
-            <Box w={{ base: "100%", md: "auto" }} sx={DATE_PICKER_WRAPPER_SX}>
-              <DatePicker
-                selected={toDateValue}
-                onChange={handleDateChange(setToDate)}
-                selectsEnd
-                startDate={fromDateValue}
-                endDate={toDateValue}
-                minDate={fromDateValue ?? undefined}
-                maxDate={today}
-                dateFormat="MMM d, yyyy"
-                placeholderText="To date"
-                isClearable
-                customInput={<Input pr="2rem" />}
-              />
-            </Box>
-            <Box w={{ base: "100%", md: "260px" }}>
-              <ReactSelect
-                isMulti
-                placeholder="Filter members by status"
-                options={statusSelectOptions}
-                value={selectedStatusOptions}
-                closeMenuOnSelect={false}
-                onChange={(selected: MultiValue<StatusOption>) => {
-                  const values = selected.map((item) => item.value);
-                  if (values.length === 0) {
-                    setStatusFilter(["all"]);
-                    setHasSearched(false);
-                    return;
-                  }
-                  if (values.includes("all") && values.length > 1) {
-                    setStatusFilter(values.filter((value) => value !== "all"));
-                    setHasSearched(false);
-                    return;
-                  }
-                  if (values.includes("all")) {
-                    setStatusFilter(["all"]);
-                    setHasSearched(false);
-                    return;
-                  }
-                  setStatusFilter(values);
-                  setHasSearched(false);
-                }}
-              />
-            </Box>
-            <Button
-              colorScheme="blue"
-              onClick={handleSearch}
-              isDisabled={!canRunQuery}
-              w={{ base: "100%", md: "auto" }}
-            >
-              Search
-            </Button>
-          </Flex>
+              </>
+            }
+          />
 
           {/* Loading & error */}
           {isFetching && <Spinner />}
@@ -578,7 +412,21 @@ const AttendanceAnalyticsPage: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {rows.map((row, index) => (
-                      <Tr key={row.memberId}>
+                      <Tr
+                        key={row.memberId}
+                        onClick={() => row.memberId && goToMemberAnalytics(row.memberId)}
+                        cursor={row.memberId ? "pointer" : "default"}
+                        _hover={row.memberId ? { bg: "blue.50" } : undefined}
+                        title={row.memberId ? "View member analytics" : undefined}
+                        role={row.memberId ? "button" : undefined}
+                        tabIndex={row.memberId ? 0 : undefined}
+                        onKeyDown={(e) => {
+                          if (row.memberId && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            goToMemberAnalytics(row.memberId);
+                          }
+                        }}
+                      >
                         <Td isNumeric>{index + 1}</Td>
                         <Td>{row.name}</Td>
 
