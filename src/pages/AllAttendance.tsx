@@ -39,6 +39,7 @@ type AttendanceType = {
   date: string;
   dateFormated: number;
   category?: { name: string; status: string } | null;
+  subCategory?: { name: string; status: string } | null;
   createdBy?: PersonRef | null;
   updatedBy?: PersonRef | null;
 };
@@ -140,10 +141,20 @@ const AllAttendance = () => {
                           </Badge>
                         )}
                       </Flex>
-                      {attendance.category?.name && (
-                        <Badge colorScheme="purple" mt={1}>
-                          {attendance.category.name}
-                        </Badge>
+                      {(attendance.category?.name ||
+                        attendance.subCategory?.name) && (
+                        <Flex gap={2} mt={1} flexWrap="wrap">
+                          {attendance.category?.name && (
+                            <Badge colorScheme="purple">
+                              {attendance.category.name}
+                            </Badge>
+                          )}
+                          {attendance.subCategory?.name && (
+                            <Badge colorScheme="cyan">
+                              {attendance.subCategory.name}
+                            </Badge>
+                          )}
+                        </Flex>
                       )}
                       <Text fontSize="xs" color="gray.500" mt={1}>
                         {attendance.createdBy?.name &&
