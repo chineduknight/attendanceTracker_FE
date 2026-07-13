@@ -26,7 +26,7 @@ const MemberRecordsTable: React.FC<{ records: MemberRecord[] }> = ({ records }) 
               <Td>{format(parseISO(record.date), "MMM d, yyyy")}</Td>
               <Td>{record.sessionName}</Td>
               <Td><Badge colorScheme={meta.color}>{meta.full}</Badge></Td>
-              <Td>{record.hasBeenUpdated && <Badge colorScheme="purple">edited</Badge>}</Td>
+              <Td>{record.hasBeenUpdated && <Badge colorScheme="purple">{record.editCount ? `edited ${record.editCount}×` : "edited"}</Badge>}</Td>
             </Tr>
           );
         })}
