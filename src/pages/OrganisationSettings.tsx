@@ -70,6 +70,7 @@ const OrganisationSettings = () => {
 
   const { isFetching } = useQueryWrapper(["organisation", org.id], url, {
     enabled: Boolean(org.id),
+    refetchOnWindowFocus: false,
     onSuccess: (res: any) => {
       const data = res.data;
       reset({
