@@ -3,6 +3,7 @@ import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Text } from "@chakra-ui/re
 import { format, parseISO } from "date-fns";
 import { MemberRecord } from "components/analytics/memberAnalyticsTypes";
 import { getStatusMeta } from "components/analytics/statusMeta";
+import { FULL_DATE_FORMAT } from "components/analytics/dateFormats";
 
 const MemberRecordsTable: React.FC<{ records: MemberRecord[] }> = ({ records }) => (
   <Box bg="white" borderRadius="12px" border="1px solid" borderColor="gray.200" p={2} overflowX="auto">
@@ -23,7 +24,7 @@ const MemberRecordsTable: React.FC<{ records: MemberRecord[] }> = ({ records }) 
           return (
             <Tr key={record.attendanceId}>
               <Td isNumeric>{index + 1}</Td>
-              <Td>{format(parseISO(record.date), "MMM d, yyyy")}</Td>
+              <Td>{format(parseISO(record.date), FULL_DATE_FORMAT)}</Td>
               <Td>{record.sessionName}</Td>
               <Td><Badge colorScheme={meta.color}>{meta.full}</Badge></Td>
               <Td>{record.hasBeenUpdated && <Badge colorScheme="purple">{record.editCount ? `edited ${record.editCount}×` : "edited"}</Badge>}</Td>
