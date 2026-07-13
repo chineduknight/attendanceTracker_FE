@@ -91,7 +91,6 @@ const OrganisationSettings = () => {
       // merge over the selected org so RBAC state is preserved.
       setOrg({ ...org, ...res.data });
       queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
-      queryClient.invalidateQueries({ queryKey: ["organisation", org.id] });
       toast.success("Settings saved");
     },
   );
@@ -141,7 +140,7 @@ const OrganisationSettings = () => {
                 my={12}
                 mx="auto"
               >
-                <FormControl isInvalid={Boolean(errors.name)}>
+                <FormControl isInvalid={Boolean(errors.name)} isRequired>
                   <FormLabel>Organisation Name</FormLabel>
                   <Input
                     placeholder="Seat of wisdom presidium"
