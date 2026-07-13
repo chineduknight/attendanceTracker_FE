@@ -223,8 +223,11 @@ const MarkAttendance = () => {
   const { mutate, isLoading } = useMutationWrapper(
     isUpdate ? putRequest : postRequest,
     onSubmitSuccess,
-    () => {
+    (error: any) => {
       isSubmittingRef.current = false;
+      if (error?.response?.status === 401) return;
+      const message = error?.response?.data?.error;
+      toast.error(`${message ?? "An error occured"}`);
     }
   );
 

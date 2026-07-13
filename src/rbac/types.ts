@@ -1,4 +1,5 @@
 import { PermissionArea, PermissionKey } from "rbac/permissions";
+import { OrganisationType } from "zStore";
 
 export interface PermissionsCatalog {
   areas: PermissionArea[];
@@ -31,16 +32,7 @@ export interface Invite {
   createdAt: string;
 }
 
-export interface OrganisationSummary {
-  id: string;
-  name: string;
-  image: string;
-  owner: string;
-  status: string;
-  isOwner: boolean;
-  roleName: string;
-  permissions: PermissionKey[];
-}
+export type OrganisationSummary = OrganisationType;
 
 export interface MeResponse {
   id: string;
