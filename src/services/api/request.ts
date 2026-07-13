@@ -13,6 +13,7 @@ export const orgRequest = {
   CATEGORY: "/organisations/:organisationId/category",
   SUB_CATEGORY: "/organisations/:organisationId/sub-category",
   ORGANISATIONS: "/organisations",
+  ORGANISATION_ONE: "/organisations/:id",
   MEMBERS:"/organisations/:organisationId/members",
   CONFIG_MODEL:"/organisations/:organisationId/model",
   BIRTHDAY: "/organisations/:organisationId/members/birthday",

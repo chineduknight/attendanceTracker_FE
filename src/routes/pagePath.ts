@@ -27,4 +27,5 @@ export const PROTECTED_PATHS = {
   BIRTHDAY: "/birthday",
   FINANCE: "/finance",
   OFFICERS_ROLES: "/officers-roles",
+  SETTINGS: "/settings",
 };

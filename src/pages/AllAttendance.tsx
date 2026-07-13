@@ -17,6 +17,11 @@ import {
   capitalizeFirstLetter,
   convertParamsToString,
 } from "helpers/stringManipulations";
+import {
+  canEditAttendance,
+  resolveEditCount,
+  resolveEditsRemaining,
+} from "helpers/attendanceEdits";
 import { FaArrowCircleLeft, FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
@@ -29,9 +34,12 @@ type AttendanceType = {
   updatedAt: string;
   id: string;
   hasBeenUpdated: boolean;
+  editCount?: number;
+  editsRemaining?: number;
   date: string;
   dateFormated: number;
   category?: { name: string; status: string } | null;
+  subCategory?: { name: string; status: string } | null;
   createdBy?: PersonRef | null;
   updatedBy?: PersonRef | null;
 };
@@ -101,19 +109,23 @@ const AllAttendance = () => {
           <>
             {allAttend
               .sort((a, b) => b.dateFormated - a.dateFormated)
-              .map((attendance) => (
-                <Flex
-                  key={attendance.id}
-                  cursor="pointer"
-                  borderRadius="10px"
-                  alignItems="center"
-                  justifyContent="space-between"
-                  p="4"
-                  mb="10px"
-                  border="1px solid rebeccapurple"
-                  onClick={() => handleNavigate(attendance)}
-                >
+              .map((attendance) => {
+                const editsRemaining = resolveEditsRemaining(attendance);
+                const editCount = resolveEditCount(attendance);
+                const canEdit = canEditAttendance(attendance);
+                return (
                   <Flex
+                    key={attendance.id}
+                    cursor="pointer"
+                    borderRadius="10px"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    p="4"
+                    mb="10px"
+                    border="1px solid rebeccapurple"
+                    onClick={() => handleNavigate(attendance)}
+                  >
+                    <Flex
                     alignItems="center"
                     justifyContent="space-between"
                     w="100%"
@@ -123,16 +135,26 @@ const AllAttendance = () => {
                         <Text textAlign="left" fontWeight="semibold">
                           {capitalizeFirstLetter(attendance.name)}
                         </Text>
-                        {attendance.hasBeenUpdated && (
+                        {editCount > 0 && (
                           <Badge colorScheme="orange" fontSize="0.65rem">
-                            Edited
+                            edited {editCount}×
                           </Badge>
                         )}
                       </Flex>
-                      {attendance.category?.name && (
-                        <Badge colorScheme="purple" mt={1}>
-                          {attendance.category.name}
-                        </Badge>
+                      {(attendance.category?.name ||
+                        attendance.subCategory?.name) && (
+                        <Flex gap={2} mt={1} flexWrap="wrap">
+                          {attendance.category?.name && (
+                            <Badge colorScheme="purple">
+                              {attendance.category.name}
+                            </Badge>
+                          )}
+                          {attendance.subCategory?.name && (
+                            <Badge colorScheme="cyan">
+                              {attendance.subCategory.name}
+                            </Badge>
+                          )}
+                        </Flex>
                       )}
                       <Text fontSize="xs" color="gray.500" mt={1}>
                         {attendance.createdBy?.name &&
@@ -141,28 +163,34 @@ const AllAttendance = () => {
                         {format(new Date(attendance.createdAt), "hh:mm a")}
                       </Text>
                     </Box>
-                    <Flex>
-                      {attendance.hasBeenUpdated ? null : (
-                        <Button
-                          variant="outline"
-                          colorScheme="blue"
-                          onClick={(e) => {
-                            // This will stop the click event from bubbling up to the parent's onClick
-                            e.stopPropagation();
-                            const pagePath = convertParamsToString(
-                              PROTECTED_PATHS.UPDATE_ATTENANCE,
-                              { attendanceId: attendance.id },
-                            );
-                            navigate(pagePath);
-                          }}
-                        >
-                          <FaPencilAlt />
-                        </Button>
+                    <Flex alignItems="center" gap={2}>
+                      {canEdit && (
+                        <>
+                          <Text fontSize="xs" color="gray.500">
+                            {editsRemaining} left
+                          </Text>
+                          <Button
+                            variant="outline"
+                            colorScheme="blue"
+                            onClick={(e) => {
+                              // stop the click from bubbling to the row onClick
+                              e.stopPropagation();
+                              const pagePath = convertParamsToString(
+                                PROTECTED_PATHS.UPDATE_ATTENANCE,
+                                { attendanceId: attendance.id },
+                              );
+                              navigate(pagePath);
+                            }}
+                          >
+                            <FaPencilAlt />
+                          </Button>
+                        </>
                       )}
                     </Flex>
                   </Flex>
                 </Flex>
-              ))}
+                );
+              })}
           </>
         ) : (
           <Text ml="4" fontWeight="bold">

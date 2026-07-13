@@ -11,6 +11,7 @@ export interface MemberRecord {
   status: AttendanceStatus;
   sessionName: string;
   hasBeenUpdated: boolean;
+  editCount?: number;
 }
 
 export interface MemberAnalyticsSummary {

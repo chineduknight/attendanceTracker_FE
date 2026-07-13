@@ -27,6 +27,8 @@ export type OrganisationType = {
   isOwner: boolean;
   roleName: string;
   permissions: PermissionKey[];
+  collapseAttendanceByDay?: boolean;
+  maxAttendanceEdits?: number | null;
 };
 
 export const EMPTY_USER: UserType = {
@@ -46,6 +48,8 @@ export const EMPTY_ORG: OrganisationType = {
   isOwner: false,
   roleName: "",
   permissions: [],
+  collapseAttendanceByDay: false,
+  maxAttendanceEdits: null,
 };
 
 interface GlobalStoreState {

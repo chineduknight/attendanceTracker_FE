@@ -3,6 +3,7 @@ import { Box, Flex, Text, Tooltip, Wrap, WrapItem } from "@chakra-ui/react";
 import { format, parseISO } from "date-fns";
 import { MemberVerdict } from "components/analytics/memberAnalyticsTypes";
 import { getStatusMeta, STATUS_META, AttendanceStatus } from "components/analytics/statusMeta";
+import { FULL_DATE_FORMAT } from "components/analytics/dateFormats";
 
 const cellColor = (status: AttendanceStatus) => `${getStatusMeta(status).color}.500`;
 
@@ -32,7 +33,7 @@ const AttendanceTimeline: React.FC<{ verdicts: MemberVerdict[] }> = ({ verdicts 
             {group.items.map((verdict, index) => (
               <WrapItem key={`${verdict.date}-${verdict.status}-${index}`}>
                 <Tooltip
-                  label={`${format(parseISO(verdict.date), "MMM d, yyyy")} · ${getStatusMeta(verdict.status).full}`}
+                  label={`${format(parseISO(verdict.date), FULL_DATE_FORMAT)} · ${getStatusMeta(verdict.status).full}`}
                 >
                   <Box
                     data-cell="verdict" w="16px" h="16px" borderRadius="4px"
