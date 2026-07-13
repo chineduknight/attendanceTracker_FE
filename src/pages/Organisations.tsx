@@ -16,7 +16,7 @@ import {
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
-import { FaTrashAlt } from "react-icons/fa";
+import { FaTrashAlt, FaCog } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { useState } from "react";
 import { orgRequest } from "services";
@@ -116,11 +116,30 @@ const OrgList = () => {
                   </Text>
                   {org.roleName && <Badge ml={2}>{org.roleName}</Badge>}
                 </Flex>
-                {org.isOwner && (
-                  <Button onClick={(e) => handleDelete(org, e)} variant="danger">
-                    <FaTrashAlt color="#fff" />
-                  </Button>
-                )}
+                <Flex gap={2}>
+                  {(org.isOwner ||
+                    org.permissions?.includes("settings.view")) && (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOrg(org);
+                        navigate(PROTECTED_PATHS.SETTINGS);
+                      }}
+                      variant="outline"
+                      colorScheme="blue"
+                    >
+                      <FaCog />
+                    </Button>
+                  )}
+                  {org.isOwner && (
+                    <Button
+                      onClick={(e) => handleDelete(org, e)}
+                      variant="danger"
+                    >
+                      <FaTrashAlt color="#fff" />
+                    </Button>
+                  )}
+                </Flex>
               </Flex>
             ))}
           </>
