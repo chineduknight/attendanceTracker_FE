@@ -21,10 +21,12 @@ const base: AttendanceDetails = { name: "", categoryId: "", subCategoryId: "", d
 
 it("renders all four fields", () => {
   render(<AttendanceDetailsForm value={base} onChange={() => {}} categories={categories} />);
-  expect(screen.getByLabelText("Name")).toBeInTheDocument();
+  // Name and Date are required, so Chakra appends a "*" indicator to the
+  // accessible label — match with a regex rather than the exact string.
+  expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
   expect(screen.getByLabelText("Category")).toBeInTheDocument();
   expect(screen.getByLabelText("Sub Category")).toBeInTheDocument();
-  expect(screen.getByLabelText("Date")).toBeInTheDocument();
+  expect(screen.getByLabelText(/Date/)).toBeInTheDocument();
 });
 
 it("shows sub-categories of the selected category", () => {
@@ -57,6 +59,6 @@ it("clears the sub-category when the category changes", () => {
 it("emits name edits", () => {
   const onChange = jest.fn();
   render(<AttendanceDetailsForm value={base} onChange={onChange} categories={categories} />);
-  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "First Mass" } });
+  fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "First Mass" } });
   expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ name: "First Mass" }));
 });
