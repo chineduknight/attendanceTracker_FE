@@ -206,6 +206,9 @@ const MarkAttendance = () => {
     {
       onSuccess: onGetAttandanceSuccess,
       enabled: isUpdate,
+      // A refocus refetch would re-run onSuccess and overwrite the user's
+      // in-progress name/category/date/member edits with the server values.
+      refetchOnWindowFocus: false,
     }
   );
 
