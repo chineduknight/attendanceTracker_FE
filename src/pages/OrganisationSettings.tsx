@@ -10,6 +10,7 @@ import {
   FormHelperText,
   Input,
   Switch,
+  Avatar,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { FaArrowCircleLeft } from "react-icons/fa";
@@ -56,6 +57,7 @@ const OrganisationSettings = () => {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<OrgSettingsForm>({
     defaultValues: {
@@ -155,15 +157,22 @@ const OrganisationSettings = () => {
 
                 <FormControl isInvalid={Boolean(errors.image)}>
                   <FormLabel>Logo URL</FormLabel>
-                  <Input
-                    placeholder="https://cdn.example.com/logo.png"
-                    {...register("image", {
-                      validate: (v) =>
-                        v.trim() === "" ||
-                        isUrl(v.trim()) ||
-                        "Enter a valid URL",
-                    })}
-                  />
+                  <Flex align="center" gap={3}>
+                    <Avatar
+                      name={watch("name")}
+                      src={watch("image")}
+                      size="md"
+                    />
+                    <Input
+                      placeholder="https://cdn.example.com/logo.png"
+                      {...register("image", {
+                        validate: (v) =>
+                          v.trim() === "" ||
+                          isUrl(v.trim()) ||
+                          "Enter a valid URL",
+                      })}
+                    />
+                  </Flex>
                   <FormErrorMessage>{errors.image?.message}</FormErrorMessage>
                 </FormControl>
 

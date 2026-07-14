@@ -109,7 +109,7 @@ const OrgList = () => {
                 }}
               >
                 <Flex alignItems="center">
-                  <Avatar name={org.name} w="45px" h="45px" />
+                  <Avatar name={org.name} src={org.image} w="45px" h="45px" />
                   <Text ml="4" textAlign="left">
                     {" "}
                     {org.name}
