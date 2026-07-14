@@ -12,8 +12,16 @@ import {
   IconButton,
   Icon,
   Container,
+  Drawer,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerCloseButton,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  useDisclosure,
 } from "@chakra-ui/react";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaPencilAlt } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
@@ -112,7 +120,7 @@ const MarkAttendance = () => {
   const isUpdate = params.attendanceId !== undefined;
   const localStorageKey = `attendance-${org.id}`;
   const { categories } = useCategories(org.id);
-  const detailsCardBg = useColorModeValue("white", "gray.700");
+  const detailsDrawer = useDisclosure();
 
   // Edit mode shows the session-details form, driven by the loaded currentAttendance.
   const details: AttendanceDetails = {
@@ -335,19 +343,16 @@ const MarkAttendance = () => {
         ) : (
           <>
             {isUpdate && (
-              <Box
+              <Button
                 mt="4"
-                p="4"
-                bg={detailsCardBg}
-                rounded="xl"
-                boxShadow="sm"
+                w="full"
+                variant="outline"
+                colorScheme="blue"
+                leftIcon={<FaPencilAlt />}
+                onClick={detailsDrawer.onOpen}
               >
-                <AttendanceDetailsForm
-                  value={details}
-                  onChange={onDetailsChange}
-                  categories={categories}
-                />
-              </Box>
+                Edit session details
+              </Button>
             )}
             <InputGroup mt="4">
               <InputLeftElement pointerEvents="none">
@@ -418,6 +423,33 @@ const MarkAttendance = () => {
           </>
         )}
       </Container>
+
+      {isUpdate && (
+        <Drawer
+          isOpen={detailsDrawer.isOpen}
+          placement="right"
+          onClose={detailsDrawer.onClose}
+          size={{ base: "full", md: "md" }}
+        >
+          <DrawerOverlay />
+          <DrawerContent>
+            <DrawerCloseButton />
+            <DrawerHeader>Session details</DrawerHeader>
+            <DrawerBody>
+              <AttendanceDetailsForm
+                value={details}
+                onChange={onDetailsChange}
+                categories={categories}
+              />
+            </DrawerBody>
+            <DrawerFooter>
+              <Button w="full" variant="primary" onClick={detailsDrawer.onClose}>
+                Done
+              </Button>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      )}
     </Box>
   );
 };
