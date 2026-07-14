@@ -20,7 +20,7 @@ import {
 import { orgRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { useState } from "react";
-import { CategoryType } from "./CreateAttendance";
+import { CategoryType } from "hooks/useCategories";
 import { toast } from "react-toastify";
 import Loader from "components/Loader";
 import BackButton from "components/BackButton";

@@ -6,7 +6,7 @@ export type currentAttendanceType = {
   name: string;
   categoryId?: string;
   subCategoryId?: string;
-  date: Date;
+  date: string;
   members?: Array<any>;
 };
 
@@ -74,7 +74,7 @@ const globalStore = <F extends Function>(set: F) => ({
     name: "",
     categoryId: "",
     subCategoryId: "",
-    date: new Date(),
+    date: "",
     members: [],
   },
   updateCurrentAttendance: (currentAttendance: currentAttendanceType) => {
