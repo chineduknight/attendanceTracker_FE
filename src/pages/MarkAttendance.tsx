@@ -324,36 +324,35 @@ const MarkAttendance = () => {
         </Text>
       </Flex>
       <Container>
-        <Flex alignItems="center" justifyContent="space-between" mt="4">
-          <Heading fontSize="22px">
+        <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
+          <Heading fontSize="22px" noOfLines={1}>
             {`Members ${currentAttendance.name}`}
           </Heading>
-          <Button
-            variant="logout"
-            onClick={() => {
-              localStorage.removeItem(localStorageKey);
-              window.location.reload();
-            }}
-          >
-            Refresh
-          </Button>
+          <Flex gap={2} alignItems="center" flexShrink={0}>
+            {isUpdate && (
+              <IconButton
+                aria-label="Edit session details"
+                icon={<FaPencilAlt />}
+                variant="outline"
+                colorScheme="blue"
+                onClick={detailsDrawer.onOpen}
+              />
+            )}
+            <Button
+              variant="logout"
+              onClick={() => {
+                localStorage.removeItem(localStorageKey);
+                window.location.reload();
+              }}
+            >
+              Refresh
+            </Button>
+          </Flex>
         </Flex>
         {isLoadingData ? (
           <LoadingSpinner h="45vh" text="Loading members..." />
         ) : (
           <>
-            {isUpdate && (
-              <Button
-                mt="4"
-                w="full"
-                variant="outline"
-                colorScheme="blue"
-                leftIcon={<FaPencilAlt />}
-                onClick={detailsDrawer.onOpen}
-              >
-                Edit session details
-              </Button>
-            )}
             <InputGroup mt="4">
               <InputLeftElement pointerEvents="none">
                 <Icon as={FaSearch} color="gray.400" />
