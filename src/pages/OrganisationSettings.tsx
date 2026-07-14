@@ -163,6 +163,8 @@ const OrganisationSettings = () => {
                       src={watch("image")}
                       size="md"
                       bg={watch("image") ? "white" : undefined}
+                      borderWidth="2px"
+                      borderColor="blue.400"
                     />
                     <Input
                       placeholder="https://cdn.example.com/logo.png"

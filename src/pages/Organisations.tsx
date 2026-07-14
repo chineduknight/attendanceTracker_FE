@@ -117,6 +117,8 @@ const OrgList = () => {
                     // Neutral backing for logos with transparency, so Chakra's
                     // name-derived colour doesn't show through the image.
                     bg={org.image ? "white" : undefined}
+                    borderWidth="2px"
+                    borderColor="blue.400"
                   />
                   <Text ml="4" textAlign="left">
                     {" "}
