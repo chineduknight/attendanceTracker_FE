@@ -3,31 +3,32 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { useCategories } from "hooks/useCategories";
 
-jest.mock("services/api", () => ({
-  __esModule: true,
-  default: {
-    get: jest.fn(() =>
-      Promise.resolve({
-        data: {
-          data: [
-            { id: "c1", name: "Sunday Service", status: "active", subCategories: [] },
-          ],
-        },
-      }),
-    ),
-  },
-}));
-
 function Probe({ orgId }: { orgId: string }) {
   const { categories } = useCategories(orgId);
   return <div>count:{categories.length}</div>;
 }
 
-it("returns the fetched categories", async () => {
+const renderProbe = (orgId: string) =>
   render(
     <QueryClientProvider client={queryClient}>
-      <Probe orgId="org1" />
+      <Probe orgId={orgId} />
     </QueryClientProvider>,
   );
-  expect(await screen.findByText("count:1")).toBeInTheDocument();
+
+it("derives the category list from the cached query payload", () => {
+  // The API wraps payloads as { data: ... }; the hook should read data.data.
+  queryClient.setQueryData(["get-all-category"], {
+    data: [
+      { id: "c1", name: "Sunday Service", status: "active", subCategories: [] },
+    ],
+  });
+  renderProbe("org1");
+  expect(screen.getByText("count:1")).toBeInTheDocument();
+});
+
+it("returns an empty list before any data has loaded", () => {
+  queryClient.removeQueries({ queryKey: ["get-all-category"] });
+  // orgId "" keeps the query disabled, so no data is ever present.
+  renderProbe("");
+  expect(screen.getByText("count:0")).toBeInTheDocument();
 });

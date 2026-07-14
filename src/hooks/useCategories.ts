@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services/api/request";
@@ -23,11 +22,12 @@ export interface CategoryType extends CommonTypeCategory {
  * query key so React Query dedupes across screens.
  */
 export const useCategories = (organisationId: string) => {
-  const [categories, setCategories] = useState<CategoryType[]>([]);
   const url = convertParamsToString(orgRequest.CATEGORY, { organisationId });
-  const { isLoading } = useQueryWrapper(["get-all-category"], url, {
+  const { data, isLoading } = useQueryWrapper(["get-all-category"], url, {
     enabled: Boolean(organisationId),
-    onSuccess: (res: { data: CategoryType[] }) => setCategories(res.data),
   });
+  // The API wraps payloads as { data: ... }; derive the list straight from the
+  // query cache rather than mirroring it into local state via onSuccess.
+  const categories: CategoryType[] = data?.data ?? [];
   return { categories, isLoading };
 };
