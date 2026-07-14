@@ -14,7 +14,14 @@ const categories: CategoryType[] = [
       { id: "s2", name: "Second Mass", status: "active", parentCategoryId: "c1" },
     ],
   },
-  { id: "c2", name: "Weekday", status: "active", subCategories: [] },
+  {
+    id: "c2",
+    name: "Weekday",
+    status: "active",
+    subCategories: [
+      { id: "s3", name: "Weekday Mass", status: "active", parentCategoryId: "c2" },
+    ],
+  },
 ];
 
 const base: AttendanceDetails = { name: "", categoryId: "", subCategoryId: "", date: "" };
@@ -39,6 +46,20 @@ it("shows sub-categories of the selected category", () => {
   );
   expect(screen.getByRole("option", { name: "First Mass" })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: "Second Mass" })).toBeInTheDocument();
+  // Only the selected category's sub-categories show — not another category's.
+  expect(
+    screen.queryByRole("option", { name: "Weekday Mass" }),
+  ).not.toBeInTheDocument();
+});
+
+it("shows no sub-category options when no category is selected", () => {
+  render(<AttendanceDetailsForm value={base} onChange={() => {}} categories={categories} />);
+  expect(
+    screen.queryByRole("option", { name: "First Mass" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: "Weekday Mass" }),
+  ).not.toBeInTheDocument();
 });
 
 it("clears the sub-category when the category changes", () => {

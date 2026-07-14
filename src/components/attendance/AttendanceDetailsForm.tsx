@@ -21,7 +21,13 @@ const AttendanceDetailsForm = ({
 }: AttendanceDetailsFormProps) => {
   const subCategories =
     categories.find((c) => c.id === value.categoryId)?.subCategories ?? [];
-  const today = new Date().toISOString().slice(0, 10);
+  // Cap at the user's LOCAL calendar day. toISOString() would use the UTC day,
+  // which is already "tomorrow" for evening users in timezones behind UTC.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(now.getDate()).padStart(2, "0")}`;
 
   return (
     <Stack spacing={4}>
