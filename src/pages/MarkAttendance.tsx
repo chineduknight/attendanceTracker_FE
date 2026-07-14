@@ -127,8 +127,8 @@ const MarkAttendance = () => {
       ...currentAttendance,
       name: next.name,
       date: next.date,
-      categoryId: next.categoryId || undefined,
-      subCategoryId: next.subCategoryId || undefined,
+      categoryId: next.categoryId || null,
+      subCategoryId: next.subCategoryId || null,
     });
   };
 
