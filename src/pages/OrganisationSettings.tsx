@@ -162,6 +162,7 @@ const OrganisationSettings = () => {
                       name={watch("name")}
                       src={watch("image")}
                       size="md"
+                      bg={watch("image") ? "white" : undefined}
                     />
                     <Input
                       placeholder="https://cdn.example.com/logo.png"

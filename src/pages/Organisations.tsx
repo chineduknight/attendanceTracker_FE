@@ -109,7 +109,15 @@ const OrgList = () => {
                 }}
               >
                 <Flex alignItems="center">
-                  <Avatar name={org.name} src={org.image} w="45px" h="45px" />
+                  <Avatar
+                    name={org.name}
+                    src={org.image}
+                    w="45px"
+                    h="45px"
+                    // Neutral backing for logos with transparency, so Chakra's
+                    // name-derived colour doesn't show through the image.
+                    bg={org.image ? "white" : undefined}
+                  />
                   <Text ml="4" textAlign="left">
                     {" "}
                     {org.name}
