@@ -32,6 +32,10 @@ import { Q_KEY } from "utils/constant";
 import _ from "lodash";
 import { toast } from "react-toastify";
 import LoadingSpinner from "components/LoadingSpinner";
+import { useCategories } from "hooks/useCategories";
+import AttendanceDetailsForm, {
+  AttendanceDetails,
+} from "components/attendance/AttendanceDetailsForm";
 
 export type AttendanceStatus = "absent" | "present" | "apology";
 
@@ -107,6 +111,26 @@ const MarkAttendance = () => {
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
   const localStorageKey = `attendance-${org.id}`;
+  const { categories } = useCategories(org.id);
+  const detailsCardBg = useColorModeValue("white", "gray.700");
+
+  // Edit mode shows the session-details form, driven by the loaded currentAttendance.
+  const details: AttendanceDetails = {
+    name: currentAttendance.name ?? "",
+    categoryId: currentAttendance.categoryId ?? "",
+    subCategoryId: currentAttendance.subCategoryId ?? "",
+    date: (currentAttendance.date ?? "").slice(0, 10),
+  };
+
+  const onDetailsChange = (next: AttendanceDetails) => {
+    setAttendance({
+      ...currentAttendance,
+      name: next.name,
+      date: next.date,
+      categoryId: next.categoryId || undefined,
+      subCategoryId: next.subCategoryId || undefined,
+    });
+  };
 
   // filtered list + status counts are pure derivations of allMembers/searchQuery,
   // so we compute them here instead of storing (and hand-syncing) extra state.
@@ -307,6 +331,21 @@ const MarkAttendance = () => {
           <LoadingSpinner h="45vh" text="Loading members..." />
         ) : (
           <>
+            {isUpdate && (
+              <Box
+                mt="4"
+                p="4"
+                bg={detailsCardBg}
+                rounded="xl"
+                boxShadow="sm"
+              >
+                <AttendanceDetailsForm
+                  value={details}
+                  onChange={onDetailsChange}
+                  categories={categories}
+                />
+              </Box>
+            )}
             <InputGroup mt="4">
               <InputLeftElement pointerEvents="none">
                 <Icon as={FaSearch} color="gray.400" />
@@ -357,7 +396,10 @@ const MarkAttendance = () => {
               w="full"
               mt="8"
               isLoading={isLoading}
-              isDisabled={attendanceInfo.present === 0}
+              isDisabled={
+                attendanceInfo.present === 0 ||
+                (isUpdate && (!details.name.trim() || !details.date))
+              }
             >
               {isUpdate ? "Update" : "Submit"}
             </Button>
