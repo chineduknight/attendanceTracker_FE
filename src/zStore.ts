@@ -4,9 +4,11 @@ import { PermissionKey } from "rbac/permissions";
 
 export type currentAttendanceType = {
   name: string;
-  categoryId?: string;
-  subCategoryId?: string;
-  date: Date;
+  // null explicitly clears the field on PUT /attendance/:id; undefined would be
+  // dropped from the request body and read as "leave unchanged" by the backend.
+  categoryId?: string | null;
+  subCategoryId?: string | null;
+  date: string;
   members?: Array<any>;
 };
 
@@ -74,7 +76,7 @@ const globalStore = <F extends Function>(set: F) => ({
     name: "",
     categoryId: "",
     subCategoryId: "",
-    date: new Date(),
+    date: "",
     members: [],
   },
   updateCurrentAttendance: (currentAttendance: currentAttendanceType) => {

@@ -12,8 +12,16 @@ import {
   IconButton,
   Icon,
   Container,
+  Drawer,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerCloseButton,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  useDisclosure,
 } from "@chakra-ui/react";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaPencilAlt } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
@@ -32,6 +40,10 @@ import { Q_KEY } from "utils/constant";
 import _ from "lodash";
 import { toast } from "react-toastify";
 import LoadingSpinner from "components/LoadingSpinner";
+import { useCategories } from "hooks/useCategories";
+import AttendanceDetailsForm, {
+  AttendanceDetails,
+} from "components/attendance/AttendanceDetailsForm";
 
 export type AttendanceStatus = "absent" | "present" | "apology";
 
@@ -107,6 +119,26 @@ const MarkAttendance = () => {
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
   const localStorageKey = `attendance-${org.id}`;
+  const { categories } = useCategories(org.id);
+  const detailsDrawer = useDisclosure();
+
+  // Edit mode shows the session-details form, driven by the loaded currentAttendance.
+  const details: AttendanceDetails = {
+    name: currentAttendance.name ?? "",
+    categoryId: currentAttendance.categoryId ?? "",
+    subCategoryId: currentAttendance.subCategoryId ?? "",
+    date: (currentAttendance.date ?? "").slice(0, 10),
+  };
+
+  const onDetailsChange = (next: AttendanceDetails) => {
+    setAttendance({
+      ...currentAttendance,
+      name: next.name,
+      date: next.date,
+      categoryId: next.categoryId || null,
+      subCategoryId: next.subCategoryId || null,
+    });
+  };
 
   // filtered list + status counts are pure derivations of allMembers/searchQuery,
   // so we compute them here instead of storing (and hand-syncing) extra state.
@@ -182,6 +214,9 @@ const MarkAttendance = () => {
     {
       onSuccess: onGetAttandanceSuccess,
       enabled: isUpdate,
+      // A refocus refetch would re-run onSuccess and overwrite the user's
+      // in-progress name/category/date/member edits with the server values.
+      refetchOnWindowFocus: false,
     }
   );
 
@@ -289,19 +324,30 @@ const MarkAttendance = () => {
         </Text>
       </Flex>
       <Container>
-        <Flex alignItems="center" justifyContent="space-between" mt="4">
-          <Heading fontSize="22px">
+        <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
+          <Heading fontSize="22px" noOfLines={1}>
             {`Members ${currentAttendance.name}`}
           </Heading>
-          <Button
-            variant="logout"
-            onClick={() => {
-              localStorage.removeItem(localStorageKey);
-              window.location.reload();
-            }}
-          >
-            Refresh
-          </Button>
+          <Flex gap={2} alignItems="center" flexShrink={0}>
+            {isUpdate && (
+              <IconButton
+                aria-label="Edit session details"
+                icon={<FaPencilAlt />}
+                variant="outline"
+                colorScheme="blue"
+                onClick={detailsDrawer.onOpen}
+              />
+            )}
+            <Button
+              variant="logout"
+              onClick={() => {
+                localStorage.removeItem(localStorageKey);
+                window.location.reload();
+              }}
+            >
+              Refresh
+            </Button>
+          </Flex>
         </Flex>
         {isLoadingData ? (
           <LoadingSpinner h="45vh" text="Loading members..." />
@@ -357,7 +403,10 @@ const MarkAttendance = () => {
               w="full"
               mt="8"
               isLoading={isLoading}
-              isDisabled={attendanceInfo.present === 0}
+              isDisabled={
+                attendanceInfo.present === 0 ||
+                (isUpdate && (!details.name.trim() || !details.date))
+              }
             >
               {isUpdate ? "Update" : "Submit"}
             </Button>
@@ -373,6 +422,33 @@ const MarkAttendance = () => {
           </>
         )}
       </Container>
+
+      {isUpdate && (
+        <Drawer
+          isOpen={detailsDrawer.isOpen}
+          placement="right"
+          onClose={detailsDrawer.onClose}
+          size={{ base: "full", md: "md" }}
+        >
+          <DrawerOverlay />
+          <DrawerContent>
+            <DrawerCloseButton />
+            <DrawerHeader>Session details</DrawerHeader>
+            <DrawerBody>
+              <AttendanceDetailsForm
+                value={details}
+                onChange={onDetailsChange}
+                categories={categories}
+              />
+            </DrawerBody>
+            <DrawerFooter>
+              <Button w="full" variant="primary" onClick={detailsDrawer.onClose}>
+                Done
+              </Button>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      )}
     </Box>
   );
 };
