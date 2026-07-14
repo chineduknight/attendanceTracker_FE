@@ -4,71 +4,52 @@ import {
   useColorModeValue,
   Text,
   Button,
-  FormControl,
-  FormLabel,
-  Input,
   Stack,
-  Select,
 } from "@chakra-ui/react";
-
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
-import _ from "lodash";
-import { queryClient, useQueryWrapper } from "services/api/apiHelper";
-import { convertParamsToString } from "helpers/stringManipulations";
-import { orgRequest } from "services";
-import { useState } from "react";
+import { queryClient } from "services/api/apiHelper";
 import { Q_KEY } from "utils/constant";
 import { FaArrowCircleLeft } from "react-icons/fa";
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useCategories } from "hooks/useCategories";
+import AttendanceDetailsForm, {
+  AttendanceDetails,
+} from "components/attendance/AttendanceDetailsForm";
 
-type CommonTypeCategory = {
-  name: string;
-  status: string;
-  id: string;
+const EMPTY_DETAILS: AttendanceDetails = {
+  name: "",
+  categoryId: "",
+  subCategoryId: "",
+  date: "",
 };
-interface SubCategoryType extends CommonTypeCategory {
-  parentCategoryId: string;
-}
-export interface CategoryType extends CommonTypeCategory {
-  subCategories: SubCategoryType[];
-}
 
 const CreateAttendance = () => {
-  const { register, handleSubmit, watch } = useForm<currentAttendanceType>();
-  const categorySelected = watch(["categoryId"]);
+  const navigate = useNavigate();
   const [updateCurrentAttendance, org] = useGlobalStore((state) => [
     state.updateCurrentAttendance,
     state.organisation,
   ]);
-  const onSubmit: SubmitHandler<currentAttendanceType> = (formData) => {
-    const trimmedFormData = _.mapValues(formData, (value) => {
-      if (typeof value === "string") {
-        return value.trim();
-      }
-      return value;
-    });
+  const { categories } = useCategories(org.id);
+  const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
 
-    const nonEmptyFormData = _.omitBy(trimmedFormData, _.isEmpty);
-    updateCurrentAttendance(nonEmptyFormData as currentAttendanceType);
+  const onContinue = () => {
+    if (!details.name.trim() || !details.date) {
+      toast.error("Name and date are required");
+      return;
+    }
+    const payload: currentAttendanceType = {
+      name: details.name.trim(),
+      date: details.date,
+      ...(details.categoryId ? { categoryId: details.categoryId } : {}),
+      ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
+    };
+    updateCurrentAttendance(payload);
     queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
-
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
-    // Q_KEY.GET_MEMBERS
   };
-  const catUrl = convertParamsToString(orgRequest.CATEGORY, {
-    organisationId: org.id,
-  });
-  const [allCategory, setAllCategory] = useState<CategoryType[]>([]);
-  const onSuccess = (res) => {
-    setAllCategory(res.data);
-  };
-  useQueryWrapper(["get-all-category"], catUrl, {
-    onSuccess,
-  });
-
-  const navigate = useNavigate();
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -93,11 +74,7 @@ const CreateAttendance = () => {
         Back
       </Button>
       <Flex>
-        <Button
-          mt="4"
-          ml="2"
-          onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}
-        >
+        <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
           Add Category
         </Button>
         <Button
@@ -123,69 +100,23 @@ const CreateAttendance = () => {
           boxShadow={"lg"}
           p={6}
         >
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <FormControl id="name" isRequired>
-              <FormLabel mb="0">Name</FormLabel>
-              <Input
-                type="text"
-                {...register("name", { required: true })}
-                placeholder="Attendance Name"
-              />
-            </FormControl>
-            <FormControl id="category" mt="4">
-              <FormLabel mb="0">Category</FormLabel>
-              <Select
-                placeholder="Select option"
-                {...register("categoryId", { required: false })}
-              >
-                {allCategory.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl id="subCategory" mt="4">
-              <FormLabel mb="0">Sub Category</FormLabel>
-              <Select
-                placeholder="Select option"
-                {...register("subCategoryId", { required: false })}
-              >
-                {allCategory
-                  .find((category) => category.id === categorySelected[0])
-                  ?.subCategories.map((subCategory) => (
-                    <option key={subCategory.id} value={subCategory.id}>
-                      {subCategory.name}
-                    </option>
-                  ))}
-              </Select>
-            </FormControl>
-            <FormControl id="date" isRequired mt="4">
-              <FormLabel mb="0">Date</FormLabel>
-              <Input
-                type="date"
-                max={new Date().toISOString().slice(0, 10)}
-                {...register("date", { required: true })}
-              />
-            </FormControl>
-
-            <Box>
-              <Button
-                w="full"
-                mt="40px"
-                bg={"blue.400"}
-                color={"white"}
-                _hover={{
-                  bg: "blue.500",
-                }}
-                fontWeight="bold"
-                fontSize="15px"
-                type="submit"
-              >
-                Continue
-              </Button>
-            </Box>
-          </form>
+          <AttendanceDetailsForm
+            value={details}
+            onChange={setDetails}
+            categories={categories}
+          />
+          <Button
+            w="full"
+            mt="40px"
+            bg={"blue.400"}
+            color={"white"}
+            _hover={{ bg: "blue.500" }}
+            fontWeight="bold"
+            fontSize="15px"
+            onClick={onContinue}
+          >
+            Continue
+          </Button>
         </Stack>
       </Flex>
     </Box>
