@@ -15,6 +15,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
+  deleteRequest,
   postRequest,
   queryClient,
   useMutationWrapper,
@@ -26,11 +27,12 @@ import useGlobalStore from "zStore";
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { FaArrowCircleLeft, FaPlusSquare } from "react-icons/fa";
+import { FaArrowCircleLeft, FaPlusSquare, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { Q_KEY } from "utils/constant";
 import { FieldType } from "./UserModel";
 import LoadingSpinner from "components/LoadingSpinner";
+import { Can } from "rbac/Can";
 
 interface FormData {
   [fieldName: string]: string;
@@ -111,6 +113,43 @@ const AddOrUpdateMember = () => {
     mutate({
       url,
       data,
+    });
+  };
+
+  const { mutate: deleteMember, isLoading: isDeleting } = useMutationWrapper(
+    deleteRequest,
+    () => {
+      toast.success("Member deleted successfully");
+      queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+      navigate(PROTECTED_PATHS.VIEW_MEMBER);
+    },
+    (error: any) => {
+      const message =
+        error?.response?.data?.error ?? "Failed to delete member.";
+      toast.error(message);
+    },
+  );
+
+  const handleDeleteMember = () => {
+    const url = convertParamsToString(orgRequest.DELETE_MEMBER, {
+      organisationId: org.id,
+      id: params.memberId as string,
+    });
+    confirmAlert({
+      title: "Delete Member",
+      message:
+        "Are you sure you want to delete this member? This cannot be undone.",
+      buttons: [
+        {
+          label: "Yes",
+          className: "confirm-alert-button confirm-alert-button-yes",
+          onClick: () => deleteMember({ url }),
+        },
+        {
+          label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
+        },
+      ],
     });
   };
 
@@ -284,6 +323,22 @@ const AddOrUpdateMember = () => {
                       >
                         Cancel
                       </Button>
+                      {isUpdating && (
+                        <Can perm="members.manage">
+                          <Button
+                            leftIcon={<FaTrash />}
+                            bg="red.500"
+                            color="white"
+                            _hover={{ bg: "red.600" }}
+                            w="full"
+                            mt="8"
+                            isLoading={isDeleting}
+                            onClick={handleDeleteMember}
+                          >
+                            Delete Member
+                          </Button>
+                        </Can>
+                      )}
                     </Stack>
                   </form>
                 </div>
