@@ -49,6 +49,73 @@ type AttendanceInfoType = {
   apology: number;
   absent: number;
 };
+
+// Voice parts are always listed in this order; anything else is appended after.
+const VOICE_PART_ORDER = ["soprano", "alto", "tenor", "bass"];
+
+const partKeyOf = (item: MemberType): string =>
+  item.member.part ? item.member.part.toLowerCase() : "others";
+
+const partLabelOf = (partKey: string): string =>
+  partKey === "others" ? "Other" : capitalize(partKey);
+
+// Rank used to sort a mixed list (e.g. apologies) by voice part; unknown parts last.
+const partRankOf = (item: MemberType): number => {
+  const index = VOICE_PART_ORDER.indexOf(partKeyOf(item));
+  return index === -1 ? VOICE_PART_ORDER.length : index;
+};
+
+const memberDisplayName = (item: MemberType): string => {
+  const isMale = item.member.gender?.toLowerCase() === "male";
+  return `${isMale ? "Bro" : "Sis"} ${item.member.name}`;
+};
+
+const byMemberName = (a: MemberType, b: MemberType): number =>
+  a.member.name.toLowerCase().localeCompare(b.member.name.toLowerCase());
+
+const orderedPartKeys = (keys: string[]): string[] => {
+  const known = VOICE_PART_ORDER.filter((part) => keys.includes(part));
+  const extra = keys.filter((part) => !VOICE_PART_ORDER.includes(part)).sort();
+  return [...known, ...extra];
+};
+
+// Closing paragraph pools, grouped by tone. One is chosen based on the session
+// figures so the message feels human without repeating the same line every time.
+const CLOSING_MESSAGES: Record<string, string[]> = {
+  strong: [
+    "Great music is built long before the performance, one rehearsal and one committed member at a time. Thank you for contributing your part.",
+    "Each time we gather, we become stronger as one choir. Thank you for showing up and helping us move the music forward.",
+  ],
+  apologies: [
+    "Thank you to everyone who was present and to those who communicated responsibly. Let us keep growing in consistency and readiness.",
+  ],
+  low: [
+    "Our strength depends on every voice taking its place. Let us make a renewed effort to be present and prepared at the next gathering.",
+  ],
+  general: [
+    "Thank you to everyone who attended or communicated their absence. Let us continue to build a choir marked by commitment, consistency, and love for the music.",
+    "Every rehearsal strengthens the sound we create together. Thank you for showing up, and let us return even stronger at the next gathering.",
+    "Your presence matters, your voice matters, and your commitment strengthens the entire choir. Thank you for being part of the work.",
+  ],
+};
+
+const pickClosingMessage = (
+  present: number,
+  apology: number,
+  absent: number,
+): string => {
+  const total = present + apology + absent;
+  const presentRate = total > 0 ? present / total : 0;
+
+  let tone: keyof typeof CLOSING_MESSAGES = "general";
+  if (total > 0 && presentRate < 0.4) tone = "low";
+  else if (presentRate >= 0.7) tone = "strong";
+  else if (apology > 0 && apology / total >= 0.2) tone = "apologies";
+
+  const pool = CLOSING_MESSAGES[tone];
+  return pool[Math.floor(Math.random() * pool.length)];
+};
+
 const Attendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,110 +201,101 @@ const Attendance = () => {
     ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
     : "";
 
-  const handleSendToWhatsapp = () => {
-    // Group present members by their part
-    const presentMembersByPart = allMembers
-      .filter(
-        (item) =>
-          item.attendanceStatus === "present" ||
-          item.attendanceStatus === "apology",
-      )
-      .reduce((acc, item) => {
-        // Use "others" if member.part is missing.
-        const part = item.member.part
-          ? item.member.part.toLowerCase()
-          : "others";
-        if (!acc[part]) {
-          acc[part] = [];
-        }
-        // Add prefix based on gender
-        const prefix =
-          item.member.gender && item.member.gender.toLowerCase() === "male"
-            ? "Bro "
-            : "Sis ";
-        const nameWithPrefix =
-          prefix +
-          item.member.name +
-          (item.attendanceStatus === "apology" ? " (Apology)" : "");
-        acc[part].push(nameWithPrefix);
-        return acc;
-      }, {});
-
-    // Define the desired order for known choir parts.
-    const orderedParts = ["soprano", "alto", "tenor", "bass"];
-    let presentMembersString = "";
-
-    // Process the known parts first.
-    orderedParts.forEach((part) => {
-      if (presentMembersByPart[part] && presentMembersByPart[part].length > 0) {
-        // Sort alphabetically ignoring the prefix.
-        presentMembersByPart[part].sort((a, b) => {
-          const nameA = a.replace(/^(Bro |Sis )/, "").toLowerCase();
-          const nameB = b.replace(/^(Bro |Sis )/, "").toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
-        presentMembersString +=
-          `*${capitalize(part)}*\n` +
-          presentMembersByPart[part].join("\n") +
-          "\n\n";
-      }
-    });
-
-    // Process any extra parts (including "others") that are not in the orderedParts array.
-    const extraParts = Object.keys(presentMembersByPart).filter(
-      (part) => !orderedParts.includes(part),
-    );
-    extraParts.sort().forEach((part) => {
-      if (presentMembersByPart[part] && presentMembersByPart[part].length > 0) {
-        presentMembersByPart[part].sort((a, b) => {
-          const nameA = a.replace(/^(Bro |Sis )/, "").toLowerCase();
-          const nameB = b.replace(/^(Bro |Sis )/, "").toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
-        presentMembersString +=
-          `*${capitalize(part)}*\n` +
-          presentMembersByPart[part].join("\n") +
-          "\n\n";
-      }
-    });
-
-    // Absent members: Only display the count.
-    const allAbsentMembers = allMembers.filter(
-      (item) => item.attendanceStatus === "absent",
-    );
-    console.log("allAbsentMembers:", allAbsentMembers);
-    const absentCount = allAbsentMembers.filter(
-      (item) => item.member.status === "active",
-    ).length;
-    const absentMembersString = `*Absent Members:(${absentCount})*`;
-
-    const presentCount = allMembers.filter(
+  const buildWhatsappMessage = (): string => {
+    const presentMembers = allMembers.filter(
       (item) => item.attendanceStatus === "present",
-    ).length;
-    const apologyCount = allMembers.filter(
+    );
+    const apologyMembers = allMembers.filter(
       (item) => item.attendanceStatus === "apology",
+    );
+    const presentCount = presentMembers.length;
+    const apologyCount = apologyMembers.length;
+    // Absent count only reflects active members, matching the on-screen figures.
+    const absentCount = allMembers.filter(
+      (item) =>
+        item.attendanceStatus === "absent" && item.member.status === "active",
     ).length;
-    const title = `Attendance Info\n\n${attendanceInfo?.name}\nDate: ${formattedDate}\nPresent (${presentCount})\nApology (${apologyCount})\n`;
-    const message = [title, presentMembersString, absentMembersString]
+
+    // Header: choir name, session name, date, and a compact present/apology summary.
+    const orgTitle = (org.name || "Choir").toUpperCase();
+    const headerBlock = `🎶 *${orgTitle} ATTENDANCE*`;
+    const sessionBlock = [
+      `*${attendanceInfo?.name ?? ""}*`,
+      `📅 ${formattedDate}`,
+    ].join("\n");
+    const summaryBlock = `✅ Present: ${presentCount}  |  🟡 Apology: ${apologyCount}`;
+
+    // Present members grouped by voice part, each heading carrying its own count.
+    const presentByPart = presentMembers.reduce(
+      (acc: Record<string, MemberType[]>, item) => {
+        const partKey = partKeyOf(item);
+        if (!acc[partKey]) acc[partKey] = [];
+        acc[partKey].push(item);
+        return acc;
+      },
+      {},
+    );
+    const partKeys = orderedPartKeys(Object.keys(presentByPart));
+    const presentBody = partKeys.length
+      ? partKeys
+          .map((partKey) => {
+            const group = [...presentByPart[partKey]].sort(byMemberName);
+            return [
+              `*${partLabelOf(partKey)} — ${group.length}*`,
+              ...group.map(memberDisplayName),
+            ].join("\n");
+          })
+          .join("\n\n")
+      : "No members recorded as present.";
+    const presentSection = `*PRESENT MEMBERS*\n\n${presentBody}`;
+
+    // Apologies: one combined list ordered by part, with the part beside each name.
+    const apologySection = apologyCount
+      ? [
+          `*APOLOGIES — ${apologyCount}*`,
+          ...[...apologyMembers]
+            .sort((a, b) => partRankOf(a) - partRankOf(b) || byMemberName(a, b))
+            .map(
+              (item) =>
+                `${memberDisplayName(item)} — ${partLabelOf(partKeyOf(item))}`,
+            ),
+        ].join("\n")
+      : "";
+
+    const absentSection = `🔴 *Absent Members: ${absentCount}*`;
+    const closingSection = `_${pickClosingMessage(
+      presentCount,
+      apologyCount,
+      absentCount,
+    )}_`;
+
+    return [
+      headerBlock,
+      sessionBlock,
+      summaryBlock,
+      presentSection,
+      apologySection,
+      absentSection,
+      closingSection,
+    ]
       .filter(Boolean)
-      .join("\n");
+      .join("\n\n");
+  };
 
-    console.log("message:", message);
-    const phoneNumber = "+2348032374369"; // replace with the actual phone number
-    const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
-      message,
-    )}`;
-
+  const handleSendToWhatsapp = () => {
+    const message = buildWhatsappMessage();
     if (navigator.share) {
       navigator
-        .share({
-          title: "Attendance Information",
-          text: message,
-        })
-        .then(() => console.log("Successful share"))
-        .catch((error) => console.log("Error sharing", error));
+        .share({ title: "Attendance Information", text: message })
+        .catch(() => {
+          /* user dismissed the native share sheet */
+        });
     } else {
-      window.open(whatsappLink);
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(message)}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
     }
   };
 
