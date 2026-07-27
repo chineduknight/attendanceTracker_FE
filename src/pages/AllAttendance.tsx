@@ -107,8 +107,16 @@ const AllAttendance = () => {
           <LoadingSpinner h="30vh" text="Loading attendance..." />
         ) : allAttend.length ? (
           <>
-            {allAttend
-              .sort((a, b) => b.dateFormated - a.dateFormated)
+            {[...allAttend]
+              .sort((a, b) => {
+                const dateDiff = b.dateFormated - a.dateFormated;
+                if (dateDiff !== 0) return dateDiff;
+                // Same date: newest created first
+                return (
+                  new Date(b.createdAt).getTime() -
+                  new Date(a.createdAt).getTime()
+                );
+              })
               .map((attendance) => {
                 const editsRemaining = resolveEditsRemaining(attendance);
                 const editCount = resolveEditCount(attendance);
