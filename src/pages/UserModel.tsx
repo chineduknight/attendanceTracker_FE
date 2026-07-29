@@ -2,7 +2,6 @@ import {
   Box,
   Flex,
   useColorModeValue,
-  Text,
   Button,
   FormControl,
   FormLabel,
@@ -140,16 +139,6 @@ const UserModel = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text color="#fff" fontWeight="bold">
-          {isUpdating ? "Update Model" : "Create Model"}
-        </Text>
-      </Flex>
       <Flex
         align={"center"}
         justify={"center"}
