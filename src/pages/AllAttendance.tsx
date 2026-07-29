@@ -22,7 +22,7 @@ import {
   resolveEditCount,
   resolveEditsRemaining,
 } from "helpers/attendanceEdits";
-import { FaArrowCircleLeft, FaPencilAlt } from "react-icons/fa";
+import { FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
 
@@ -73,24 +73,6 @@ const AllAttendance = () => {
 
   return (
     <Box minH={"100vh"} bg={pageBg}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text color="#fff">Attendance Tracker</Text>
-      </Flex>
-      <Button
-        variant="logout"
-        colorScheme="blue"
-        onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-        mr={2}
-        leftIcon={<FaArrowCircleLeft />}
-        m="2"
-      >
-        Back
-      </Button>
       <Stack
         spacing={4}
         w={"full"}
