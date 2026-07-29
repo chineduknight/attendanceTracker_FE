@@ -22,7 +22,6 @@ import { useState } from "react";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import SetEmailModal from "components/auth/SetEmailModal";
-import AppHeader from "components/AppHeader";
 import { OrganisationSummary } from "rbac/types";
 
 const OrgList = () => {
@@ -77,7 +76,6 @@ const OrgList = () => {
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <SetEmailModal />
-      <AppHeader />
       <Button  mt="4" ml="6" onClick={() => navigate(PROTECTED_PATHS.ADD_ORG)}>
         + Add Org
       </Button>

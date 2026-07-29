@@ -7,7 +7,6 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import useGlobalStore from "zStore";
-import AppHeader from "components/AppHeader";
 import { Can } from "rbac/Can";
 import { useSyncSelectedOrg } from "rbac/useSyncSelectedOrg";
 import { NAV_ACTIONS } from "config/navActions";
@@ -19,8 +18,6 @@ const Dashboard = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <AppHeader inOrg />
-
       <Heading mt="4" fontSize="22px" textAlign="center">
         {organisation?.name || "Dashboard"}
       </Heading>
