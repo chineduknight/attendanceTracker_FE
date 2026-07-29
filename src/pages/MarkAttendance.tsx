@@ -313,16 +313,6 @@ const MarkAttendance = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          Mark Attendance
-        </Text>
-      </Flex>
       <Container>
         <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
           <Heading fontSize="22px" noOfLines={1}>
