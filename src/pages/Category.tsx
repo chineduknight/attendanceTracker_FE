@@ -2,7 +2,6 @@ import {
   Box,
   Flex,
   useColorModeValue,
-  Text,
   Button,
   FormControl,
   FormLabel,
@@ -16,8 +15,6 @@ import { orgRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
-import BackButton from "components/BackButton";
 
 const Category = () => {
   const [category] = useGlobalStore((state) => [state.organisation]);
@@ -26,7 +23,6 @@ const Category = () => {
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
-  const navigate = useNavigate();
 
   const handleAddCategory = (detail) => {
     const categoryUrl = convertParamsToString(orgRequest.CATEGORY, {
@@ -49,19 +45,6 @@ const Category = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          Create Category
-        </Text>
-      </Flex>
-
-      <BackButton handleClick={() => navigate(-1)} />
-
       <Flex
         align={"center"}
         justify={"center"}
