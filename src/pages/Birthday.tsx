@@ -25,16 +25,12 @@ import {
   WrapItem,
 } from "@chakra-ui/react";
 import {
-  FaArrowCircleLeft,
-  FaBirthdayCake,
   FaFileExcel,
   FaFilePdf,
   FaShareAlt,
   FaWhatsapp,
   FaCopy,
 } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
-import { PROTECTED_PATHS } from "routes/pagePath";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -60,7 +56,6 @@ type StatusOption = {
 };
 
 const Birthday: React.FC = () => {
-  const navigate = useNavigate();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -417,29 +412,7 @@ const Birthday: React.FC = () => {
 
   return (
     <Box minH="100vh" bg={pageBg}>
-      <Flex
-        bg="pink.400"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          Birthdays
-        </Text>
-        <FaBirthdayCake color="#fff" size={22} />
-      </Flex>
-
       <Box p={4}>
-        <Button
-          variant="ghost"
-          colorScheme="pink"
-          onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-          leftIcon={<FaArrowCircleLeft />}
-          mb={4}
-        >
-          Back
-        </Button>
-
         {/* Share button */}
         <Flex mb={3} justifyContent="flex-end">
           <Button
