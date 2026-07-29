@@ -21,7 +21,7 @@ import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
-import { FaArrowCircleLeft, FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
+import { FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 
@@ -367,30 +367,12 @@ const Attendance = () => {
   };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          View Attendance
-        </Text>
-      </Flex>
       <Container>
         {isLoadingAttendance ? (
           <LoadingSpinner h="40vh" text="Loading attendance..." />
         ) : (
           <>
-            <Flex mt="4" justifyContent="space-between">
-              <Button
-                variant="logout"
-                colorScheme="blue"
-                onClick={() => navigate(-1)}
-                leftIcon={<FaArrowCircleLeft />}
-              >
-                Back
-              </Button>
+            <Flex mt="4" justifyContent="flex-end">
               <Flex gap={2}>
                 <Button
                   onClick={handleSendToWhatsapp}
