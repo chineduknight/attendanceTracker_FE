@@ -1,0 +1,49 @@
+import { render, screen, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import AppHeader from "components/AppHeader";
+
+jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock("components/NavDrawer", () => {
+  return function MockedNavDrawer({ isOpen }: any) {
+    return isOpen ? <div data-testid="nav-drawer">Change password</div> : null;
+  };
+});
+
+describe("<AppHeader>", () => {
+  it("renders the given title", () => {
+    render(
+      <MemoryRouter>
+        <AppHeader title="Finance" />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("Finance")).toBeInTheDocument();
+  });
+
+  it("hides the back button when showBack is false", () => {
+    render(
+      <MemoryRouter>
+        <AppHeader title="Dashboard" showBack={false} />
+      </MemoryRouter>
+    );
+    expect(screen.queryByLabelText("Back")).not.toBeInTheDocument();
+  });
+
+  it("shows the back button by default", () => {
+    render(
+      <MemoryRouter>
+        <AppHeader title="Category" />
+      </MemoryRouter>
+    );
+    expect(screen.getByLabelText("Back")).toBeInTheDocument();
+  });
+
+  it("opens the nav drawer when the hamburger is clicked", () => {
+    render(
+      <MemoryRouter>
+        <AppHeader title="Category" />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByLabelText("Open menu"));
+    expect(screen.getByText("Change password")).toBeInTheDocument();
+  });
+});
