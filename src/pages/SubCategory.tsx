@@ -1,7 +1,6 @@
 import {
   Box,
   Flex,
-  Text,
   Button,
   FormControl,
   FormLabel,
@@ -23,8 +22,6 @@ import { useState } from "react";
 import { CategoryType } from "hooks/useCategories";
 import { toast } from "react-toastify";
 import Loader from "components/Loader";
-import BackButton from "components/BackButton";
-import { useNavigate } from "react-router-dom";
 const SubCategory = () => {
   const onSuccess = (data) => {
     toast.success("Sub Category added successfully");
@@ -65,23 +62,11 @@ const SubCategory = () => {
     handleAddSubCategory(details);
   };
 
-  const navigate = useNavigate();
   if (isGettingCat) {
     return <Loader />;
   }
   return (
     <Box minH={"100vh"} bg={"gray.50"}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          Create Sub-Category
-        </Text>
-      </Flex>
-      <BackButton handleClick={() => navigate(-1)} />
       <Flex align={"center"} justify={"center"} bg="gray.50">
         <Stack
           spacing={4}
