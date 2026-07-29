@@ -11,6 +11,20 @@ import {
   Button,
   Checkbox,
   CheckboxGroup,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Icon,
+  Collapse,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverArrow,
+  PopoverCloseButton,
+  PopoverBody,
+  useBreakpointValue,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -23,6 +37,11 @@ import {
   FaArrowCircleLeft,
   FaFileExcel,
   FaFilePdf,
+  FaUserPlus,
+  FaShareAlt,
+  FaChevronDown,
+  FaChevronUp,
+  FaFilter,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -31,9 +50,13 @@ import ReactSelect, { MultiValue } from "react-select";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 
-type StatusOption = {
+type SelectOption = {
   value: string;
   label: string;
+};
+type FilterableField = {
+  name: string;
+  options: string[];
 };
 const REQUIRED_EXPORT_FIELDS = ["name"];
 
@@ -44,9 +67,13 @@ const ViewMembers: React.FC = () => {
     const stored = localStorage.getItem("selectedFields");
     return stored ? JSON.parse(stored) : [];
   });
-  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
-  const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [filterableFields, setFilterableFields] = useState<FilterableField[]>(
+    [],
+  );
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
   const navigate = useNavigate();
+  const isCompactActions = useBreakpointValue({ base: true, sm: false });
+  const { isOpen: isFieldsOpen, onToggle: onFieldsToggle } = useDisclosure();
   // The keys you always want to exclude
   const filteredKeys = useMemo(
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
@@ -58,12 +85,13 @@ const ViewMembers: React.FC = () => {
 
   useQueryWrapper(["get-member-model"], modelURL, {
     onSuccess: (data) => {
-      const fields = data?.data.fields;
-      const statusField = fields.find((field: any) => field.name === "status");
-      if (statusField && Array.isArray(statusField.options)) {
-        setStatusOptions(statusField.options);
-        setStatusFilter(["all"]);
-      }
+      const fields = data?.data.fields ?? [];
+      const optionFields = fields
+        .filter(
+          (field: any) => field.type === "option" && Array.isArray(field.options),
+        )
+        .map((field: any) => ({ name: field.name, options: field.options }));
+      setFilterableFields(optionFields);
     },
   });
   const url = convertParamsToString(orgRequest.MEMBERS, {
@@ -75,9 +103,9 @@ const ViewMembers: React.FC = () => {
       ? Object.keys(_.omit(members[0], filteredKeys))
       : [];
   }, [members, filteredKeys]);
-  const exportStatuses = useMemo(
-    () => statusFilter.filter((status) => status !== "all"),
-    [statusFilter],
+  const activeExportFilters = useMemo(
+    () => Object.entries(filters).filter(([, values]) => values.length > 0),
+    [filters],
   );
   const exportFields = useMemo(
     () =>
@@ -92,8 +120,10 @@ const ViewMembers: React.FC = () => {
   const exportQueryString = useMemo(() => {
     const queryParams = new URLSearchParams();
 
-    if (exportStatuses.length) {
-      queryParams.set("status", exportStatuses.join(","));
+    activeExportFilters.forEach(([field, values]) => {
+      queryParams.set(field, values.join(","));
+    });
+    if (activeExportFilters.length) {
       queryParams.set("sort", "part:asc");
     }
 
@@ -103,7 +133,7 @@ const ViewMembers: React.FC = () => {
 
     const queryString = queryParams.toString();
     return queryString ? `?${queryString}` : "";
-  }, [exportFields, exportStatuses]);
+  }, [exportFields, activeExportFilters]);
   const exportMembersUrl = useMemo(
     () => `${url}/export${exportQueryString}`,
     [exportQueryString, url],
@@ -132,7 +162,7 @@ const ViewMembers: React.FC = () => {
       [
         "export-members",
         org.id,
-        exportStatuses.join(","),
+        JSON.stringify(filters),
         exportFields.join(","),
       ],
       exportMembersUrl,
@@ -150,7 +180,7 @@ const ViewMembers: React.FC = () => {
       [
         "export-members-pdf",
         org.id,
-        exportStatuses.join(","),
+        JSON.stringify(filters),
         exportFields.join(","),
       ],
       exportMembersPdfUrl,
@@ -164,34 +194,21 @@ const ViewMembers: React.FC = () => {
       },
     );
 
-  const statusSelectOptions = useMemo<StatusOption[]>(
-    () => [
-      { value: "all", label: "All" },
-      ...statusOptions.map((option) => ({
-        value: option,
-        label: capitalize(option),
-      })),
-    ],
-    [statusOptions],
-  );
-
-  const selectedStatusOptions = useMemo(
-    () =>
-      statusSelectOptions.filter((option) =>
-        statusFilter.includes(option.value),
-      ),
-    [statusFilter, statusSelectOptions],
+  const activeFilterCount = useMemo(
+    () => Object.values(filters).filter((values) => values.length > 0).length,
+    [filters],
   );
 
   const filteredMembers = members.filter((member) => {
     const matchesSearch = member.name
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter.includes("all") ||
-      statusFilter.length === 0 ||
-      statusFilter.includes(member.status);
-    return matchesSearch && matchesStatus;
+    const matchesFilters = filterableFields.every((field) => {
+      const values = filters[field.name];
+      if (!values || values.length === 0) return true;
+      return values.includes(member[field.name]);
+    });
+    return matchesSearch && matchesFilters;
   });
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,63 +243,68 @@ const ViewMembers: React.FC = () => {
         </Text>
       </Flex>
       <Box px="4">
-        <Flex
-          justifyContent="space-between"
-          alignItems={{ base: "stretch", sm: "center" }}
-          direction={{ base: "column", sm: "row" }}
-          gap={2}
-          mb={2}
-        >
+        <Flex alignItems="center" justifyContent="space-between" mb={4}>
           <Button
             variant="logout"
             colorScheme="blue"
             onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-            w={{ base: "100%", sm: "auto" }}
             leftIcon={<FaArrowCircleLeft />}
+            aria-label="Back"
+            px={isCompactActions ? 3 : 4}
           >
-            Back
+            {!isCompactActions && "Back"}
           </Button>
-          <Can perm="members.manage">
-            <Button
-              variant="primary"
-              colorScheme="blue"
-              onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-              w={{ base: "100%", sm: "auto" }}
-            >
-              Add Member
-            </Button>
-          </Can>
-        </Flex>
-        <Flex
-          gap={2}
-          mb={4}
-          justifyContent={{ base: "stretch", sm: "flex-end" }}
-          direction={{ base: "column", sm: "row" }}
-        >
-          <Button
-            leftIcon={<FaFileExcel />}
-            onClick={() => exportMembers()}
-            isLoading={isExportingMembers}
-            isDisabled={!org.id || isLoading || Boolean(error)}
-            w={{ base: "100%", sm: "auto" }}
-            bg="green.500"
-            color="white"
-            _hover={{ bg: "green.600" }}
-          >
-            Export Member List
-          </Button>
-          <Button
-            leftIcon={<FaFilePdf />}
-            onClick={() => exportMembersPdf()}
-            isLoading={isExportingMembersPdf}
-            isDisabled={!org.id || isLoading || Boolean(error)}
-            w={{ base: "100%", sm: "auto" }}
-            bg="red.500"
-            color="white"
-            _hover={{ bg: "red.600" }}
-          >
-            Export Member PDF
-          </Button>
+          <Flex gap={2}>
+            <Can perm="members.manage">
+              <Button
+                variant="primary"
+                colorScheme="blue"
+                onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
+                leftIcon={<FaUserPlus />}
+                aria-label="Add Member"
+                px={isCompactActions ? 3 : 4}
+              >
+                {!isCompactActions && "Add Member"}
+              </Button>
+            </Can>
+            <Menu>
+              <MenuButton
+                as={Button}
+                variant="solid"
+                colorScheme="teal"
+                leftIcon={<FaShareAlt />}
+                aria-label="Share"
+                px={isCompactActions ? 3 : 4}
+              >
+                {!isCompactActions && "Share"}
+              </MenuButton>
+              <MenuList>
+                <MenuItem
+                  icon={<Icon as={FaFileExcel} color="green.500" />}
+                  color="green.600"
+                  onClick={() => exportMembers()}
+                  isDisabled={
+                    !org.id || isLoading || Boolean(error) || isExportingMembers
+                  }
+                >
+                  {isExportingMembers ? "Exporting..." : "Export Member List"}
+                </MenuItem>
+                <MenuItem
+                  icon={<Icon as={FaFilePdf} color="red.500" />}
+                  color="red.600"
+                  onClick={() => exportMembersPdf()}
+                  isDisabled={
+                    !org.id ||
+                    isLoading ||
+                    Boolean(error) ||
+                    isExportingMembersPdf
+                  }
+                >
+                  {isExportingMembersPdf ? "Exporting..." : "Export Member PDF"}
+                </MenuItem>
+              </MenuList>
+            </Menu>
+          </Flex>
         </Flex>
         {isLoading ? (
           <LoadingSpinner h="45vh" text="Loading members..." />
@@ -313,53 +335,112 @@ const ViewMembers: React.FC = () => {
                 mr={0}
                 maxW={{ base: "100%", md: "300px" }}
               />
-              <Box minW={{ base: "100%", md: "220px" }}>
-                <ReactSelect
-                  isMulti
-                  placeholder="Filter by status"
-                  options={statusSelectOptions}
-                  value={selectedStatusOptions}
-                  closeMenuOnSelect={false}
-                  onChange={(selected: MultiValue<StatusOption>) => {
-                    const values = selected.map((item) => item.value);
-                    if (values.length === 0) {
-                      setStatusFilter(["all"]);
-                      return;
-                    }
-                    if (values.includes("all") && values.length > 1) {
-                      setStatusFilter(
-                        values.filter((value) => value !== "all"),
-                      );
-                      return;
-                    }
-                    if (values.includes("all")) {
-                      setStatusFilter(["all"]);
-                      return;
-                    }
-                    setStatusFilter(values);
-                  }}
-                />
-              </Box>
+              {filterableFields.length > 0 && (
+                <Popover placement="bottom-end" closeOnBlur>
+                  <PopoverTrigger>
+                    <Button
+                      leftIcon={<FaFilter />}
+                      variant="outline"
+                      colorScheme="blue"
+                      w={{ base: "100%", md: "auto" }}
+                    >
+                      Filters
+                      {activeFilterCount > 0 && ` (${activeFilterCount})`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent w={{ base: "280px", md: "320px" }}>
+                    <PopoverArrow />
+                    <PopoverCloseButton />
+                    <PopoverBody>
+                      <Flex align="center" gap={3} mb={2} pr={6}>
+                        <Text fontWeight="bold">Filter by</Text>
+                        {activeFilterCount > 0 && (
+                          <Button
+                            size="xs"
+                            variant="link"
+                            colorScheme="blue"
+                            onClick={() => setFilters({})}
+                          >
+                            Clear all
+                          </Button>
+                        )}
+                      </Flex>
+                      {filterableFields.map((field) => {
+                        const options: SelectOption[] = field.options.map(
+                          (option) => ({
+                            value: option,
+                            label: capitalize(option),
+                          }),
+                        );
+                        const selected = options.filter((option) =>
+                          (filters[field.name] ?? []).includes(option.value),
+                        );
+                        return (
+                          <Box key={field.name} mb={3}>
+                            <Text fontSize="sm" fontWeight="bold" mb={1}>
+                              {capitalize(field.name)}
+                            </Text>
+                            <ReactSelect
+                              isMulti
+                              placeholder={`Filter by ${capitalize(field.name)}`}
+                              options={options}
+                              value={selected}
+                              closeMenuOnSelect={false}
+                              onChange={(selected: MultiValue<SelectOption>) => {
+                                const values = selected.map(
+                                  (item) => item.value,
+                                );
+                                setFilters((prev) => ({
+                                  ...prev,
+                                  [field.name]: values,
+                                }));
+                              }}
+                            />
+                          </Box>
+                        );
+                      })}
+                    </PopoverBody>
+                  </PopoverContent>
+                </Popover>
+              )}
             </Flex>
             <Text mb={4} fontWeight="bold">
               Total Members: {filteredMembers.length}
             </Text>
             <Box mb={8}>
-              <Heading as="h3" size="md" mb={2}>
-                Select additional fields to display:
-              </Heading>
-              <CheckboxGroup
-                value={selectedFields}
-                onChange={(values: string[]) => setSelectedFields(values)}
+              <Flex
+                align="center"
+                justify="space-between"
+                mb={2}
+                onClick={isCompactActions ? onFieldsToggle : undefined}
+                cursor={{ base: "pointer", md: "default" }}
               >
-                <Flex gap={4} wrap="wrap">
-                  {allExtraFields.map((field) => (
-                    <Checkbox key={field} value={field}>
-                      {capitalize(field)}
-                    </Checkbox>
-                  ))}
-                </Flex>
-              </CheckboxGroup>
+                <Heading as="h3" size="md">
+                  Select additional fields to display:
+                </Heading>
+                <Box display={{ base: "block", md: "none" }} color="gray.500">
+                  {isFieldsOpen ? <FaChevronUp /> : <FaChevronDown />}
+                </Box>
+              </Flex>
+              {isCompactActions && !isFieldsOpen && (
+                <Text fontSize="sm" color="gray.500">
+                  {selectedFields.length} selected — tap to customize
+                </Text>
+              )}
+              <Collapse in={!isCompactActions || isFieldsOpen} animateOpacity>
+                <CheckboxGroup
+                  value={selectedFields}
+                  onChange={(values: string[]) => setSelectedFields(values)}
+                >
+                  <Flex gap={4} wrap="wrap" pt={2}>
+                    {allExtraFields.map((field) => (
+                      <Checkbox key={field} value={field}>
+                        {capitalize(field)}
+                      </Checkbox>
+                    ))}
+                  </Flex>
+                </CheckboxGroup>
+              </Collapse>
             </Box>
             {filteredMembers.length === 0 ? (
               <Box
