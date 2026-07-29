@@ -11,7 +11,7 @@ const myTheme = extendTheme({
     body: "Palanquin",
   },
   colors: {
-    primary: "#ffdd00",
+    primary: "#3182CE", // blue.500 — the color every header already uses
     secondary: "#2FA07224",
   },
   components: {
