@@ -13,7 +13,7 @@ import {
   Divider,
   useDisclosure,
 } from "@chakra-ui/react";
-import { FaArrowLeft, FaKey, FaSignOutAlt } from "react-icons/fa";
+import { FaArrowLeft, FaKey, FaSignOutAlt, FaTachometerAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { EMPTY_USER, EMPTY_ORG } from "zStore";
@@ -90,6 +90,15 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
             <Divider />
 
             <VStack align="stretch" spacing={0} py={2}>
+              <Button
+                variant="ghost"
+                justifyContent="flex-start"
+                leftIcon={<FaTachometerAlt />}
+                borderRadius={0}
+                onClick={() => goTo(PROTECTED_PATHS.DASHBOARD)}
+              >
+                Dashboard
+              </Button>
               <Button
                 variant="ghost"
                 justifyContent="flex-start"

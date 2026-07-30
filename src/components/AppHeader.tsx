@@ -2,6 +2,7 @@ import { Flex, Text, IconButton, useDisclosure } from "@chakra-ui/react";
 import { FaBars, FaArrowCircleLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import NavDrawer from "components/NavDrawer";
+import { PROTECTED_PATHS } from "routes/pagePath";
 
 interface AppHeaderProps {
   title: string;
@@ -12,13 +13,22 @@ const AppHeader = ({ title, showBack = true }: AppHeaderProps) => {
   const navigate = useNavigate();
   const drawer = useDisclosure();
 
+  const handleBack = () => {
+    const historyIndex = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (historyIndex > 0) {
+      navigate(-1);
+    } else {
+      navigate(PROTECTED_PATHS.DASHBOARD);
+    }
+  };
+
   return (
     <Flex bg="primary" alignItems="center" p="4" gap={2}>
       {showBack && (
         <IconButton
           aria-label="Back"
           icon={<FaArrowCircleLeft />}
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           variant="ghost"
           color="#fff"
           _hover={{ bg: "blue.600" }}

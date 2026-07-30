@@ -8,13 +8,11 @@ import {
 import { useNavigate } from "react-router-dom";
 import useGlobalStore from "zStore";
 import { Can } from "rbac/Can";
-import { useSyncSelectedOrg } from "rbac/useSyncSelectedOrg";
 import { NAV_ACTIONS } from "config/navActions";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const organisation = useGlobalStore((state) => state.organisation);
-  useSyncSelectedOrg();
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>

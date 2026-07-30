@@ -1,5 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "services/api/apiHelper";
 import ProtectedLayout from "components/ProtectedLayout";
 
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
@@ -10,9 +12,14 @@ jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn
 // behavior rather than NavDrawer's internals.
 jest.mock("components/NavDrawer", () => () => null);
 
+// ProtectedLayout now calls useSyncSelectedOrg(), which uses useQueryWrapper
+// (react-query's useQuery) internally, so every render needs a QueryClientProvider.
+const renderWithProviders = (ui: React.ReactElement) =>
+  render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+
 describe("<ProtectedLayout>", () => {
   it("shows the matched route's title and its child content", () => {
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={["/finance"]}>
         <Routes>
           <Route element={<ProtectedLayout />}>
@@ -26,7 +33,7 @@ describe("<ProtectedLayout>", () => {
   });
 
   it("resolves titles for dynamic route segments", () => {
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={["/attendance/abc123"]}>
         <Routes>
           <Route element={<ProtectedLayout />}>
@@ -39,7 +46,7 @@ describe("<ProtectedLayout>", () => {
   });
 
   it("hides the back button on Dashboard", () => {
-    render(
+    renderWithProviders(
       <MemoryRouter initialEntries={["/dashboard"]}>
         <Routes>
           <Route element={<ProtectedLayout />}>
