@@ -16,12 +16,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { confirmAlert } from "react-confirm-alert";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest } from "services";
-import { deleteRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
+import {
+  deleteRequest,
+  queryClient,
+  useMutationWrapper,
+  useQueryWrapper,
+} from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
-import { FaArrowCircleLeft, FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
+import { FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 
@@ -285,11 +290,9 @@ const Attendance = () => {
   const handleSendToWhatsapp = () => {
     const message = buildWhatsappMessage();
     if (navigator.share) {
-      navigator
-        .share({ title: "Attendance Information", text: message })
-        .catch(() => {
-          /* user dismissed the native share sheet */
-        });
+      navigator.share({ title: "", text: message }).catch(() => {
+        /* user dismissed the native share sheet */
+      });
     } else {
       window.open(
         `https://wa.me/?text=${encodeURIComponent(message)}`,
@@ -336,22 +339,25 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { mutate: deleteAttendance, isLoading: isDeleting } = useMutationWrapper(
-    deleteRequest,
-    () => {
-      queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
-      navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
-    },
-    (error: any) => {
-      const message = error?.response?.data?.error ?? "Failed to delete attendance.";
-      toast.error(message);
-    },
-  );
+  const { mutate: deleteAttendance, isLoading: isDeleting } =
+    useMutationWrapper(
+      deleteRequest,
+      () => {
+        queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
+        navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+      },
+      (error: any) => {
+        const message =
+          error?.response?.data?.error ?? "Failed to delete attendance.";
+        toast.error(message);
+      },
+    );
 
   const handleDelete = () => {
     confirmAlert({
       title: "Delete Attendance",
-      message: "Are you sure you want to delete this attendance record? This cannot be undone.",
+      message:
+        "Are you sure you want to delete this attendance record? This cannot be undone.",
       buttons: [
         {
           label: "Yes",
@@ -367,30 +373,12 @@ const Attendance = () => {
   };
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          View Attendance
-        </Text>
-      </Flex>
       <Container>
         {isLoadingAttendance ? (
           <LoadingSpinner h="40vh" text="Loading attendance..." />
         ) : (
           <>
-            <Flex mt="4" justifyContent="space-between">
-              <Button
-                variant="logout"
-                colorScheme="blue"
-                onClick={() => navigate(-1)}
-                leftIcon={<FaArrowCircleLeft />}
-              >
-                Back
-              </Button>
+            <Flex mt="4" justifyContent="flex-end">
               <Flex gap={2}>
                 <Button
                   onClick={handleSendToWhatsapp}

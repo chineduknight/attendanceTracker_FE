@@ -1,12 +1,11 @@
 import React, { useMemo } from "react";
 import { Box, Flex, Button, Spinner, Text } from "@chakra-ui/react";
-import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
+import { useParams, useSearchParams } from "react-router-dom";
+import { FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { attendanceRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import useGlobalStore from "zStore";
-import { PROTECTED_PATHS } from "routes/pagePath";
 import { useDateRange } from "components/analytics/useDateRange";
 import DateRangeControls from "components/analytics/DateRangeControls";
 import MemberHero from "components/analytics/MemberHero";
@@ -31,7 +30,6 @@ const MemberAnalyticsPage: React.FC = () => {
   const { memberId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const navigate = useNavigate();
 
   const {
     fromDate, toDate, setFromDate, setToDate,
@@ -101,18 +99,9 @@ const MemberAnalyticsPage: React.FC = () => {
 
   return (
     <Box minH="100vh" bg="gray.50">
-      <Flex bg="blue.500" justify="space-between" align="center" p="4">
-        <Text fontWeight="bold" color="#fff">Member Analytics</Text>
-      </Flex>
       <Box p={2}>
         <>
-        <Flex justify="space-between" align="center" flexWrap="wrap" gap={2} mb={3}>
-          <Button
-            variant="logout" colorScheme="blue" leftIcon={<FaArrowCircleLeft />}
-            onClick={() => navigate(PROTECTED_PATHS.ANALYTICS)}
-          >
-            Back
-          </Button>
+        <Flex justify="flex-end" align="center" flexWrap="wrap" gap={2} mb={3}>
           <Flex gap={2} flexWrap="wrap">
             <Button
               leftIcon={<FaFileExcel />} onClick={() => refetchExcel()}

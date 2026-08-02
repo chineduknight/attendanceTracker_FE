@@ -34,7 +34,6 @@ import { format, parseISO, isValid } from "date-fns";
 import _ from "lodash";
 import {
   FaPencilAlt,
-  FaArrowCircleLeft,
   FaFileExcel,
   FaFilePdf,
   FaUserPlus,
@@ -231,29 +230,8 @@ const ViewMembers: React.FC = () => {
 
   return (
     <Box minH={"100vh"} bg="gray.50">
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-        mb={4}
-      >
-        <Text color="#fff" fontWeight="bold">
-          View Members
-        </Text>
-      </Flex>
       <Box px="4">
-        <Flex alignItems="center" justifyContent="space-between" mb={4}>
-          <Button
-            variant="logout"
-            colorScheme="blue"
-            onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-            leftIcon={<FaArrowCircleLeft />}
-            aria-label="Back"
-            px={isCompactActions ? 3 : 4}
-          >
-            {!isCompactActions && "Back"}
-          </Button>
+        <Flex alignItems="center" justifyContent="flex-end" mb={4}>
           <Flex gap={2}>
             <Can perm="members.manage">
               <Button

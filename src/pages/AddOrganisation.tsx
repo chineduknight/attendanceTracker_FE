@@ -1,5 +1,4 @@
 import {
-  Text,
   Box,
   useColorModeValue,
   Flex,
@@ -12,7 +11,6 @@ import {
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
-import { FaArrowCircleLeft } from "react-icons/fa";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { queryClient } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -53,30 +51,6 @@ const AddOrganisation = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          New Organisation
-        </Text>
-      </Flex>
-      <Button
-        onClick={() => navigate(PROTECTED_PATHS.ALL_ORG)}
-        variant="logout"
-        mt="10px"
-        ml="10px"
-        color={"white"}
-        _hover={{
-          bg: "blue.500",
-        }}
-        leftIcon={<FaArrowCircleLeft />}
-      >
-        Back
-      </Button>
-
       <Flex
         align={"center"}
         justify={"center"}

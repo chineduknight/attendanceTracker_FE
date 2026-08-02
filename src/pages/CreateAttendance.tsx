@@ -2,7 +2,6 @@ import {
   Box,
   Flex,
   useColorModeValue,
-  Text,
   Button,
   Stack,
 } from "@chakra-ui/react";
@@ -11,7 +10,6 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { queryClient } from "services/api/apiHelper";
 import { Q_KEY } from "utils/constant";
-import { FaArrowCircleLeft } from "react-icons/fa";
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useCategories } from "hooks/useCategories";
@@ -53,26 +51,6 @@ const CreateAttendance = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          Create Attendance
-        </Text>
-      </Flex>
-      <Button
-        variant="logout"
-        colorScheme="blue"
-        onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-        mr={2}
-        leftIcon={<FaArrowCircleLeft />}
-        m="2"
-      >
-        Back
-      </Button>
       <Flex>
         <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
           Add Category

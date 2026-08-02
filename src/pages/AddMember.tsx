@@ -3,7 +3,6 @@ import {
   Flex,
   Checkbox,
   useColorModeValue,
-  Text,
   Button,
   FormControl,
   FormLabel,
@@ -27,7 +26,7 @@ import useGlobalStore from "zStore";
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { FaArrowCircleLeft, FaPlusSquare, FaTrash } from "react-icons/fa";
+import { FaPlusSquare, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { Q_KEY } from "utils/constant";
 import { FieldType } from "./UserModel";
@@ -232,25 +231,7 @@ const AddOrUpdateMember = () => {
 
   return (
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text color="#fff" fontWeight="bold">
-          {isUpdating ? "Update Member" : "Add Member"}
-        </Text>
-      </Flex>
-      <Flex justify="space-between" alignItems="center" mx="6" mt="4">
-        <Button
-          variant="logout"
-          colorScheme="blue"
-          onClick={() => navigate(-1)}
-          leftIcon={<FaArrowCircleLeft />}
-        >
-          Back
-        </Button>
+      <Flex justify="flex-end" alignItems="center" mx="6" mt="4">
         {!isGettingMembers && membersModel.length !== 0 && (
           <Button
             leftIcon={<FaPlusSquare />}

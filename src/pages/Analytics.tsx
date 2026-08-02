@@ -17,7 +17,7 @@ import {
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { useNavigate } from "react-router-dom";
-import { FaArrowCircleLeft, FaFileExcel, FaFilePdf } from "react-icons/fa";
+import { FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
@@ -252,28 +252,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        bg="blue.500"
-        justifyContent="space-between"
-        alignItems="center"
-        p="4"
-      >
-        <Text fontWeight="bold" color="#fff">
-          Attendance Analytics
-        </Text>
-      </Flex>
       <Box p={2}>
         <>
-          <Button
-            variant="logout"
-            colorScheme="blue"
-            onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-            mr={2}
-            leftIcon={<FaArrowCircleLeft />}
-            m="2"
-          >
-            Back
-          </Button>
           <Flex mb={3} mt={2} gap={2} justifyContent="flex-end" flexWrap="wrap">
             <Button
               leftIcon={<FaFileExcel />}

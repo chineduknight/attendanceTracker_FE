@@ -1,7 +1,6 @@
 import {
   Box,
   Flex,
-  Text,
   Button,
   Stack,
   FormControl,
@@ -13,8 +12,6 @@ import {
   Avatar,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { FaArrowCircleLeft } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
@@ -29,7 +26,6 @@ import {
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { buildOrgUpdatePayload, OrgSettingsForm } from "helpers/orgPayloads";
-import { PROTECTED_PATHS } from "routes/pagePath";
 import LoadingSpinner from "components/LoadingSpinner";
 
 const DEFAULT_MAX_EDITS = 1;
@@ -45,7 +41,6 @@ const isUrl = (value: string): boolean => {
 };
 
 const OrganisationSettings = () => {
-  const navigate = useNavigate();
   const [org, setOrg] = useGlobalStore((s) => [
     s.organisation,
     s.updateOrganisation,
@@ -105,28 +100,6 @@ const OrganisationSettings = () => {
   return (
     <RequirePermission perm="settings.view">
       <Box minH="100vh" bg={pageBg}>
-        <Flex
-          bg="blue.500"
-          justifyContent="space-between"
-          alignItems="center"
-          p="4"
-        >
-          <Text fontWeight="bold" color="#fff">
-            Organisation Settings
-          </Text>
-        </Flex>
-        <Button
-          onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-          variant="logout"
-          mt="10px"
-          ml="10px"
-          color="white"
-          _hover={{ bg: "blue.500" }}
-          leftIcon={<FaArrowCircleLeft />}
-        >
-          Back
-        </Button>
-
         {isFetching ? (
           <LoadingSpinner h="30vh" text="Loading settings..." />
         ) : (
