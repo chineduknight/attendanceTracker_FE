@@ -16,7 +16,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { confirmAlert } from "react-confirm-alert";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest } from "services";
-import { deleteRequest, queryClient, useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
+import {
+  deleteRequest,
+  queryClient,
+  useMutationWrapper,
+  useQueryWrapper,
+} from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import { Q_KEY } from "utils/constant";
@@ -285,11 +290,9 @@ const Attendance = () => {
   const handleSendToWhatsapp = () => {
     const message = buildWhatsappMessage();
     if (navigator.share) {
-      navigator
-        .share({ title: "Attendance Information", text: message })
-        .catch(() => {
-          /* user dismissed the native share sheet */
-        });
+      navigator.share({ title: "", text: message }).catch(() => {
+        /* user dismissed the native share sheet */
+      });
     } else {
       window.open(
         `https://wa.me/?text=${encodeURIComponent(message)}`,
@@ -336,22 +339,25 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { mutate: deleteAttendance, isLoading: isDeleting } = useMutationWrapper(
-    deleteRequest,
-    () => {
-      queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
-      navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
-    },
-    (error: any) => {
-      const message = error?.response?.data?.error ?? "Failed to delete attendance.";
-      toast.error(message);
-    },
-  );
+  const { mutate: deleteAttendance, isLoading: isDeleting } =
+    useMutationWrapper(
+      deleteRequest,
+      () => {
+        queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
+        navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+      },
+      (error: any) => {
+        const message =
+          error?.response?.data?.error ?? "Failed to delete attendance.";
+        toast.error(message);
+      },
+    );
 
   const handleDelete = () => {
     confirmAlert({
       title: "Delete Attendance",
-      message: "Are you sure you want to delete this attendance record? This cannot be undone.",
+      message:
+        "Are you sure you want to delete this attendance record? This cannot be undone.",
       buttons: [
         {
           label: "Yes",
