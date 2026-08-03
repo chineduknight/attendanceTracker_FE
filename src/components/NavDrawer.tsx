@@ -15,6 +15,7 @@ import {
   useDisclosure,
 } from "@chakra-ui/react";
 import { FaArrowLeft, FaKey, FaSignOutAlt, FaTachometerAlt } from "react-icons/fa";
+import { IconType } from "react-icons";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { EMPTY_USER, EMPTY_ORG } from "zStore";
@@ -26,6 +27,13 @@ interface NavDrawerProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+type AccountAction = {
+  label: string;
+  icon: IconType;
+  colorScheme: string;
+  onClick: () => void;
+};
 
 const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
   const navigate = useNavigate();
@@ -47,6 +55,13 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
     setUser(EMPTY_USER);
     updateOrganisation(EMPTY_ORG);
   };
+
+  const ACCOUNT_ACTIONS: AccountAction[] = [
+    { label: "Dashboard", icon: FaTachometerAlt, colorScheme: "cyan", onClick: () => goTo(PROTECTED_PATHS.DASHBOARD) },
+    { label: "Organisations", icon: FaArrowLeft, colorScheme: "blue", onClick: () => goTo(PROTECTED_PATHS.ALL_ORG) },
+    { label: "Change password", icon: FaKey, colorScheme: "gray", onClick: changePassword.onOpen },
+    { label: "Logout", icon: FaSignOutAlt, colorScheme: "red", onClick: handleLogout },
+  ];
 
   return (
     <>
@@ -78,7 +93,8 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
                   <Button
                     variant="ghost"
                     justifyContent="flex-start"
-                    leftIcon={<Icon as={icon} color={`${colorScheme}.500`} />}
+                    color={`${colorScheme}.600`}
+                    leftIcon={<Icon as={icon} color={`${colorScheme}.600`} />}
                     borderRadius={0}
                     onClick={() => goTo(path)}
                   >
@@ -91,43 +107,19 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
             <Divider />
 
             <VStack align="stretch" spacing={0} py={2}>
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={<FaTachometerAlt />}
-                borderRadius={0}
-                onClick={() => goTo(PROTECTED_PATHS.DASHBOARD)}
-              >
-                Dashboard
-              </Button>
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={<FaArrowLeft />}
-                borderRadius={0}
-                onClick={() => goTo(PROTECTED_PATHS.ALL_ORG)}
-              >
-                Organisations
-              </Button>
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={<FaKey />}
-                borderRadius={0}
-                onClick={changePassword.onOpen}
-              >
-                Change password
-              </Button>
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={<FaSignOutAlt />}
-                borderRadius={0}
-                color="red.500"
-                onClick={handleLogout}
-              >
-                Logout
-              </Button>
+              {ACCOUNT_ACTIONS.map(({ label, icon, colorScheme, onClick }) => (
+                <Button
+                  key={label}
+                  variant="ghost"
+                  justifyContent="flex-start"
+                  color={`${colorScheme}.600`}
+                  leftIcon={<Icon as={icon} color={`${colorScheme}.600`} />}
+                  borderRadius={0}
+                  onClick={onClick}
+                >
+                  {label}
+                </Button>
+              ))}
             </VStack>
           </DrawerBody>
         </DrawerContent>
