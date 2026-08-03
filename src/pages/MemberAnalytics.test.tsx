@@ -16,4 +16,6 @@ test("renders the export buttons and date controls", () => {
   );
   expect(screen.getByRole("button", { name: /Export Excel/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Export PDF/ })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("From date")).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("To date")).toBeInTheDocument();
 });
