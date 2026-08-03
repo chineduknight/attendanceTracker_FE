@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import useGlobalStore, { EMPTY_USER } from "zStore";
 import AppHeader from "components/AppHeader";
 
 const mockNavigate = jest.fn();
@@ -19,6 +20,7 @@ describe("<AppHeader>", () => {
   beforeEach(() => {
     mockNavigate.mockClear();
     window.history.replaceState(null, "");
+    useGlobalStore.setState({ user: EMPTY_USER });
   });
 
   it("renders the given title", () => {
@@ -78,5 +80,17 @@ describe("<AppHeader>", () => {
     );
     fireEvent.click(screen.getByLabelText("Back"));
     expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("shows the logged-in user's avatar and opens the drawer when clicked", () => {
+    useGlobalStore.setState({ user: { ...EMPTY_USER, username: "Ada Lovelace" } });
+    render(
+      <MemoryRouter>
+        <AppHeader title="Category" />
+      </MemoryRouter>
+    );
+    expect(screen.getByLabelText("Account menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Account menu"));
+    expect(screen.getByText("Change password")).toBeInTheDocument();
   });
 });

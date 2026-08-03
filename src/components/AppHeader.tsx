@@ -1,8 +1,9 @@
-import { Flex, Text, IconButton, useDisclosure } from "@chakra-ui/react";
+import { Flex, Text, IconButton, Avatar, useDisclosure } from "@chakra-ui/react";
 import { FaBars, FaArrowCircleLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import NavDrawer from "components/NavDrawer";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import useGlobalStore from "zStore";
 
 interface AppHeaderProps {
   title: string;
@@ -12,6 +13,7 @@ interface AppHeaderProps {
 const AppHeader = ({ title, showBack = true }: AppHeaderProps) => {
   const navigate = useNavigate();
   const drawer = useDisclosure();
+  const username = useGlobalStore((s) => s.user.username);
 
   const handleBack = () => {
     const historyIndex = (window.history.state as { idx?: number } | null)?.idx ?? 0;
@@ -23,30 +25,41 @@ const AppHeader = ({ title, showBack = true }: AppHeaderProps) => {
   };
 
   return (
-    <Flex bg="primary" alignItems="center" p="4" gap={2}>
-      {showBack && (
+    <Flex bg="primary" alignItems="center" justifyContent="space-between" p="4">
+      <Flex alignItems="center" gap={2}>
+        {showBack && (
+          <IconButton
+            aria-label="Back"
+            icon={<FaArrowCircleLeft />}
+            onClick={handleBack}
+            variant="ghost"
+            color="#fff"
+            _hover={{ bg: "primaryHover" }}
+            size="sm"
+          />
+        )}
         <IconButton
-          aria-label="Back"
-          icon={<FaArrowCircleLeft />}
-          onClick={handleBack}
+          aria-label="Open menu"
+          icon={<FaBars />}
+          onClick={drawer.onOpen}
           variant="ghost"
           color="#fff"
-          _hover={{ bg: "blue.600" }}
+          _hover={{ bg: "primaryHover" }}
           size="sm"
         />
-      )}
-      <IconButton
-        aria-label="Open menu"
-        icon={<FaBars />}
-        onClick={drawer.onOpen}
-        variant="ghost"
-        color="#fff"
-        _hover={{ bg: "blue.600" }}
+        <Text fontWeight="bold" color="#fff">
+          {title}
+        </Text>
+      </Flex>
+
+      <Avatar
         size="sm"
+        name={username}
+        aria-label="Account menu"
+        cursor="pointer"
+        onClick={drawer.onOpen}
       />
-      <Text fontWeight="bold" color="#fff">
-        {title}
-      </Text>
+
       <NavDrawer isOpen={drawer.isOpen} onClose={drawer.onClose} />
     </Flex>
   );

@@ -4,6 +4,9 @@ import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import NavDrawer from "components/NavDrawer";
 
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+// ChangePasswordModal calls useMutationWrapper -> react-query's useMutation,
+// which throws without a QueryClientProvider ancestor (absent from this
+// isolated render tree) — mocked out since its internals aren't under test here.
 jest.mock("components/auth/ChangePasswordModal", () => {
   return function MockChangePasswordModal() {
     return null;

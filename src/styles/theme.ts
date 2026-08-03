@@ -12,6 +12,7 @@ const myTheme = extendTheme({
   },
   colors: {
     primary: "#3182CE", // blue.500 — the color every header already uses
+    primaryHover: "#2B6CB0", // blue.600 — hover state for primary-colored surfaces
     secondary: "#2FA07224",
   },
   components: {
