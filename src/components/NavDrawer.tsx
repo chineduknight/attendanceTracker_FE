@@ -11,6 +11,7 @@ import {
   VStack,
   Button,
   Divider,
+  Icon,
   useDisclosure,
 } from "@chakra-ui/react";
 import { FaArrowLeft, FaKey, FaSignOutAlt, FaTachometerAlt } from "react-icons/fa";
@@ -72,12 +73,12 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
             </Box>
 
             <VStack align="stretch" spacing={0} py={2}>
-              {NAV_ACTIONS.map(({ label, icon: Icon, path, perm, colorScheme }) => (
+              {NAV_ACTIONS.map(({ label, icon, path, perm, colorScheme }) => (
                 <Can key={label} perm={perm}>
                   <Button
                     variant="ghost"
                     justifyContent="flex-start"
-                    leftIcon={<Icon color={`${colorScheme}.500`} />}
+                    leftIcon={<Icon as={icon} color={`${colorScheme}.500`} />}
                     borderRadius={0}
                     onClick={() => goTo(path)}
                   >
