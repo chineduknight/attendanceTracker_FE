@@ -41,14 +41,16 @@ import {
   endOfMonth,
   format,
   isExists,
-  isValid,
-  parse,
-  parseISO,
   startOfMonth,
   startOfDay,
 } from "date-fns";
 import ReactSelect, { MultiValue } from "react-select";
 import { toast } from "react-toastify";
+import {
+  formatBirthdayForRange,
+  formatBirthdayRangeDate,
+  parseBirthdayValue,
+} from "helpers/birthdayDates";
 
 type StatusOption = {
   value: string;
@@ -237,68 +239,6 @@ const Birthday: React.FC = () => {
     }
   };
 
-  const parseBirthdayValue = (dob: unknown): Date | null => {
-    if (dob instanceof Date) {
-      return isValid(dob) ? dob : null;
-    }
-
-    if (typeof dob === "number") {
-      const parsed = new Date(dob);
-      return isValid(parsed) ? parsed : null;
-    }
-
-    if (typeof dob !== "string") {
-      return null;
-    }
-
-    const rawDob = dob.trim();
-    if (!rawDob) {
-      return null;
-    }
-
-    const isoParsed = parseISO(rawDob);
-    if (isValid(isoParsed)) {
-      return isoParsed;
-    }
-
-    const nativeParsed = new Date(rawDob);
-    if (isValid(nativeParsed)) {
-      return nativeParsed;
-    }
-
-    const fallbackFormats = [
-      "yyyy-MM-dd",
-      "yyyy/MM/dd",
-      "dd/MM/yyyy",
-      "MM/dd/yyyy",
-      "dd-MM-yyyy",
-      "MM-dd-yyyy",
-      "MMM d, yyyy",
-      "MMMM d, yyyy",
-      "dd MMM yyyy",
-      "d MMM yyyy",
-      "dd MMMM yyyy",
-      "d MMMM yyyy",
-      "MMM d",
-      "MMMM d",
-      "d MMM",
-      "d MMMM",
-      "MM-dd",
-      "dd-MM",
-      "MM/dd",
-      "dd/MM",
-    ];
-
-    for (const dateFormat of fallbackFormats) {
-      const parsed = parse(rawDob, dateFormat, new Date());
-      if (isValid(parsed)) {
-        return parsed;
-      }
-    }
-
-    return null;
-  };
-
   const getBirthdayInsights = (dob: string) => {
     const parsedDob = parseBirthdayValue(dob);
     if (!parsedDob) {
@@ -364,19 +304,18 @@ const Birthday: React.FC = () => {
     birthdayResponse?.data?.members || birthdayResponse?.data || [];
 
   const buildShareText = () => {
-    const formatRangeDate = (d: string) => {
-      const parsed = parseISO(d);
-      return isValid(parsed) ? format(parsed, "dd-MMM") : d;
-    };
-    const formatDob = (dob: string) => {
-      const parsed = parseBirthdayValue(dob);
-      return parsed ? format(parsed, "EEE, dd MMM") : dob;
-    };
-    const header = `🎂 Birthdays (${formatRangeDate(
+    const header = `🎂 Birthdays (${formatBirthdayRangeDate(
       fromDate,
-    )} to ${formatRangeDate(toDate)})\n\n`;
+    )} to ${formatBirthdayRangeDate(toDate)})\n\n`;
     const list = members
-      .map((m: any, i: number) => `${i + 1}. ${m.name} - ${formatDob(m.dob)}`)
+      .map(
+        (m: any, i: number) =>
+          `${i + 1}. ${m.name} - ${formatBirthdayForRange(
+            m.dob,
+            fromDate,
+            toDate,
+          )}`,
+      )
       .join("\n");
     return header + list;
   };
