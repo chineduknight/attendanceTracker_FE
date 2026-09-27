@@ -42,6 +42,7 @@ interface Props {
 
 type StatusFilter =
   | "all"
+  | "compliant"
   | "paid"
   | "partial"
   | "unpaid"
@@ -108,7 +109,7 @@ const LEGEND = [
 const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) => {
   const [payFor, setPayFor] = useState<ComplianceRow | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("compliant");
   const [sortKey, setSortKey] = useState<SortKey>("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -242,6 +243,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
     if (statusFilter === "all") return true;
     if (statusFilter === "not-accountable") return !row.accountable;
     if (!row.accountable) return false; // status filters apply to accountable members
+    if (statusFilter === "compliant") return overallStatus(row) === "paid";
     if (statusFilter === "outstanding") return overallStatus(row) !== "paid";
     return overallStatus(row) === statusFilter;
   });
@@ -345,6 +347,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
           maxW="2xs"
           size="sm"
         >
+          <option value="compliant">Compliant</option>
           <option value="all">All statuses</option>
           <option value="paid">Paid</option>
           <option value="partial">Partial</option>
