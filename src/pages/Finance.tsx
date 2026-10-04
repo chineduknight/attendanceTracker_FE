@@ -14,11 +14,10 @@ import PaymentsTab from "components/finance/PaymentsTab";
 import AccountabilityTab from "components/finance/AccountabilityTab";
 import useGlobalStore from "zStore";
 
-const Finance = () => {
+const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   const [selectedObligationId, setSelectedObligationId] = useState<string>("");
   const [tabIndex, setTabIndex] = useState<number>(0);
   const [prefillMemberId, setPrefillMemberId] = useState<string>("");
-  const [organisation] = useGlobalStore((s) => [s.organisation]);
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -33,7 +32,7 @@ const Finance = () => {
           <TabPanels>
             <TabPanel>
               <ObligationsTab
-                organisationId={organisation.id}
+                organisationId={organisationId}
                 selectedObligationId={selectedObligationId}
                 onSelectObligation={(id) => {
                   setSelectedObligationId(id);
@@ -43,7 +42,7 @@ const Finance = () => {
             </TabPanel>
             <TabPanel>
               <ComplianceTab
-                organisationId={organisation.id}
+                organisationId={organisationId}
                 obligationId={selectedObligationId}
                 onSetStartDate={(memberId) => {
                   setPrefillMemberId(memberId);
@@ -52,11 +51,11 @@ const Finance = () => {
               />
             </TabPanel>
             <TabPanel>
-              <PaymentsTab organisationId={organisation.id} />
+              <PaymentsTab organisationId={organisationId} />
             </TabPanel>
             <TabPanel>
               <AccountabilityTab
-                organisationId={organisation.id}
+                organisationId={organisationId}
                 prefillMemberId={prefillMemberId}
               />
             </TabPanel>
@@ -65,6 +64,18 @@ const Finance = () => {
       </Box>
     </Box>
   );
+};
+
+/**
+ * Finance owns no selection state itself: `FinanceWorkspace` is keyed by the
+ * organisation id so switching organisations remounts it, clearing the
+ * selected obligation, prefill member and tab index before Organisation B can
+ * use an Organisation A id.
+ */
+const Finance = () => {
+  const [organisation] = useGlobalStore((s) => [s.organisation]);
+
+  return <FinanceWorkspace key={organisation.id} organisationId={organisation.id} />;
 };
 
 export default Finance;

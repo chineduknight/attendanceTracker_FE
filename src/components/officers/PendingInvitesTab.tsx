@@ -5,6 +5,7 @@ import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { Invite } from "rbac/types";
@@ -13,11 +14,11 @@ interface Props { organisationId: string; }
 
 const PendingInvitesTab = ({ organisationId }: Props) => {
   const url = convertParamsToString(rbacRequest.INVITES, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["officer-invites", organisationId], url);
+  const { data, isLoading } = useQueryWrapper(queryKeys.rbac.invites(organisationId), url);
   const invites: Invite[] = data?.data ?? [];
 
   const { mutate } = useMutationWrapper(deleteRequest, () =>
-    queryClient.invalidateQueries(["officer-invites", organisationId])
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.invites(organisationId) })
   );
 
   const revoke = (inv: Invite) =>

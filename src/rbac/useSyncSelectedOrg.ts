@@ -2,6 +2,7 @@ import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
 import useGlobalStore, { EMPTY_ORG, OrganisationType } from "zStore";
 import { OrganisationSummary } from "rbac/types";
+import { queryKeys } from "services/api/queryKeys";
 
 export function useSyncSelectedOrg(): { refresh: () => void } {
   const [organisation, updateOrganisation] = useGlobalStore((s) => [
@@ -15,9 +16,9 @@ export function useSyncSelectedOrg(): { refresh: () => void } {
     updateOrganisation((fresh as OrganisationType) ?? EMPTY_ORG);
   };
 
-  // Shares the ["all-organisations"] key with Organisations.tsx — React Query dedupes the request; each observer's onSuccess still fires independently.
+  // Shares the all-organisations key with Organisations.tsx — React Query dedupes the request; each observer's onSuccess still fires independently.
   const { refetch } = useQueryWrapper(
-    ["all-organisations"],
+    queryKeys.allOrganisations,
     orgRequest.ORGANISATIONS,
     { onSuccess: reconcile, enabled: !!organisation.id }
   );

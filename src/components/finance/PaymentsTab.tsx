@@ -4,6 +4,7 @@ import { FaMoneyBillWave } from "react-icons/fa";
 import { financeRequest, orgRequest } from "services";
 import { useQueryWrapper, queryClient } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import { Obligation, ComplianceRow } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
 import { Can } from "rbac/Can";
@@ -20,11 +21,12 @@ const PaymentsTab = ({ organisationId }: Props) => {
   const obUrl = convertParamsToString(financeRequest.LIST_OBLIGATIONS, { organisationId });
   const memUrl = convertParamsToString(orgRequest.MEMBERS, { organisationId });
   const { data: obData, isLoading: obLoading } = useQueryWrapper(
-    ["finance-obligations", organisationId],
+    queryKeys.finance.obligations(organisationId),
     obUrl
   );
+  // Same endpoint and payload shape as the members UI, so share its cache.
   const { data: memData, isLoading: memLoading } = useQueryWrapper(
-    ["finance-members", organisationId],
+    queryKeys.members(organisationId),
     memUrl
   );
 
@@ -37,7 +39,7 @@ const PaymentsTab = ({ organisationId }: Props) => {
       })
     : "";
   const { data: compData } = useQueryWrapper(
-    ["finance-compliance", organisationId, obligationId],
+    queryKeys.finance.compliance(organisationId, obligationId),
     complianceUrl,
     { enabled: Boolean(obligationId) }
   );
@@ -107,7 +109,9 @@ const PaymentsTab = ({ organisationId }: Props) => {
           memberName={selectedMember.name}
           complianceRow={selectedRow}
           onSuccess={() =>
-            queryClient.invalidateQueries(["finance-compliance", organisationId])
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.finance.complianceRoot(organisationId),
+            })
           }
         />
       )}

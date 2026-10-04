@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { useQueryWrapper, postRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import { Role, InviteResponse } from "rbac/types";
 
 interface Props { organisationId: string; isOpen: boolean; onClose: () => void; }
@@ -14,7 +15,7 @@ interface InviteInputs { email: string; roleId: string; }
 
 const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
   const rolesUrl = convertParamsToString(rbacRequest.ROLES, { organisationId });
-  const { data: rolesData } = useQueryWrapper(["roles", organisationId], rolesUrl, { enabled: isOpen });
+  const { data: rolesData } = useQueryWrapper(queryKeys.rbac.roles(organisationId), rolesUrl, { enabled: isOpen });
   const roles: Role[] = rolesData?.data ?? [];
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<InviteInputs>();
@@ -22,8 +23,8 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
   const onSuccess = (res: { data: InviteResponse }) => {
     if ("attached" in res.data) toast.success("Officer added");
     else toast.success("Invite pending — they'll join when they sign up with that email");
-    queryClient.invalidateQueries(["officers", organisationId]);
-    queryClient.invalidateQueries(["officer-invites", organisationId]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.officers(organisationId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.invites(organisationId) });
     reset();
     onClose();
   };

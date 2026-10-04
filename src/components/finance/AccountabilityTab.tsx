@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -25,6 +25,7 @@ import {
   queryClient,
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import ConfirmModal from "components/finance/ConfirmModal";
 import { Can } from "rbac/Can";
 
@@ -49,13 +50,26 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   const [rowDates, setRowDates] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
 
+  // The prefill target can arrive after this tab has mounted (Compliance → Set
+  // start date), so fold it into the selection rather than only seeding the
+  // initial state above.
+  useEffect(() => {
+    if (!prefillMemberId) return;
+    setSelected((prev) => ({ ...prev, [prefillMemberId]: true }));
+  }, [prefillMemberId]);
+
   const memUrl = convertParamsToString(orgRequest.MEMBERS, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["finance-members", organisationId], memUrl);
+  // Same endpoint and payload shape as the members UI, so share its cache.
+  const { data, isLoading } = useQueryWrapper(queryKeys.members(organisationId), memUrl);
   const members: Array<Record<string, any>> = data?.data ?? [];
 
+  // A start-date change shifts accountability, so every compliance query for
+  // this organisation is stale — but only this organisation's.
   const invalidate = () => {
-    queryClient.invalidateQueries(["finance-members", organisationId]);
-    queryClient.invalidateQueries(["finance-compliance", organisationId]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.finance.complianceRoot(organisationId),
+    });
   };
   const { mutate, mutateAsync } = useMutationWrapper(patchRequest);
 

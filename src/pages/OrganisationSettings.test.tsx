@@ -47,7 +47,7 @@ const setOrg = (over: Partial<typeof EMPTY_ORG>) =>
 describe("<OrganisationSettings>", () => {
   beforeEach(() => {
     // Each test renders against the same singleton queryClient; clear its
-    // cache so a previous test's cached ["organisation", "org1"] response
+    // cache so a previous test's cached organisation-detail response
     // doesn't leak in and skip a fresh GET/reset() for this test.
     queryClient.clear();
     // resetMocks (see note above) wipes implementations before every test,

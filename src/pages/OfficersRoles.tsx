@@ -7,27 +7,39 @@ import OfficersTab from "components/officers/OfficersTab";
 import PendingInvitesTab from "components/officers/PendingInvitesTab";
 import RolesTab from "components/officers/RolesTab";
 
+interface ContentProps { organisationId: string; }
+
+/**
+ * Holds all officer/role tab and modal state. `OfficersRoles` remounts this
+ * subtree when the organisation changes (via `key`), so an Organisation A
+ * officer, role, invite or open modal can never stay actionable against
+ * Organisation B.
+ */
+const OfficersRolesContent = ({ organisationId }: ContentProps) => (
+  <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
+    <Box p={4}>
+      <Tabs variant="enclosed" colorScheme="blue">
+        <TabList>
+          <Tab>Officers</Tab>
+          <Tab>Pending Invites</Tab>
+          <Tab>Roles</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel><OfficersTab organisationId={organisationId} /></TabPanel>
+          <TabPanel><PendingInvitesTab organisationId={organisationId} /></TabPanel>
+          <TabPanel><RolesTab organisationId={organisationId} /></TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
+  </Box>
+);
+
 const OfficersRoles = () => {
   const [organisation] = useGlobalStore((s) => [s.organisation]);
 
   return (
     <RequirePermission perm="officers.view">
-      <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
-        <Box p={4}>
-          <Tabs variant="enclosed" colorScheme="blue">
-            <TabList>
-              <Tab>Officers</Tab>
-              <Tab>Pending Invites</Tab>
-              <Tab>Roles</Tab>
-            </TabList>
-            <TabPanels>
-              <TabPanel><OfficersTab organisationId={organisation.id} /></TabPanel>
-              <TabPanel><PendingInvitesTab organisationId={organisation.id} /></TabPanel>
-              <TabPanel><RolesTab organisationId={organisation.id} /></TabPanel>
-            </TabPanels>
-          </Tabs>
-        </Box>
-      </Box>
+      <OfficersRolesContent key={organisation.id} organisationId={organisation.id} />
     </RequirePermission>
   );
 };

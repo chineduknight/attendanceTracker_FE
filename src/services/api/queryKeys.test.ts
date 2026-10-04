@@ -1,0 +1,67 @@
+import { QueryClient } from "@tanstack/react-query";
+import { queryKeys } from "services/api/queryKeys";
+
+const matches = (prefix: readonly unknown[], key: readonly unknown[]) =>
+  prefix.length <= key.length && prefix.every((part, i) => part === key[i]);
+
+describe("queryKeys tenant scoping", () => {
+  it("scopes finance obligations to the organisation", () => {
+    expect(queryKeys.finance.obligations("orgA")).not.toEqual(
+      queryKeys.finance.obligations("orgB")
+    );
+  });
+
+  it("scopes finance compliance by organisation and obligation", () => {
+    expect(queryKeys.finance.compliance("orgA", "ob1")).not.toEqual(
+      queryKeys.finance.compliance("orgB", "ob1")
+    );
+    expect(queryKeys.finance.compliance("orgA", "ob1")).not.toEqual(
+      queryKeys.finance.compliance("orgA", "ob2")
+    );
+  });
+
+  it("scopes officers, roles and invites to the organisation", () => {
+    expect(queryKeys.rbac.officers("orgA")).not.toEqual(queryKeys.rbac.officers("orgB"));
+    expect(queryKeys.rbac.roles("orgA")).not.toEqual(queryKeys.rbac.roles("orgB"));
+    expect(queryKeys.rbac.invites("orgA")).not.toEqual(queryKeys.rbac.invites("orgB"));
+  });
+
+  it("keeps the permissions catalog global", () => {
+    expect(queryKeys.permissionsCatalog).toEqual(["permissions-catalog"]);
+    expect(queryKeys.permissionsCatalog).not.toContain("orgA");
+  });
+
+  it("does not let one organisation's prefix invalidate another's cache", () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.finance.compliance("orgA", "ob1"), { org: "A" });
+    client.setQueryData(queryKeys.finance.compliance("orgB", "ob1"), { org: "B" });
+    client.setQueryData(queryKeys.rbac.officers("orgA"), []);
+    client.setQueryData(queryKeys.rbac.officers("orgB"), []);
+
+    const financeHits = client
+      .getQueryCache()
+      .findAll({ queryKey: queryKeys.finance.complianceRoot("orgA") });
+    expect(financeHits).toHaveLength(1);
+    expect(financeHits[0].state.data).toEqual({ org: "A" });
+
+    const rbacHits = client
+      .getQueryCache()
+      .findAll({ queryKey: queryKeys.rbac.officers("orgA") });
+    expect(rbacHits).toHaveLength(1);
+  });
+
+  it("keeps the compliance export keys under the compliance prefix", () => {
+    expect(
+      matches(
+        queryKeys.finance.complianceRoot("orgA"),
+        queryKeys.finance.complianceExport("orgA", "ob1", "pdf")
+      )
+    ).toBe(true);
+    expect(
+      matches(
+        queryKeys.finance.complianceRoot("orgA"),
+        queryKeys.finance.complianceExport("orgB", "ob1", "pdf")
+      )
+    ).toBe(false);
+  });
+});

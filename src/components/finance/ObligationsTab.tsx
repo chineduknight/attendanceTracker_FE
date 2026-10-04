@@ -34,6 +34,7 @@ import {
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { formatMoney } from "helpers/financeConstants";
+import { queryKeys } from "services/api/queryKeys";
 import ConfirmModal from "components/finance/ConfirmModal";
 import { Obligation, ObligationType } from "components/finance/financeTypes";
 import { Can } from "rbac/Can";
@@ -56,11 +57,16 @@ const ObligationsTab = ({ organisationId, selectedObligationId, onSelectObligati
   const [date, setDate] = useState("");
 
   const listUrl = convertParamsToString(financeRequest.LIST_OBLIGATIONS, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["finance-obligations", organisationId], listUrl);
+  const { data, isLoading } = useQueryWrapper(
+    queryKeys.finance.obligations(organisationId),
+    listUrl
+  );
   const obligations: Obligation[] = data?.data ?? [];
 
   const invalidate = () =>
-    queryClient.invalidateQueries(["finance-obligations", organisationId]);
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.finance.obligations(organisationId),
+    });
 
   const { mutate: createMutate, isLoading: creating } = useMutationWrapper(postRequest, () => {
     toast.success("Obligation created");
