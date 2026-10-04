@@ -32,6 +32,7 @@ import {
   FaCopy,
 } from "react-icons/fa";
 import { useQueryWrapper } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore from "zStore";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
@@ -124,7 +125,7 @@ const Birthday: React.FC = () => {
     organisationId: org.id,
   });
 
-  useQueryWrapper(["get-member-model-birthday", org.id], modelURL, {
+  useQueryWrapper(queryKeys.memberModel(org.id), modelURL, {
     enabled: Boolean(org.id),
     onSuccess: (data: any) => {
       const fields = data?.data?.fields;

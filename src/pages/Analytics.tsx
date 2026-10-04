@@ -37,6 +37,7 @@ import {
   formatRangeLabel,
 } from "components/analytics/useDateRange";
 import DateRangeControls from "components/analytics/DateRangeControls";
+import { queryKeys } from "services/api/queryKeys";
 
 type StatusOption = {
   value: string;
@@ -90,7 +91,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     organisationId: org.id,
   });
 
-  useQueryWrapper(["get-member-model", org.id], modelURL, {
+  useQueryWrapper(queryKeys.memberModel(org.id), modelURL, {
     enabled: Boolean(org.id),
     onSuccess: (data) => {
       const fields = data?.data?.fields;

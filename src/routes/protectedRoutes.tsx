@@ -1,12 +1,28 @@
 import { Navigate } from "react-router-dom";
 import { PROTECTED_PATHS, PUBLIC_PATHS } from "./pagePath";
-import { PAGE_ROUTES } from "./protectedRouteConfig";
+import { PageRouteConfig, PAGE_ROUTES } from "./protectedRouteConfig";
 import ProtectedLayout from "components/ProtectedLayout";
+import { RequirePermission } from "rbac/RequirePermission";
+
+/**
+ * Wrap each route element that declares a permission in RequirePermission.
+ * Hiding dashboard buttons alone can be bypassed by typing a URL, so every
+ * guarded route is re-checked here at navigation time.
+ */
+export const applyRoutePermissions = (routes: PageRouteConfig[]) =>
+  routes.map(({ perm, element, ...route }) => ({
+    ...route,
+    element: perm ? (
+      <RequirePermission perm={perm}>{element}</RequirePermission>
+    ) : (
+      element
+    ),
+  }));
 
 const PROTECTED_ROUTES = [
   {
     element: <ProtectedLayout />,
-    children: PAGE_ROUTES,
+    children: applyRoutePermissions(PAGE_ROUTES),
   },
   { path: "/", element: <Navigate to={PROTECTED_PATHS.ALL_ORG} /> },
   // this enables you not to access the public routes when logged in

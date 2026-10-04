@@ -343,7 +343,7 @@ const Attendance = () => {
     useMutationWrapper(
       deleteRequest,
       () => {
-        queryClient.invalidateQueries({ queryKey: ["all-attendance-12"] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.attendances(org.id) });
         navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
       },
       (error: any) => {
