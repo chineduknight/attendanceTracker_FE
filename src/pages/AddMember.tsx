@@ -151,7 +151,6 @@ const AddOrUpdateMember = () => {
   };
 
   const onSubmit = handleSubmit((data) => {
-    console.log("data:", data);
     confirmAlert({
       title: "Confirmation",
       message: `Are you sure you want to ${
@@ -164,7 +163,7 @@ const AddOrUpdateMember = () => {
         },
         {
           label: "No",
-          onClick: () => console.log("Member update canceled"),
+          className: "confirm-alert-button confirm-alert-button-no",
         },
       ],
     });
