@@ -15,6 +15,7 @@ export const orgRequest = {
   ORGANISATIONS: "/organisations",
   ORGANISATION_ONE: "/organisations/:id",
   MEMBERS:"/organisations/:organisationId/members",
+  MEMBER_ONE:"/organisations/:organisationId/members/:id",
   DELETE_MEMBER: "/organisations/:organisationId/members/:id",
   CONFIG_MODEL:"/organisations/:organisationId/model",
   BIRTHDAY: "/organisations/:organisationId/members/birthday",
