@@ -24,11 +24,11 @@ import {
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
-import { Q_KEY } from "utils/constant";
 import LoadingSpinner from "components/LoadingSpinner";
 import { FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
+import { queryKeys } from "services/api/queryKeys";
 
 type StatusOption = {
   value: string;
@@ -164,7 +164,7 @@ const Attendance = () => {
   });
 
   const { isFetching: isFetchingAttendance } = useQueryWrapper(
-    [Q_KEY.GET_MEMBERS],
+    queryKeys.attendance(org.id, param.id),
     url,
     {
       onSuccess,
