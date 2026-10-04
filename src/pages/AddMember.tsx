@@ -28,10 +28,10 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
-import { Q_KEY } from "utils/constant";
 import { FieldType } from "./UserModel";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
+import { queryKeys } from "services/api/queryKeys";
 
 interface FormData {
   [fieldName: string]: string;
@@ -44,25 +44,23 @@ const AddOrUpdateMember = () => {
   const [currentMember, setcurrentMember] = useState({});
   const navigate = useNavigate();
   const params = useParams();
-  const allMembersURL = convertParamsToString(orgRequest.MEMBERS, {
+  const memberURL = convertParamsToString(orgRequest.MEMBER_ONE, {
     organisationId: org.id,
+    id: params.memberId as string,
   });
-  const { refetch } = useQueryWrapper(["get-member-by-id"], allMembersURL, {
+  useQueryWrapper(queryKeys.member(org.id, params.memberId), memberURL, {
     onSuccess: (data) => {
-      const allMembers = data.data;
-      const member = allMembers.find((member) => member.id === params.memberId);
-      setcurrentMember(member);
+      setcurrentMember(data.data);
+      setIsUpdating(true);
     },
-    enabled: false,
+    enabled: Boolean(org.id && params.memberId),
   });
   useEffect(() => {
-    if (params.memberId) {
-      setIsUpdating(true);
-      refetch();
-    } else {
+    if (!params.memberId) {
       setIsUpdating(false);
+      setcurrentMember({});
     }
-  }, [params.memberId, refetch]);
+  }, [params.memberId]);
 
   const { register, handleSubmit, reset } = useForm<FormData>();
   useEffect(() => {
@@ -75,7 +73,7 @@ const AddOrUpdateMember = () => {
     toast.success(
       isUpdating ? "Member updated successfully" : "Member added successfully",
     );
-    queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
   };
 
@@ -84,7 +82,7 @@ const AddOrUpdateMember = () => {
   });
 
   const { isFetching: isGettingMembers } = useQueryWrapper(
-    ["get-member-model"],
+    queryKeys.memberModel(org.id),
     modelURL,
     {
       onSuccess: (data) => {
@@ -119,7 +117,7 @@ const AddOrUpdateMember = () => {
     deleteRequest,
     () => {
       toast.success("Member deleted successfully");
-      queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
@@ -233,14 +231,16 @@ const AddOrUpdateMember = () => {
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex justify="flex-end" alignItems="center" mx="6" mt="4">
         {!isGettingMembers && membersModel.length !== 0 && (
-          <Button
-            leftIcon={<FaPlusSquare />}
-            colorScheme="blue"
-            variant="outline"
-            onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-          >
-            Update Model
-          </Button>
+          <Can perm="members.manage">
+            <Button
+              leftIcon={<FaPlusSquare />}
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+            >
+              Update Model
+            </Button>
+          </Can>
         )}
       </Flex>
       <>

@@ -1,6 +1,7 @@
 import { useQueryWrapper } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services/api/request";
+import { queryKeys } from "services/api/queryKeys";
 
 export interface CommonTypeCategory {
   name: string;
@@ -18,12 +19,12 @@ export interface CategoryType extends CommonTypeCategory {
 
 /**
  * Fetches the org's categories (with nested sub-categories). Shared by the
- * create and edit attendance screens. Uses the existing "get-all-category"
- * query key so React Query dedupes across screens.
+ * create and edit attendance screens. The query key includes the organisation
+ * so cached categories can never bleed between tenants.
  */
 export const useCategories = (organisationId: string) => {
   const url = convertParamsToString(orgRequest.CATEGORY, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["get-all-category"], url, {
+  const { data, isLoading } = useQueryWrapper(queryKeys.categories(organisationId), url, {
     enabled: Boolean(organisationId),
   });
   // The API wraps payloads as { data: ... }; derive the list straight from the

@@ -25,6 +25,7 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { FaPlusCircle, FaTimesCircle } from "react-icons/fa";
+import { queryKeys } from "services/api/queryKeys";
 
 export interface FieldType {
   _id: string;
@@ -44,7 +45,6 @@ const UserModel = () => {
     "checkbox",
     "date",
     "color",
-    "password",
     "option",
   ];
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ const UserModel = () => {
     }
     setFields(modelFields);
   };
-  useQueryWrapper(["get-model"], url, { onSuccess: getModelSuccess });
+  useQueryWrapper(queryKeys.memberModel(org.id), url, { onSuccess: getModelSuccess });
 
   const handleAddMore = () => {
     const newField = {
