@@ -48,6 +48,7 @@ import { Q_KEY } from "utils/constant";
 import ReactSelect, { MultiValue } from "react-select";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
+import { queryKeys } from "services/api/queryKeys";
 
 type SelectOption = {
   value: string;
@@ -62,8 +63,9 @@ const REQUIRED_EXPORT_FIELDS = ["name"];
 const ViewMembers: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [searchQuery, setSearchQuery] = useState("");
+  const selectedFieldsStorageKey = `selectedFields-${org.id}`;
   const [selectedFields, setSelectedFields] = useState<string[]>(() => {
-    const stored = localStorage.getItem("selectedFields");
+    const stored = localStorage.getItem(selectedFieldsStorageKey);
     return stored ? JSON.parse(stored) : [];
   });
   const [filterableFields, setFilterableFields] = useState<FilterableField[]>(
@@ -82,7 +84,7 @@ const ViewMembers: React.FC = () => {
     organisationId: org.id,
   });
 
-  useQueryWrapper(["get-member-model"], modelURL, {
+  useQueryWrapper(queryKeys.memberModel(org.id), modelURL, {
     onSuccess: (data) => {
       const fields = data?.data.fields ?? [];
       const optionFields = fields
@@ -122,10 +124,6 @@ const ViewMembers: React.FC = () => {
     activeExportFilters.forEach(([field, values]) => {
       queryParams.set(field, values.join(","));
     });
-    if (activeExportFilters.length) {
-      queryParams.set("sort", "part:asc");
-    }
-
     if (exportFields.length) {
       queryParams.set("fields", exportFields.join(","));
     }
@@ -143,15 +141,20 @@ const ViewMembers: React.FC = () => {
   );
 
   useEffect(() => {
-    localStorage.setItem("selectedFields", JSON.stringify(selectedFields));
-  }, [selectedFields]);
+    const stored = localStorage.getItem(selectedFieldsStorageKey);
+    setSelectedFields(stored ? JSON.parse(stored) : []);
+  }, [selectedFieldsStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(selectedFieldsStorageKey, JSON.stringify(selectedFields));
+  }, [selectedFields, selectedFieldsStorageKey]);
   useEffect(() => {
     if (members.length > 0 && selectedFields.length === 0) {
       setSelectedFields(allExtraFields);
     }
   }, [members, allExtraFields, selectedFields]);
 
-  const { isLoading, error } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
+  const { isLoading, error } = useQueryWrapper(queryKeys.members(org.id), url, {
     onSuccess: (res) => {
       setMembers(res.data);
     },
