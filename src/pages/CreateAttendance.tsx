@@ -9,13 +9,14 @@ import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { queryClient } from "services/api/apiHelper";
-import { Q_KEY } from "utils/constant";
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
+import { queryKeys } from "services/api/queryKeys";
+import { Can } from "rbac/Can";
 
 const EMPTY_DETAILS: AttendanceDetails = {
   name: "",
@@ -45,24 +46,26 @@ const CreateAttendance = () => {
       ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
     };
     updateCurrentAttendance(payload);
-    queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex>
-        <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
-          Add Category
-        </Button>
-        <Button
-          mt="4"
-          ml="6"
-          onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}
-        >
-          Add Sub-Category
-        </Button>
-      </Flex>
+      <Can perm="categories.manage">
+        <Flex>
+          <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
+            Add Category
+          </Button>
+          <Button
+            mt="4"
+            ml="6"
+            onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}
+          >
+            Add Sub-Category
+          </Button>
+        </Flex>
+      </Can>
       <Flex
         align={"center"}
         justify={"center"}
