@@ -44,7 +44,6 @@ import {
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { Q_KEY } from "utils/constant";
 import ReactSelect, { MultiValue } from "react-select";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
@@ -139,11 +138,6 @@ const ViewMembers: React.FC = () => {
     () => `${url}/export/pdf${exportQueryString}`,
     [exportQueryString, url],
   );
-
-  useEffect(() => {
-    const stored = localStorage.getItem(selectedFieldsStorageKey);
-    setSelectedFields(stored ? JSON.parse(stored) : []);
-  }, [selectedFieldsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(selectedFieldsStorageKey, JSON.stringify(selectedFields));
