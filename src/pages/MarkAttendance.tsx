@@ -36,7 +36,6 @@ import {
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { confirmAlert } from "react-confirm-alert";
-import { Q_KEY } from "utils/constant";
 import _ from "lodash";
 import { toast } from "react-toastify";
 import LoadingSpinner from "components/LoadingSpinner";
@@ -44,6 +43,7 @@ import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
+import { queryKeys } from "services/api/queryKeys";
 
 export type AttendanceStatus = "absent" | "present" | "apology";
 
@@ -118,7 +118,10 @@ const MarkAttendance = () => {
   ]);
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
-  const localStorageKey = `attendance-${org.id}`;
+  const draftIdentity = isUpdate
+    ? params.attendanceId
+    : `${currentAttendance.date || "undated"}-${currentAttendance.name || "untitled"}`;
+  const localStorageKey = `attendance-draft-${org.id}-${draftIdentity}`;
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
 
@@ -171,7 +174,7 @@ const MarkAttendance = () => {
 
   // Query to fetch members (only when not updating)
   const { isLoading: isGettingMembers } = useQueryWrapper(
-    [Q_KEY.GET_MEMBERS],
+    queryKeys.members(org.id),
     convertParamsToString(orgRequest.MEMBERS, { organisationId: org.id }),
     {
       onSuccess: onGetMembersSuccess,
@@ -209,7 +212,7 @@ const MarkAttendance = () => {
   });
   // Query for fetching attendance details when updating
   const { isLoading: isGettingAttendance } = useQueryWrapper(
-    [Q_KEY.GET_ATTENDANCE],
+    queryKeys.attendance(org.id, params.attendanceId),
     attendUrl,
     {
       onSuccess: onGetAttandanceSuccess,
