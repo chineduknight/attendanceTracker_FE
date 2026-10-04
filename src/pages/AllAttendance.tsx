@@ -25,6 +25,7 @@ import {
 import { FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
+import { queryKeys } from "services/api/queryKeys";
 
 type PersonRef = { id: string; name: string };
 
@@ -59,7 +60,7 @@ const AllAttendance = () => {
     organisationId: org.id,
   });
 
-  const { isFetching } = useQueryWrapper(["all-attendance-12"], url, {
+  const { isFetching } = useQueryWrapper(queryKeys.attendances(org.id), url, {
     onSuccess: handleGetOrgSuccess,
   });
   const isLoading = isFetching && allAttend.length === 0;

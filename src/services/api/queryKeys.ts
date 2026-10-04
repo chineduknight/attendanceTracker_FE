@@ -9,4 +9,6 @@ export const queryKeys = {
     ["categories", organisationId] as const,
   attendance: (organisationId: string, attendanceId?: string) =>
     ["attendance", organisationId, attendanceId ?? ""] as const,
+  attendances: (organisationId: string) =>
+    ["attendances", organisationId] as const,
 };

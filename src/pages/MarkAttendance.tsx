@@ -44,8 +44,12 @@ import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
 import { queryKeys } from "services/api/queryKeys";
+import {
+  reconcileAttendanceDraft,
+  AttendanceStatus,
+} from "helpers/attendanceDraft";
 
-export type AttendanceStatus = "absent" | "present" | "apology";
+export type { AttendanceStatus };
 
 export type MemberType = {
   attendanceStatus: AttendanceStatus;
@@ -153,23 +157,24 @@ const MarkAttendance = () => {
   }, [allMembers, searchQuery]);
   const attendanceInfo = useMemo(() => computeCounts(allMembers), [allMembers]);
 
-  // Callback for fetching all members (new attendance marking)
+  // Called when the roster loads for a new attendance session. Any locally-saved
+  // draft is reconciled against the live roster, so members who were removed no
+  // longer appear and newly eligible members start off as "absent" instead of
+  // trusting stale draft data.
   const onGetMembersSuccess = (data) => {
-    const members = [...data.data].sort((a, b) => a.name.localeCompare(b.name));
+    const roster = [...data.data].sort((a, b) => a.name.localeCompare(b.name));
 
-    // Resume from a locally-saved draft if one exists, otherwise start everyone
-    // off as "absent".
+    let draft: unknown = null;
     const localAttendance = localStorage.getItem(localStorageKey);
     if (localAttendance) {
-      const parsedLocal = JSON.parse(localAttendance);
-      if (parsedLocal.length > 0) {
-        setAllMembers(parsedLocal);
-        return;
+      try {
+        draft = JSON.parse(localAttendance);
+      } catch {
+        draft = null;
       }
     }
-    setAllMembers(
-      members.map((member) => ({ ...member, attendanceStatus: "absent" }))
-    );
+
+    setAllMembers(reconcileAttendanceDraft<MemberType>(draft, roster));
   };
 
   // Query to fetch members (only when not updating)

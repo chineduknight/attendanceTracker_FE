@@ -258,15 +258,17 @@ const AddOrUpdateMember = () => {
                   boxShadow={"lg"}
                 >
                   <Heading>You don't have a model yet</Heading>
-                  <Button
-                    mt="4"
-                    leftIcon={<FaPlusSquare />}
-                    colorScheme="blue"
-                    variant="outline"
-                    onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-                  >
-                    Create Model
-                  </Button>
+                  <Can perm="members.manage">
+                    <Button
+                      mt="4"
+                      leftIcon={<FaPlusSquare />}
+                      colorScheme="blue"
+                      variant="outline"
+                      onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+                    >
+                      Create Model
+                    </Button>
+                  </Can>
                 </Flex>
               ) : (
                 <div style={{ width: "90%" }}>

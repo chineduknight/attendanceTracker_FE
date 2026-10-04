@@ -22,6 +22,7 @@ import { useState } from "react";
 import { CategoryType } from "hooks/useCategories";
 import { toast } from "react-toastify";
 import Loader from "components/Loader";
+import { queryKeys } from "services/api/queryKeys";
 const SubCategory = () => {
   const onSuccess = (data) => {
     toast.success("Sub Category added successfully");
@@ -52,7 +53,7 @@ const SubCategory = () => {
     setAllCategory(res.data);
   };
   const { isLoading: isGettingCat } = useQueryWrapper(
-    ["get-all-category"],
+    queryKeys.categories(org.id),
     catUrl,
     {
       onSuccess: onCatSuccess,
