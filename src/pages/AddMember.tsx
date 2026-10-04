@@ -117,7 +117,7 @@ const AddOrUpdateMember = () => {
     deleteRequest,
     () => {
       toast.success("Member deleted successfully");
-      queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
@@ -231,14 +231,16 @@ const AddOrUpdateMember = () => {
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex justify="flex-end" alignItems="center" mx="6" mt="4">
         {!isGettingMembers && membersModel.length !== 0 && (
-          <Button
-            leftIcon={<FaPlusSquare />}
-            colorScheme="blue"
-            variant="outline"
-            onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-          >
-            Update Model
-          </Button>
+          <Can perm="members.manage">
+            <Button
+              leftIcon={<FaPlusSquare />}
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+            >
+              Update Model
+            </Button>
+          </Can>
         )}
       </Flex>
       <>
