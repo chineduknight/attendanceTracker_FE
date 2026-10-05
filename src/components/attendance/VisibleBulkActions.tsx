@@ -31,7 +31,7 @@ const VisibleBulkActions = ({
     {selectedStatus && (
       <Button
         size="sm"
-        minH="40px"
+        minH="44px"
         colorScheme={selectedStatus.color}
         isDisabled={visibleCount === 0}
         onClick={onApply}
@@ -41,7 +41,7 @@ const VisibleBulkActions = ({
     )}
     <Button
       size="sm"
-      minH="40px"
+      minH="44px"
       variant="outline"
       isDisabled={visibleCount === 0}
       onClick={onReset}
@@ -51,7 +51,7 @@ const VisibleBulkActions = ({
     {canUndo && (
       <Button
         size="sm"
-        minH="40px"
+        minH="44px"
         variant="ghost"
         leftIcon={<FaUndo aria-hidden />}
         onClick={onUndo}

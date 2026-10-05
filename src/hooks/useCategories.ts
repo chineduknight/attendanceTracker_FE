@@ -24,11 +24,11 @@ export interface CategoryType extends CommonTypeCategory {
  */
 export const useCategories = (organisationId: string) => {
   const url = convertParamsToString(orgRequest.CATEGORY, { organisationId });
-  const { data, isLoading } = useQueryWrapper(queryKeys.categories(organisationId), url, {
+  const { data, isLoading, isSuccess } = useQueryWrapper(queryKeys.categories(organisationId), url, {
     enabled: Boolean(organisationId),
   });
   // The API wraps payloads as { data: ... }; derive the list straight from the
   // query cache rather than mirroring it into local state via onSuccess.
   const categories: CategoryType[] = data?.data ?? [];
-  return { categories, isLoading };
+  return { categories, isLoading, isSuccess };
 };

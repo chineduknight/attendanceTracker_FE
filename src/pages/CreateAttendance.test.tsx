@@ -82,12 +82,17 @@ const button = (name: string) => screen.getByRole("button", { name });
 const type = (input: HTMLElement, value: string) =>
   fireEvent.change(input, { target: { value } });
 
+const orgBInvalidated = () =>
+  queryClient.getQueryState(queryKeys.attendanceTemplates("orgB"))?.isInvalidated;
+
 const confirmDialog = () => {
   const options = mockConfirm.mock.calls[mockConfirm.mock.calls.length - 1][0];
   act(() => options.buttons[0].onClick());
 };
 
 describe("<CreateAttendance> session templates", () => {
+  afterEach(() => jest.restoreAllMocks());
+
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
@@ -153,6 +158,7 @@ describe("<CreateAttendance> session templates", () => {
     type(categorySelect(), "c2");
     type(dateInput(), "2026-10-02");
     const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), { data: [] });
 
     templatesByOrg.orgA = [template({ id: "t-new", name: "Friday Vigil", categoryId: "c2", subCategoryId: null })];
     fireEvent.click(button("Save as template"));
@@ -166,7 +172,7 @@ describe("<CreateAttendance> session templates", () => {
     await waitFor(() => expect(templateSelect().value).toBe("t-new"));
     expect(toast.success).toHaveBeenCalledWith('Saved "Friday Vigil" as a template');
     expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.attendanceTemplates("orgA") });
-    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: queryKeys.attendanceTemplates("orgB") });
+    expect(orgBInvalidated()).toBe(false);
     // Saving does not navigate or clear what was typed.
     expect(dateInput().value).toBe("2026-10-02");
     invalidate.mockRestore();
@@ -197,10 +203,15 @@ describe("<CreateAttendance> session templates", () => {
     type(nameInput(), "Thursday Practice");
     type(categorySelect(), "c2");
     type(dateInput(), "2026-10-01");
+    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), { data: [] });
 
     fireEvent.click(button("Update template"));
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mockGet.mock.calls.filter(([url]) => url === "/attendance/orgA/templates")).toHaveLength(2)
+    );
+    expect(orgBInvalidated()).toBe(false);
     expect(mockPut).toHaveBeenCalledWith("/attendance/orgA/templates/t1", {
       name: "Thursday Practice",
       categoryId: "c2",
@@ -217,11 +228,13 @@ describe("<CreateAttendance> session templates", () => {
 
     fireEvent.click(button("Delete template"));
     templatesByOrg.orgA = [];
+    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), { data: [] });
     confirmDialog();
 
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
     expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t1");
     await screen.findByText(/No templates yet/);
+    expect(orgBInvalidated()).toBe(false);
     expect(nameInput().value).toBe("Thursday Rehearsal");
     expect(categorySelect().value).toBe("c1");
     expect(subCategorySelect().value).toBe("s1");
@@ -242,6 +255,36 @@ describe("<CreateAttendance> session templates", () => {
     expect(nameInput().value).toBe("");
     expect(screen.queryByRole("button", { name: "Update template" })).not.toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgB/templates");
+  });
+
+  it("shows a load error rather than an empty state when the template list fails", async () => {
+    // React Query logs the failed request; the failure itself is the scenario.
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    mockGet.mockImplementation((url: string) =>
+      url.endsWith("/templates")
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve({ data: { data: CATEGORIES } })
+    );
+    renderPage();
+    expect(await screen.findByText(/Templates could not be loaded/)).toBeInTheDocument();
+    expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
+  });
+
+  it("does not mark templates stale or apply them when categories fail to load", async () => {
+    // React Query logs the failed request; the failure itself is the scenario.
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    templatesByOrg.orgA = [template({})];
+    mockGet.mockImplementation((url: string) =>
+      url.endsWith("/category")
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve({ data: { data: templatesByOrg.orgA } })
+    );
+    renderPage();
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    type(templateSelect(), "t1");
+    expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
+    expect(button("Apply")).toBeDisabled();
+    expect(nameInput().value).toBe("");
   });
 
   describe("stale templates", () => {

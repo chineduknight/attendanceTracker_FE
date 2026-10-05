@@ -55,7 +55,7 @@ const AttendanceTemplatePicker = ({
   categoriesLoaded,
   onApply,
 }: AttendanceTemplatePickerProps) => {
-  const { templates, isLoading, create, update, remove, isSaving } =
+  const { templates, isLoading, isError, create, update, remove, isSaving } =
     useAttendanceTemplates(organisationId);
   const [selectedId, setSelectedId] = useState("");
 
@@ -66,9 +66,9 @@ const AttendanceTemplatePicker = ({
           ? templates
               .filter((template) => isTemplateStale(template, categories))
               .map((template) => template.id)
-          : [],
+          : []
       ),
-    [templates, categories, categoriesLoaded],
+    [templates, categories, categoriesLoaded]
   );
   const selected = templates.find((template) => template.id === selectedId);
   const isSelectedStale = selected ? staleIds.has(selected.id) : false;
@@ -115,6 +115,7 @@ const AttendanceTemplatePicker = ({
 
   const onDelete = () => {
     if (!selected) return;
+    const deletedId = selected.id;
     confirmAlert({
       title: "Delete template",
       message: `Delete the "${selected.name}" template? The details you have entered stay as they are.`,
@@ -123,14 +124,19 @@ const AttendanceTemplatePicker = ({
           label: "Yes",
           className: "confirm-alert-button confirm-alert-button-yes",
           onClick: () =>
-            remove(selected.id, {
+            remove(deletedId, {
               onSuccess: () => {
                 toast.success("Template deleted");
-                setSelectedId("");
+                setSelectedId((current) =>
+                  current === deletedId ? "" : current
+                );
               },
             }),
         },
-        { label: "No", className: "confirm-alert-button confirm-alert-button-no" },
+        {
+          label: "No",
+          className: "confirm-alert-button confirm-alert-button-no",
+        },
       ],
     });
   };
@@ -138,36 +144,45 @@ const AttendanceTemplatePicker = ({
   return (
     <Stack spacing={3}>
       <FormControl id="attendanceTemplate">
-        <FormLabel mb="0">Template</FormLabel>
-        {templates.length === 0 && !isLoading ? (
+        {isError ? (
+          <Text fontSize="sm" color="red.500">
+            Templates could not be loaded. You can still fill in the details
+            below.
+          </Text>
+        ) : templates.length === 0 && !isLoading ? (
           <Text fontSize="sm" color="gray.500">
             No templates yet. Fill in the details below and save them as a
             template to reuse them next time.
           </Text>
         ) : (
-          <Select
-            placeholder={isLoading ? "Loading templates…" : "Choose a template"}
-            // A template deleted elsewhere drops out of the list; show no selection.
-            value={selected?.id ?? ""}
-            isDisabled={isLoading}
-            onChange={(e) => onSelect(e.target.value)}
-          >
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {staleIds.has(template.id)
-                  ? `${template.name} (Needs update)`
-                  : template.name}
-              </option>
-            ))}
-          </Select>
+          <>
+            <FormLabel mb="0">Template</FormLabel>
+            <Select
+              placeholder={
+                isLoading ? "Loading templates…" : "Choose a template"
+              }
+              // A template deleted elsewhere drops out of the list; show no selection.
+              value={selected?.id ?? ""}
+              isDisabled={isLoading || isSaving}
+              onChange={(e) => onSelect(e.target.value)}
+            >
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {staleIds.has(template.id)
+                    ? `${template.name} (Needs update)`
+                    : template.name}
+                </option>
+              ))}
+            </Select>
+          </>
         )}
         {isSelectedStale && (
           <FormHelperText>
             <Badge colorScheme="orange" mr={2}>
               Needs update
             </Badge>
-            Its category no longer exists. Choose a current category below, then
-            update the template.
+            Its category or sub-category no longer exists. Choose current ones
+            below, then update the template.
           </FormHelperText>
         )}
       </FormControl>

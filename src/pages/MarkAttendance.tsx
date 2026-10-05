@@ -144,7 +144,6 @@ const MarkAttendanceSession = () => {
     commitMembers(() =>
       reconcileAttendanceDraft<MemberType>(draft, roster, statuses)
     );
-    setUndoSnapshot(null);
   };
 
   // Query to fetch members (only when not updating)
@@ -179,7 +178,6 @@ const MarkAttendanceSession = () => {
         attendanceStatus: attend.attendanceStatus,
       }));
     commitMembers(() => updatedMembers);
-    setUndoSnapshot(null);
   };
 
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -231,15 +229,13 @@ const MarkAttendanceSession = () => {
   // Bulk actions touch only the members the current search shows.
   const setVisibleStatus = (status: string) => {
     const visibleIds = new Set(filteredMembers.map((member) => member.id));
+    let snapshot: StatusSnapshot = new Map();
     commitMembers((current) => {
-      const { members, snapshot } = updateStatuses(
-        current,
-        visibleIds,
-        () => status
-      );
-      setUndoSnapshot(snapshot);
-      return members;
+      const update = updateStatuses(current, visibleIds, () => status);
+      snapshot = update.snapshot;
+      return update.members;
     });
+    setUndoSnapshot(snapshot);
   };
 
   const undoBulkChange = () => {

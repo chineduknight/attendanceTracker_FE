@@ -60,7 +60,7 @@ const nameKey = (name: string) => name.trim().toLowerCase();
  * The template, other than `excludeId`, whose name matches `name`
  * case-insensitively — the same rule the backend enforces.
  */
-export const findTemplateNamed = (
+const findTemplateNamed = (
   templates: readonly AttendanceTemplate[],
   name: string,
   excludeId?: string,

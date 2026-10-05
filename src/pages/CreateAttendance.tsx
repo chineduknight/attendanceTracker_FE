@@ -33,7 +33,7 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
   const updateCurrentAttendance = useGlobalStore(
     (state) => state.updateCurrentAttendance,
   );
-  const { categories, isLoading: isLoadingCategories } =
+  const { categories, isSuccess: categoriesLoaded } =
     useCategories(organisationId);
   const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
 
@@ -92,7 +92,7 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             organisationId={organisationId}
             details={details}
             categories={categories}
-            categoriesLoaded={!isLoadingCategories}
+            categoriesLoaded={categoriesLoaded}
             onApply={applyTemplate}
           />
           <AttendanceDetailsForm

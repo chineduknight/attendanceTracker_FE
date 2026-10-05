@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import {
   deleteRequest,
   postRequest,
@@ -19,6 +18,8 @@ interface MutationCallbacks<T> {
   onSuccess?: (result: T) => void;
 }
 
+type TemplateResponse = { data: AttendanceTemplate };
+
 /**
  * The selected organisation's attendance templates plus their create, update
  * and delete mutations. Every mutation invalidates only this organisation's
@@ -35,31 +36,26 @@ export const useAttendanceTemplates = (organisationId: string) => {
       templateId,
     });
 
-  const { data, isLoading } = useQueryWrapper(listKey, listUrl, {
+  const { data, isLoading, isError } = useQueryWrapper(listKey, listUrl, {
     enabled: Boolean(organisationId),
   });
   const templates: AttendanceTemplate[] = data?.data ?? [];
 
-  const invalidate = useCallback(
-    () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.attendanceTemplates(organisationId),
-      }),
-    [organisationId],
-  );
+  // Refetch after failures too: a 404/422 usually means the list is out of date
+  // (e.g. the template was deleted or renamed on another device).
+  const onSettled = () => queryClient.invalidateQueries({ queryKey: listKey });
+  const withTemplate =
+    (onSuccess?: (template: AttendanceTemplate) => void) =>
+    ({ onSettled, onSuccess: (res: TemplateResponse) => onSuccess?.(res.data) });
 
-  const createMutation = useMutationWrapper(postRequest, invalidate);
-  const updateMutation = useMutationWrapper(putRequest, invalidate);
-  const removeMutation = useMutationWrapper(deleteRequest, invalidate);
+  const createMutation = useMutationWrapper(postRequest);
+  const updateMutation = useMutationWrapper(putRequest);
+  const removeMutation = useMutationWrapper(deleteRequest);
 
   const create = (
     fields: AttendanceTemplateFields,
     { onSuccess }: MutationCallbacks<AttendanceTemplate> = {},
-  ) =>
-    createMutation.mutate(
-      { url: listUrl, data: fields },
-      { onSuccess: (res: { data: AttendanceTemplate }) => onSuccess?.(res.data) },
-    );
+  ) => createMutation.mutate({ url: listUrl, data: fields }, withTemplate(onSuccess));
 
   const update = (
     templateId: string,
@@ -68,7 +64,7 @@ export const useAttendanceTemplates = (organisationId: string) => {
   ) =>
     updateMutation.mutate(
       { url: templateUrl(templateId), data: fields },
-      { onSuccess: (res: { data: AttendanceTemplate }) => onSuccess?.(res.data) },
+      withTemplate(onSuccess),
     );
 
   const remove = (
@@ -77,12 +73,13 @@ export const useAttendanceTemplates = (organisationId: string) => {
   ) =>
     removeMutation.mutate(
       { url: templateUrl(templateId) },
-      { onSuccess: () => onSuccess?.() },
+      { onSettled, onSuccess: () => onSuccess?.() },
     );
 
   return {
     templates,
     isLoading,
+    isError,
     create,
     update,
     remove,

@@ -1,8 +1,9 @@
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { confirmAlert } from "react-confirm-alert";
 import { queryClient } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
@@ -216,7 +217,7 @@ describe("<MarkAttendance> quick marking", () => {
     });
     mockGet.mockImplementation((url: string) => {
       if (url.includes("/members")) return Promise.resolve({ data: { data: FIVE } });
-      if (url.startsWith("/attendance/org1/att1")) {
+      if (/^\/attendance\/org1\/att\d$/.test(url)) {
         return Promise.resolve({
           data: {
             data: {
@@ -359,6 +360,42 @@ describe("<MarkAttendance> quick marking", () => {
       expect(undoButton()).not.toBeInTheDocument();
     });
 
+    it("survives a roster refetch (e.g. the app regaining focus)", async () => {
+      await start();
+      chooseMode("Present");
+      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 5 visible" }));
+
+      await act(() => queryClient.refetchQueries({ queryKey: queryKeys.members("org1") }));
+
+      fireEvent.click(undoButton() as HTMLElement);
+      expect(allStatuses()).toEqual(["Absent", "Absent", "Absent", "Absent", "Absent"]);
+    });
+
+    it("is cleared when a different session is opened", async () => {
+      const OpenOtherSession = () => {
+        const navigate = useNavigate();
+        return <button onClick={() => navigate("/mark/att2")}>open other</button>;
+      };
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/mark/att1"]}>
+            <OpenOtherSession />
+            <Routes>
+              <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Bola");
+      fireEvent.click(screen.getByRole("button", { name: "Reset 5 visible to Absent" }));
+      expect(undoButton()).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "open other" }));
+
+      await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/attendance/org1/att2"));
+      expect(undoButton()).not.toBeInTheDocument();
+    });
+
     it("and the quick-mark mode are reset by an organisation switch", async () => {
       await start();
       chooseMode("Present");
@@ -395,6 +432,10 @@ describe("<MarkAttendance> quick marking", () => {
 
       expect(statusOf("Ada Eze")).toBe("Remote");
       expect(countText("Remote")).toBe("Remote: 1");
+      expect(JSON.parse(localStorage.getItem("attendance-draft-org1-att1") as string)[0]).toMatchObject({
+        id: "m1",
+        attendanceStatus: "remote",
+      });
     });
   });
 
