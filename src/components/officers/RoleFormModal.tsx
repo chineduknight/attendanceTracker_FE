@@ -8,6 +8,7 @@ import {
 } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import PermissionGrid from "components/officers/PermissionGrid";
 import { buildRolePayload } from "rbac/rbacPayloads";
 import { PermissionKey } from "rbac/permissions";
@@ -27,12 +28,12 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
     setTouchedName(false);
   }, [role, isOpen]);
 
-  const { data: catalogData } = useQueryWrapper(["permissions-catalog"], rbacRequest.PERMISSIONS, { enabled: isOpen });
+  const { data: catalogData } = useQueryWrapper(queryKeys.permissionsCatalog, rbacRequest.PERMISSIONS, { enabled: isOpen });
   const catalog: PermissionsCatalog | undefined = catalogData?.data;
 
   const onSuccess = () => {
-    queryClient.invalidateQueries(["roles", organisationId]);
-    queryClient.invalidateQueries(["officers", organisationId]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.roles(organisationId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.officers(organisationId) });
     onClose();
   };
   const { mutate: create, isLoading: creating } = useMutationWrapper(postRequest, onSuccess);

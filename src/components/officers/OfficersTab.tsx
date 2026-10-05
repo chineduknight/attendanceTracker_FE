@@ -19,6 +19,7 @@ import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import LoadingSpinner from "components/LoadingSpinner";
 import useGlobalStore from "zStore";
 import { Can } from "rbac/Can";
@@ -36,11 +37,13 @@ const OfficersTab = ({ organisationId }: Props) => {
   const [permsTarget, setPermsTarget] = useState<Officer | null>(null);
 
   const url = convertParamsToString(rbacRequest.OFFICERS, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["officers", organisationId], url);
+  const { data, isLoading } = useQueryWrapper(queryKeys.rbac.officers(organisationId), url);
   const officers: Officer[] = data?.data ?? [];
 
   const { mutate: removeMutate } = useMutationWrapper(deleteRequest, () =>
-    queryClient.invalidateQueries(["officers", organisationId])
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.rbac.officers(organisationId),
+    })
   );
 
   const handleRemove = (o: Officer) =>

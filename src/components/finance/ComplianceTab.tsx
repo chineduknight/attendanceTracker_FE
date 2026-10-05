@@ -27,6 +27,7 @@ import { financeRequest } from "services";
 import { useQueryWrapper, queryClient } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { monthStatusColor, MONTHS, formatMoney } from "helpers/financeConstants";
+import { queryKeys } from "services/api/queryKeys";
 import {
   ComplianceResponse,
   ComplianceRow,
@@ -122,7 +123,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
     : "";
 
   const { data, isLoading } = useQueryWrapper(
-    ["finance-compliance", organisationId, obligationId],
+    queryKeys.finance.compliance(organisationId, obligationId),
     complianceUrl,
     { enabled: Boolean(obligationId) }
   );
@@ -172,7 +173,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
 
   const { refetch: refetchExcel, isFetching: isExportingExcel } =
     useQueryWrapper(
-      ["finance-compliance-export-excel", organisationId, obligationId],
+      queryKeys.finance.complianceExport(organisationId, obligationId, "excel"),
       excelUrl,
       {
         enabled: false,
@@ -182,7 +183,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
     );
 
   const { refetch: refetchPdf, isFetching: isExportingPdf } = useQueryWrapper(
-    ["finance-compliance-export-pdf", organisationId, obligationId],
+    queryKeys.finance.complianceExport(organisationId, obligationId, "pdf"),
     pdfUrl,
     {
       enabled: false,
@@ -209,7 +210,9 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
   const isDues = obligation?.type === "dues";
 
   const invalidate = () =>
-    queryClient.invalidateQueries(["finance-compliance", organisationId, obligationId]);
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.finance.compliance(organisationId, obligationId),
+    });
 
   // A member's overall status across the obligation, used for the status filter
   // and the per-row summary badge.

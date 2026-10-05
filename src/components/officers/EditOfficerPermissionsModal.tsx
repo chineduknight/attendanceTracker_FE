@@ -5,6 +5,7 @@ import {
 import { useQueryWrapper, patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import PermissionGrid from "components/officers/PermissionGrid";
 import { buildOverridePayload } from "rbac/rbacPayloads";
 import { PermissionKey } from "rbac/permissions";
@@ -18,15 +19,15 @@ const EditOfficerPermissionsModal = ({ organisationId, officer, onClose }: Props
 
   useEffect(() => { setSelected(officer?.permissions ?? []); }, [officer]);
 
-  const { data: catalogData } = useQueryWrapper(["permissions-catalog"], rbacRequest.PERMISSIONS, { enabled: isOpen });
+  const { data: catalogData } = useQueryWrapper(queryKeys.permissionsCatalog, rbacRequest.PERMISSIONS, { enabled: isOpen });
   const catalog: PermissionsCatalog | undefined = catalogData?.data;
 
   const rolesUrl = convertParamsToString(rbacRequest.ROLES, { organisationId });
-  const { data: rolesData } = useQueryWrapper(["roles", organisationId], rolesUrl, { enabled: isOpen });
+  const { data: rolesData } = useQueryWrapper(queryKeys.rbac.roles(organisationId), rolesUrl, { enabled: isOpen });
   const roles: Role[] = rolesData?.data ?? [];
 
   const { mutate, isLoading } = useMutationWrapper(patchRequest, () => {
-    queryClient.invalidateQueries(["officers", organisationId]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.officers(organisationId) });
     onClose();
   });
 

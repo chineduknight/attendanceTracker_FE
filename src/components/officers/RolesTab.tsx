@@ -6,6 +6,7 @@ import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { Role } from "rbac/types";
@@ -18,12 +19,12 @@ const RolesTab = ({ organisationId }: Props) => {
   const [editing, setEditing] = useState<Role | null>(null);
 
   const url = convertParamsToString(rbacRequest.ROLES, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["roles", organisationId], url);
+  const { data, isLoading } = useQueryWrapper(queryKeys.rbac.roles(organisationId), url);
   const roles: Role[] = data?.data ?? [];
 
   const { mutate: remove } = useMutationWrapper(deleteRequest, () => {
-    queryClient.invalidateQueries(["roles", organisationId]);
-    queryClient.invalidateQueries(["officers", organisationId]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.roles(organisationId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.officers(organisationId) });
   });
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };

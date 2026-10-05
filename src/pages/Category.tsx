@@ -12,14 +12,17 @@ import {
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { orgRequest } from "services";
-import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toast } from "react-toastify";
 
 const Category = () => {
   const [category] = useGlobalStore((state) => [state.organisation]);
-  const onSuccess = (data) => {
+  const onSuccess = () => {
     toast.success("category added successfully");
+    // Only the current organisation's categories are stale.
+    queryClient.invalidateQueries({ queryKey: queryKeys.categories(category.id) });
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);

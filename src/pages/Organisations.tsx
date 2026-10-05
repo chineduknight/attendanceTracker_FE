@@ -23,13 +23,14 @@ import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import SetEmailModal from "components/auth/SetEmailModal";
 import { OrganisationSummary } from "rbac/types";
+import { queryKeys } from "services/api/queryKeys";
 
 const OrgList = () => {
   const navigate = useNavigate();
   const [setOrg] = useGlobalStore((state) => [state.updateOrganisation]);
   const onSuccess = () => {
     refetch();
-    queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
   };
 
   const { mutate } = useMutationWrapper(deleteRequest, onSuccess);
@@ -39,7 +40,7 @@ const OrgList = () => {
     setAllOrg(res.data);
   };
   const { refetch } = useQueryWrapper(
-    ["all-organisations"],
+    queryKeys.allOrganisations,
     orgRequest.ORGANISATIONS,
     {
       onSuccess: handleGetOrgSuccess,

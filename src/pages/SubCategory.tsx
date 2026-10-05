@@ -13,6 +13,7 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import {
   postRequest,
+  queryClient,
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
@@ -24,12 +25,14 @@ import { toast } from "react-toastify";
 import Loader from "components/Loader";
 import { queryKeys } from "services/api/queryKeys";
 const SubCategory = () => {
-  const onSuccess = (data) => {
+  const [org] = useGlobalStore((state) => [state.organisation]);
+  const onSuccess = () => {
     toast.success("Sub Category added successfully");
+    // Only the current organisation's categories are stale.
+    queryClient.invalidateQueries({ queryKey: queryKeys.categories(org.id) });
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
-  const [org] = useGlobalStore((state) => [state.organisation]);
   const handleAddSubCategory = (details) => {
     const data = {
       name: details.subCategoryId,

@@ -18,6 +18,7 @@ import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import { Can } from "rbac/Can";
 import { orgRequest } from "services/api/request";
+import { queryKeys } from "services/api/queryKeys";
 import {
   putRequest,
   queryClient,
@@ -65,7 +66,7 @@ const OrganisationSettings = () => {
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
-  const { isFetching } = useQueryWrapper(["organisation", org.id], url, {
+  const { isFetching } = useQueryWrapper(queryKeys.organisation(org.id), url, {
     enabled: Boolean(org.id),
     refetchOnWindowFocus: false,
     onSuccess: (res: any) => {
@@ -88,7 +89,9 @@ const OrganisationSettings = () => {
       // PUT returns org fields but NOT permissions/isOwner/roleName —
       // merge over the selected org so RBAC state is preserved.
       setOrg({ ...org, ...res.data });
-      queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
+      // Refresh this organisation's detail only — never another tenant's.
+      queryClient.invalidateQueries({ queryKey: queryKeys.organisation(org.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
       toast.success("Settings saved");
     },
   );
