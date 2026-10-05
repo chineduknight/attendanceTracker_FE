@@ -28,6 +28,8 @@ import {
 import {
   createStatusRow,
   MAX_ATTENDANCE_STATUSES,
+  MAX_STATUS_LABEL_LENGTH,
+  MAX_STATUS_SHORT_LABEL_LENGTH,
   moveStatusRow,
   setDefaultStatus,
   StatusRow,
@@ -128,6 +130,7 @@ const AttendanceStatusesEditor = ({
               </FormLabel>
               <Input
                 size="sm"
+                maxLength={MAX_STATUS_LABEL_LENGTH}
                 value={row.label}
                 isReadOnly={isReadOnly}
                 onChange={(e) => updateRow(row.key, { label: e.target.value })}
@@ -139,7 +142,7 @@ const AttendanceStatusesEditor = ({
               </FormLabel>
               <Input
                 size="sm"
-                maxLength={4}
+                maxLength={MAX_STATUS_SHORT_LABEL_LENGTH}
                 value={row.shortLabel}
                 isReadOnly={isReadOnly}
                 onChange={(e) =>
@@ -225,6 +228,7 @@ const AttendanceStatusesEditor = ({
             size="sm"
             placeholder="New status label, e.g. Late"
             aria-label="New status label"
+            maxLength={MAX_STATUS_LABEL_LENGTH}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
             onKeyDown={(e) => {

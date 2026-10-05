@@ -25,14 +25,14 @@ const ANALYTICS = {
     longestStreak: 2,
   },
   verdicts: [
-    { date: "2026-06-07", status: "late" },
-    { date: "2026-06-14", status: "remote" },
-    { date: "2026-06-21", status: "mystery" },
-    { date: "2026-06-28", status: "excused" },
+    { date: "2026-06-07", status: "late", behavior: "present" },
+    { date: "2026-06-14", status: "remote", behavior: "present" },
+    { date: "2026-06-21", status: "mystery", behavior: "absent" },
+    { date: "2026-06-28", status: "excused", behavior: "excused" },
   ],
   records: [
-    { attendanceId: "a1", date: "2026-06-07", status: "late", sessionName: "S1", hasBeenUpdated: false },
-    { attendanceId: "a2", date: "2026-06-14", status: "remote", sessionName: "S2", hasBeenUpdated: false },
+    { attendanceId: "a1", date: "2026-06-07", status: "late", behavior: "present", sessionName: "S1", hasBeenUpdated: false },
+    { attendanceId: "a2", date: "2026-06-14", status: "remote", behavior: "present", sessionName: "S2", hasBeenUpdated: false },
   ],
 };
 

@@ -17,7 +17,7 @@ const update = (rows: StatusRow[], key: string, patch: Partial<StatusRow>) =>
 describe("attendance status settings", () => {
   it("starts from the default configuration, all persisted and valid", () => {
     const rows = toStatusRows(undefined);
-    expect(rows.map((row) => row.key)).toEqual(["present", "apology", "absent"]);
+    expect(rows.map((row) => row.key)).toEqual(["absent", "present", "apology"]);
     expect(rows.every((row) => row.persisted)).toBe(true);
     expect(validateStatusRows(rows)).toEqual([]);
   });
@@ -42,6 +42,25 @@ describe("attendance status settings", () => {
     expect(generateStatusKey("Present", rows)).toBe("present_2");
     expect(generateStatusKey("No Show!", rows)).toBe("no_show");
     expect(generateStatusKey("!!!", rows)).toBe("status");
+  });
+
+  it("keeps generated keys within the backend key rule", () => {
+    const rows = defaults();
+    const key = generateStatusKey("A".repeat(60), rows);
+    expect(key).toMatch(/^[a-z0-9][a-z0-9_-]{0,31}$/);
+    const second = generateStatusKey("A".repeat(60), [
+      ...rows,
+      { ...rows[0], key },
+    ]);
+    expect(second).toMatch(/^[a-z0-9][a-z0-9_-]{0,31}$/);
+    expect(second).not.toBe(key);
+  });
+
+  it("enforces label and short-label length limits", () => {
+    const rows = update(defaults(), "present", { shortLabel: "TOOLONG" });
+    expect(validateStatusRows(rows)).toContain(
+      "Labels are at most 40 characters and short labels at most 6.",
+    );
   });
 
   it("rejects duplicate labels and short labels", () => {
@@ -102,14 +121,14 @@ describe("attendance status settings", () => {
   it("moves rows up and down within bounds", () => {
     const rows = defaults();
     expect(moveStatusRow(rows, 2, -1).map((r) => r.key)).toEqual([
-      "present",
       "absent",
       "apology",
+      "present",
     ]);
     expect(moveStatusRow(rows, 0, -1).map((r) => r.key)).toEqual([
+      "absent",
       "present",
       "apology",
-      "absent",
     ]);
   });
 });

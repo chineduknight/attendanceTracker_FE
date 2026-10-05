@@ -1,9 +1,13 @@
-import { AttendanceBehavior } from "helpers/attendanceStatuses";
+import {
+  AttendanceBehavior,
+  AttendanceStatusDefinition,
+} from "helpers/attendanceStatuses";
 
 export interface MemberVerdict {
   date: string;
   /** Configured status key; may be inactive or unknown on historical records. */
   status: string;
+  behavior: AttendanceBehavior;
 }
 
 export interface MemberRecord {
@@ -11,6 +15,7 @@ export interface MemberRecord {
   date: string;
   /** Configured status key; may be inactive or unknown on historical records. */
   status: string;
+  behavior: AttendanceBehavior;
   sessionName: string;
   hasBeenUpdated: boolean;
   editCount?: number;
@@ -32,4 +37,6 @@ export interface MemberAnalytics {
   summary: MemberAnalyticsSummary;
   verdicts: MemberVerdict[];
   records: MemberRecord[];
+  /** The organisation's effective status config at query time. */
+  attendanceStatuses?: AttendanceStatusDefinition[];
 }

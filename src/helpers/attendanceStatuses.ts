@@ -68,12 +68,21 @@ export const BEHAVIOR_META: Record<
 };
 
 /**
- * The configuration every organisation starts with. Array order is the
- * display and tap-cycle order, so tapping from the default walks
- * Absent → Present → Apology → Absent.
+ * The configuration every organisation starts with — identical to the
+ * backend's effective defaults. Array order is the display and tap-cycle
+ * order, so tapping from the default walks Absent → Present → Apology → Absent.
  */
 export const DEFAULT_ATTENDANCE_STATUSES: readonly AttendanceStatusDefinition[] =
   [
+    {
+      key: "absent",
+      label: "Absent",
+      shortLabel: "A",
+      color: "red",
+      behavior: "absent",
+      active: true,
+      isDefault: true,
+    },
     {
       key: "present",
       label: "Present",
@@ -91,15 +100,6 @@ export const DEFAULT_ATTENDANCE_STATUSES: readonly AttendanceStatusDefinition[] 
       behavior: "excused",
       active: true,
       isDefault: false,
-    },
-    {
-      key: "absent",
-      label: "Absent",
-      shortLabel: "A",
-      color: "red",
-      behavior: "absent",
-      active: true,
-      isDefault: true,
     },
   ];
 

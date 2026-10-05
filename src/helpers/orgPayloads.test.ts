@@ -60,9 +60,9 @@ describe("buildOrgUpdatePayload", () => {
 
     expect(result).toMatchObject({ ...base, maxAttendanceEdits: 2 });
     expect(result.attendanceStatuses.map((s) => s.key)).toEqual([
+      "absent",
       "present",
       "apology",
-      "absent",
       "late",
     ]);
     expect(result.attendanceStatuses[3]).not.toHaveProperty("persisted");

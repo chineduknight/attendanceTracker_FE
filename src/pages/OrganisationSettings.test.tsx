@@ -148,9 +148,9 @@ describe("<OrganisationSettings>", () => {
         maxAttendanceEdits: 3,
       });
       expect(body.attendanceStatuses.map((s: { key: string }) => s.key)).toEqual([
+        "absent",
         "present",
         "apology",
-        "absent",
         "late",
       ]);
       await waitFor(() =>

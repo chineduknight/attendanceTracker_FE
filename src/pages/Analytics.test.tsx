@@ -23,19 +23,24 @@ const ANALYTICS = {
     {
       memberId: "m1",
       name: "Ada",
-      behaviorCounts: { present: 1, excused: 0, absent: 1 },
+      attendanceBehaviorCounts: { present: 1, excused: 0, absent: 1 },
       [D1]: "late",
       [D2]: "no_show",
     },
     {
       memberId: "m2",
       name: "Bola",
-      behaviorCounts: { present: 1, excused: 1, absent: 0 },
+      attendanceBehaviorCounts: { present: 1, excused: 1, absent: 0 },
       [D1]: "remote",
       [D2]: "excused",
     },
   ],
 };
+
+// The response's own config wins over the selected org's copy.
+const RESPONSE_STATUSES = CUSTOM_STATUSES.map((status) =>
+  status.key === "late" ? { ...status, label: "Tardy", shortLabel: "T" } : status,
+);
 
 describe("<Analytics> with configured statuses", () => {
   beforeEach(() => {
@@ -45,7 +50,9 @@ describe("<Analytics> with configured statuses", () => {
     });
     mockGet.mockImplementation((url: string) =>
       Promise.resolve({
-        data: url.includes("/analytics?") ? { data: ANALYTICS } : { data: {} },
+        data: url.includes("/analytics?")
+          ? { data: { ...ANALYTICS, attendanceStatuses: RESPONSE_STATUSES } }
+          : { data: {} },
       }),
     );
   });
@@ -63,7 +70,7 @@ describe("<Analytics> with configured statuses", () => {
     await screen.findByText("Ada");
   };
 
-  it("shows behavior totals as semantic columns", async () => {
+  it("shows behavior totals from attendanceBehaviorCounts as semantic columns", async () => {
     await search();
     ["Present", "Excused", "Absent"].forEach((label) =>
       expect(screen.getByRole("columnheader", { name: label })).toBeInTheDocument(),
@@ -72,15 +79,15 @@ describe("<Analytics> with configured statuses", () => {
     const adaCells = Array.from(
       (screen.getByText("Ada").closest("tr") as HTMLElement).querySelectorAll("td"),
     ).map((cell) => cell.textContent);
-    expect(adaCells).toEqual(["1", "Ada", "1", "0", "1", "L", "NS"]);
+    expect(adaCells).toEqual(["1", "Ada", "1", "0", "1", "T", "NS"]);
   });
 
   it("renders exact status keys in date cells and a dynamic legend", async () => {
     await search();
-    expect(screen.getByTitle("Late")).toHaveTextContent("L");
+    expect(screen.getByTitle("Tardy")).toHaveTextContent("T");
     expect(screen.getByTitle("Remote")).toHaveTextContent("R");
     // Legend: every active status plus inactive Remote seen in results.
-    ["Present", "Late", "No Show", "Remote"].forEach((label) =>
+    ["Present", "Tardy", "No Show", "Remote"].forEach((label) =>
       expect(screen.getAllByText(label).length).toBeGreaterThan(0),
     );
     expect(screen.queryByText("Apology")).not.toBeInTheDocument();

@@ -10,9 +10,9 @@ it("groups verdicts by month and renders a cell per verdict", () => {
     <AttendanceTimeline
       statuses={statuses}
       verdicts={[
-        { date: "2026-05-03", status: "present" },
-        { date: "2026-05-10", status: "late" },
-        { date: "2026-06-07", status: "no_show" },
+        { date: "2026-05-03", status: "present", behavior: "present" },
+        { date: "2026-05-10", status: "late", behavior: "present" },
+        { date: "2026-06-07", status: "no_show", behavior: "absent" },
       ]}
     />,
   );
@@ -26,9 +26,9 @@ it("uses configured statuses in the legend, plus inactive/unknown history", () =
     <AttendanceTimeline
       statuses={statuses}
       verdicts={[
-        { date: "2026-05-03", status: "late" },
-        { date: "2026-05-10", status: "remote" },
-        { date: "2026-05-17", status: "apology" },
+        { date: "2026-05-03", status: "late", behavior: "present" },
+        { date: "2026-05-10", status: "remote", behavior: "present" },
+        { date: "2026-05-17", status: "apology", behavior: "present" },
       ]}
     />,
   );

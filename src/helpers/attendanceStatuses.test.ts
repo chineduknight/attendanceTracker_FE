@@ -83,5 +83,6 @@ describe("createStatusConfig", () => {
     expect(fallback.defaultStatus.key).toBe("absent");
     expect(fallback.next("absent")).toBe("present");
     expect(fallback.next("present")).toBe("apology");
+    expect(fallback.next("apology")).toBe("absent");
   });
 });

@@ -4,6 +4,10 @@ import {
 } from "helpers/attendanceStatuses";
 
 export const MAX_ATTENDANCE_STATUSES = 10;
+export const MAX_STATUS_LABEL_LENGTH = 40;
+export const MAX_STATUS_SHORT_LABEL_LENGTH = 6;
+/** Backend key rule: `^[a-z0-9][a-z0-9_-]{0,31}$`. */
+const MAX_STATUS_KEY_LENGTH = 32;
 
 /**
  * An editable status row. `persisted` rows came from the backend: their key
@@ -41,10 +45,13 @@ export const generateStatusKey = (
   label: string,
   rows: readonly StatusRow[],
 ): string => {
-  const base = slugify(label) || "status";
+  const base = slugify(label).slice(0, MAX_STATUS_KEY_LENGTH) || "status";
   const taken = new Set(rows.map((row) => row.key));
   let key = base;
-  for (let suffix = 2; taken.has(key); suffix += 1) key = `${base}_${suffix}`;
+  for (let suffix = 2; taken.has(key); suffix += 1) {
+    const tail = `_${suffix}`;
+    key = `${base.slice(0, MAX_STATUS_KEY_LENGTH - tail.length)}${tail}`;
+  }
   return key;
 };
 
@@ -62,7 +69,7 @@ export const createStatusRow = (
   rows: readonly StatusRow[],
 ): StatusRow => ({
   key: generateStatusKey(label, rows),
-  label: label.trim(),
+  label: label.trim().slice(0, MAX_STATUS_LABEL_LENGTH),
   shortLabel: deriveShortLabel(label),
   color: "blue",
   behavior: "present",
@@ -110,6 +117,17 @@ export const validateStatusRows = (rows: readonly StatusRow[]): string[] => {
   }
   if (rows.some((row) => !row.label.trim() || !row.shortLabel.trim())) {
     errors.push("Every status needs a label and a short label.");
+  }
+  if (
+    rows.some(
+      (row) =>
+        row.label.trim().length > MAX_STATUS_LABEL_LENGTH ||
+        row.shortLabel.trim().length > MAX_STATUS_SHORT_LABEL_LENGTH,
+    )
+  ) {
+    errors.push(
+      `Labels are at most ${MAX_STATUS_LABEL_LENGTH} characters and short labels at most ${MAX_STATUS_SHORT_LABEL_LENGTH}.`,
+    );
   }
   duplicates(rows.map((row) => row.key)).forEach((key) =>
     errors.push(`Key "${key}" is used more than once.`),

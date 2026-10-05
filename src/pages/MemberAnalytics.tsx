@@ -31,7 +31,6 @@ const MemberAnalyticsPage: React.FC = () => {
   const { memberId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const statuses = useAttendanceStatuses();
 
   const {
     fromDate, toDate, setFromDate, setToDate,
@@ -60,6 +59,7 @@ const MemberAnalyticsPage: React.FC = () => {
   );
 
   const analytics: MemberAnalyticsData | undefined = response?.data;
+  const statuses = useAttendanceStatuses(analytics?.attendanceStatuses);
   const statusCode = (error as any)?.response?.status;
   const hasData = Boolean(analytics && analytics.summary.totalSessions > 0);
 

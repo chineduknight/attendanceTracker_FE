@@ -59,9 +59,15 @@ const VERTICAL_LABEL_SX = {
 
 type BehaviorCounts = Record<AttendanceBehavior, number>;
 
-/** Backend per-member totals, bucketed by behavior rather than status label. */
+/**
+ * Backend per-member totals, bucketed by behavior rather than status label.
+ * `attendanceBehaviorCounts` is the source of truth; the legacy
+ * "Total Number of …" columns are deprecated aliases and are not read.
+ */
 const behaviorCountOf = (row: any, behavior: AttendanceBehavior): number =>
-  (row?.behaviorCounts as Partial<BehaviorCounts> | undefined)?.[behavior] ?? 0;
+  (row?.attendanceBehaviorCounts as Partial<BehaviorCounts> | undefined)?.[
+    behavior
+  ] ?? 0;
 
 // extract the yyyy-MM-dd suffix from a date column key and render it compactly
 const formatDayHeader = (key: string) => {
@@ -82,7 +88,6 @@ const AttendanceAnalyticsPage: React.FC = () => {
     "inactive",
   ]);
   const navigate = useNavigate();
-  const statuses = useAttendanceStatuses();
 
   const goToMemberAnalytics = (memberId: string) => {
     const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, { memberId });
@@ -223,6 +228,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
     () => analyticsResponse?.data.keys || [],
     [analyticsResponse?.data.keys],
   );
+  // The response carries the org's effective config at query time.
+  const statuses = useAttendanceStatuses(analyticsResponse?.data.attendanceStatuses);
   const rows: any[] = useMemo(
     () => analyticsResponse?.data.analytics || [],
     [analyticsResponse?.data.analytics],

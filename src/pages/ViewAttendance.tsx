@@ -27,7 +27,7 @@ import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
 import { FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
-import ReactSelect, { MultiValue } from "react-select";
+import ReactSelect, { MultiValue, SingleValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
@@ -57,7 +57,7 @@ type AttendanceInfoType = {
   date: Date;
 };
 
-// "All" sentinel shared by both multi-selects: selecting it clears the others.
+// "All" sentinel for the member-status multi-select: selecting it clears the others.
 const ALL = "all";
 const nextMultiFilter = (values: string[]): string[] => {
   const last = values[values.length - 1];
@@ -70,7 +70,8 @@ const Attendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([ALL]);
-  const [attendanceFilter, setAttendanceFilter] = useState<string[]>([ALL]);
+  // Single key: the session export filters by exactly one attendance status.
+  const [attendanceFilter, setAttendanceFilter] = useState<string | null>(null);
   const statuses = useAttendanceStatuses();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
@@ -123,31 +124,27 @@ const Attendance = () => {
 
   // Active statuses plus any inactive/unknown status recorded on this session.
   const attendanceOptions = useMemo<StatusOption[]>(
-    () => [
-      { value: ALL, label: "All" },
-      ...statuses
+    () =>
+      statuses
         .legendFor(allMembers.map((m) => m.attendanceStatus))
         .map((status) => ({ value: status.key, label: status.label })),
-    ],
     [allMembers, statuses],
   );
 
-  const selectedAttendanceOptions = useMemo(
-    () => attendanceOptions.filter((o) => attendanceFilter.includes(o.value)),
+  const selectedAttendanceOption = useMemo(
+    () => attendanceOptions.find((o) => o.value === attendanceFilter) ?? null,
     [attendanceOptions, attendanceFilter],
   );
 
   const filteredMembers = useMemo(() => {
     const query = searchQuery.toLowerCase();
     const memberStatuses = activeFilterValues(statusFilter);
-    const attendanceStatuses = activeFilterValues(attendanceFilter);
     return allMembers.filter(
       (m) =>
         m.member.name.toLowerCase().includes(query) &&
         (memberStatuses.length === 0 ||
           memberStatuses.includes(m.member.status)) &&
-        (attendanceStatuses.length === 0 ||
-          attendanceStatuses.includes(m.attendanceStatus)),
+        (attendanceFilter === null || m.attendanceStatus === attendanceFilter),
     );
   }, [allMembers, searchQuery, statusFilter, attendanceFilter]);
 
@@ -188,11 +185,8 @@ const Attendance = () => {
     });
     const query = new URLSearchParams();
     const memberStatuses = activeFilterValues(statusFilter);
-    const attendanceStatuses = activeFilterValues(attendanceFilter);
     if (memberStatuses.length) query.set("status", memberStatuses.join(","));
-    if (attendanceStatuses.length) {
-      query.set("attendanceStatus", attendanceStatuses.join(","));
-    }
+    if (attendanceFilter) query.set("attendanceStatus", attendanceFilter);
     const search = query.toString();
     return search ? `${base}?${search}` : base;
   }, [org.id, param.id, statusFilter, attendanceFilter]);
@@ -203,7 +197,7 @@ const Attendance = () => {
       org.id,
       param.id,
       statusFilter.join(","),
-      attendanceFilter.join(","),
+      attendanceFilter ?? ALL,
     ],
     downloadURl,
     {
@@ -304,17 +298,16 @@ const Attendance = () => {
               </InputGroup>
               <Box minW={{ base: "100%", sm: "200px" }}>
                 <ReactSelect
-                  isMulti
+                  isClearable
                   aria-label="Filter by attendance status"
-                  placeholder="Filter by attendance"
+                  placeholder="All attendance"
                   options={attendanceOptions}
-                  value={selectedAttendanceOptions}
-                  closeMenuOnSelect={false}
+                  value={selectedAttendanceOption}
                   menuPortalTarget={document.body}
                   menuPosition="fixed"
                   styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
-                  onChange={(selected: MultiValue<StatusOption>) =>
-                    setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
+                  onChange={(selected: SingleValue<StatusOption>) =>
+                    setAttendanceFilter(selected?.value ?? null)
                   }
                 />
               </Box>
