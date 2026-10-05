@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
@@ -113,6 +113,91 @@ describe("<OrganisationSettings>", () => {
       const org = useGlobalStore.getState().organisation;
       expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
       expect(org.name).toBe("VOB Choir");
+    });
+  });
+
+  describe("attendance statuses", () => {
+    const manager = () =>
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+
+    it("loads the default configuration for an org without custom statuses", async () => {
+      manager();
+      renderPage();
+      await screen.findByText("Attendance statuses");
+      ["present", "apology", "absent"].forEach((key) =>
+        expect(screen.getByTestId(`status-row-${key}`)).toBeInTheDocument(),
+      );
+    });
+
+    it("adds `late` and saves it with every other setting", async () => {
+      manager();
+      renderPage();
+      fireEvent.change(await screen.findByLabelText("New status label"), {
+        target: { value: "Late" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add status" }));
+      expect(screen.getByTestId("status-row-late")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      const body = mockPut.mock.calls[0][1];
+      expect(body).toMatchObject({
+        name: "VOB Choir",
+        image: "",
+        collapseAttendanceByDay: false,
+        maxAttendanceEdits: 3,
+      });
+      expect(body.attendanceStatuses.map((s: { key: string }) => s.key)).toEqual([
+        "present",
+        "apology",
+        "absent",
+        "late",
+      ]);
+      await waitFor(() =>
+        expect(
+          useGlobalStore.getState().organisation.attendanceStatuses.map((s) => s.key),
+        ).toContain("late"),
+      );
+    });
+
+    it("locks behavior on persisted statuses but not on new ones", async () => {
+      manager();
+      renderPage();
+      const present = await screen.findByTestId("status-row-present");
+      expect(within(present).getByLabelText("Behavior")).toBeDisabled();
+      expect(
+        within(present).queryByRole("button", { name: /Remove/ }),
+      ).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText("New status label"), {
+        target: { value: "Late" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add status" }));
+      const late = screen.getByTestId("status-row-late");
+      expect(within(late).getByLabelText("Behavior")).toBeEnabled();
+      fireEvent.click(within(late).getByRole("button", { name: "Remove Late" }));
+      expect(screen.queryByTestId("status-row-late")).not.toBeInTheDocument();
+    });
+
+    it("blocks saving an invalid configuration", async () => {
+      manager();
+      renderPage();
+      const absent = await screen.findByTestId("status-row-absent");
+      fireEvent.click(within(absent).getByLabelText("Active"));
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("An inactive status cannot be the default.");
+      expect(mockPut).not.toHaveBeenCalled();
+    });
+
+    it("is read-only for a view-only user", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderPage();
+      const present = await screen.findByTestId("status-row-present");
+      expect(within(present).getByLabelText("Label")).toHaveAttribute("readonly");
+      expect(within(present).getByLabelText("Active")).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Add status" })).not.toBeInTheDocument();
     });
   });
 });

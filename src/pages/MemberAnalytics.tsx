@@ -15,6 +15,7 @@ import AttendanceTimeline from "components/analytics/AttendanceTimeline";
 import MemberRecordsTable from "components/analytics/MemberRecordsTable";
 import { openExportUrl, handleExportError } from "components/analytics/analyticsExport";
 import { MemberAnalytics as MemberAnalyticsData } from "components/analytics/memberAnalyticsTypes";
+import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 
 const buildQuery = (fromDate: string, toDate: string) => {
   const params = new URLSearchParams();
@@ -30,6 +31,7 @@ const MemberAnalyticsPage: React.FC = () => {
   const { memberId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const statuses = useAttendanceStatuses();
 
   const {
     fromDate, toDate, setFromDate, setToDate,
@@ -149,13 +151,11 @@ const MemberAnalyticsPage: React.FC = () => {
               attendanceRate={analytics.summary.attendanceRate}
             />
             <StatTiles
-              present={analytics.summary.present}
-              absent={analytics.summary.absent}
-              apology={analytics.summary.apology}
+              behaviorCounts={analytics.summary.behaviorCounts}
               totalSessions={analytics.summary.totalSessions}
             />
-            <AttendanceTimeline verdicts={analytics.verdicts} />
-            <MemberRecordsTable records={analytics.records} />
+            <AttendanceTimeline verdicts={analytics.verdicts} statuses={statuses} />
+            <MemberRecordsTable records={analytics.records} statuses={statuses} />
           </Flex>
         )}
         </>
