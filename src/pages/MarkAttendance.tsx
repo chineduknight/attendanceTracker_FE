@@ -50,6 +50,16 @@ import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary, {
   formatStatusCounts,
 } from "components/attendance/StatusCountSummary";
+import QuickMarkToolbar, {
+  QuickMarkMode,
+} from "components/attendance/QuickMarkToolbar";
+import VisibleBulkActions from "components/attendance/VisibleBulkActions";
+import { usePersistedRoster } from "hooks/usePersistedRoster";
+import {
+  restoreStatuses,
+  StatusSnapshot,
+  updateStatuses,
+} from "helpers/attendanceBulk";
 
 export type MemberType = {
   /** A configured status key of the selected organisation. */
@@ -58,8 +68,7 @@ export type MemberType = {
   id: string;
 };
 
-const MarkAttendance = () => {
-  const [allMembers, setAllMembers] = useState<MemberType[]>([]);
+const MarkAttendanceSession = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [org, currentAttendance, setAttendance] = useGlobalStore((state) => [
     state.organisation,
@@ -72,6 +81,13 @@ const MarkAttendance = () => {
     ? params.attendanceId
     : `${currentAttendance.date || "undated"}-${currentAttendance.name || "untitled"}`;
   const localStorageKey = `attendance-draft-${org.id}-${draftIdentity}`;
+  // Every roster change goes through commitMembers so the draft never diverges.
+  const [allMembers, commitMembers] =
+    usePersistedRoster<MemberType>(localStorageKey);
+  // Component-local: a remount (organisation/session change) resets to Cycle.
+  const [quickMarkMode, setQuickMarkMode] = useState<QuickMarkMode>(null);
+  // Previous statuses of the last bulk change; null when there is nothing to undo.
+  const [undoSnapshot, setUndoSnapshot] = useState<StatusSnapshot | null>(null);
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
   const statuses = useAttendanceStatuses();
@@ -125,7 +141,10 @@ const MarkAttendance = () => {
       }
     }
 
-    setAllMembers(reconcileAttendanceDraft<MemberType>(draft, roster, statuses));
+    commitMembers(() =>
+      reconcileAttendanceDraft<MemberType>(draft, roster, statuses)
+    );
+    setUndoSnapshot(null);
   };
 
   // Query to fetch members (only when not updating)
@@ -159,8 +178,8 @@ const MarkAttendance = () => {
         // Kept verbatim, even when the status has since been deactivated.
         attendanceStatus: attend.attendanceStatus,
       }));
-    localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
-    setAllMembers(updatedMembers);
+    commitMembers(() => updatedMembers);
+    setUndoSnapshot(null);
   };
 
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -186,28 +205,54 @@ const MarkAttendance = () => {
     setSearchQuery(e.target.value);
   }, []);
 
-  // Tapping a member advances them through the organisation's active statuses.
-  const updateAttendance = useCallback(
-    (userId) => {
-      setAllMembers((prevMembers) => {
-        const updatedMembers = prevMembers.map((member) => {
-          if (member.id !== userId) return member;
-          return {
-            ...member,
-            attendanceStatus: statuses.next(member.attendanceStatus),
-          };
-        });
-        localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
-        return updatedMembers;
-      });
+  // A quick-mark mode only ever holds an active status; anything else is Cycle.
+  const selectedStatus =
+    quickMarkMode !== null && statuses.isActive(quickMarkMode)
+      ? statuses.resolve(quickMarkMode)
+      : null;
+
+  // Tapping a member assigns the selected status, or in Cycle mode advances
+  // them through the organisation's active statuses. A manual edit makes any
+  // pending bulk Undo stale, so it is discarded.
+  const markMember = useCallback(
+    (memberId: string) => {
+      const nextStatus = selectedStatus
+        ? () => selectedStatus.key
+        : statuses.next;
+      commitMembers(
+        (current) =>
+          updateStatuses(current, new Set([memberId]), nextStatus).members
+      );
+      setUndoSnapshot(null);
     },
-    [localStorageKey, statuses]
+    [commitMembers, selectedStatus, statuses]
   );
+
+  // Bulk actions touch only the members the current search shows.
+  const setVisibleStatus = (status: string) => {
+    const visibleIds = new Set(filteredMembers.map((member) => member.id));
+    commitMembers((current) => {
+      const { members, snapshot } = updateStatuses(
+        current,
+        visibleIds,
+        () => status
+      );
+      setUndoSnapshot(snapshot);
+      return members;
+    });
+  };
+
+  const undoBulkChange = () => {
+    if (!undoSnapshot) return;
+    commitMembers((current) => restoreStatuses(current, undoSnapshot));
+    setUndoSnapshot(null);
+  };
 
   const navigate = useNavigate();
   const isSubmittingRef = useRef(false);
   const onSubmitSuccess = () => {
     isSubmittingRef.current = false;
+    setUndoSnapshot(null);
     localStorage.removeItem(localStorageKey);
     toast.success(
       isUpdate ? "Attendance Updated" : "Attendance Created successfully"
@@ -297,6 +342,11 @@ const MarkAttendance = () => {
           <LoadingSpinner h="45vh" text="Loading members..." />
         ) : (
           <>
+            <QuickMarkToolbar
+              statuses={statuses.active}
+              mode={selectedStatus?.key ?? null}
+              onModeChange={setQuickMarkMode}
+            />
             <InputGroup mt="4">
               <InputLeftElement pointerEvents="none">
                 <Icon as={FaSearch} color="gray.400" />
@@ -319,6 +369,15 @@ const MarkAttendance = () => {
                 </InputRightElement>
               )}
             </InputGroup>
+            <VisibleBulkActions
+              visibleCount={filteredMembers.length}
+              selectedStatus={selectedStatus}
+              defaultStatus={statuses.defaultStatus}
+              canUndo={undoSnapshot !== null}
+              onApply={() => selectedStatus && setVisibleStatus(selectedStatus.key)}
+              onReset={() => setVisibleStatus(statuses.defaultStatus.key)}
+              onUndo={undoBulkChange}
+            />
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
@@ -334,7 +393,7 @@ const MarkAttendance = () => {
                   memberId={item.id}
                   name={item.name}
                   status={statuses.resolve(item.attendanceStatus)}
-                  onToggle={updateAttendance}
+                  onToggle={markMember}
                 />
               ))}
             </Box>
@@ -391,6 +450,17 @@ const MarkAttendance = () => {
       )}
     </Box>
   );
+};
+
+/**
+ * Remounts the marking session whenever the organisation or the session being
+ * edited changes, so the quick-mark mode, search and any pending Undo never
+ * carry over to a different roster.
+ */
+const MarkAttendance = () => {
+  const organisationId = useGlobalStore((state) => state.organisation.id);
+  const { attendanceId } = useParams();
+  return <MarkAttendanceSession key={`${organisationId}:${attendanceId ?? "new"}`} />;
 };
 
 export default MarkAttendance;

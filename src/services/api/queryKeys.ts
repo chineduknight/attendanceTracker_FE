@@ -25,6 +25,8 @@ export const queryKeys = {
     ["attendance", organisationId, attendanceId ?? ""] as const,
   attendances: (organisationId: string) =>
     ["attendances", organisationId] as const,
+  attendanceTemplates: (organisationId: string) =>
+    ["attendance-templates", organisationId] as const,
 
   finance: {
     obligations: (organisationId: string) =>

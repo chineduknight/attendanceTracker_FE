@@ -26,6 +26,13 @@ describe("queryKeys tenant scoping", () => {
     expect(queryKeys.rbac.invites("orgA")).not.toEqual(queryKeys.rbac.invites("orgB"));
   });
 
+  it("scopes attendance templates to the organisation", () => {
+    expect(queryKeys.attendanceTemplates("orgA")).toEqual(["attendance-templates", "orgA"]);
+    expect(queryKeys.attendanceTemplates("orgA")).not.toEqual(
+      queryKeys.attendanceTemplates("orgB")
+    );
+  });
+
   it("keeps the permissions catalog global", () => {
     expect(queryKeys.permissionsCatalog).toEqual(["permissions-catalog"]);
     expect(queryKeys.permissionsCatalog).not.toContain("orgA");
