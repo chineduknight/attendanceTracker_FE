@@ -17,7 +17,7 @@ const update = (rows: StatusRow[], key: string, patch: Partial<StatusRow>) =>
 describe("attendance status settings", () => {
   it("starts from the default configuration, all persisted and valid", () => {
     const rows = toStatusRows(undefined);
-    expect(rows.map((row) => row.key)).toEqual(["absent", "present", "apology"]);
+    expect(rows.map((row) => row.key)).toEqual(["present", "apology", "absent"]);
     expect(rows.every((row) => row.persisted)).toBe(true);
     expect(validateStatusRows(rows)).toEqual([]);
   });
@@ -121,14 +121,14 @@ describe("attendance status settings", () => {
   it("moves rows up and down within bounds", () => {
     const rows = defaults();
     expect(moveStatusRow(rows, 2, -1).map((r) => r.key)).toEqual([
+      "present",
       "absent",
       "apology",
-      "present",
     ]);
     expect(moveStatusRow(rows, 0, -1).map((r) => r.key)).toEqual([
-      "absent",
       "present",
       "apology",
+      "absent",
     ]);
   });
 });

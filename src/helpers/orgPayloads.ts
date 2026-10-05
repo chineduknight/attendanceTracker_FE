@@ -19,7 +19,8 @@ export interface OrgUpdatePayload {
 
 /**
  * Build the `PUT /organisations/:id` body. `name` and `image` are ALWAYS sent
- * — the BE 422s without `name` and wipes the stored logo if `image` is omitted.
+ * — the BE 422s without `name`, and `image: ""` is how a cleared logo field
+ * removes the logo (omitting it would leave the old logo in place).
  * A blank `maxAttendanceEdits` maps to `null` so the BE applies its default.
  * Attendance statuses travel in the same body so saving one setting never
  * wipes another.

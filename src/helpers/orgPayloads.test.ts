@@ -37,6 +37,14 @@ describe("buildOrgUpdatePayload", () => {
     ).toBeNull();
   });
 
+  it("sends a cleared logo as an empty image", () => {
+    const result = buildOrgUpdatePayload(
+      { ...base, image: "   ", maxAttendanceEdits: "" },
+      rows,
+    );
+    expect(result.image).toBe("");
+  });
+
   it("trims name and image (both always present)", () => {
     const result = buildOrgUpdatePayload(
       {
@@ -60,9 +68,9 @@ describe("buildOrgUpdatePayload", () => {
 
     expect(result).toMatchObject({ ...base, maxAttendanceEdits: 2 });
     expect(result.attendanceStatuses.map((s) => s.key)).toEqual([
-      "absent",
       "present",
       "apology",
+      "absent",
       "late",
     ]);
     expect(result.attendanceStatuses[3]).not.toHaveProperty("persisted");

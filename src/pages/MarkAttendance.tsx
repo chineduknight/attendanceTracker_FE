@@ -229,8 +229,9 @@ const MarkAttendance = () => {
   const sendAttandanceToAPI = useCallback(() => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
+    // Only the session fields the API accepts — never stray persisted state.
     const data = {
-      ...currentAttendance,
+      ..._.pick(currentAttendance, ["name", "date", "categoryId", "subCategoryId"]),
       organisationId: org.id,
       memberStatuses: allMembers.map((member) => ({
         memberId: member.id,

@@ -75,15 +75,6 @@ export const BEHAVIOR_META: Record<
 export const DEFAULT_ATTENDANCE_STATUSES: readonly AttendanceStatusDefinition[] =
   [
     {
-      key: "absent",
-      label: "Absent",
-      shortLabel: "A",
-      color: "red",
-      behavior: "absent",
-      active: true,
-      isDefault: true,
-    },
-    {
       key: "present",
       label: "Present",
       shortLabel: "P",
@@ -100,6 +91,15 @@ export const DEFAULT_ATTENDANCE_STATUSES: readonly AttendanceStatusDefinition[] 
       behavior: "excused",
       active: true,
       isDefault: false,
+    },
+    {
+      key: "absent",
+      label: "Absent",
+      shortLabel: "A",
+      color: "red",
+      behavior: "absent",
+      active: true,
+      isDefault: true,
     },
   ];
 

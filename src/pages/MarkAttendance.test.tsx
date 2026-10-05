@@ -138,6 +138,8 @@ describe("<MarkAttendance> with configured statuses", () => {
       { memberId: "m1", status: "late" },
       { memberId: "m2", status: "no_show" },
     ]);
+    expect(body).toMatchObject({ name: "Rehearsal", date: "2026-10-01", organisationId: "org1" });
+    expect(body).not.toHaveProperty("members");
     expect(body).not.toHaveProperty("presentMembers");
     expect(body).not.toHaveProperty("apologisedMembers");
   });
