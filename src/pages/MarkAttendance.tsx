@@ -24,7 +24,7 @@ import {
 import { FaSearch, FaPencilAlt } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
@@ -44,73 +44,19 @@ import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
 import { queryKeys } from "services/api/queryKeys";
-import {
-  reconcileAttendanceDraft,
-  AttendanceStatus,
-} from "helpers/attendanceDraft";
-
-export type { AttendanceStatus };
+import { reconcileAttendanceDraft } from "helpers/attendanceDraft";
+import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
+import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
+import StatusCountSummary, {
+  formatStatusCounts,
+} from "components/attendance/StatusCountSummary";
 
 export type MemberType = {
-  attendanceStatus: AttendanceStatus;
+  /** A configured status key of the selected organisation. */
+  attendanceStatus: string;
   name: string;
   id: string;
 };
-
-type AttendanceInfoType = {
-  present: number;
-  apology: number;
-  absent: number;
-};
-
-// Tapping a member cycles their status in this order.
-const NEXT_STATUS: Record<AttendanceStatus, AttendanceStatus> = {
-  absent: "present",
-  present: "apology",
-  apology: "absent",
-};
-
-/** Tally statuses in a single pass — this runs on every toggle. */
-const computeCounts = (members: MemberType[]): AttendanceInfoType =>
-  members.reduce(
-    (acc, member) => {
-      acc[member.attendanceStatus] += 1;
-      return acc;
-    },
-    { present: 0, apology: 0, absent: 0 }
-  );
-
-// One member button. Memoized so toggling a single member only re-renders that
-// row, not the whole (potentially large) roster.
-const MemberRow = memo(
-  ({
-    member,
-    onToggle,
-  }: {
-    member: MemberType;
-    onToggle: (id: string) => void;
-  }) => (
-    <Button
-      variant="unstyled"
-      onClick={() => onToggle(member.id)}
-      display="block"
-      w="full"
-      mt="3"
-      border="1px solid green"
-      bg={
-        member.attendanceStatus === "present"
-          ? "green"
-          : member.attendanceStatus === "apology"
-          ? "orange"
-          : ""
-      }
-      color={member.attendanceStatus === "absent" ? "" : "#fff"}
-    >
-      {member.name}
-    </Button>
-  )
-);
-MemberRow.displayName = "MemberRow";
 
 const MarkAttendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
@@ -128,6 +74,7 @@ const MarkAttendance = () => {
   const localStorageKey = `attendance-draft-${org.id}-${draftIdentity}`;
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
+  const statuses = useAttendanceStatuses();
 
   // Edit mode shows the session-details form, driven by the loaded currentAttendance.
   const details: AttendanceDetails = {
@@ -155,12 +102,16 @@ const MarkAttendance = () => {
       member.name.toLowerCase().includes(query)
     );
   }, [allMembers, searchQuery]);
-  const attendanceInfo = useMemo(() => computeCounts(allMembers), [allMembers]);
+  // Edit counts include any inactive historical status still on the record.
+  const statusCounts = useMemo(
+    () => statuses.countStatuses(allMembers.map((m) => m.attendanceStatus)),
+    [allMembers, statuses]
+  );
 
   // Called when the roster loads for a new attendance session. Any locally-saved
   // draft is reconciled against the live roster, so members who were removed no
-  // longer appear and newly eligible members start off as "absent" instead of
-  // trusting stale draft data.
+  // longer appear, and newly eligible members (or stale draft statuses) start at
+  // the organisation's default status instead of trusting stale draft data.
   const onGetMembersSuccess = (data) => {
     const roster = [...data.data].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -174,7 +125,7 @@ const MarkAttendance = () => {
       }
     }
 
-    setAllMembers(reconcileAttendanceDraft<MemberType>(draft, roster));
+    setAllMembers(reconcileAttendanceDraft<MemberType>(draft, roster, statuses));
   };
 
   // Query to fetch members (only when not updating)
@@ -205,7 +156,8 @@ const MarkAttendance = () => {
       .map((attend) => ({
         id: attend.memberId,
         name: attend.member.name,
-        attendanceStatus: attend.attendanceStatus, // expects "present", "apology" or "absent"
+        // Kept verbatim, even when the status has since been deactivated.
+        attendanceStatus: attend.attendanceStatus,
       }));
     localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
     setAllMembers(updatedMembers);
@@ -234,7 +186,7 @@ const MarkAttendance = () => {
     setSearchQuery(e.target.value);
   }, []);
 
-  // Cycle a member's status: absent -> present -> apology -> absent
+  // Tapping a member advances them through the organisation's active statuses.
   const updateAttendance = useCallback(
     (userId) => {
       setAllMembers((prevMembers) => {
@@ -242,14 +194,14 @@ const MarkAttendance = () => {
           if (member.id !== userId) return member;
           return {
             ...member,
-            attendanceStatus: NEXT_STATUS[member.attendanceStatus] ?? "present",
+            attendanceStatus: statuses.next(member.attendanceStatus),
           };
         });
         localStorage.setItem(localStorageKey, JSON.stringify(updatedMembers));
         return updatedMembers;
       });
     },
-    [localStorageKey]
+    [localStorageKey, statuses]
   );
 
   const navigate = useNavigate();
@@ -277,21 +229,15 @@ const MarkAttendance = () => {
   const sendAttandanceToAPI = useCallback(() => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
-    const presentMembers = allMembers
-      .filter((member) => member.attendanceStatus === "present")
-      .map((member) => member.id);
-    const apologisedMembers = allMembers
-      .filter((member) => member.attendanceStatus === "apology")
-      .map((member) => member.id);
-
-    const data: any = {
-      ...currentAttendance,
+    // Only the session fields the API accepts — never stray persisted state.
+    const data = {
+      ..._.pick(currentAttendance, ["name", "date", "categoryId", "subCategoryId"]),
       organisationId: org.id,
-      presentMembers,
+      memberStatuses: allMembers.map((member) => ({
+        memberId: member.id,
+        status: member.attendanceStatus,
+      })),
     };
-    if (apologisedMembers.length) {
-      data.apologisedMembers = apologisedMembers;
-    }
     const upateUrl = convertParamsToString(attendanceRequest.UPDATE_ATTENDANCE, {
       attendanceId: params.attendanceId as string,
     });
@@ -304,7 +250,7 @@ const MarkAttendance = () => {
   const onSubmit = () => {
     confirmAlert({
       title: "Please verify count",
-      message: `Are you sure you want to submit?`,
+      message: `${formatStatusCounts(statusCounts)}. Are you sure you want to submit?`,
       buttons: [
         {
           label: "Yes",
@@ -380,20 +326,16 @@ const MarkAttendance = () => {
                 </Text>
               </Box>
             )}
-            <Flex mt="2" justifyContent="space-between">
-              <Text>
-                Present: <strong>{attendanceInfo.present}</strong>
-              </Text>
-              <Text>
-                Apology: <strong>{attendanceInfo.apology}</strong>
-              </Text>
-              <Text>
-                Absent: <strong>{attendanceInfo.absent}</strong>
-              </Text>
-            </Flex>
+            <StatusCountSummary counts={statusCounts} />
             <Box mt="4" overflow="auto" maxHeight="300px">
               {filteredMembers.map((item) => (
-                <MemberRow key={item.id} member={item} onToggle={updateAttendance} />
+                <AttendanceMemberRow
+                  key={item.id}
+                  memberId={item.id}
+                  name={item.name}
+                  status={statuses.resolve(item.attendanceStatus)}
+                  onToggle={updateAttendance}
+                />
               ))}
             </Box>
             <Button
@@ -402,7 +344,7 @@ const MarkAttendance = () => {
               mt="8"
               isLoading={isLoading}
               isDisabled={
-                attendanceInfo.present === 0 ||
+                allMembers.length === 0 ||
                 (isUpdate && (!details.name.trim() || !details.date))
               }
             >

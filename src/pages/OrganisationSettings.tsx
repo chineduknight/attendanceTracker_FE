@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Box,
   Flex,
@@ -10,6 +11,7 @@ import {
   Input,
   Switch,
   Avatar,
+  Divider,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useForm } from "react-hook-form";
@@ -17,6 +19,7 @@ import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import { Can } from "rbac/Can";
+import { usePermissions } from "rbac/usePermissions";
 import { orgRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import {
@@ -28,6 +31,13 @@ import {
 import { convertParamsToString } from "helpers/stringManipulations";
 import { buildOrgUpdatePayload, OrgSettingsForm } from "helpers/orgPayloads";
 import LoadingSpinner from "components/LoadingSpinner";
+import AttendanceStatusesEditor from "components/settings/AttendanceStatusesEditor";
+import {
+  StatusRow,
+  toStatusDefinitions,
+  toStatusRows,
+  validateStatusRows,
+} from "helpers/attendanceStatusSettings";
 
 const DEFAULT_MAX_EDITS = 1;
 
@@ -48,6 +58,11 @@ const OrganisationSettings = () => {
   ]);
   const cardBg = useColorModeValue("white", "gray.700");
   const pageBg = useColorModeValue("gray.50", "gray.800");
+  const canManage = usePermissions().has("settings.manage");
+  const [statusRows, setStatusRows] = useState<StatusRow[]>(() =>
+    toStatusRows(org.attendanceStatuses),
+  );
+  const [statusErrors, setStatusErrors] = useState<string[]>([]);
 
   const {
     register,
@@ -80,6 +95,8 @@ const OrganisationSettings = () => {
             ? ""
             : String(data.maxAttendanceEdits),
       });
+      setStatusRows(toStatusRows(data.attendanceStatuses));
+      setStatusErrors([]);
     },
   });
 
@@ -87,8 +104,14 @@ const OrganisationSettings = () => {
     putRequest,
     (res: any) => {
       // PUT returns org fields but NOT permissions/isOwner/roleName —
-      // merge over the selected org so RBAC state is preserved.
-      setOrg({ ...org, ...res.data });
+      // merge over the selected org so RBAC state is preserved. Statuses
+      // apply immediately so marking/analytics switch to the new config.
+      setOrg({
+        ...org,
+        attendanceStatuses: toStatusDefinitions(statusRows),
+        ...res.data,
+      });
+      setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
       // Refresh this organisation's detail only — never another tenant's.
       queryClient.invalidateQueries({ queryKey: queryKeys.organisation(org.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
@@ -96,8 +119,16 @@ const OrganisationSettings = () => {
     },
   );
 
+  const onStatusRowsChange = (rows: StatusRow[]) => {
+    setStatusRows(rows);
+    if (statusErrors.length) setStatusErrors(validateStatusRows(rows));
+  };
+
   const onSubmit = (form: OrgSettingsForm) => {
-    mutate({ url, data: buildOrgUpdatePayload(form) });
+    const errors = validateStatusRows(statusRows);
+    setStatusErrors(errors);
+    if (errors.length) return;
+    mutate({ url, data: buildOrgUpdatePayload(form, statusRows) });
   };
 
   return (
@@ -111,7 +142,7 @@ const OrganisationSettings = () => {
               <Stack
                 spacing={4}
                 w="full"
-                maxW="md"
+                maxW="lg"
                 bg={cardBg}
                 rounded="xl"
                 boxShadow="lg"
@@ -183,6 +214,14 @@ const OrganisationSettings = () => {
                     {errors.maxAttendanceEdits?.message}
                   </FormErrorMessage>
                 </FormControl>
+
+                <Divider />
+                <AttendanceStatusesEditor
+                  rows={statusRows}
+                  onChange={onStatusRowsChange}
+                  errors={statusErrors}
+                  isReadOnly={!canManage}
+                />
 
                 <Can perm="settings.manage">
                   <Button variant="primary" type="submit" isLoading={isSaving}>

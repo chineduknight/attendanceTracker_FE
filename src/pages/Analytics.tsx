@@ -22,10 +22,11 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import {
-  STATUS_META,
-  getStatusMeta,
-  AttendanceStatus,
-} from "components/analytics/statusMeta";
+  ATTENDANCE_BEHAVIORS,
+  AttendanceBehavior,
+  BEHAVIOR_META,
+} from "helpers/attendanceStatuses";
+import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import {
   openExportUrl,
   handleExportError,
@@ -55,6 +56,18 @@ const VERTICAL_LABEL_SX = {
   transform: "rotate(180deg)",
   whiteSpace: "nowrap",
 } as const;
+
+type BehaviorCounts = Record<AttendanceBehavior, number>;
+
+/**
+ * Backend per-member totals, bucketed by behavior rather than status label.
+ * `attendanceBehaviorCounts` is the source of truth; the legacy
+ * "Total Number of …" columns are deprecated aliases and are not read.
+ */
+const behaviorCountOf = (row: any, behavior: AttendanceBehavior): number =>
+  (row?.attendanceBehaviorCounts as Partial<BehaviorCounts> | undefined)?.[
+    behavior
+  ] ?? 0;
 
 // extract the yyyy-MM-dd suffix from a date column key and render it compactly
 const formatDayHeader = (key: string) => {
@@ -215,7 +228,12 @@ const AttendanceAnalyticsPage: React.FC = () => {
     () => analyticsResponse?.data.keys || [],
     [analyticsResponse?.data.keys],
   );
-  const rows: any[] = analyticsResponse?.data.analytics || [];
+  // The response carries the org's effective config at query time.
+  const statuses = useAttendanceStatuses(analyticsResponse?.data.attendanceStatuses);
+  const rows: any[] = useMemo(
+    () => analyticsResponse?.data.analytics || [],
+    [analyticsResponse?.data.analytics],
+  );
 
   const statusSelectOptions = useMemo<StatusOption[]>(
     () => [
@@ -242,14 +260,16 @@ const AttendanceAnalyticsPage: React.FC = () => {
     [keys],
   );
 
-  // static totals
-  // static totals (simplified labels) and a lookup for your actual field keys
-  const totalKeys = ["Present", "Absent", "Apology"];
-  const totalsMap: Record<string, string> = {
-    Present: "Total Number of Times Present",
-    Absent: "Total Number of Times Absent",
-    Apology: "Total Number of  Apology",
-  };
+  // Legend: active statuses plus any inactive/unknown key in these results.
+  const legend = useMemo(() => {
+    const usedKeys = new Set<string>();
+    rows.forEach((row) =>
+      dateKeys.forEach((d) => {
+        if (row[d]) usedKeys.add(row[d] as string);
+      }),
+    );
+    return statuses.legendFor(usedKeys);
+  }, [rows, dateKeys, statuses]);
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -356,16 +376,12 @@ const AttendanceAnalyticsPage: React.FC = () => {
                   {formatRangeLabel(fromDate, toDate)}
                 </Text>
                 <Flex gap={4} flexWrap="wrap">
-                  {(Object.keys(STATUS_META) as AttendanceStatus[]).map(
-                    (status) => (
-                      <Flex key={status} align="center" gap={1}>
-                        <Badge colorScheme={STATUS_META[status].color}>
-                          {STATUS_META[status].short}
-                        </Badge>
-                        <Text fontSize="sm">{STATUS_META[status].full}</Text>
-                      </Flex>
-                    ),
-                  )}
+                  {legend.map((status) => (
+                    <Flex key={status.key} align="center" gap={1}>
+                      <Badge colorScheme={status.color}>{status.shortLabel}</Badge>
+                      <Text fontSize="sm">{status.label}</Text>
+                    </Flex>
+                  ))}
                 </Flex>
               </Flex>
 
@@ -375,10 +391,10 @@ const AttendanceAnalyticsPage: React.FC = () => {
                     <Tr>
                       <Th isNumeric>SN</Th>
                       <Th>Name</Th>
-                      {totalKeys.map((label) => (
-                        <Th key={label} textAlign="center" verticalAlign="bottom">
+                      {ATTENDANCE_BEHAVIORS.map((behavior) => (
+                        <Th key={behavior} textAlign="center" verticalAlign="bottom">
                           <Box as="span" sx={VERTICAL_LABEL_SX}>
-                            {label}
+                            {BEHAVIOR_META[behavior].label}
                           </Box>
                         </Th>
                       ))}
@@ -411,21 +427,29 @@ const AttendanceAnalyticsPage: React.FC = () => {
                         <Td isNumeric>{index + 1}</Td>
                         <Td>{row.name}</Td>
 
-                        {totalKeys.map((label) => (
-                          <Td key={label} textAlign="center">
-                            <Badge
-                              colorScheme={getStatusMeta(label.toLowerCase()).color}
-                            >
-                              {row[totalsMap[label]] ?? 0}
+                        {ATTENDANCE_BEHAVIORS.map((behavior) => (
+                          <Td key={behavior} textAlign="center">
+                            <Badge colorScheme={BEHAVIOR_META[behavior].color}>
+                              {behaviorCountOf(row, behavior)}
                             </Badge>
                           </Td>
                         ))}
 
                         {dateKeys.map((d) => {
-                          const meta = getStatusMeta(row[d] as string);
+                          const key = row[d] as string | undefined;
+                          if (!key) {
+                            return (
+                              <Td key={d} textAlign="center">
+                                <Badge title="No record">-</Badge>
+                              </Td>
+                            );
+                          }
+                          const status = statuses.resolve(key);
                           return (
                             <Td key={d} textAlign="center">
-                              <Badge colorScheme={meta.color}>{meta.short}</Badge>
+                              <Badge colorScheme={status.color} title={status.label}>
+                                {status.shortLabel}
+                              </Badge>
                             </Td>
                           );
                         })}

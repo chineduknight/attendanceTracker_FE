@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { PermissionKey } from "rbac/permissions";
+import {
+  AttendanceStatusDefinition,
+  DEFAULT_ATTENDANCE_STATUSES,
+} from "helpers/attendanceStatuses";
 
 export type currentAttendanceType = {
   name: string;
@@ -31,6 +35,7 @@ export type OrganisationType = {
   permissions: PermissionKey[];
   collapseAttendanceByDay?: boolean;
   maxAttendanceEdits?: number | null;
+  attendanceStatuses: AttendanceStatusDefinition[];
 };
 
 export const EMPTY_USER: UserType = {
@@ -52,6 +57,7 @@ export const EMPTY_ORG: OrganisationType = {
   permissions: [],
   collapseAttendanceByDay: false,
   maxAttendanceEdits: null,
+  attendanceStatuses: [...DEFAULT_ATTENDANCE_STATUSES],
 };
 
 interface GlobalStoreState {

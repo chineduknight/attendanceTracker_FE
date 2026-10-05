@@ -1,18 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import AttendanceTimeline from "components/analytics/AttendanceTimeline";
+import { createStatusConfig } from "helpers/attendanceStatuses";
+import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
+
+const statuses = createStatusConfig(CUSTOM_STATUSES);
 
 it("groups verdicts by month and renders a cell per verdict", () => {
   const { container } = render(
     <AttendanceTimeline
+      statuses={statuses}
       verdicts={[
-        { date: "2026-05-03", status: "present" },
-        { date: "2026-05-10", status: "apology" },
-        { date: "2026-06-07", status: "absent" },
+        { date: "2026-05-03", status: "present", behavior: "present" },
+        { date: "2026-05-10", status: "late", behavior: "present" },
+        { date: "2026-06-07", status: "no_show", behavior: "absent" },
       ]}
     />,
   );
   expect(screen.getByText("May 2026")).toBeInTheDocument();
   expect(screen.getByText("Jun 2026")).toBeInTheDocument();
-  // 3 verdict cells + 3 legend swatches = 6 boxes of 16px/12px; assert verdict cells:
   expect(container.querySelectorAll('[data-cell="verdict"]').length).toBe(3);
+});
+
+it("uses configured statuses in the legend, plus inactive/unknown history", () => {
+  render(
+    <AttendanceTimeline
+      statuses={statuses}
+      verdicts={[
+        { date: "2026-05-03", status: "late", behavior: "present" },
+        { date: "2026-05-10", status: "remote", behavior: "present" },
+        { date: "2026-05-17", status: "apology", behavior: "present" },
+      ]}
+    />,
+  );
+  ["Present", "Late", "Excused", "No Show", "Remote", "Unknown"].forEach(
+    (label) => expect(screen.getByText(label)).toBeInTheDocument(),
+  );
 });

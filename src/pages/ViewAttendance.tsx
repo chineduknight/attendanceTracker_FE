@@ -29,6 +29,10 @@ import { FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
+import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
+import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
+import StatusCountSummary from "components/attendance/StatusCountSummary";
+import { buildAttendanceShareMessage } from "helpers/attendanceShareMessage";
 
 type StatusOption = {
   value: string;
@@ -36,7 +40,8 @@ type StatusOption = {
 };
 
 type MemberType = {
-  attendanceStatus: "absent" | "present" | "apology";
+  /** Configured status key; may be inactive or unknown on historical records. */
+  attendanceStatus: string;
   memberId: string;
   _id: string;
   member: {
@@ -50,110 +55,36 @@ type MemberType = {
 type AttendanceInfoType = {
   name: string;
   date: Date;
-  present: number;
-  apology: number;
-  absent: number;
 };
 
-// Voice parts are always listed in this order; anything else is appended after.
-const VOICE_PART_ORDER = ["soprano", "alto", "tenor", "bass"];
-
-const partKeyOf = (item: MemberType): string =>
-  item.member.part ? item.member.part.toLowerCase() : "others";
-
-const partLabelOf = (partKey: string): string =>
-  partKey === "others" ? "Other" : capitalize(partKey);
-
-// Rank used to sort a mixed list (e.g. apologies) by voice part; unknown parts last.
-const partRankOf = (item: MemberType): number => {
-  const index = VOICE_PART_ORDER.indexOf(partKeyOf(item));
-  return index === -1 ? VOICE_PART_ORDER.length : index;
+// "All" sentinel shared by both multi-selects: selecting it clears the others.
+const ALL = "all";
+const nextMultiFilter = (values: string[]): string[] => {
+  const last = values[values.length - 1];
+  if (last === undefined || last === ALL) return [ALL];
+  return values.filter((v) => v !== ALL);
 };
-
-const memberDisplayName = (item: MemberType): string => {
-  const isMale = item.member.gender?.toLowerCase() === "male";
-  return `${isMale ? "Bro" : "Sis"} ${item.member.name}`;
-};
-
-const byMemberName = (a: MemberType, b: MemberType): number =>
-  a.member.name.toLowerCase().localeCompare(b.member.name.toLowerCase());
-
-const orderedPartKeys = (keys: string[]): string[] => {
-  const known = VOICE_PART_ORDER.filter((part) => keys.includes(part));
-  const extra = keys.filter((part) => !VOICE_PART_ORDER.includes(part)).sort();
-  return [...known, ...extra];
-};
-
-// Closing paragraph pools, grouped by tone. One is chosen based on the session
-// figures so the message feels human without repeating the same line every time.
-const CLOSING_MESSAGES: Record<string, string[]> = {
-  strong: [
-    "Great music is built long before the performance, one rehearsal and one committed member at a time. Thank you for contributing your part.",
-    "Each time we gather, we become stronger as one choir. Thank you for showing up and helping us move the music forward.",
-  ],
-  apologies: [
-    "Thank you to everyone who was present and to those who communicated responsibly. Let us keep growing in consistency and readiness.",
-  ],
-  low: [
-    "Our strength depends on every voice taking its place. Let us make a renewed effort to be present and prepared at the next gathering.",
-  ],
-  general: [
-    "Thank you to everyone who attended or communicated their absence. Let us continue to build a choir marked by commitment, consistency, and love for the music.",
-    "Every rehearsal strengthens the sound we create together. Thank you for showing up, and let us return even stronger at the next gathering.",
-    "Your presence matters, your voice matters, and your commitment strengthens the entire choir. Thank you for being part of the work.",
-  ],
-};
-
-const pickClosingMessage = (
-  present: number,
-  apology: number,
-  absent: number,
-): string => {
-  const total = present + apology + absent;
-  const presentRate = total > 0 ? present / total : 0;
-
-  let tone: keyof typeof CLOSING_MESSAGES = "general";
-  if (total > 0 && presentRate < 0.4) tone = "low";
-  else if (presentRate >= 0.7) tone = "strong";
-  else if (apology > 0 && apology / total >= 0.2) tone = "apologies";
-
-  const pool = CLOSING_MESSAGES[tone];
-  return pool[Math.floor(Math.random() * pool.length)];
-};
+const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
 const Attendance = () => {
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([ALL]);
+  const [attendanceFilter, setAttendanceFilter] = useState<string[]>([ALL]);
+  const statuses = useAttendanceStatuses();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
   const onSuccess = (data) => {
     const unsorted = data.data.attendance.filter((a) => a.member != null);
-    const statusOrder = { present: 0, apology: 1, absent: 2 };
-    const members = unsorted.sort((a, b) => {
-      return (
-        statusOrder[a.attendanceStatus] - statusOrder[b.attendanceStatus] ||
-        a.member.name.localeCompare(b.member.name)
-      );
-    });
+    // Configured status order first; unknown historical statuses sort last.
+    const members = unsorted.sort(
+      (a, b) =>
+        statuses.rank(a.attendanceStatus) - statuses.rank(b.attendanceStatus) ||
+        a.member.name.localeCompare(b.member.name),
+    );
 
-    const presentCount = members.filter(
-      (member) => member.attendanceStatus === "present",
-    ).length;
-    const apologyCount = members.filter(
-      (member) => member.attendanceStatus === "apology",
-    ).length;
-    const absentCount = members.filter(
-      (member) => member.attendanceStatus === "absent",
-    ).length;
-
-    setAttendanceInfo({
-      ...data.data,
-      present: presentCount,
-      apology: apologyCount,
-      absent: absentCount,
-    });
+    setAttendanceInfo({ name: data.data.name, date: data.data.date });
 
     setAllMembers(members);
   };
@@ -180,7 +111,7 @@ const Attendance = () => {
       new Set(allMembers.map((m) => m.member.status).filter(Boolean)),
     );
     return [
-      { value: "all", label: "All" },
+      { value: ALL, label: "All" },
       ...unique.map((s) => ({ value: s, label: capitalize(s) })),
     ];
   }, [allMembers]);
@@ -190,105 +121,54 @@ const Attendance = () => {
     [statusOptions, statusFilter],
   );
 
+  // Active statuses plus any inactive/unknown status recorded on this session.
+  // Active statuses plus any inactive/unknown status recorded on this session.
+  const attendanceOptions = useMemo<StatusOption[]>(
+    () => [
+      { value: ALL, label: "All" },
+      ...statuses
+        .legendFor(allMembers.map((m) => m.attendanceStatus))
+        .map((status) => ({ value: status.key, label: status.label })),
+    ],
+    [allMembers, statuses],
+  );
+
+  const selectedAttendanceOptions = useMemo(
+    () => attendanceOptions.filter((o) => attendanceFilter.includes(o.value)),
+    [attendanceOptions, attendanceFilter],
+  );
+
   const filteredMembers = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return allMembers.filter((m) => {
-      const matchesName = m.member.name.toLowerCase().includes(query);
-      const matchesStatus =
-        statusFilter.includes("all") ||
-        statusFilter.length === 0 ||
-        statusFilter.includes(m.member.status);
-      return matchesName && matchesStatus;
-    });
-  }, [allMembers, searchQuery, statusFilter]);
+    const memberStatuses = activeFilterValues(statusFilter);
+    const attendanceStatuses = activeFilterValues(attendanceFilter);
+    return allMembers.filter(
+      (m) =>
+        m.member.name.toLowerCase().includes(query) &&
+        (memberStatuses.length === 0 ||
+          memberStatuses.includes(m.member.status)) &&
+        (attendanceStatuses.length === 0 ||
+          attendanceStatuses.includes(m.attendanceStatus)),
+    );
+  }, [allMembers, searchQuery, statusFilter, attendanceFilter]);
+
+  const filteredCounts = useMemo(
+    () => statuses.countStatuses(filteredMembers.map((m) => m.attendanceStatus)),
+    [filteredMembers, statuses],
+  );
 
   const formattedDate = attendanceInfo?.date
     ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
     : "";
 
-  const buildWhatsappMessage = (): string => {
-    const presentMembers = allMembers.filter(
-      (item) => item.attendanceStatus === "present",
-    );
-    const apologyMembers = allMembers.filter(
-      (item) => item.attendanceStatus === "apology",
-    );
-    const presentCount = presentMembers.length;
-    const apologyCount = apologyMembers.length;
-    // Absent count only reflects active members, matching the on-screen figures.
-    const absentCount = allMembers.filter(
-      (item) =>
-        item.attendanceStatus === "absent" && item.member.status === "active",
-    ).length;
-
-    // Header: choir name, session name, date, and a compact present/apology summary.
-    const orgTitle = (org.name || "Choir").toUpperCase();
-    const headerBlock = `🎶 *${orgTitle} ATTENDANCE*`;
-    const sessionBlock = [
-      `*${attendanceInfo?.name ?? ""}*`,
-      `📅 ${formattedDate}`,
-    ].join("\n");
-    const summaryBlock = `✅ Present: ${presentCount}  |  🟡 Apology: ${apologyCount}`;
-
-    // Present members grouped by voice part, each heading carrying its own count.
-    const presentByPart = presentMembers.reduce(
-      (acc: Record<string, MemberType[]>, item) => {
-        const partKey = partKeyOf(item);
-        if (!acc[partKey]) acc[partKey] = [];
-        acc[partKey].push(item);
-        return acc;
-      },
-      {},
-    );
-    const partKeys = orderedPartKeys(Object.keys(presentByPart));
-    const presentBody = partKeys.length
-      ? partKeys
-          .map((partKey) => {
-            const group = [...presentByPart[partKey]].sort(byMemberName);
-            return [
-              `*${partLabelOf(partKey)} — ${group.length}*`,
-              ...group.map(memberDisplayName),
-            ].join("\n");
-          })
-          .join("\n\n")
-      : "No members recorded as present.";
-    const presentSection = `*PRESENT MEMBERS*\n\n${presentBody}`;
-
-    // Apologies: one combined list ordered by part, with the part beside each name.
-    const apologySection = apologyCount
-      ? [
-          `*APOLOGIES — ${apologyCount}*`,
-          ...[...apologyMembers]
-            .sort((a, b) => partRankOf(a) - partRankOf(b) || byMemberName(a, b))
-            .map(
-              (item) =>
-                `${memberDisplayName(item)} — ${partLabelOf(partKeyOf(item))}`,
-            ),
-        ].join("\n")
-      : "";
-
-    const absentSection = `🔴 *Absent Members: ${absentCount}*`;
-    const closingSection = `_${pickClosingMessage(
-      presentCount,
-      apologyCount,
-      absentCount,
-    )}_`;
-
-    return [
-      headerBlock,
-      sessionBlock,
-      summaryBlock,
-      presentSection,
-      apologySection,
-      absentSection,
-      closingSection,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-  };
-
   const handleSendToWhatsapp = () => {
-    const message = buildWhatsappMessage();
+    const message = buildAttendanceShareMessage({
+      orgName: org.name,
+      sessionName: attendanceInfo?.name ?? "",
+      formattedDate,
+      members: allMembers,
+      statuses,
+    });
     if (navigator.share) {
       navigator.share({ title: "", text: message }).catch(() => {
         /* user dismissed the native share sheet */
@@ -307,14 +187,25 @@ const Attendance = () => {
       organisationId: org.id,
       id: param.id as string,
     });
-    const activeStatuses = statusFilter.filter((s) => s !== "all");
-    return activeStatuses.length > 0
-      ? `${base}?status=${activeStatuses.join(",")}`
-      : base;
-  }, [org.id, param.id, statusFilter]);
+    const query = new URLSearchParams();
+    const memberStatuses = activeFilterValues(statusFilter);
+    if (memberStatuses.length) query.set("status", memberStatuses.join(","));
+    const attendanceStatuses = activeFilterValues(attendanceFilter);
+    if (attendanceStatuses.length) {
+      query.set("attendanceStatus", attendanceStatuses.join(","));
+    }
+    const search = query.toString();
+    return search ? `${base}?${search}` : base;
+  }, [org.id, param.id, statusFilter, attendanceFilter]);
 
   const { refetch, isFetching } = useQueryWrapper(
-    ["export-excel", org.id, param.id, statusFilter.join(",")],
+    [
+      "export-excel",
+      org.id,
+      param.id,
+      statusFilter.join(","),
+      attendanceFilter.join(","),
+    ],
     downloadURl,
     {
       enabled: false,
@@ -415,29 +306,33 @@ const Attendance = () => {
               <Box minW={{ base: "100%", sm: "200px" }}>
                 <ReactSelect
                   isMulti
-                  placeholder="Filter by status"
+                  aria-label="Filter by attendance status"
+                  placeholder="Filter by attendance"
+                  options={attendanceOptions}
+                  value={selectedAttendanceOptions}
+                  closeMenuOnSelect={false}
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+                  onChange={(selected: MultiValue<StatusOption>) =>
+                    setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
+                  }
+                />
+              </Box>
+              <Box minW={{ base: "100%", sm: "200px" }}>
+                <ReactSelect
+                  isMulti
+                  aria-label="Filter by member status"
+                  placeholder="Filter by member status"
                   options={statusOptions}
                   value={selectedStatusOptions}
                   closeMenuOnSelect={false}
                   menuPortalTarget={document.body}
                   menuPosition="fixed"
                   styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
-                  onChange={(selected: MultiValue<StatusOption>) => {
-                    const values = selected.map((o) => o.value);
-                    if (values.length === 0) {
-                      setStatusFilter(["all"]);
-                      return;
-                    }
-                    if (values.includes("all") && values.length > 1) {
-                      setStatusFilter(values.filter((v) => v !== "all"));
-                      return;
-                    }
-                    if (values.includes("all")) {
-                      setStatusFilter(["all"]);
-                      return;
-                    }
-                    setStatusFilter(values);
-                  }}
+                  onChange={(selected: MultiValue<StatusOption>) =>
+                    setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))
+                  }
                 />
               </Box>
             </Flex>
@@ -448,40 +343,16 @@ const Attendance = () => {
                 </Text>
               </Box>
             )}
-            <Flex mt="2" justifyContent="space-between">
-              <Text>
-                Present:{" "}
-                <strong>
-                  {
-                    filteredMembers.filter(
-                      (m) => m.attendanceStatus === "present",
-                    ).length
-                  }{" "}
-                </strong>
-              </Text>
-              <Text>
-                Apology:{" "}
-                <strong>
-                  {
-                    filteredMembers.filter(
-                      (m) => m.attendanceStatus === "apology",
-                    ).length
-                  }{" "}
-                </strong>
-              </Text>
-              <Text>
-                Absent:{" "}
-                <strong>
-                  {
-                    filteredMembers.filter(
-                      (m) => m.attendanceStatus === "absent",
-                    ).length
-                  }{" "}
-                </strong>
-              </Text>
-            </Flex>
+            <StatusCountSummary counts={filteredCounts} />
             <Box mt="4" overflow="scroll" maxH="500px">
-              {filteredMembers.map((item) => AttendCard(item))}
+              {filteredMembers.map((item) => (
+                <AttendanceMemberRow
+                  key={item.memberId}
+                  memberId={item.memberId}
+                  name={item.member.name}
+                  status={statuses.resolve(item.attendanceStatus)}
+                />
+              ))}
             </Box>
             <Button
               onClick={handleDelete}
@@ -504,23 +375,3 @@ const Attendance = () => {
 };
 
 export default Attendance;
-function AttendCard(item: MemberType): JSX.Element {
-  const isPresent = item.attendanceStatus === "present";
-  const isApology = item.attendanceStatus === "apology";
-  const bg: string = isPresent ? "green" : isApology ? "orange" : "";
-  const color: string = isPresent || isApology ? "#fff" : "";
-
-  return (
-    <Button
-      variant="unstyled"
-      display="block"
-      w="full"
-      mt="3"
-      border="1px solid green"
-      key={item.memberId}
-      style={{ backgroundColor: bg, color }}
-    >
-      {item.member.name}
-    </Button>
-  ) as JSX.Element;
-}
