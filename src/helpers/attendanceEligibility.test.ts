@@ -162,3 +162,16 @@ describe("setRuleValues", () => {
     expect(setRuleValues(rules, "part", [])).toEqual([{ field: "status", values: ["active"] }]);
   });
 });
+
+describe("backend-compatible casing", () => {
+  it("matches member values and field names case-insensitively", () => {
+    const legacy = { id: "x", name: "Legacy", Part: " Soprano " };
+    expect(matchesEligibility(legacy, [{ field: "part", values: ["soprano"] }])).toBe(true);
+    expect(matchesEligibility(legacy, [{ field: "part", values: ["alto"] }])).toBe(false);
+  });
+
+  it("does not flag a stored lowercased field or canonical option as stale", () => {
+    const model = [{ name: "Part", type: "option", options: ["Soprano", "Alto"] }];
+    expect(eligibilityIssues([{ field: "part", values: ["soprano"] }], model)).toEqual([]);
+  });
+});

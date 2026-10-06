@@ -36,6 +36,11 @@ export interface EligibilityIssue {
 
 export const EVERYONE_LABEL = "Everyone";
 
+// Field names and values compare case-insensitively, as the backend does when
+// it stores rules (lowercased fields) and resolves rosters (legacy member
+// casing still matches its option).
+const matchKey = (value: string) => value.trim().toLowerCase();
+
 /** Option-type fields with at least one option — the only eligible criteria. */
 export const eligibilityFields = (
   fields: readonly MemberModelField[] | null | undefined,
@@ -102,14 +107,24 @@ export const eligibilityIssues = (
   modelFields: readonly MemberModelField[],
 ): EligibilityIssue[] =>
   rules.flatMap((rule): EligibilityIssue[] => {
-    const field = modelFields.find((f) => f.name === rule.field);
+    const field = modelFields.find((f) => matchKey(f.name) === matchKey(rule.field));
     if (!field) return [{ field: rule.field, kind: "missing-field" }];
     if (field.type !== "option") return [{ field: rule.field, kind: "not-option" }];
-    const missing = rule.values.filter((value) => !field.options?.includes(value));
+    const options = new Set((field.options ?? []).map(matchKey));
+    const missing = rule.values.filter((value) => !options.has(matchKey(value)));
     return missing.length
       ? [{ field: rule.field, kind: "missing-option", values: missing }]
       : [];
   });
+
+const memberValue = (
+  member: Readonly<Record<string, unknown>>,
+  field: string,
+): unknown => {
+  if (field in member) return member[field];
+  const key = Object.keys(member).find((k) => matchKey(k) === matchKey(field));
+  return key === undefined ? undefined : member[key];
+};
 
 /** Whether `member` is expected under `rules`; a missing value never matches. */
 export const matchesEligibility = (
@@ -117,8 +132,11 @@ export const matchesEligibility = (
   rules: readonly AttendanceEligibilityRule[],
 ): boolean =>
   rules.every((rule) => {
-    const value = member[rule.field];
-    return typeof value === "string" && rule.values.includes(value);
+    const value = memberValue(member, rule.field);
+    return (
+      typeof value === "string" &&
+      rule.values.some((option) => matchKey(option) === matchKey(value))
+    );
   });
 
 /** The members expected under `rules`, in their original order. */

@@ -41,8 +41,17 @@ const AttendanceEligibilityEditor = ({
   expectedCount,
   totalCount,
 }: AttendanceEligibilityEditorProps) => {
+  // Stored rules use lowercased field names and may differ in option casing.
   const selectedValues = (field: string) =>
-    rules.find((rule) => rule.field === field)?.values ?? [];
+    (
+      rules.find((rule) => rule.field.toLowerCase() === field.toLowerCase())
+        ?.values ?? []
+    ).map((value) => value.toLowerCase());
+
+  // Edit an applied template's rule in place rather than adding a duplicate.
+  const storedFieldName = (field: string) =>
+    rules.find((rule) => rule.field.toLowerCase() === field.toLowerCase())
+      ?.field ?? field;
 
   return (
     <Stack spacing={3} borderWidth="1px" borderRadius="md" p={3}>
@@ -94,7 +103,9 @@ const AttendanceEligibilityEditor = ({
                   aria-label={`${label} eligibility`}
                   placeholder={`Any ${label.toLowerCase()}`}
                   options={options}
-                  value={options.filter((o) => selected.includes(o.value))}
+                  value={options.filter((o) =>
+                    selected.includes(o.value.toLowerCase())
+                  )}
                   closeMenuOnSelect={false}
                   menuPortalTarget={document.body}
                   menuPosition="fixed"
@@ -103,7 +114,7 @@ const AttendanceEligibilityEditor = ({
                     onChange(
                       setRuleValues(
                         rules,
-                        field.name,
+                        storedFieldName(field.name),
                         picked.map((o) => o.value),
                       ),
                     )
