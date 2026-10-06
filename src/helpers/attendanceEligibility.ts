@@ -43,6 +43,21 @@ export interface EligibilityIssue {
 
 export const EVERYONE_LABEL = "Everyone";
 
+/** The part of an organisation that switches eligibility on; older caches may lack it. */
+export interface EligibilitySettingSource {
+  attendanceEligibilityEnabled?: boolean | null;
+}
+
+/**
+ * Whether the organisation has opted in to eligibility rules when creating
+ * attendance. Off unless explicitly enabled. Only creation UX depends on this —
+ * attendance already stored with rules keeps its roster regardless.
+ */
+export const isAttendanceEligibilityEnabled = (
+  org: EligibilitySettingSource | null | undefined,
+): boolean => org?.attendanceEligibilityEnabled === true;
+
+
 // Field names and values compare case-insensitively, as the backend does when
 // it stores rules (lowercased fields) and resolves rosters (legacy member
 // casing still matches its option).

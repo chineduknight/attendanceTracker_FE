@@ -51,6 +51,11 @@ export type OrganisationType = {
    */
   terminology?: OrganisationTerminology;
   featureVisibility?: OrganisationFeatureVisibility;
+  /**
+   * Whether Create Attendance offers eligibility rules. Optional for the same
+   * reason — always read via isAttendanceEligibilityEnabled.
+   */
+  attendanceEligibilityEnabled?: boolean;
 };
 
 export const EMPTY_USER: UserType = {
@@ -75,7 +80,9 @@ export const EMPTY_ORG: OrganisationType = {
   attendanceStatuses: [...DEFAULT_ATTENDANCE_STATUSES],
   terminology: { ...DEFAULT_TERMINOLOGY },
   featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+  attendanceEligibilityEnabled: false,
 };
+
 
 interface GlobalStoreState {
   user: UserType;

@@ -9,14 +9,18 @@ const NO_FIELDS: MemberModelField[] = [];
 /** The organisation's configured member fields, from the canonical model cache. */
 export const useMemberModel = (
   organisationId: string,
-  { refetchOnWindowFocus = true }: { refetchOnWindowFocus?: boolean } = {},
+  {
+    refetchOnWindowFocus = true,
+    enabled = true,
+  }: { refetchOnWindowFocus?: boolean; enabled?: boolean } = {},
 ) => {
   const url = convertParamsToString(orgRequest.CONFIG_MODEL, { organisationId });
   const { data, isLoading, isSuccess, isError, isFetchedAfterMount } = useQueryWrapper(
     queryKeys.memberModel(organisationId),
     url,
-    { enabled: Boolean(organisationId), refetchOnWindowFocus },
+    { enabled: enabled && Boolean(organisationId), refetchOnWindowFocus },
   );
+
   const fields: MemberModelField[] = data?.data?.fields ?? NO_FIELDS;
   return {
     fields,

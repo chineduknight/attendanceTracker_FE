@@ -8,6 +8,8 @@ import {
   DEFAULT_FEATURE_VISIBILITY,
   DEFAULT_TERMINOLOGY,
 } from "helpers/organisationPresentation";
+import { isAttendanceEligibilityEnabled } from "helpers/attendanceEligibility";
+import { DEFAULT_ATTENDANCE_STATUSES } from "helpers/attendanceStatuses";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -322,6 +324,172 @@ describe("<OrganisationSettings>", () => {
       });
 
       expect(useGlobalStore.getState().organisation.id).toBe("org2");
+    });
+  });
+
+  describe("attendance eligibility setting", () => {
+    const LABEL = "Use attendance eligibility rules";
+    const detail = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      name: `Org ${id}`,
+      image: "",
+      collapseAttendanceByDay: false,
+      maxAttendanceEdits: 3,
+      attendanceStatuses: undefined,
+      terminology: { ...DEFAULT_TERMINOLOGY },
+      featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+      ...over,
+    });
+    const serve = (byId: Record<string, Record<string, unknown>>) =>
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({ data: { data: byId[url.split("/").pop() as string] } }),
+      );
+    const manager = (id = "org1") =>
+      setOrg({ id, permissions: ["settings.view", "settings.manage"] });
+
+    it("is off for a cached organisation that predates the setting", () => {
+      expect(EMPTY_ORG.attendanceEligibilityEnabled).toBe(false);
+      expect(isAttendanceEligibilityEnabled({})).toBe(false);
+
+      expect(isAttendanceEligibilityEnabled(null)).toBe(false);
+      expect(isAttendanceEligibilityEnabled({ attendanceEligibilityEnabled: true })).toBe(true);
+    });
+
+    it.each([false, true])("loads %s into the switch under the attendance settings heading", async (enabled) => {
+      serve({ org1: detail("org1", { attendanceEligibilityEnabled: enabled }) });
+      manager();
+      renderPage();
+      const toggle = await screen.findByLabelText(LABEL);
+      expect(screen.getByText("Attendance settings")).toBeInTheDocument();
+      expect(toggle).not.toBeDisabled();
+      if (enabled) expect(toggle).toBeChecked();
+      else expect(toggle).not.toBeChecked();
+      expect(
+        screen.getByText(/Allow officers to choose which members are expected for an attendance\./),
+      ).toBeInTheDocument();
+    });
+
+    it("is read-only for a view-only user", async () => {
+      serve({ org1: detail("org1", { attendanceEligibilityEnabled: true }) });
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderPage();
+      const toggle = await screen.findByLabelText(LABEL);
+      expect(toggle).toBeDisabled();
+      expect(toggle).toBeChecked();
+      expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
+    });
+
+    it("uses the organisation's terminology", async () => {
+      serve({ org1: detail("org1", {
+        attendanceEligibilityEnabled: false,
+        terminology: {
+          ...DEFAULT_TERMINOLOGY,
+          memberSingular: "Student",
+          memberPlural: "Students",
+          attendanceSingular: "Session",
+          attendancePlural: "Sessions",
+          officerSingular: "Coordinator",
+          officerPlural: "Coordinators",
+        },
+      }) });
+      setOrg({
+        id: "org1",
+        permissions: ["settings.view", "settings.manage"],
+        terminology: {
+          ...DEFAULT_TERMINOLOGY,
+          memberSingular: "Student",
+          memberPlural: "Students",
+          attendanceSingular: "Session",
+          attendancePlural: "Sessions",
+          officerSingular: "Coordinator",
+          officerPlural: "Coordinators",
+        },
+      });
+      renderPage();
+      expect(await screen.findByLabelText("Use session eligibility rules")).toBeInTheDocument();
+      expect(screen.getByText("Session settings")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Allow coordinators to choose which students are expected for a session\./),
+      ).toBeInTheDocument();
+    });
+
+    it("saves the exact payload and updates the selected organisation at once", async () => {
+      serve({ org1: detail("org1", { attendanceEligibilityEnabled: false }) });
+      setOrg({ id: "org1", roleName: "Owner", isOwner: true, permissions: ["settings.view", "settings.manage"] });
+      // The PUT reply omits the field; the submitted value still applies.
+      mockPut.mockResolvedValue({ data: { data: { id: "org1", name: "Org org1" } } });
+      renderPage();
+      fireEvent.click(await screen.findByLabelText(LABEL));
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0][0]).toBe("/organisations/org1");
+      expect(mockPut.mock.calls[0][1]).toEqual({
+        name: "Org org1",
+        image: "",
+        collapseAttendanceByDay: false,
+        maxAttendanceEdits: 3,
+        attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
+        attendanceEligibilityEnabled: true,
+        terminology: { ...DEFAULT_TERMINOLOGY },
+        featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+      });
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.attendanceEligibilityEnabled).toBe(true),
+      );
+      const org = useGlobalStore.getState().organisation;
+      expect(org.roleName).toBe("Owner");
+      expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
+    });
+
+    it("prefers the backend's stored value from the save reply", async () => {
+      serve({ org1: detail("org1", { attendanceEligibilityEnabled: true }) });
+      manager();
+      mockPut.mockResolvedValue({
+        data: { data: { id: "org1", name: "Org org1", attendanceEligibilityEnabled: false } },
+      });
+      renderPage();
+      await screen.findByLabelText(LABEL);
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.attendanceEligibilityEnabled).toBe(false),
+      );
+    });
+
+    it("neither shows nor sends the switch to an older backend that doesn't return it", async () => {
+      serve({ org1: detail("org1") });
+      manager();
+      renderPage();
+      await screen.findByLabelText(/Member singular/);
+      expect(screen.queryByLabelText(LABEL)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      const body = mockPut.mock.calls[0][1];
+      expect(body).not.toHaveProperty("attendanceEligibilityEnabled");
+      expect(body.terminology).toEqual({ ...DEFAULT_TERMINOLOGY });
+      expect(useGlobalStore.getState().organisation).not.toHaveProperty(
+        "attendanceEligibilityEnabled",
+        true,
+      );
+    });
+
+    it("keeps each organisation's value across A -> B -> A", async () => {
+      serve({
+        orgA: detail("orgA", { attendanceEligibilityEnabled: true }),
+        orgB: detail("orgB", { attendanceEligibilityEnabled: false }),
+      });
+      manager("orgA");
+      renderPage();
+      await waitFor(() => expect(screen.getByLabelText(LABEL)).toBeChecked());
+
+      act(() => manager("orgB"));
+      await waitFor(() => expect(screen.getByLabelText(/Organisation Name/)).toHaveValue("Org orgB"));
+      expect(screen.getByLabelText(LABEL)).not.toBeChecked();
+
+      act(() => manager("orgA"));
+      await waitFor(() => expect(screen.getByLabelText(/Organisation Name/)).toHaveValue("Org orgA"));
+      expect(screen.getByLabelText(LABEL)).toBeChecked();
     });
   });
 });

@@ -12,6 +12,7 @@ import {
   Switch,
   Avatar,
   Divider,
+  Heading,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useForm } from "react-hook-form";
@@ -21,7 +22,8 @@ import { RequirePermission } from "rbac/RequirePermission";
 import { Can } from "rbac/Can";
 import { usePermissions } from "rbac/usePermissions";
 import { useTerms } from "hooks/useOrgPresentation";
-import { lowerTerm } from "helpers/organisationPresentation";
+import { lowerTerm, withArticle } from "helpers/organisationPresentation";
+import { isAttendanceEligibilityEnabled } from "helpers/attendanceEligibility";
 import { orgRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import {
@@ -87,6 +89,7 @@ const OrganisationSettings = () => {
       image: "",
       collapseAttendanceByDay: false,
       maxAttendanceEdits: "",
+      attendanceEligibilityEnabled: isAttendanceEligibilityEnabled(org),
       terminology: effectiveTerminology(org),
       featureVisibility: effectiveFeatureVisibility(org),
     },
@@ -94,8 +97,13 @@ const OrganisationSettings = () => {
   // Only a backend that returns presentation settings can store them; an
   // older validator would reject the whole save if they were sent.
   const [presentationSupported, setPresentationSupported] = useState(false);
+  // Likewise, only a backend that returns the eligibility switch accepts it.
+  const [eligibilitySettingSupported, setEligibilitySettingSupported] =
+    useState(false);
   // The organisation a save was submitted for; its reply may land after a switch.
   const savingOrgId = useRef<string | null>(null);
+  // The eligibility switch as submitted, when the backend supports it.
+  const savingEligibility = useRef<boolean | undefined>(undefined);
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
@@ -112,11 +120,15 @@ const OrganisationSettings = () => {
           data.maxAttendanceEdits == null
             ? ""
             : String(data.maxAttendanceEdits),
+        attendanceEligibilityEnabled: isAttendanceEligibilityEnabled(data),
         terminology: effectiveTerminology(data),
         featureVisibility: effectiveFeatureVisibility(data),
       });
       setPresentationSupported(
         data.terminology != null && data.featureVisibility != null,
+      );
+      setEligibilitySettingSupported(
+        typeof data.attendanceEligibilityEnabled === "boolean",
       );
       setStatusRows(toStatusRows(data.attendanceStatuses));
       setStatusErrors([]);
@@ -132,10 +144,14 @@ const OrganisationSettings = () => {
       if (current.id !== savingOrgId.current) return;
       // PUT returns org fields but NOT permissions/isOwner/roleName —
       // merge over the selected org so RBAC state is preserved. Statuses,
-      // terminology and visibility apply immediately to marking and nav.
+      // terminology, visibility and eligibility apply immediately to marking,
+      // nav and Create Attendance.
       setOrg({
         ...current,
         attendanceStatuses: toStatusDefinitions(statusRows),
+        ...(savingEligibility.current !== undefined && {
+          attendanceEligibilityEnabled: savingEligibility.current,
+        }),
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
@@ -155,13 +171,13 @@ const OrganisationSettings = () => {
     const errors = validateStatusRows(statusRows);
     setStatusErrors(errors);
     if (errors.length) return;
-    savingOrgId.current = org.id;
-    mutate({
-      url,
-      data: buildOrgUpdatePayload(form, statusRows, {
-        includePresentation: presentationSupported,
-      }),
+    const data = buildOrgUpdatePayload(form, statusRows, {
+      includePresentation: presentationSupported,
+      includeEligibilitySetting: eligibilitySettingSupported,
     });
+    savingOrgId.current = org.id;
+    savingEligibility.current = data.attendanceEligibilityEnabled;
+    mutate({ url, data });
   };
 
   return (
@@ -219,6 +235,9 @@ const OrganisationSettings = () => {
                   <FormErrorMessage>{errors.image?.message}</FormErrorMessage>
                 </FormControl>
 
+                <Divider />
+                <Heading size="sm">{`${terms.attendanceSingular} settings`}</Heading>
+
                 <FormControl display="flex" alignItems="center">
                   <FormLabel mb="0">{`Collapse ${lowerTerm(
                     terms.attendanceSingular,
@@ -251,6 +270,35 @@ const OrganisationSettings = () => {
                     {errors.maxAttendanceEdits?.message}
                   </FormErrorMessage>
                 </FormControl>
+
+                {eligibilitySettingSupported && (
+                  <FormControl>
+                    <Flex align="center" justify="space-between" gap={3}>
+                      <FormLabel htmlFor="attendanceEligibilityEnabled" mb="0">
+                        {`Use ${lowerTerm(
+                          terms.attendanceSingular,
+                        )} eligibility rules`}
+                      </FormLabel>
+                      <Switch
+                        id="attendanceEligibilityEnabled"
+                        isDisabled={!canManage}
+                        {...register("attendanceEligibilityEnabled")}
+                      />
+                    </Flex>
+                    <FormHelperText>
+                      {`Allow ${lowerTerm(
+                        terms.officerPlural,
+                      )} to choose which ${lowerTerm(
+                        terms.memberPlural,
+                      )} are expected for ${withArticle(
+                        lowerTerm(terms.attendanceSingular),
+                      )}.`}{" "}
+                      Useful for sectional rehearsals, committees and other
+                      restricted sessions.
+                    </FormHelperText>
+                  </FormControl>
+                )}
+
 
                 <Divider />
                 <AttendanceStatusesEditor

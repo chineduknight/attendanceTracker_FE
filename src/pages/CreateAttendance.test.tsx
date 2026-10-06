@@ -59,8 +59,14 @@ let templatesByOrg: Record<string, Partial<AttendanceTemplate>[]>;
 let rosterByOrg: Record<string, typeof ROSTER>;
 let modelByOrg: Record<string, typeof MEMBER_MODEL>;
 
-const selectOrg = (id: string) =>
-  useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id, permissions: [] } });
+/** Eligibility is off unless a test opts in, as for a new organisation. */
+const selectOrg = (id: string, { eligibility = false } = {}) =>
+  useGlobalStore.setState({ organisation: {
+      ...EMPTY_ORG,
+      id,
+      permissions: [],
+      attendanceEligibilityEnabled: eligibility,
+    }, });
 
 const renderPage = () =>
   render(
@@ -363,7 +369,7 @@ describe("<CreateAttendance> eligibility", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
-    selectOrg("orgA");
+    selectOrg("orgA", { eligibility: true });
     templatesByOrg = { orgA: [], orgB: [] };
     rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
     modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
@@ -445,7 +451,7 @@ describe("<CreateAttendance> eligibility", () => {
     await pickEligibility("Part", "Soprano");
     expect(expectedText()).toBe("Expected members: 2 of 8");
 
-    act(() => selectOrg("orgB"));
+    act(() => selectOrg("orgB", { eligibility: true }));
 
     await screen.findByText("Expected members: 3 of 3");
     expect(screen.getByText("Everyone is expected")).toBeInTheDocument();
@@ -607,7 +613,7 @@ describe("<CreateAttendance> with relabelled member fields", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
-    selectOrg("orgA");
+    selectOrg("orgA", { eligibility: true });
     templatesByOrg = {
       orgA: [
         template({
@@ -682,6 +688,7 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
         ...EMPTY_ORG,
         id: "orgA",
         permissions: [],
+        attendanceEligibilityEnabled: true,
         terminology: {
           memberSingular: "Student",
           memberPlural: "Students",
@@ -726,3 +733,217 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
   });
 });
 
+
+describe("<CreateAttendance> with attendance eligibility off", () => {
+  const sopranoTemplate = template({
+    id: "t-sop",
+    name: "Soprano Rehearsal",
+    eligibilityRules: [{ field: "part", values: ["soprano"] }],
+  });
+  const memberModelRequested = () =>
+    mockGet.mock.calls.some(([url]) => url === "/organisations/orgA/model");
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    selectOrg("orgA");
+    templatesByOrg = { orgA: [template({}), sopranoTemplate], orgB: [] };
+    rosterByOrg = { orgA: ROSTER, orgB: [] };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  it("treats a cached organisation without the setting as off", async () => {
+    const { attendanceEligibilityEnabled, ...legacy } = useGlobalStore.getState().organisation;
+    useGlobalStore.setState({ organisation: legacy });
+    renderPage();
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
+  });
+
+  it("shows no eligibility editor or expected count and creates an Everyone session", async () => {
+    templatesByOrg.orgA = [];
+    renderPage();
+    await screen.findByText(/No templates yet/);
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members"));
+
+    expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Everyone/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /clear/i })).not.toBeInTheDocument();
+    expect(memberModelRequested()).toBe(false);
+
+    type(nameInput(), "Ad-hoc meeting");
+    type(dateInput(), "2026-10-01");
+    expect(button("Continue")).toBeEnabled();
+    fireEvent.click(button("Continue"));
+
+    expect(await screen.findByText("marking")).toBeInTheDocument();
+    expect(useGlobalStore.getState().currentAttendance).toEqual({
+      name: "Ad-hoc meeting",
+      date: "2026-10-01",
+      eligibilityRules: [],
+    });
+  });
+
+  it("keeps Continue available with an empty roster", async () => {
+    rosterByOrg.orgA = [];
+    renderPage();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members"));
+    expect(button("Continue")).toBeEnabled();
+  });
+
+  it("never shows the member-field load error", async () => {
+    mockGet.mockImplementation((url: string) =>
+      url.endsWith("/model")
+        ? Promise.reject(new Error("boom"))
+        : url.endsWith("/category")
+          ? Promise.resolve({ data: { data: CATEGORIES } })
+          : Promise.resolve({ data: { data: url.endsWith("/templates") ? [template({})] : ROSTER } }),
+    );
+    renderPage();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    expect(screen.queryByText(/fields could not be loaded/)).not.toBeInTheDocument();
+
+    // Unrestricted templates do not depend on member fields while off.
+    type(templateSelect(), "t1");
+    expect(nameInput().value).toBe("Thursday Rehearsal");
+    expect(button("Apply")).toBeEnabled();
+  });
+
+  it("applies a template without rules", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    type(templateSelect(), "t1");
+    expect(nameInput().value).toBe("Thursday Rehearsal");
+    expect(categorySelect().value).toBe("c1");
+  });
+
+  it("lists a restricted template as unavailable, fills nothing and never widens it", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    expect(
+      await screen.findByRole("option", { name: "Soprano Rehearsal (Requires eligibility)" }),
+    ).toBeInTheDocument();
+
+    type(templateSelect(), "t-sop");
+
+    expect(nameInput().value).toBe("");
+    expect(
+      screen.getByText(
+        /Uses attendance eligibility\. Enable eligibility in Organisation Settings to use this template\./,
+      ),
+    ).toBeInTheDocument();
+    expect(button("Apply")).toBeDisabled();
+    expect(button("Update template")).toBeDisabled();
+    fireEvent.click(button("Update template"));
+    expect(mockPut).not.toHaveBeenCalled();
+
+    // Deleting stays allowed.
+    expect(button("Delete template")).toBeEnabled();
+    fireEvent.click(button("Delete template"));
+    confirmDialog();
+    await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
+    expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t-sop");
+
+  });
+
+  it("treats a template with unreadable rules as restricted", async () => {
+    templatesByOrg.orgA = [template({ id: "t-bad", name: "Odd", eligibilityRules: "nope" as never })];
+    renderPage();
+    expect(
+      await screen.findByRole("option", { name: "Odd (Requires eligibility)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("saves new templates as Everyone", async () => {
+    templatesByOrg.orgA = [];
+    renderPage();
+    await screen.findByText(/No templates yet/);
+    type(nameInput(), "Friday Vigil");
+    fireEvent.click(button("Save as template"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(mockPost.mock.calls[0][1]).toEqual({
+      name: "Friday Vigil",
+      categoryId: null,
+      subCategoryId: null,
+      eligibilityRules: [],
+    });
+  });
+
+  it("never carries rules into an Everyone session after the setting is switched off", async () => {
+    selectOrg("orgA", { eligibility: true });
+    renderPage();
+    await waitForRoster();
+    await pickEligibility("Part", "Soprano");
+
+    act(() =>
+      useGlobalStore.setState((state) => ({
+        organisation: { ...state.organisation, attendanceEligibilityEnabled: false },
+      })),
+    );
+
+    expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
+    type(nameInput(), "Full rehearsal");
+    type(dateInput(), "2026-10-03");
+    fireEvent.click(button("Continue"));
+    await screen.findByText("marking");
+    expect(useGlobalStore.getState().currentAttendance.eligibilityRules).toEqual([]);
+  });
+
+  it("restores a restricted template when eligibility is switched back on, with its rules intact", async () => {
+    selectOrg("orgA", { eligibility: true });
+    const first = renderPage();
+    await waitForRoster();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    type(templateSelect(), "t-sop");
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+    first.unmount();
+
+    // Off: the editor is gone, the template is unavailable, Everyone still works.
+    selectOrg("orgA");
+    const off = renderPage();
+    await screen.findByRole("option", { name: "Soprano Rehearsal (Requires eligibility)" });
+    expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
+    type(templateSelect(), "t-sop");
+    expect(button("Apply")).toBeDisabled();
+    type(nameInput(), "Everyone rehearsal");
+    type(dateInput(), "2026-10-04");
+    fireEvent.click(button("Continue"));
+    await screen.findByText("marking");
+    expect(useGlobalStore.getState().currentAttendance.eligibilityRules).toEqual([]);
+    off.unmount();
+    expect(mockPut).not.toHaveBeenCalled();
+
+    // On again: the same stored template applies its rules.
+    selectOrg("orgA", { eligibility: true });
+    renderPage();
+    await waitForRoster();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    expect(screen.getByRole("option", { name: "Soprano Rehearsal" })).toBeInTheDocument();
+    type(templateSelect(), "t-sop");
+    expect(nameInput().value).toBe("Soprano Rehearsal");
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+  });
+
+  it("does not bleed the setting between organisations", async () => {
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "orgB", permissions: [], attendanceEligibilityEnabled: true },
+    });
+    rosterByOrg.orgB = ROSTER;
+    renderPage();
+    await screen.findByText(/^Expected members: 8 of 8/);
+
+    act(() => selectOrg("orgA"));
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
+
+    act(() =>
+      useGlobalStore.setState({
+        organisation: { ...EMPTY_ORG, id: "orgB", permissions: [], attendanceEligibilityEnabled: true },
+      }),
+    );
+    expect(await screen.findByText(/^Expected members: 8 of 8/)).toBeInTheDocument();
+  });
+});

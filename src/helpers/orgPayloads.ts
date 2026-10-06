@@ -12,6 +12,7 @@ export interface OrgSettingsForm {
   collapseAttendanceByDay: boolean;
   /** Raw input value; "" (or whitespace) means "use the deployment default". */
   maxAttendanceEdits: string;
+  attendanceEligibilityEnabled: boolean;
   terminology: OrganisationTerminology;
   featureVisibility: OrganisationFeatureVisibility;
 }
@@ -22,6 +23,8 @@ export interface OrgUpdatePayload {
   collapseAttendanceByDay: boolean;
   maxAttendanceEdits: number | null;
   attendanceStatuses: AttendanceStatusDefinition[];
+  /** Sent only to a backend that supports the eligibility setting. */
+  attendanceEligibilityEnabled?: boolean;
   /** Sent only to a backend that supports presentation settings. */
   terminology?: OrganisationTerminology;
   featureVisibility?: OrganisationFeatureVisibility;
@@ -34,13 +37,17 @@ export interface OrgUpdatePayload {
  * A blank `maxAttendanceEdits` maps to `null` so the BE applies its default.
  * Attendance statuses, terminology and module visibility travel in the same
  * body — terminology and visibility always complete, as the backend requires —
- * so saving one setting never wipes another. Presentation settings are only
- * included for a backend that returned them (an older validator rejects them).
+ * so saving one setting never wipes another. Presentation settings and the
+ * eligibility switch are each only included for a backend that returned them
+ * (an older validator rejects unknown fields).
  */
 export const buildOrgUpdatePayload = (
   form: OrgSettingsForm,
   statusRows: readonly StatusRow[],
-  { includePresentation = true }: { includePresentation?: boolean } = {},
+  {
+    includePresentation = true,
+    includeEligibilitySetting = true,
+  }: { includePresentation?: boolean; includeEligibilitySetting?: boolean } = {},
 ): OrgUpdatePayload => {
   const trimmedMax = form.maxAttendanceEdits.trim();
   return {
@@ -49,7 +56,11 @@ export const buildOrgUpdatePayload = (
     collapseAttendanceByDay: form.collapseAttendanceByDay,
     maxAttendanceEdits: trimmedMax === "" ? null : Number(trimmedMax),
     attendanceStatuses: toStatusDefinitions(statusRows),
+    ...(includeEligibilitySetting && {
+      attendanceEligibilityEnabled: form.attendanceEligibilityEnabled,
+    }),
     ...(includePresentation && {
+
       terminology: TERM_KEYS.reduce((terms, key) => {
         terms[key] = form.terminology[key].trim();
         return terms;
