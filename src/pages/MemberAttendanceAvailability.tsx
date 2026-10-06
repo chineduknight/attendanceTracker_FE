@@ -119,7 +119,13 @@ const MemberAttendanceAvailability = () => {
   const remove = (period: AttendanceAvailability) => {
     if (
       !window.confirm(
-        "Remove this attendance availability period? This will affect only attendance created after the change. Existing attendance records will stay unchanged."
+        `Remove this ${lowerTerm(
+          terms.attendanceSingular
+        )} availability period? This will affect only ${lowerTerm(
+          terms.attendancePlural
+        )} created after the change. Existing ${lowerTerm(
+          terms.attendancePlural
+        )} will stay unchanged.`
       )
     )
       return;
@@ -160,7 +166,8 @@ const MemberAttendanceAvailability = () => {
         Back to {lowerTerm(terms.memberPlural)}
       </Button>
       <Heading size="lg" mb={2}>
-        {member?.name ?? terms.memberSingular} attendance availability
+        {member?.name ?? terms.memberSingular}{" "}
+        {lowerTerm(terms.attendanceSingular)} availability
       </Heading>
       <Text mb={6}>
         This {lowerTerm(terms.memberSingular)} will not be expected for{" "}
@@ -169,8 +176,9 @@ const MemberAttendanceAvailability = () => {
       </Text>
       <Alert status="info" mb={6}>
         <AlertIcon />
-        Availability affects attendance created after it is saved. Existing
-        attendance records are not recalculated.
+        Availability affects {lowerTerm(terms.attendancePlural)} created after
+        it is saved. Existing {lowerTerm(terms.attendancePlural)} are not
+        recalculated.
       </Alert>
 
       <Can perm="attendance.manage">
@@ -223,15 +231,19 @@ const MemberAttendanceAvailability = () => {
       {isError && (
         <Alert status="error" mb={5}>
           <AlertIcon />
-          Unable to load attendance availability.
+          Unable to load {lowerTerm(terms.attendanceSingular)} availability.
         </Alert>
       )}
-      {isLoading && <Text>Loading attendance availability...</Text>}
+      {isLoading && (
+        <Text>
+          Loading {lowerTerm(terms.attendanceSingular)} availability...
+        </Text>
+      )}
       {!isLoading && !isError && periods.length === 0 && (
         <Box bg="white" borderRadius="lg" p={6}>
           <Text>
-            No attendance availability periods for this{" "}
-            {lowerTerm(terms.memberSingular)}.
+            No {lowerTerm(terms.attendanceSingular)} availability periods for
+            this {lowerTerm(terms.memberSingular)}.
           </Text>
         </Box>
       )}

@@ -11,6 +11,7 @@ import theme from "styles/theme";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import MemberAttendanceAvailability from "pages/MemberAttendanceAvailability";
+import { toast } from "react-toastify";
 
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
@@ -104,13 +105,13 @@ describe("<MemberAttendanceAvailability>", () => {
 
   it("renders for attendance.view and uses local Current, Upcoming and Past groups", () => {
     renderPage();
-    expect(screen.getByText("Ada attendance availability")).toBeInTheDocument();
+    expect(screen.getByText("Ada rehearsal availability")).toBeInTheDocument();
     expect(screen.getByText("CURRENT")).toBeInTheDocument();
     expect(screen.getByText("UPCOMING")).toBeInTheDocument();
     expect(screen.getByText("PAST")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Availability affects attendance created after it is saved. Existing attendance records are not recalculated."
+        "Availability affects rehearsals created after it is saved. Existing rehearsals are not recalculated."
       )
     ).toBeInTheDocument();
   });
@@ -191,5 +192,24 @@ describe("<MemberAttendanceAvailability>", () => {
     expect(window.confirm).toHaveBeenCalled();
     expect(mockArchive).toHaveBeenCalledWith("current", expect.any(Function));
     await waitFor(() => expect(mockArchive).toHaveBeenCalled());
+  });
+
+  it("keeps backend overlap errors visible", () => {
+    mockCreate.mockImplementation(() => {
+      toast.error(
+        "This student already has an attendance availability period that overlaps these dates."
+      );
+    });
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Start date"), {
+      target: { value: "2026-12-01" },
+    });
+    fireEvent.change(screen.getByLabelText("End date"), {
+      target: { value: "2026-12-02" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add period" }));
+    expect(toast.error).toHaveBeenCalledWith(
+      "This student already has an attendance availability period that overlaps these dates."
+    );
   });
 });

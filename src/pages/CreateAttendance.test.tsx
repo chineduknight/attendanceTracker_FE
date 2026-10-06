@@ -470,6 +470,79 @@ describe("<CreateAttendance> eligibility", () => {
     type(dateInput(), "2026-10-01");
   };
 
+  const seedAvailability = (memberId = "m1") => {
+    queryClient.setQueryData(
+      queryKeys.attendanceAvailability.date("orgA", "2026-10-01"),
+      {
+        data: [
+          {
+            memberId,
+            startDate: "2026-10-01",
+            endDate: "2026-10-01",
+          },
+        ],
+      }
+    );
+  };
+
+  it("does not trust cached availability while a fresh date request is pending", async () => {
+    seedAvailability("m1");
+    let resolveFresh!: (value: unknown) => void;
+    const fresh = new Promise((resolve) => {
+      resolveFresh = resolve;
+    });
+    const baseGet = mockGet.getMockImplementation() as (
+      url: string
+    ) => Promise<unknown>;
+    mockGet.mockImplementation((url: string) =>
+      url.includes("/availability") ? fresh : baseGet(url)
+    );
+
+    renderPage();
+    await waitForRoster();
+    fillDetails();
+    expect(button("Continue")).toBeDisabled();
+    expect(
+      screen.getByText("Checking attendance availability...")
+    ).toBeInTheDocument();
+
+    resolveFresh({ data: { data: [] } });
+    await waitFor(() => expect(button("Continue")).toBeEnabled());
+    expect(
+      screen.queryByText("Checking attendance availability...")
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps Continue blocked when a fresh request fails over cached availability", async () => {
+    seedAvailability("m1");
+    let rejectFresh!: (error: Error) => void;
+    const fresh = new Promise((_, reject) => {
+      rejectFresh = reject;
+    });
+    const baseGet = mockGet.getMockImplementation() as (
+      url: string
+    ) => Promise<unknown>;
+    mockGet.mockImplementation((url: string) =>
+      url.includes("/availability") ? fresh : baseGet(url)
+    );
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    renderPage();
+    await waitForRoster();
+    fillDetails();
+    expect(button("Continue")).toBeDisabled();
+    rejectFresh(new Error("availability offline"));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Attendance availability could not be loaded. Try again before continuing."
+        )
+      ).toBeInTheDocument()
+    );
+    expect(button("Continue")).toBeDisabled();
+    (console.error as jest.Mock).mockRestore();
+  });
+
   it("defaults to Everyone and offers only option fields", async () => {
     renderPage();
     await waitForRoster();

@@ -733,6 +733,143 @@ describe("<MarkAttendance> eligibility", () => {
       expect(draftIds()).toEqual(["m1", "m3"]);
     });
 
+    it("filters unavailable members and submits only the available roster", async () => {
+      roster = [
+        { id: "m1", name: "Ada" },
+        { id: "m2", name: "Bea" },
+      ];
+      useGlobalStore.setState({
+        currentAttendance: {
+          name: "Sectional",
+          date: "2026-10-01",
+          eligibilityRules: [],
+        },
+      });
+      mockGet.mockImplementation((url: string) => {
+        if (url.includes("/members")) {
+          return Promise.resolve({ data: { data: roster } });
+        }
+        return Promise.resolve({
+          data: {
+            data: [
+              {
+                memberId: "m1",
+                startDate: "2026-10-01",
+                endDate: "2026-10-01",
+              },
+            ],
+          },
+        });
+      });
+
+      renderAt("/mark");
+      await screen.findByText("Bea");
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      tap("Bea");
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
+        { memberId: "m2", status: "present" },
+      ]);
+    });
+
+    it("does not expose a stale roster during refresh and reconciles fresh availability", async () => {
+      roster = [
+        { id: "m1", name: "Ada" },
+        { id: "m2", name: "Bea" },
+      ];
+      useGlobalStore.setState({
+        currentAttendance: {
+          name: "Sectional",
+          date: "2026-10-01",
+          eligibilityRules: [],
+        },
+      });
+      let refreshPending = false;
+      let resolveRefresh!: (value: unknown) => void;
+      const refreshAvailability = new Promise((resolve) => {
+        resolveRefresh = resolve;
+      });
+      mockGet.mockImplementation((url: string) => {
+        if (url.includes("/members"))
+          return Promise.resolve({ data: { data: roster } });
+        return refreshPending
+          ? refreshAvailability
+          : Promise.resolve({ data: { data: [] } });
+      });
+
+      renderAt("/mark");
+      await screen.findByText("Ada");
+      tap("Bea");
+      refreshPending = true;
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      await screen.findByText(/Checking attendance availability/);
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(screen.queryByText("Bea")).not.toBeInTheDocument();
+
+      resolveRefresh({
+        data: {
+          data: [
+            {
+              memberId: "m1",
+              startDate: "2026-10-01",
+              endDate: "2026-10-01",
+            },
+          ],
+        },
+      });
+      await screen.findByText("Bea");
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(statusOf("Bea")).toBe("Present");
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
+        { memberId: "m2", status: "present" },
+      ]);
+    });
+
+    it("keeps the roster unavailable when availability refresh fails", async () => {
+      roster = [
+        { id: "m1", name: "Ada" },
+        { id: "m2", name: "Bea" },
+      ];
+      useGlobalStore.setState({
+        currentAttendance: {
+          name: "Sectional",
+          date: "2026-10-01",
+          eligibilityRules: [],
+        },
+      });
+      let refreshPending = false;
+      let rejectRefresh!: (error: Error) => void;
+      const refreshAvailability = new Promise((_, reject) => {
+        rejectRefresh = reject;
+      });
+      refreshAvailability.catch(() => undefined);
+      mockGet.mockImplementation((url: string) => {
+        if (url.includes("/members"))
+          return Promise.resolve({ data: { data: roster } });
+        return refreshPending
+          ? refreshAvailability
+          : Promise.resolve({ data: { data: [] } });
+      });
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+      renderAt("/mark");
+      await screen.findByText("Ada");
+      refreshPending = true;
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      await screen.findByText(/Checking attendance availability/);
+      rejectRefresh(new Error("availability offline"));
+      await screen.findByText(/Attendance availability could not be loaded/);
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(screen.queryByText("Bea")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Submit" })
+      ).not.toBeInTheDocument();
+      (console.error as jest.Mock).mockRestore();
+    });
+
     it("limits bulk actions to the expected roster", async () => {
       await start();
       fireEvent.click(
@@ -1087,7 +1224,7 @@ describe("<MarkAttendance> with custom terminology", () => {
     mockGet.mockImplementation(() => new Promise(() => undefined));
     renderAt("/mark");
     expect(
-      await screen.findByText("Checking attendance availability...")
+      await screen.findByText("Checking session availability...")
     ).toBeInTheDocument();
   });
 
@@ -1097,7 +1234,7 @@ describe("<MarkAttendance> with custom terminology", () => {
     renderAt("/mark");
     expect(
       await screen.findByText(
-        "Attendance availability could not be loaded. Use Refresh to try again."
+        "Session availability could not be loaded. Use Refresh to try again."
       )
     ).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();

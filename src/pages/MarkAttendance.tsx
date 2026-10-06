@@ -453,12 +453,12 @@ const MarkAttendanceSession = () => {
         ) : rosterFailed ? (
           <Text mt="6" color="red.500">
             {availabilityFailed
-              ? "Attendance availability could not be loaded. Use Refresh to try again."
+              ? `${terms.attendanceSingular} availability could not be loaded. Use Refresh to try again.`
               : `${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
           </Text>
         ) : !isUpdate && (availabilityLoading || availabilityFetching) ? (
           <Text mt="6" color="gray.600">
-            Checking attendance availability...
+            Checking {lowerTerm(terms.attendanceSingular)} availability...
           </Text>
         ) : (
           <>

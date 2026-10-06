@@ -201,17 +201,21 @@ const CreateAttendanceForm = ({
             categories={categories}
           />
           {details.date && (availabilityLoading || availabilityFetching) && (
-            <Text color="gray.600">Checking attendance availability...</Text>
+            <Text color="gray.600">
+              Checking {lowerTerm(terms.attendanceSingular)} availability...
+            </Text>
           )}
           {details.date && availabilityFailed && (
             <Text color="red.500">
-              Attendance availability could not be loaded. Try again before
-              continuing.
+              {terms.attendanceSingular} availability could not be loaded. Try
+              again before continuing.
             </Text>
           )}
           {validDate && availabilityReady && unavailableExpectedCount > 0 && (
             <Box borderWidth="1px" borderRadius="md" p={3}>
-              <Text fontWeight="bold">Attendance availability</Text>
+              <Text fontWeight="bold">
+                {terms.attendanceSingular} availability
+              </Text>
               <Text fontSize="sm">
                 {unavailableExpectedCount}{" "}
                 {unavailableExpectedCount === 1
