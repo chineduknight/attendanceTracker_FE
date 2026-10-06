@@ -79,7 +79,7 @@ const renderPage = () =>
 const nameInput = () => screen.getByLabelText(/Name/) as HTMLInputElement;
 const dateInput = () => screen.getByLabelText(/Date/) as HTMLInputElement;
 const categorySelect = () => screen.getByLabelText("Category") as HTMLSelectElement;
-const subCategorySelect = () => screen.getByLabelText("Sub Category") as HTMLSelectElement;
+const subCategorySelect = () => screen.getByLabelText("Sub-category") as HTMLSelectElement;
 const templateSelect = () => screen.getByLabelText("Template") as HTMLSelectElement;
 const button = (name: string) => screen.getByRole("button", { name });
 
@@ -219,7 +219,7 @@ describe("<CreateAttendance> session templates", () => {
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     fireEvent.click(button("Save as template"));
-    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Enter an attendance name/));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Enter the attendance name/));
     expect(mockPost).not.toHaveBeenCalled();
   });
 
@@ -672,3 +672,57 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     expect(expectedText()).toBe("Expected members: 2 of 8");
   });
 });
+
+describe("<CreateAttendance> under custom organisation terminology", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "orgA",
+        permissions: [],
+        terminology: {
+          memberSingular: "Student",
+          memberPlural: "Students",
+          attendanceSingular: "Session",
+          attendancePlural: "Sessions",
+          categorySingular: "Activity",
+          categoryPlural: "Activities",
+          subCategorySingular: "Activity type",
+          subCategoryPlural: "Activity types",
+          officerSingular: "Coordinator",
+          officerPlural: "Coordinators",
+        },
+      },
+    });
+    templatesByOrg = { orgA: [], orgB: [] };
+    rosterByOrg = { orgA: ROSTER, orgB: [] };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  it("shows the organisation's words but stores category ids and storage-keyed rules", async () => {
+    renderPage();
+    await screen.findByText(/^Expected students: \d+ of/);
+    await waitFor(() =>
+      expect((screen.getByLabelText("Activity") as HTMLSelectElement).options.length).toBeGreaterThan(1)
+    );
+    type(nameInput(), "Rehearsal");
+    type(dateInput(), "2026-10-01");
+    type(screen.getByLabelText("Activity"), "c1");
+    await pickEligibility("Part", "Soprano");
+
+    fireEvent.click(button("Continue"));
+
+    await screen.findByText("marking");
+    expect(useGlobalStore.getState().currentAttendance).toEqual({
+      name: "Rehearsal",
+      date: "2026-10-01",
+      categoryId: "c1",
+      eligibilityRules: [{ field: "part", values: ["soprano"] }],
+    });
+    expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members");
+  });
+});
+

@@ -27,6 +27,8 @@ import LoadingSpinner from "components/LoadingSpinner";
 import ModelFieldCard from "components/members/ModelFieldCard";
 import { useMemberModel } from "hooks/useMemberModel";
 import { MemberModelField } from "helpers/memberFields";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 import {
   EditorField,
   FieldErrors,
@@ -36,6 +38,7 @@ import {
   toModelPayload,
   validateEditorFields,
 } from "helpers/memberModelEditor";
+import { LABELS } from "config/presentationLabels";
 
 const NO_ERRORS = new Map<string, FieldErrors>();
 
@@ -55,6 +58,7 @@ const applyPatch = (field: EditorField, patch: Partial<EditorField>): EditorFiel
 
 const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   const navigate = useNavigate();
+  const terms = useTerms();
   // Initialised once from the loaded model, so a background refetch can't wipe
   // unsaved edits. The parent remounts this form on organisation change.
   const [fields, setFields] = useState<EditorField[]>(() => toEditorFields(savedFields));
@@ -79,13 +83,15 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
     () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.memberModel(organisationId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
-      toast.success(isUpdating ? "Model updated successfully" : "Model created successfully");
+      const model = LABELS.memberModel(terms);
+      toast.success(`${model} ${isUpdating ? "updated" : "created"} successfully`);
       navigate(PROTECTED_PATHS.ADD_MEMBER);
     },
     (error: any) => {
       if (error?.response?.status === 401) return;
       const message: string =
-        error?.response?.data?.error ?? "The model could not be saved. Please try again.";
+        error?.response?.data?.error ??
+        `The ${lowerTerm(LABELS.memberModel(terms))} could not be saved. Please try again.`;
       setServerError(message);
       toast.error(message);
     },
@@ -115,8 +121,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
       p={{ base: 4, sm: 6 }}
     >
       <Text fontSize="sm" color="gray.500">
-        Labels are what officers see and can be changed at any time. Internal keys
-        identify stored member data and stay fixed once saved.
+        {`Labels are what ${lowerTerm(terms.officerPlural)} see and can be changed at any time. Internal keys identify stored ${lowerTerm(terms.memberSingular)} data and stay fixed once saved.`}
       </Text>
       {serverError && (
         <Alert status="error" borderRadius="md">
@@ -161,6 +166,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
  * never replace or unmount the officer's unsaved edits.
  */
 const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
+  const terms = useTerms();
   const { fields, hasData, isError, isFetchedAfterMount } = useMemberModel(organisationId, {
     refetchOnWindowFocus: false,
   });
@@ -171,9 +177,18 @@ const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
 
   if (seed) return <ModelForm organisationId={organisationId} savedFields={seed} />;
   if (isError && !hasData) {
-    return <Text color="red.500">The member model could not be loaded. Please refresh.</Text>;
+    return (
+      <Text color="red.500">
+        {`The ${lowerTerm(terms.memberSingular)} model could not be loaded. Please refresh.`}
+      </Text>
+    );
   }
-  return <LoadingSpinner h="40vh" text="Loading member model..." />;
+  return (
+    <LoadingSpinner
+      h="40vh"
+      text={`Loading ${lowerTerm(terms.memberSingular)} model...`}
+    />
+  );
 };
 
 /**

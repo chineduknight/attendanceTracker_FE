@@ -32,6 +32,9 @@ import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields"
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
+import { LABELS } from "config/presentationLabels";
 
 interface FormData {
   [fieldName: string]: string;
@@ -39,6 +42,7 @@ interface FormData {
 
 const AddOrUpdateMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
   const [membersModel, setMembersModel] = useState<MemberModelField[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [currentMember, setcurrentMember] = useState({});
@@ -71,7 +75,9 @@ const AddOrUpdateMember = () => {
 
   const onSuccess = () => {
     toast.success(
-      isUpdating ? "Member updated successfully" : "Member added successfully",
+      isUpdating
+        ? `${terms.memberSingular} updated successfully`
+        : `${terms.memberSingular} added successfully`,
     );
     queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
@@ -116,13 +122,14 @@ const AddOrUpdateMember = () => {
   const { mutate: deleteMember, isLoading: isDeleting } = useMutationWrapper(
     deleteRequest,
     () => {
-      toast.success("Member deleted successfully");
+      toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
       const message =
-        error?.response?.data?.error ?? "Failed to delete member.";
+        error?.response?.data?.error ??
+        `Failed to delete ${lowerTerm(terms.memberSingular)}.`;
       toast.error(message);
     },
   );
@@ -133,9 +140,10 @@ const AddOrUpdateMember = () => {
       id: params.memberId as string,
     });
     confirmAlert({
-      title: "Delete Member",
-      message:
-        "Are you sure you want to delete this member? This cannot be undone.",
+      title: `Delete ${terms.memberSingular}`,
+      message: `Are you sure you want to delete this ${lowerTerm(
+        terms.memberSingular,
+      )}? This cannot be undone.`,
       buttons: [
         {
           label: "Yes",
@@ -155,7 +163,7 @@ const AddOrUpdateMember = () => {
       title: "Confirmation",
       message: `Are you sure you want to ${
         isUpdating ? "update" : "submit"
-      } the member?`,
+      } the ${lowerTerm(terms.memberSingular)}?`,
       buttons: [
         {
           label: "Yes",
@@ -238,7 +246,7 @@ const AddOrUpdateMember = () => {
               variant="outline"
               onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
             >
-              Update Model
+              {`Update ${LABELS.memberModel(terms)}`}
             </Button>
           </Can>
         )}
@@ -257,7 +265,7 @@ const AddOrUpdateMember = () => {
                   rounded={"xl"}
                   boxShadow={"lg"}
                 >
-                  <Heading>You don't have a model yet</Heading>
+                  <Heading>{`You don't have a ${lowerTerm(LABELS.memberModel(terms))} yet`}</Heading>
                   <Can perm="members.manage">
                     <Button
                       mt="4"
@@ -266,7 +274,7 @@ const AddOrUpdateMember = () => {
                       variant="outline"
                       onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
                     >
-                      Create Model
+                      {`Create ${LABELS.memberModel(terms)}`}
                     </Button>
                   </Can>
                 </Flex>
@@ -318,7 +326,7 @@ const AddOrUpdateMember = () => {
                             isLoading={isDeleting}
                             onClick={handleDeleteMember}
                           >
-                            Delete Member
+                            {`Delete ${terms.memberSingular}`}
                           </Button>
                         </Can>
                       )}

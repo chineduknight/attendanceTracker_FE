@@ -9,6 +9,8 @@ import {
   setRuleValues,
   summarizeEligibilityRules,
 } from "helpers/attendanceEligibility";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type ValueOption = { value: string; label: string };
 
@@ -43,6 +45,8 @@ const AttendanceEligibilityEditor = ({
   expectedCount,
   totalCount,
 }: AttendanceEligibilityEditorProps) => {
+  const terms = useTerms();
+  const members = lowerTerm(terms.memberPlural);
   const labelFor = useMemo(() => memberFieldLabeler(fields), [fields]);
   // Labels needn't be unique, so a repeated label is disambiguated by its key.
   const repeatedLabels = useMemo(() => {
@@ -67,8 +71,8 @@ const AttendanceEligibilityEditor = ({
       <Box aria-live="polite">
         <Text fontWeight="bold">
           {expectedCount === null
-            ? "Expected members: counting…"
-            : `Expected members: ${expectedCount} of ${totalCount}`}
+            ? `Expected ${members}: counting…`
+            : `Expected ${members}: ${expectedCount} of ${totalCount}`}
         </Text>
         <Text fontSize="sm" color="gray.500">
           {rules.length
@@ -78,23 +82,25 @@ const AttendanceEligibilityEditor = ({
         {expectedCount === 0 && (
           <Text fontSize="sm" color="red.500" mt={1}>
             {rules.length
-              ? "No members match these eligibility rules."
-              : "This organisation has no members yet."}
+              ? `No ${members} match these eligibility rules.`
+              : `This organisation has no ${members} yet.`}
           </Text>
         )}
       </Box>
 
       {fieldsStatus === "loading" ? (
         <Text fontSize="sm" color="gray.500">
-          Loading member fields…
+          {`Loading ${lowerTerm(terms.memberSingular)} fields…`}
         </Text>
       ) : fieldsStatus === "error" ? (
         <Text fontSize="sm" color="red.500">
-          Member fields could not be loaded, so everyone is expected.
+          {`${terms.memberSingular} fields could not be loaded, so everyone is expected.`}
         </Text>
       ) : fields.length === 0 ? (
         <Text fontSize="sm" color="gray.500">
-          Add option fields to the member model to limit who is expected.
+          {`Add option fields to the ${lowerTerm(
+            terms.memberSingular,
+          )} model to limit who is expected.`}
         </Text>
       ) : (
         <>

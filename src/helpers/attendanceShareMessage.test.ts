@@ -1,6 +1,7 @@
 import { buildAttendanceShareMessage, ShareMember } from "helpers/attendanceShareMessage";
 import { createStatusConfig } from "helpers/attendanceStatuses";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 const member = (
   name: string,
@@ -39,5 +40,25 @@ describe("buildAttendanceShareMessage", () => {
 
   it("does not crash on inactive or unknown statuses", () => {
     expect(() => build([member("Ada", "remote"), member("Bayo", "mystery")])).not.toThrow();
+  });
+
+  it("uses the organisation's terms for the generic headings", () => {
+    const message = buildAttendanceShareMessage({
+      orgName: "VOB Choir",
+      sessionName: "Rehearsal",
+      formattedDate: "Tue 01 Sep 26",
+      members: [member("Ada", "present")],
+      statuses: createStatusConfig(CUSTOM_STATUSES),
+      terminology: {
+        ...DEFAULT_TERMINOLOGY,
+        memberPlural: "Students",
+        attendanceSingular: "Session",
+      },
+      random: () => 0,
+    });
+
+    expect(message).toContain("VOB CHOIR SESSION*");
+    expect(message).toContain("*PRESENT STUDENTS*");
+    expect(message).toContain("*Absent Students: 0*");
   });
 });

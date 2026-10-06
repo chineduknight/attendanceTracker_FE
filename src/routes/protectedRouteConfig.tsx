@@ -2,6 +2,8 @@ import WithSuspense from "components/HOC/WithSuspense";
 import { lazy } from "react";
 import { PermissionKey } from "rbac/permissions";
 import { PROTECTED_PATHS } from "./pagePath";
+import { OptionalFeature } from "helpers/organisationPresentation";
+import { LABELS, PresentationText } from "config/presentationLabels";
 
 const Dashboard = WithSuspense(lazy(() => import("pages/Dashboard")));
 const UserModel = WithSuspense(lazy(() => import("pages/UserModel")));
@@ -54,13 +56,16 @@ const {
 export type PageRouteConfig = {
   path: string;
   element: JSX.Element;
-  title: string;
+  /** Static, or derived from the selected organisation's terminology. */
+  title: PresentationText;
   showBack?: boolean;
   /**
    * Permission required to view this route. Routes without a `perm` (the org
    * picker, dashboard, etc.) are always allowed.
    */
   perm?: PermissionKey;
+  /** Optional module; a direct visit redirects when the org hides it. */
+  feature?: OptionalFeature;
 };
 
 export const PAGE_ROUTES: PageRouteConfig[] = [
@@ -70,97 +75,101 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
   {
     path: USER_MODEL,
     element: <UserModel />,
-    title: "User Model",
+    title: LABELS.memberModel,
     perm: "members.manage",
   },
   {
     path: CATEGORY,
     element: <Category />,
-    title: "Create Category",
+    title: LABELS.createCategory,
     perm: "categories.manage",
   },
   {
     path: SUB_CATEGORY,
     element: <SubCategory />,
-    title: "Create Sub-Category",
+    title: LABELS.createSubCategory,
     perm: "categories.manage",
   },
   {
     path: ADD_MEMBER,
     element: <AddMember />,
-    title: "Add Member",
+    title: LABELS.addMember,
     perm: "members.manage",
   },
   {
     path: UPDATE_MEMBER,
     element: <AddMember />,
-    title: "Update Member",
+    title: LABELS.updateMember,
     perm: "members.manage",
   },
   {
     path: MARK_ATTENANCE,
     element: <MarkAttendance />,
-    title: "Mark Attendance",
+    title: LABELS.markAttendance,
     perm: "attendance.manage",
   },
   {
     path: UPDATE_ATTENANCE,
     element: <MarkAttendance />,
-    title: "Mark Attendance",
+    title: LABELS.markAttendance,
     perm: "attendance.manage",
   },
   {
     path: CREATE_ATTENDANCE,
     element: <CreateAttendance />,
-    title: "Create Attendance",
+    title: LABELS.createAttendance,
     perm: "attendance.manage",
   },
   {
     path: ATTENDANCE,
     element: <Attendance />,
-    title: "View Attendance",
+    title: LABELS.viewAttendance,
     perm: "attendance.view",
   },
   {
     path: ALL_ATTENDANCE,
     element: <AllAttendance />,
-    title: "All Attendance",
+    title: LABELS.allAttendance,
     perm: "attendance.view",
   },
   {
     path: VIEW_MEMBER,
     element: <ViewMembers />,
-    title: "View Members",
+    title: LABELS.viewMembers,
     perm: "members.view",
   },
   {
     path: ANALYTICS,
     element: <Analytics />,
-    title: "Attendance Analytics",
+    title: LABELS.attendanceAnalytics,
     perm: "attendance.view",
+    feature: "analytics",
   },
   {
     path: MEMBER_ANALYTICS,
     element: <MemberAnalytics />,
-    title: "Member Analytics",
+    title: LABELS.memberAnalytics,
     perm: "attendance.view",
+    feature: "analytics",
   },
   {
     path: BIRTHDAY,
     element: <Birthday />,
     title: "Birthdays",
     perm: "members.view",
+    feature: "birthdays",
   },
   {
     path: FINANCE,
     element: <Finance />,
     title: "Finance",
     perm: "finance.view",
+    feature: "finance",
   },
   {
     path: OFFICERS_ROLES,
     element: <OfficersRoles />,
-    title: "Officers & Roles",
+    title: LABELS.officersAndRoles,
     perm: "officers.view",
   },
   {

@@ -1,9 +1,13 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import OrganisationSettings from "pages/OrganisationSettings";
+import {
+  DEFAULT_FEATURE_VISIBILITY,
+  DEFAULT_TERMINOLOGY,
+} from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -61,6 +65,9 @@ describe("<OrganisationSettings>", () => {
             image: "",
             collapseAttendanceByDay: false,
             maxAttendanceEdits: 3,
+            // A backend that supports presentation settings always returns both.
+            terminology: { ...DEFAULT_TERMINOLOGY },
+            featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
           },
         },
       }),
@@ -198,6 +205,123 @@ describe("<OrganisationSettings>", () => {
       expect(within(present).getByLabelText("Label")).toHaveAttribute("readonly");
       expect(within(present).getByLabelText("Active")).toBeDisabled();
       expect(screen.queryByRole("button", { name: "Add status" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("terminology and visible modules", () => {
+    it("shows read-only presentation controls to a view-only user", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderPage();
+      const member = await screen.findByLabelText(/Member singular/);
+      expect(member).toHaveAttribute("readonly");
+      expect(screen.getByLabelText("Finance")).toBeDisabled();
+      expect(screen.getByText(/do not rename stored data or API fields/)).toBeInTheDocument();
+      expect(screen.getByText(/Permissions are unchanged/)).toBeInTheDocument();
+    });
+
+    it("loads stored terms over defaults and saves complete config with every other setting", async () => {
+      mockGet.mockImplementation(() =>
+        Promise.resolve({
+          data: {
+            data: {
+              id: "org1",
+              name: "VOB Choir",
+              image: "",
+              collapseAttendanceByDay: false,
+              maxAttendanceEdits: 3,
+              terminology: { memberSingular: "Chorister", memberPlural: "Choristers" },
+              featureVisibility: { finance: true, birthdays: false, analytics: true },
+            },
+          },
+        }),
+      );
+      setOrg({ id: "org1", roleName: "Owner", isOwner: true, permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      const memberSingular = (await screen.findByLabelText(/Member singular/)) as HTMLInputElement;
+      expect(memberSingular.value).toBe("Chorister");
+      expect((screen.getByLabelText(/Officer plural/) as HTMLInputElement).value).toBe("Officers");
+      // Stored visibility loads into the switches.
+      expect(screen.getByLabelText("Birthdays")).not.toBeChecked();
+      expect(screen.getByLabelText("Finance")).toBeChecked();
+      mockPut.mockImplementation((_url: string, sent: Record<string, unknown>) =>
+        Promise.resolve({ data: { data: { id: "org1", name: "VOB Choir", ...sent } } })
+      );
+
+      fireEvent.change(screen.getByLabelText(/Officer plural/), { target: { value: " Coordinators " } });
+      fireEvent.click(screen.getByLabelText("Finance"));
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      const body = mockPut.mock.calls[0][1];
+      expect(body.terminology).toEqual({
+        memberSingular: "Chorister",
+        memberPlural: "Choristers",
+        attendanceSingular: "Attendance",
+        attendancePlural: "Attendance",
+        categorySingular: "Category",
+        categoryPlural: "Categories",
+        subCategorySingular: "Sub-category",
+        subCategoryPlural: "Sub-categories",
+        officerSingular: "Officer",
+        officerPlural: "Coordinators",
+      });
+      expect(body.featureVisibility).toEqual({ finance: false, birthdays: false, analytics: true });
+      expect(body).toMatchObject({ name: "VOB Choir", maxAttendanceEdits: 3 });
+      ["permissions", "isOwner", "roleName"].forEach((key) => expect(body).not.toHaveProperty(key));
+
+      // The selected org updates at once (navigation reads it) and keeps RBAC.
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.terminology?.officerPlural).toBe("Coordinators")
+      );
+      const org = useGlobalStore.getState().organisation;
+      expect(org.featureVisibility?.finance).toBe(false);
+      expect(org.roleName).toBe("Owner");
+      expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
+    });
+
+    it("blocks saving a blank or over-long term", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      const field = await screen.findByLabelText(/Member plural/);
+      fireEvent.change(field, { target: { value: "   " } });
+      fireEvent.change(screen.getByLabelText(/Officer singular/), { target: { value: "x".repeat(41) } });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      expect(await screen.findByText("Required")).toBeInTheDocument();
+      expect(screen.getByText(/At most 40 characters/)).toBeInTheDocument();
+      expect(mockPut).not.toHaveBeenCalled();
+    });
+
+    it("keeps saving against an older backend that doesn't return presentation settings", async () => {
+      mockGet.mockImplementation(() =>
+        Promise.resolve({
+          data: { data: { id: "org1", name: "VOB Choir", image: "", collapseAttendanceByDay: false, maxAttendanceEdits: 3 } },
+        }),
+      );
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      await screen.findByLabelText(/Organisation Name/);
+      expect(screen.queryByText("Terminology")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      const body = mockPut.mock.calls[0][1];
+      expect(body).not.toHaveProperty("terminology");
+      expect(body).not.toHaveProperty("featureVisibility");
+    });
+
+    it("ignores a save reply for an organisation the officer has switched away from", async () => {
+      let reply: (value: unknown) => void = () => undefined;
+      mockPut.mockImplementation(() => new Promise((resolve) => { reply = resolve; }));
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+
+      act(() => setOrg({ id: "org2", name: "Band", permissions: ["settings.view"] }));
+      await act(async () => {
+        reply({ data: { data: { id: "org1", name: "VOB Choir" } } });
+      });
+
+      expect(useGlobalStore.getState().organisation.id).toBe("org2");
     });
   });
 });

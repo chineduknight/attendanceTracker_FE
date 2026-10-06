@@ -3,6 +3,12 @@ import { persist } from "zustand/middleware";
 import { PermissionKey } from "rbac/permissions";
 import { AttendanceEligibilityRule } from "helpers/attendanceEligibility";
 import {
+  DEFAULT_FEATURE_VISIBILITY,
+  DEFAULT_TERMINOLOGY,
+  OrganisationFeatureVisibility,
+  OrganisationTerminology,
+} from "helpers/organisationPresentation";
+import {
   AttendanceStatusDefinition,
   DEFAULT_ATTENDANCE_STATUSES,
 } from "helpers/attendanceStatuses";
@@ -39,6 +45,12 @@ export type OrganisationType = {
   collapseAttendanceByDay?: boolean;
   maxAttendanceEdits?: number | null;
   attendanceStatuses: AttendanceStatusDefinition[];
+  /**
+   * Display-only presentation config. Optional because a persisted org from
+   * an older build may lack it — always read via organisationPresentation.
+   */
+  terminology?: OrganisationTerminology;
+  featureVisibility?: OrganisationFeatureVisibility;
 };
 
 export const EMPTY_USER: UserType = {
@@ -61,6 +73,8 @@ export const EMPTY_ORG: OrganisationType = {
   collapseAttendanceByDay: false,
   maxAttendanceEdits: null,
   attendanceStatuses: [...DEFAULT_ATTENDANCE_STATUSES],
+  terminology: { ...DEFAULT_TERMINOLOGY },
+  featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
 };
 
 interface GlobalStoreState {

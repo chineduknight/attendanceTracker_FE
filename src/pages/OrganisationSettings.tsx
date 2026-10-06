@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Box,
   Flex,
@@ -20,6 +20,8 @@ import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import { Can } from "rbac/Can";
 import { usePermissions } from "rbac/usePermissions";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 import { orgRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import {
@@ -30,6 +32,14 @@ import {
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { buildOrgUpdatePayload, OrgSettingsForm } from "helpers/orgPayloads";
+import {
+  effectiveFeatureVisibility,
+  effectiveTerminology,
+} from "helpers/organisationPresentation";
+import {
+  FeatureVisibilitySettings,
+  TerminologySettings,
+} from "components/settings/PresentationSettings";
 import LoadingSpinner from "components/LoadingSpinner";
 import AttendanceStatusesEditor from "components/settings/AttendanceStatusesEditor";
 import {
@@ -56,6 +66,7 @@ const OrganisationSettings = () => {
     s.organisation,
     s.updateOrganisation,
   ]);
+  const terms = useTerms();
   const cardBg = useColorModeValue("white", "gray.700");
   const pageBg = useColorModeValue("gray.50", "gray.800");
   const canManage = usePermissions().has("settings.manage");
@@ -76,8 +87,15 @@ const OrganisationSettings = () => {
       image: "",
       collapseAttendanceByDay: false,
       maxAttendanceEdits: "",
+      terminology: effectiveTerminology(org),
+      featureVisibility: effectiveFeatureVisibility(org),
     },
   });
+  // Only a backend that returns presentation settings can store them; an
+  // older validator would reject the whole save if they were sent.
+  const [presentationSupported, setPresentationSupported] = useState(false);
+  // The organisation a save was submitted for; its reply may land after a switch.
+  const savingOrgId = useRef<string | null>(null);
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
@@ -94,7 +112,12 @@ const OrganisationSettings = () => {
           data.maxAttendanceEdits == null
             ? ""
             : String(data.maxAttendanceEdits),
+        terminology: effectiveTerminology(data),
+        featureVisibility: effectiveFeatureVisibility(data),
       });
+      setPresentationSupported(
+        data.terminology != null && data.featureVisibility != null,
+      );
       setStatusRows(toStatusRows(data.attendanceStatuses));
       setStatusErrors([]);
     },
@@ -103,11 +126,15 @@ const OrganisationSettings = () => {
   const { mutate, isLoading: isSaving } = useMutationWrapper(
     putRequest,
     (res: any) => {
+      // A reply for an organisation the officer has since switched away from
+      // must not re-select it.
+      const current = useGlobalStore.getState().organisation;
+      if (current.id !== savingOrgId.current) return;
       // PUT returns org fields but NOT permissions/isOwner/roleName —
-      // merge over the selected org so RBAC state is preserved. Statuses
-      // apply immediately so marking/analytics switch to the new config.
+      // merge over the selected org so RBAC state is preserved. Statuses,
+      // terminology and visibility apply immediately to marking and nav.
       setOrg({
-        ...org,
+        ...current,
         attendanceStatuses: toStatusDefinitions(statusRows),
         ...res.data,
       });
@@ -128,7 +155,13 @@ const OrganisationSettings = () => {
     const errors = validateStatusRows(statusRows);
     setStatusErrors(errors);
     if (errors.length) return;
-    mutate({ url, data: buildOrgUpdatePayload(form, statusRows) });
+    savingOrgId.current = org.id;
+    mutate({
+      url,
+      data: buildOrgUpdatePayload(form, statusRows, {
+        includePresentation: presentationSupported,
+      }),
+    });
   };
 
   return (
@@ -187,12 +220,16 @@ const OrganisationSettings = () => {
                 </FormControl>
 
                 <FormControl display="flex" alignItems="center">
-                  <FormLabel mb="0">Collapse attendance by day</FormLabel>
+                  <FormLabel mb="0">{`Collapse ${lowerTerm(
+                    terms.attendanceSingular,
+                  )} by day`}</FormLabel>
                   <Switch {...register("collapseAttendanceByDay")} />
                 </FormControl>
 
                 <FormControl isInvalid={Boolean(errors.maxAttendanceEdits)}>
-                  <FormLabel>Max attendance edits</FormLabel>
+                  <FormLabel>{`Max ${lowerTerm(
+                    terms.attendanceSingular,
+                  )} edits`}</FormLabel>
                   <Input
                     type="number"
                     placeholder={`${DEFAULT_MAX_EDITS} (default)`}
@@ -222,6 +259,24 @@ const OrganisationSettings = () => {
                   errors={statusErrors}
                   isReadOnly={!canManage}
                 />
+
+                {presentationSupported && (
+                  <>
+                    <Divider />
+                    <TerminologySettings
+                      register={register}
+                      errors={errors}
+                      isReadOnly={!canManage}
+                    />
+
+                    <Divider />
+                    <FeatureVisibilitySettings
+                      register={register}
+                      errors={errors}
+                      isReadOnly={!canManage}
+                    />
+                  </>
+                )}
 
                 <Can perm="settings.manage">
                   <Button variant="primary" type="submit" isLoading={isSaving}>

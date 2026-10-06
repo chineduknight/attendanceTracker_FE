@@ -8,6 +8,11 @@ import {
   normalizeEligibilityRules,
 } from "helpers/attendanceEligibility";
 import { memberFieldLabeler } from "helpers/memberFields";
+import {
+  DEFAULT_TERMINOLOGY,
+  lowerTerm,
+  OrganisationTerminology,
+} from "helpers/organisationPresentation";
 
 /**
  * A reusable shortcut for the Create Attendance form: the session name, its
@@ -103,6 +108,7 @@ export const templateStaleness = (
   template: AttendanceTemplate,
   categories: readonly CategoryType[],
   modelFields: readonly MemberModelField[],
+  terminology: OrganisationTerminology = DEFAULT_TERMINOLOGY,
 ): TemplateStaleness => {
   const labelFor = memberFieldLabeler(modelFields);
   return {
@@ -110,7 +116,7 @@ export const templateStaleness = (
     eligibility: template.hasUnreadableEligibility
       ? ["Its stored eligibility rules could not be read."]
       : eligibilityIssues(template.eligibilityRules, modelFields).map((issue) =>
-          describeEligibilityIssue(issue, labelFor),
+          describeEligibilityIssue(issue, labelFor, terminology),
         ),
   };
 };
@@ -142,8 +148,13 @@ export const templateFieldsError = (
   fields: AttendanceTemplateFields,
   templates: readonly AttendanceTemplate[],
   excludeId?: string,
+  terminology: OrganisationTerminology = DEFAULT_TERMINOLOGY,
 ): string | null => {
-  if (!fields.name) return "Enter an attendance name to save it as a template";
+  if (!fields.name) {
+    return `Enter the ${lowerTerm(
+      terminology.attendanceSingular,
+    )} name to save it as a template`;
+  }
   if (fields.name.length > TEMPLATE_NAME_MAX_LENGTH) {
     return `Template names can be at most ${TEMPLATE_NAME_MAX_LENGTH} characters`;
   }

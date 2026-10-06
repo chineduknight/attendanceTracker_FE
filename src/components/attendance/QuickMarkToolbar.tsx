@@ -2,6 +2,8 @@ import { ReactElement } from "react";
 import { Button, Flex, Text } from "@chakra-ui/react";
 import { FaCheck, FaSyncAlt } from "react-icons/fa";
 import { AttendanceStatusDefinition } from "helpers/attendanceStatuses";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm, withArticle } from "helpers/organisationPresentation";
 
 /** `null` is Cycle mode; otherwise the active status key every tap assigns. */
 export type QuickMarkMode = string | null;
@@ -49,35 +51,38 @@ const ModeChip = ({
  * Chooses what tapping a member does: Cycle advances through the active
  * statuses as before, while a status chip assigns exactly that status.
  */
-const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProps) => (
-  <Flex direction="column" gap={1} mt="4">
-    <Text fontSize="sm" color="gray.500" id="quick-mark-label">
-      Tap a member to
-    </Text>
-    <Flex
-      role="group"
-      aria-labelledby="quick-mark-label"
-      gap={2}
-      overflowX="auto"
-      pb={1}
-    >
-      <ModeChip
-        label="Cycle"
-        idleIcon={<FaSyncAlt aria-hidden />}
-        isSelected={mode === null}
-        onClick={() => onModeChange(null)}
-      />
-      {statuses.map((status) => (
+const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProps) => {
+  const terms = useTerms();
+  return (
+    <Flex direction="column" gap={1} mt="4">
+      <Text fontSize="sm" color="gray.500" id="quick-mark-label">
+        {`Tap ${withArticle(lowerTerm(terms.memberSingular))} to`}
+      </Text>
+      <Flex
+        role="group"
+        aria-labelledby="quick-mark-label"
+        gap={2}
+        overflowX="auto"
+        pb={1}
+      >
         <ModeChip
-          key={status.key}
-          label={status.label}
-          colorScheme={status.color}
-          isSelected={mode === status.key}
-          onClick={() => onModeChange(status.key)}
+          label="Cycle"
+          idleIcon={<FaSyncAlt aria-hidden />}
+          isSelected={mode === null}
+          onClick={() => onModeChange(null)}
         />
-      ))}
+        {statuses.map((status) => (
+          <ModeChip
+            key={status.key}
+            label={status.label}
+            colorScheme={status.color}
+            isSelected={mode === status.key}
+            onClick={() => onModeChange(status.key)}
+          />
+        ))}
+      </Flex>
     </Flex>
-  </Flex>
-);
+  );
+};
 
 export default QuickMarkToolbar;

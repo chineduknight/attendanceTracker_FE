@@ -28,6 +28,8 @@ import { convertParamsToString } from "helpers/stringManipulations";
 import { queryKeys } from "services/api/queryKeys";
 import ConfirmModal from "components/finance/ConfirmModal";
 import { Can } from "rbac/Can";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface Props {
   organisationId: string;
@@ -43,6 +45,7 @@ type PendingConfirm = {
 };
 
 const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
+  const terms = useTerms();
   const [selected, setSelected] = useState<Record<string, boolean>>(() =>
     prefillMemberId ? { [prefillMemberId]: true } : {}
   );
@@ -89,7 +92,8 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   const applyBulk = async () => {
     if (!bulkDate) return toast.error("Pick a date");
     const ids = Object.keys(selected).filter((id) => selected[id]);
-    if (!ids.length) return toast.error("Select members");
+    if (!ids.length)
+      return toast.error(`Select ${lowerTerm(terms.memberPlural)}`);
     const promises: Promise<unknown>[] = ids.map((id) => {
       const url = convertParamsToString(financeRequest.FINANCIAL_START_DATE, { memberId: id });
       return mutateAsync({ url, data: { organisationId, financialStartDate: bulkDate } });
@@ -98,7 +102,11 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
     const ok = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.filter((r) => r.status === "rejected").length;
     if (failed === 0) {
-      toast.success(`Applied to ${ok} member(s)`);
+      toast.success(
+        `Applied to ${ok} ${lowerTerm(
+          ok === 1 ? terms.memberSingular : terms.memberPlural,
+        )}`,
+      );
     } else {
       toast.warn(`Applied to ${ok}, ${failed} failed`);
     }
@@ -137,10 +145,13 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   const requestBulk = () => {
     if (!bulkDate) return toast.error("Pick a date");
     const ids = Object.keys(selected).filter((id) => selected[id]);
-    if (!ids.length) return toast.error("Select members");
+    if (!ids.length)
+      return toast.error(`Select ${lowerTerm(terms.memberPlural)}`);
     setConfirm({
       title: "Set start date for selected",
-      body: `Set the financial start date to ${bulkDate} for ${ids.length} selected member(s)? They will be financially accountable from that month onward.`,
+      body: `Set the financial start date to ${bulkDate} for ${ids.length} selected ${lowerTerm(
+        ids.length === 1 ? terms.memberSingular : terms.memberPlural,
+      )}? They will be financially accountable from that month onward.`,
       confirmLabel: `Yes, set ${ids.length}`,
       confirmColorScheme: "purple",
       action: applyBulk,
@@ -152,7 +163,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   return (
     <Box>
       <Heading size="md" mb={4}>
-        Member accountability
+        {`${terms.memberSingular} accountability`}
       </Heading>
 
       <Can perm="finance.manage">

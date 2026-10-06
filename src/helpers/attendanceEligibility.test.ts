@@ -11,6 +11,7 @@ import {
   summarizeEligibilityRules,
 } from "helpers/attendanceEligibility";
 import { MEMBER_MODEL, ROSTER } from "test-utils/eligibilityFixtures";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 const names = (rules: Parameters<typeof filterEligibleMembers>[1]) =>
   filterEligibleMembers(ROSTER, rules).map((m) => m.name);
@@ -132,6 +133,13 @@ describe("describeEligibilityIssue", () => {
     expect(
       describeEligibilityIssue({ field: "part", kind: "missing-option", values: ["mezzo", "contralto"] })
     ).toBe("Part: Mezzo, Contralto are no longer an option.");
+  });
+
+  it("names the organisation's member term", () => {
+    const terms = { ...DEFAULT_TERMINOLOGY, memberSingular: "Student" };
+    expect(
+      describeEligibilityIssue({ field: "section", kind: "missing-field" }, undefined, terms)
+    ).toBe("Section is no longer a student field.");
   });
 });
 

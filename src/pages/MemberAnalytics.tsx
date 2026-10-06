@@ -16,6 +16,8 @@ import MemberRecordsTable from "components/analytics/MemberRecordsTable";
 import { openExportUrl, handleExportError } from "components/analytics/analyticsExport";
 import { MemberAnalytics as MemberAnalyticsData } from "components/analytics/memberAnalyticsTypes";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 const buildQuery = (fromDate: string, toDate: string) => {
   const params = new URLSearchParams();
@@ -31,6 +33,7 @@ const MemberAnalyticsPage: React.FC = () => {
   const { memberId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
 
   const {
     fromDate, toDate, setFromDate, setToDate,
@@ -134,13 +137,19 @@ const MemberAnalyticsPage: React.FC = () => {
 
         {isFetching && <Spinner />}
         {!isFetching && statusCode === 404 && (
-          <Text color="red.500" mt={4}>Member not found in this organisation.</Text>
+          <Text color="red.500" mt={4}>
+            {`${terms.memberSingular} not found in this organisation.`}
+          </Text>
         )}
         {!isFetching && error && statusCode !== 404 && (
-          <Text color="red.500" mt={4}>Error loading member analytics.</Text>
+          <Text color="red.500" mt={4}>
+            {`Error loading ${lowerTerm(terms.memberSingular)} analytics.`}
+          </Text>
         )}
         {!isFetching && !error && analytics && !hasData && (
-          <Text mt={4}>No attendance records for this range.</Text>
+          <Text mt={4}>
+            {`No ${lowerTerm(terms.attendanceSingular)} records for this range.`}
+          </Text>
         )}
         {!isFetching && !error && hasData && analytics && (
           <Flex direction="column" gap={4} mt={2}>

@@ -39,6 +39,8 @@ import {
 } from "components/analytics/useDateRange";
 import DateRangeControls from "components/analytics/DateRangeControls";
 import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type StatusOption = {
   value: string;
@@ -77,10 +79,11 @@ const formatDayHeader = (key: string) => {
 
 // A member with no cell for a session was not on its roster — neither present
 // nor absent, so it is neutral rather than a status of its own.
-const NOT_ON_ROSTER = "Not on this session roster";
+const NOT_ON_ROSTER = (session: string) => `Not on this ${lowerTerm(session)} roster`;
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
   const [hasSearched, setHasSearched] = useState(false);
   const {
     fromDate, toDate, setFromDate, setToDate,
@@ -317,7 +320,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
                 <Box w={{ base: "100%", md: "260px" }}>
                   <ReactSelect
                     isMulti
-                    placeholder="Filter members by status"
+                    placeholder={`Filter ${lowerTerm(
+                      terms.memberPlural,
+                    )} by status`}
                     options={statusSelectOptions}
                     value={selectedStatusOptions}
                     closeMenuOnSelect={false}
@@ -418,7 +423,11 @@ const AttendanceAnalyticsPage: React.FC = () => {
                         onClick={() => row.memberId && goToMemberAnalytics(row.memberId)}
                         cursor={row.memberId ? "pointer" : "default"}
                         _hover={row.memberId ? { bg: "blue.50" } : undefined}
-                        title={row.memberId ? "View member analytics" : undefined}
+                        title={
+                          row.memberId
+                            ? `View ${lowerTerm(terms.memberSingular)} analytics`
+                            : undefined
+                        }
                         role={row.memberId ? "button" : undefined}
                         tabIndex={row.memberId ? 0 : undefined}
                         onKeyDown={(e) => {
@@ -446,8 +455,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
                               <Td key={d} textAlign="center">
                                 <Badge
                                   role="img"
-                                  aria-label={NOT_ON_ROSTER}
-                                  title={NOT_ON_ROSTER}
+                                  aria-label={NOT_ON_ROSTER(terms.attendanceSingular)}
+                                  title={NOT_ON_ROSTER(terms.attendanceSingular)}
                                 >
                                   -
                                 </Badge>
@@ -473,7 +482,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
           {/* No data message */}
           {!isFetching && !error && hasSearched && rows.length === 0 && (
-            <Text>No attendance records found for this range.</Text>
+            <Text>{`No ${lowerTerm(
+              terms.attendanceSingular,
+            )} records found for this range.`}</Text>
           )}
         </>
       </Box>

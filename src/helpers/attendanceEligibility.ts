@@ -4,6 +4,11 @@ import {
   fallbackFieldLabel,
   MemberModelField,
 } from "helpers/memberFields";
+import {
+  DEFAULT_TERMINOLOGY,
+  lowerTerm,
+  OrganisationTerminology,
+} from "helpers/organisationPresentation";
 
 export type { MemberModelField };
 
@@ -162,11 +167,12 @@ const fieldLabel = fallbackFieldLabel;
 export const describeEligibilityIssue = (
   issue: EligibilityIssue,
   labelFor: (field: string) => string = fieldLabel,
+  terminology: OrganisationTerminology = DEFAULT_TERMINOLOGY,
 ): string => {
   const label = labelFor(issue.field);
   switch (issue.kind) {
     case "missing-field":
-      return `${label} is no longer a member field.`;
+      return `${label} is no longer a ${lowerTerm(terminology.memberSingular)} field.`;
     case "not-option":
       return `${label} is no longer an option field.`;
     case "missing-option": {

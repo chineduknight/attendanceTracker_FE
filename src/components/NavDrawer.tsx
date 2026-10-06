@@ -19,8 +19,7 @@ import { IconType } from "react-icons";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { EMPTY_USER, EMPTY_ORG } from "zStore";
-import { Can } from "rbac/Can";
-import { NAV_ACTIONS } from "config/navActions";
+import { useNavActions } from "hooks/useNavActions";
 import ChangePasswordModal from "components/auth/ChangePasswordModal";
 
 interface NavDrawerProps {
@@ -38,6 +37,7 @@ type AccountAction = {
 const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
   const navigate = useNavigate();
   const changePassword = useDisclosure();
+  const navActions = useNavActions();
   const [user, organisation, setUser, updateOrganisation] = useGlobalStore((s) => [
     s.user,
     s.organisation,
@@ -88,19 +88,18 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
             </Box>
 
             <VStack align="stretch" spacing={0} py={2}>
-              {NAV_ACTIONS.map(({ label, icon, path, perm, colorScheme }) => (
-                <Can key={label} perm={perm}>
-                  <Button
-                    variant="ghost"
-                    justifyContent="flex-start"
-                    color={`${colorScheme}.600`}
-                    leftIcon={<Icon as={icon} color={`${colorScheme}.600`} />}
-                    borderRadius={0}
-                    onClick={() => goTo(path)}
-                  >
-                    {label}
-                  </Button>
-                </Can>
+              {navActions.map(({ label, icon, path, colorScheme }) => (
+                <Button
+                  key={path}
+                  variant="ghost"
+                  justifyContent="flex-start"
+                  color={`${colorScheme}.600`}
+                  leftIcon={<Icon as={icon} color={`${colorScheme}.600`} />}
+                  borderRadius={0}
+                  onClick={() => goTo(path)}
+                >
+                  {label}
+                </Button>
               ))}
             </VStack>
 

@@ -34,6 +34,8 @@ import {
   Obligation,
 } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface Props {
   organisationId: string;
@@ -107,6 +109,7 @@ const LEGEND = [
 ];
 
 const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) => {
+  const terms = useTerms();
   const [payFor, setPayFor] = useState<ComplianceRow | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -317,7 +320,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
 
       <SimpleGrid columns={[2, 4]} spacing={4} mb={6}>
         <Stat>
-          <StatLabel>Members</StatLabel>
+          <StatLabel>{terms.memberPlural}</StatLabel>
           <StatNumber>{payload.summary.totalMembers}</StatNumber>
         </Stat>
         <Stat>
@@ -422,7 +425,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
               <Tr>
                 <Td colSpan={totalCols}>
                   <Text color="gray.500" py={2}>
-                    No members match your search or filter.
+                    {`No ${lowerTerm(terms.memberPlural)} match your search or filter.`}
                   </Text>
                 </Td>
               </Tr>

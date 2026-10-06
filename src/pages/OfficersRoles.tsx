@@ -6,6 +6,7 @@ import { RequirePermission } from "rbac/RequirePermission";
 import OfficersTab from "components/officers/OfficersTab";
 import PendingInvitesTab from "components/officers/PendingInvitesTab";
 import RolesTab from "components/officers/RolesTab";
+import { useTerms } from "hooks/useOrgPresentation";
 
 interface ContentProps { organisationId: string; }
 
@@ -15,24 +16,27 @@ interface ContentProps { organisationId: string; }
  * officer, role, invite or open modal can never stay actionable against
  * Organisation B.
  */
-const OfficersRolesContent = ({ organisationId }: ContentProps) => (
-  <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
-    <Box p={4}>
-      <Tabs variant="enclosed" colorScheme="blue">
-        <TabList>
-          <Tab>Officers</Tab>
-          <Tab>Pending Invites</Tab>
-          <Tab>Roles</Tab>
-        </TabList>
-        <TabPanels>
-          <TabPanel><OfficersTab organisationId={organisationId} /></TabPanel>
-          <TabPanel><PendingInvitesTab organisationId={organisationId} /></TabPanel>
-          <TabPanel><RolesTab organisationId={organisationId} /></TabPanel>
-        </TabPanels>
-      </Tabs>
+const OfficersRolesContent = ({ organisationId }: ContentProps) => {
+  const terms = useTerms();
+  return (
+    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
+      <Box p={4}>
+        <Tabs variant="enclosed" colorScheme="blue">
+          <TabList>
+            <Tab>{terms.officerPlural}</Tab>
+            <Tab>Pending Invites</Tab>
+            <Tab>Roles</Tab>
+          </TabList>
+          <TabPanels>
+            <TabPanel><OfficersTab organisationId={organisationId} /></TabPanel>
+            <TabPanel><PendingInvitesTab organisationId={organisationId} /></TabPanel>
+            <TabPanel><RolesTab organisationId={organisationId} /></TabPanel>
+          </TabPanels>
+        </Tabs>
+      </Box>
     </Box>
-  </Box>
-);
+  );
+};
 
 const OfficersRoles = () => {
   const [organisation] = useGlobalStore((s) => [s.organisation]);

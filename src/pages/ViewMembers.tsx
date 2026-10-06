@@ -50,6 +50,9 @@ import { memberFieldLabeler } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { LABELS } from "config/presentationLabels";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type SelectOption = {
   value: string;
@@ -62,6 +65,7 @@ type FilterableField = {
 const REQUIRED_EXPORT_FIELDS = ["name"];
 
 const ViewMembers: React.FC = () => {
+  const terms = useTerms();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [searchQuery, setSearchQuery] = useState("");
   const selectedFieldsStorageKey = `selectedFields-${org.id}`;
@@ -230,10 +234,10 @@ const ViewMembers: React.FC = () => {
                 colorScheme="blue"
                 onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
                 leftIcon={<FaUserPlus />}
-                aria-label="Add Member"
+                aria-label={LABELS.addMember(terms)}
                 px={isCompactActions ? 3 : 4}
               >
-                {!isCompactActions && "Add Member"}
+                {!isCompactActions && LABELS.addMember(terms)}
               </Button>
             </Can>
             <Menu>
@@ -256,7 +260,9 @@ const ViewMembers: React.FC = () => {
                     !org.id || isLoading || Boolean(error) || isExportingMembers
                   }
                 >
-                  {isExportingMembers ? "Exporting..." : "Export Member List"}
+                  {isExportingMembers
+                    ? "Exporting..."
+                    : `Export ${terms.memberSingular} List`}
                 </MenuItem>
                 <MenuItem
                   icon={<Icon as={FaFilePdf} color="red.500" />}
@@ -269,14 +275,19 @@ const ViewMembers: React.FC = () => {
                     isExportingMembersPdf
                   }
                 >
-                  {isExportingMembersPdf ? "Exporting..." : "Export Member PDF"}
+                  {isExportingMembersPdf
+                    ? "Exporting..."
+                    : `Export ${terms.memberSingular} PDF`}
                 </MenuItem>
               </MenuList>
             </Menu>
           </Flex>
         </Flex>
         {isLoading ? (
-          <LoadingSpinner h="45vh" text="Loading members..." />
+          <LoadingSpinner
+            h="45vh"
+            text={`Loading ${lowerTerm(terms.memberPlural)}...`}
+          />
         ) : error ? (
           <Box
             bg="#fff"
@@ -286,7 +297,9 @@ const ViewMembers: React.FC = () => {
             textAlign="center"
           >
             <Text color="red.500" fontWeight="bold">
-              Error occurred while fetching members.
+              {`Error occurred while fetching ${lowerTerm(
+                terms.memberPlural,
+              )}.`}
             </Text>
           </Box>
         ) : (
@@ -374,7 +387,7 @@ const ViewMembers: React.FC = () => {
               )}
             </Flex>
             <Text mb={4} fontWeight="bold">
-              Total Members: {filteredMembers.length}
+              {`Total ${terms.memberPlural}: ${filteredMembers.length}`}
             </Text>
             <Box mb={8}>
               <Flex
@@ -420,7 +433,7 @@ const ViewMembers: React.FC = () => {
                 textAlign="center"
               >
                 <Heading as="h2" size="lg">
-                  No members found
+                  {`No ${lowerTerm(terms.memberPlural)} found`}
                 </Heading>
               </Box>
             ) : (

@@ -26,6 +26,8 @@ import { FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
 import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type PersonRef = { id: string; name: string };
 
@@ -48,6 +50,7 @@ type AttendanceType = {
 const AllAttendance = () => {
   const navigate = useNavigate();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
   const pageBg = useColorModeValue("gray.50", "gray.800");
   const cardBg = useColorModeValue("white", "gray.700");
 
@@ -87,7 +90,10 @@ const AllAttendance = () => {
         mx="auto"
       >
         {isLoading ? (
-          <LoadingSpinner h="30vh" text="Loading attendance..." />
+          <LoadingSpinner
+            h="30vh"
+            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+          />
         ) : allAttend.length ? (
           <>
             {[...allAttend]
@@ -185,7 +191,7 @@ const AllAttendance = () => {
           </>
         ) : (
           <Text ml="4" fontWeight="bold">
-            No Attendance here, Kindly Create attendance
+            {`No ${terms.attendanceSingular} here, Kindly Create ${lowerTerm(terms.attendanceSingular)}`}
           </Text>
         )}
       </Stack>

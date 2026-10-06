@@ -1,8 +1,36 @@
 import {
+  behaviorDescription,
   createStatusConfig,
   DEFAULT_ATTENDANCE_STATUSES,
 } from "helpers/attendanceStatuses";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
+
+describe("behaviorDescription", () => {
+  it("explains each behavior in the default attendance term", () => {
+    expect(behaviorDescription("present", DEFAULT_TERMINOLOGY.attendanceSingular)).toBe(
+      "Counts as attendance and extends the streak.",
+    );
+    expect(behaviorDescription("excused", DEFAULT_TERMINOLOGY.attendanceSingular)).toBe(
+      "Counts toward the attendance rate but does not extend the streak.",
+    );
+    expect(behaviorDescription("absent", DEFAULT_TERMINOLOGY.attendanceSingular)).toBe(
+      "No attendance credit and breaks the streak.",
+    );
+  });
+
+  it("uses the organisation's term", () => {
+    expect(behaviorDescription("present", "Session")).toBe(
+      "Counts as session and extends the streak.",
+    );
+    expect(behaviorDescription("excused", "Session")).toBe(
+      "Counts toward the session rate but does not extend the streak.",
+    );
+    expect(behaviorDescription("absent", "Session")).toBe(
+      "No session credit and breaks the streak.",
+    );
+  });
+});
 
 const statuses = createStatusConfig(CUSTOM_STATUSES);
 

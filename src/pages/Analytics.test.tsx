@@ -106,8 +106,8 @@ describe("<Analytics> with configured statuses", () => {
       (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll("td"),
     );
     const missing = chiCells[chiCells.length - 1];
-    const cell = within(missing).getByRole("img", { name: "Not on this session roster" });
-    expect(cell).toHaveAttribute("title", "Not on this session roster");
+    const cell = within(missing).getByRole("img", { name: "Not on this attendance roster" });
+    expect(cell).toHaveAttribute("title", "Not on this attendance roster");
     // Neither the configured absent status (No Show / NS) nor a behavior label.
     ["No Show", "NS", "Absent"].forEach((text) =>
       expect(missing).not.toHaveTextContent(text),

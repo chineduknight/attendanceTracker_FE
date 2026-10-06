@@ -2,6 +2,7 @@ import { applyRoutePermissions } from "routes/protectedRoutes";
 import { PAGE_ROUTES } from "routes/protectedRouteConfig";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { RequirePermission } from "rbac/RequirePermission";
+import { RequireFeature } from "routes/RequireFeature";
 
 describe("applyRoutePermissions", () => {
   it("wraps routes that declare a permission in RequirePermission", () => {
@@ -32,8 +33,14 @@ describe("applyRoutePermissions", () => {
     const routes = applyRoutePermissions(PAGE_ROUTES);
 
     PAGE_ROUTES.forEach((original, index) => {
-      if (original.perm) {
-        expect(routes[index].element.type).toBe(RequirePermission);
+      const element = routes[index].element;
+      if (original.feature) {
+        // RBAC first, then visibility inside it.
+        expect(element.type).toBe(RequirePermission);
+        expect(element.props.children.type).toBe(RequireFeature);
+        expect(element.props.children.props.feature).toBe(original.feature);
+      } else if (original.perm) {
+        expect(element.type).toBe(RequirePermission);
       } else {
         expect(routes[index].element).toBe(original.element);
       }

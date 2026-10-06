@@ -43,6 +43,8 @@ import { memberFieldLabeler } from "helpers/memberFields";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
 import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type StatusOption = {
   value: string;
@@ -84,6 +86,7 @@ const nextMultiFilter = (values: string[]): string[] => {
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
 const Attendance = () => {
+  const terms = useTerms();
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([ALL]);
@@ -202,6 +205,7 @@ const Attendance = () => {
       formattedDate,
       members: allMembers,
       statuses,
+      terminology: terms,
     });
     if (navigator.share) {
       navigator.share({ title: "", text: message }).catch(() => {
@@ -273,16 +277,18 @@ const Attendance = () => {
       },
       (error: any) => {
         const message =
-          error?.response?.data?.error ?? "Failed to delete attendance.";
+          error?.response?.data?.error ??
+          `Failed to delete ${lowerTerm(terms.attendanceSingular)}.`;
         toast.error(message);
       },
     );
 
   const handleDelete = () => {
     confirmAlert({
-      title: "Delete Attendance",
-      message:
-        "Are you sure you want to delete this attendance record? This cannot be undone.",
+      title: `Delete ${terms.attendanceSingular}`,
+      message: `Are you sure you want to delete this ${lowerTerm(
+        terms.attendanceSingular,
+      )} record? This cannot be undone.`,
       buttons: [
         {
           label: "Yes",
@@ -300,7 +306,10 @@ const Attendance = () => {
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Container>
         {isLoadingAttendance ? (
-          <LoadingSpinner h="40vh" text="Loading attendance..." />
+          <LoadingSpinner
+            h="40vh"
+            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+          />
         ) : (
           <>
             <Flex mt="4" justifyContent="flex-end">
@@ -330,7 +339,7 @@ const Attendance = () => {
             </Flex>
             {attendanceInfo && (
               <ExpectedRosterSummary
-                title={`Expected members: ${attendanceInfo.expectedCount}`}
+                title={`Expected ${lowerTerm(terms.memberPlural)}: ${attendanceInfo.expectedCount}`}
                 rules={storedRules}
                 isOutdated={rulesOutdated}
                 labelFor={labelFor}
@@ -341,15 +350,19 @@ const Attendance = () => {
                 <InputLeftElement pointerEvents="none" />
                 <Input
                   type="search"
-                  placeholder="Search member"
+                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
                   onChange={handleSearch}
                 />
               </InputGroup>
               <Box minW={{ base: "100%", sm: "200px" }}>
                 <ReactSelect
                   isMulti
-                  aria-label="Filter by attendance status"
-                  placeholder="Filter by attendance"
+                  aria-label={`Filter by ${lowerTerm(
+                    terms.attendanceSingular,
+                  )} status`}
+                  placeholder={`Filter by ${lowerTerm(
+                    terms.attendanceSingular,
+                  )}`}
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
                   closeMenuOnSelect={false}
@@ -364,8 +377,8 @@ const Attendance = () => {
               <Box minW={{ base: "100%", sm: "200px" }}>
                 <ReactSelect
                   isMulti
-                  aria-label="Filter by member status"
-                  placeholder="Filter by member status"
+                  aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
+                  placeholder={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
                   closeMenuOnSelect={false}
@@ -381,7 +394,7 @@ const Attendance = () => {
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
-                  No member found
+                  {`No ${lowerTerm(terms.memberSingular)} found`}
                 </Text>
               </Box>
             )}
@@ -413,7 +426,7 @@ const Attendance = () => {
               mt="4"
               mb="8"
             >
-              Delete Attendance
+              {`Delete ${terms.attendanceSingular}`}
             </Button>
           </>
         )}

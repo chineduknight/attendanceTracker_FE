@@ -1,14 +1,18 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { confirmAlert } from "react-confirm-alert";
+import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewAttendance from "pages/ViewAttendance";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { MEMBER_MODEL } from "test-utils/eligibilityFixtures";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
+jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
@@ -17,6 +21,9 @@ jest.mock("services/api", () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockGet: jest.Mock = require("services/api").default.get;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockDelete: jest.Mock = require("services/api").default.delete;
+const mockConfirm = confirmAlert as jest.Mock;
 
 const entry = (memberId: string, name: string, attendanceStatus: string) => ({
   _id: `${memberId}-row`,
@@ -181,5 +188,80 @@ describe("<ViewAttendance> with an unresolvable roster member", () => {
     expect(within(placeholder.parentElement as HTMLElement).getByTitle("Late")).toBeInTheDocument();
     expect(placeholder.closest("button")).toBeNull();
     expect(screen.getByText("Xavi")).toBeInTheDocument();
+  });
+});
+
+const SCHOOL_TERMS = {
+  ...DEFAULT_TERMINOLOGY,
+  memberSingular: "Student",
+  memberPlural: "Students",
+  attendanceSingular: "Session",
+  attendancePlural: "Sessions",
+};
+
+describe("<ViewAttendance> with custom terminology", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        terminology: SCHOOL_TERMS,
+      },
+    });
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: SESSION } }));
+  });
+
+  it("names the session term while the record loads", async () => {
+    mockGet.mockImplementation(() => new Promise(() => undefined));
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    expect(await screen.findByText("Loading sessions...")).toBeInTheDocument();
+  });
+
+  it("names the session and student terms in the filter labels", async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    expect(screen.getByLabelText("Filter by session status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter by student status")).toBeInTheDocument();
+  });
+
+  it("names the session term in the delete confirm and failure copy", async () => {
+    mockDelete.mockImplementation(() =>
+      Promise.reject({ response: { data: { error: undefined } } }),
+    );
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete Session/ }));
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    const options = mockConfirm.mock.calls[0][0];
+    expect(options.title).toBe("Delete Session");
+    expect(options.message).toContain("delete this session record?");
+
+    options.buttons[0].onClick();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Failed to delete session."),
+    );
+  });
+
+  it("names the student term on the unresolved-roster placeholder", async () => {
+    const THREE = {
+      name: "Small Sectional",
+      date: "2026-09-01T00:00:00.000Z",
+      attendance: [
+        entry("m1", "Zara", "present"),
+        { _id: "m2-row", memberId: "m2", attendanceStatus: "late", member: null },
+      ],
+    };
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? { fields: [] } : THREE } }),
+    );
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    expect(screen.getByText("Former student (profile unavailable)")).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 student on this roster no longer has a profile/),
+    ).toBeInTheDocument();
   });
 });

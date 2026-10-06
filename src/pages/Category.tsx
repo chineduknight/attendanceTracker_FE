@@ -16,11 +16,13 @@ import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHe
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toast } from "react-toastify";
+import { useTerms } from "hooks/useOrgPresentation";
 
 const Category = () => {
   const [category] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
   const onSuccess = () => {
-    toast.success("category added successfully");
+    toast.success(`${terms.categorySingular} added successfully`);
     // Only the current organisation's categories are stale.
     queryClient.invalidateQueries({ queryKey: queryKeys.categories(category.id) });
   };
@@ -65,7 +67,7 @@ const Category = () => {
         >
           <form onSubmit={handleSubmit(onSubmit)}>
             <FormControl id="category" isRequired>
-              <FormLabel>Category name</FormLabel>
+              <FormLabel>{`${terms.categorySingular} name`}</FormLabel>
               <Input
                 type="category"
                 {...register("categoryId", { required: true })}

@@ -11,6 +11,7 @@ import {
   toTemplateFields,
   TEMPLATE_NAME_MAX_LENGTH,
 } from "helpers/attendanceTemplates";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 const categories: CategoryType[] = [
   {
@@ -78,7 +79,16 @@ describe("templateFieldsError", () => {
   });
 
   it("requires a name", () => {
-    expect(templateFieldsError(fields(""), existing)).toMatch(/Enter an attendance name/);
+    expect(templateFieldsError(fields(""), existing)).toMatch(/Enter the attendance name/);
+  });
+
+  it("names the term the organisation uses", () => {
+    expect(
+      templateFieldsError(fields(""), existing, undefined, {
+        ...DEFAULT_TERMINOLOGY,
+        attendanceSingular: "Session",
+      })
+    ).toMatch(/Enter the session name/);
   });
 
   it("caps the name length", () => {

@@ -29,6 +29,7 @@ import {
 } from "helpers/attendanceEligibility";
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
+import { useTerms } from "hooks/useOrgPresentation";
 
 const EMPTY_DETAILS: AttendanceDetails = {
   name: "",
@@ -39,6 +40,7 @@ const EMPTY_DETAILS: AttendanceDetails = {
 
 const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) => {
   const navigate = useNavigate();
+  const terms = useTerms();
   const updateCurrentAttendance = useGlobalStore(
     (state) => state.updateCurrentAttendance,
   );
@@ -91,14 +93,14 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
       <Can perm="categories.manage">
         <Flex>
           <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
-            Add Category
+            {`Add ${terms.categorySingular}`}
           </Button>
           <Button
             mt="4"
             ml="6"
             onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}
           >
-            Add Sub-Category
+            {`Add ${terms.subCategorySingular}`}
           </Button>
         </Flex>
       </Can>
