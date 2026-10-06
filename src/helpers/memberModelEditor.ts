@@ -189,6 +189,14 @@ export const validateEditorFields = (
 };
 
 /**
+ * Whether a field's options go in the payload: always for `option` fields, and
+ * for any saved field (e.g. a legacy `select`) whose loaded options weren't
+ * edited, so a label-only save never erases them.
+ */
+const sendsOptions = (field: EditorField): boolean =>
+  field.type === "option" || (field.savedOptions !== null && !field.optionsEdited);
+
+/**
  * The model payload: saved fields keep their `_id`, key and type; new fields
  * send no id, so the backend mints their persistent identity.
  */
@@ -199,5 +207,5 @@ export const toModelPayload = (fields: readonly EditorField[]): ModelFieldPayloa
     label: field.label.trim(),
     type: field.type,
     required: field.required,
-    ...(field.type === "option" ? { options: fieldOptions(field) } : {}),
+    ...(sendsOptions(field) ? { options: fieldOptions(field) } : {}),
   }));

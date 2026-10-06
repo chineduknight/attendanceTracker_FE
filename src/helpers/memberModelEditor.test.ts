@@ -114,6 +114,15 @@ describe("saved options and the name field", () => {
     ).toEqual(["Hall", "West"]);
   });
 
+  it("keeps a legacy select field's id, key, type and options on a label-only save", () => {
+    const stored = { _id: "f-sel", name: "part", label: "Part", type: "select", options: ["Soprano", "Alto"], required: false };
+    const [field] = toEditorFields([stored]);
+
+    const [payload] = toModelPayload([{ ...field, label: "Voice Part" }]);
+
+    expect(payload).toEqual({ ...stored, label: "Voice Part" });
+  });
+
   it("pins the name field by key wherever it sits in a legacy model", () => {
     const fields = toEditorFields([
       { _id: "f-part", name: "part", type: "text" },

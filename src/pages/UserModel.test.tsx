@@ -234,5 +234,17 @@ describe("<UserModel>", () => {
     expect(screen.getByDisplayValue("Voice Part")).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
-});
 
+  it("keeps a legacy select field's id, key, type and options when only its label changes", async () => {
+    const select = { _id: "s-part", name: "part", label: "Part", type: "select", options: ["Soprano", "Alto"], required: false };
+    models.orgS = [{ _id: "s-name", name: "name", label: "Name", type: "text", required: true }, select];
+    selectOrg("orgS");
+    renderPage();
+    const part = await waitFor(() => card("Part"));
+    fireEvent.change(labelInput(part), { target: { value: "Voice Part" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(posted()[1]).toEqual({ ...select, label: "Voice Part" });
+  });
+});
