@@ -1,6 +1,7 @@
 import {
   Box,
   Flex,
+  Text,
   useColorModeValue,
   Button,
   Stack,
@@ -23,14 +24,20 @@ import { useMembers } from "hooks/useMembers";
 import { useMemberModel } from "hooks/useMemberModel";
 import {
   AttendanceEligibilityRule,
-  countEligibleMembers,
   eligibilityFields,
   isAttendanceEligibilityEnabled,
   normalizeEligibilityRules,
+  filterEligibleMembers,
 } from "helpers/attendanceEligibility";
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
+import { useAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
+import {
+  filterAvailableMembers,
+  isValidAvailabilityDate,
+} from "helpers/attendanceAvailability";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -41,16 +48,20 @@ const EMPTY_DETAILS: AttendanceDetails = {
   date: "",
 };
 
-const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) => {
+const CreateAttendanceForm = ({
+  organisationId,
+}: {
+  organisationId: string;
+}) => {
   const navigate = useNavigate();
   const terms = useTerms();
   const updateCurrentAttendance = useGlobalStore(
-    (state) => state.updateCurrentAttendance,
+    (state) => state.updateCurrentAttendance
   );
   // Off, the page behaves as if eligibility did not exist: no editor, no
   // member-field dependency, and every new session expects everyone.
   const eligibilityEnabled = useGlobalStore((state) =>
-    isAttendanceEligibilityEnabled(state.organisation),
+    isAttendanceEligibilityEnabled(state.organisation)
   );
   const {
     categories,
@@ -67,14 +78,45 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
   const [eligibilityRules, setEligibilityRules] = useState<
     AttendanceEligibilityRule[]
   >([]);
+  const {
+    unavailableMemberIds,
+    isLoading: availabilityLoading,
+    isFetching: availabilityFetching,
+    isSuccess: availabilitySuccess,
+    isError: availabilityFailed,
+  } = useAttendanceAvailabilityForDate(organisationId, details.date);
 
   // Rules entered while eligibility was on never leak into an Everyone session.
   const activeRules = eligibilityEnabled ? eligibilityRules : NO_RULES;
-  const optionFields = useMemo(() => eligibilityFields(memberFields), [memberFields]);
-  const expectedCount =
-    eligibilityEnabled && membersLoaded
-      ? countEligibleMembers(members, activeRules)
-      : null;
+  const optionFields = useMemo(
+    () => eligibilityFields(memberFields),
+    [memberFields]
+  );
+  const rawEligibleMembers = useMemo(
+    () =>
+      eligibilityEnabled
+        ? filterEligibleMembers(members, activeRules)
+        : members,
+    [activeRules, eligibilityEnabled, members]
+  );
+  const rawEligibilityCount =
+    eligibilityEnabled && membersLoaded ? rawEligibleMembers.length : null;
+  const validDate = isValidAvailabilityDate(details.date);
+  const availabilityReady =
+    !validDate || (availabilitySuccess && !availabilityFetching);
+  const finalExpectedMembers = useMemo(
+    () =>
+      availabilityReady
+        ? filterAvailableMembers(rawEligibleMembers, unavailableMemberIds)
+        : [],
+    [availabilityReady, rawEligibleMembers, unavailableMemberIds]
+  );
+  const finalExpectedCount = availabilityReady
+    ? finalExpectedMembers.length
+    : null;
+  const unavailableExpectedCount = availabilityReady
+    ? rawEligibleMembers.length - finalExpectedMembers.length
+    : 0;
 
   // A template fills everything but the date, which belongs to this session.
   const applyTemplate = (applied: AppliedTemplate) => {
@@ -91,11 +133,15 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
       name: details.name.trim(),
       date: details.date,
       ...(details.categoryId ? { categoryId: details.categoryId } : {}),
-      ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
+      ...(details.subCategoryId
+        ? { subCategoryId: details.subCategoryId }
+        : {}),
       eligibilityRules: normalizeEligibilityRules(activeRules),
     };
     updateCurrentAttendance(payload);
-    queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.members(organisationId),
+    });
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
@@ -103,7 +149,11 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Can perm="categories.manage">
         <Flex>
-          <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
+          <Button
+            mt="4"
+            ml="2"
+            onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}
+          >
             {`Add ${terms.categorySingular}`}
           </Button>
           <Button
@@ -150,15 +200,58 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             onChange={setDetails}
             categories={categories}
           />
+          {details.date && (availabilityLoading || availabilityFetching) && (
+            <Text color="gray.600">
+              Checking {lowerTerm(terms.attendanceSingular)} availability...
+            </Text>
+          )}
+          {details.date && availabilityFailed && (
+            <Text color="red.500">
+              {terms.attendanceSingular} availability could not be loaded. Try
+              again before continuing.
+            </Text>
+          )}
+          {validDate && availabilityReady && unavailableExpectedCount > 0 && (
+            <Box borderWidth="1px" borderRadius="md" p={3}>
+              <Text fontWeight="bold">
+                {terms.attendanceSingular} availability
+              </Text>
+              <Text fontSize="sm">
+                {unavailableExpectedCount}{" "}
+                {unavailableExpectedCount === 1
+                  ? lowerTerm(terms.memberSingular)
+                  : lowerTerm(terms.memberPlural)}{" "}
+                {unavailableExpectedCount === 1 ? "is" : "are"} unavailable on
+                this date.
+              </Text>
+              <Text fontSize="sm">
+                Final expected roster: {finalExpectedCount}{" "}
+                {finalExpectedCount === 1
+                  ? lowerTerm(terms.memberSingular)
+                  : lowerTerm(terms.memberPlural)}
+                .
+              </Text>
+            </Box>
+          )}
+          {validDate && availabilityReady && finalExpectedCount === 0 && (
+            <Text color="red.500">
+              No {lowerTerm(terms.memberPlural)} are available for this{" "}
+              {lowerTerm(terms.attendanceSingular)}.
+            </Text>
+          )}
           {eligibilityEnabled && (
             <AttendanceEligibilityEditor
               fields={optionFields}
               fieldsStatus={
-                memberModelLoaded ? "ready" : memberModelFailed ? "error" : "loading"
+                memberModelLoaded
+                  ? "ready"
+                  : memberModelFailed
+                  ? "error"
+                  : "loading"
               }
               rules={eligibilityRules}
               onChange={setEligibilityRules}
-              expectedCount={expectedCount}
+              expectedCount={rawEligibilityCount}
               totalCount={members.length}
             />
           )}
@@ -171,7 +264,14 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             _hover={{ bg: "blue.500" }}
             fontWeight="bold"
             fontSize="15px"
-            isDisabled={expectedCount === 0}
+            isDisabled={
+              !membersLoaded ||
+              !availabilityReady ||
+              availabilityLoading ||
+              availabilityFetching ||
+              availabilityFailed ||
+              finalExpectedCount === 0
+            }
             onClick={onContinue}
           >
             Continue
@@ -190,7 +290,10 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
 const CreateAttendance = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);
   return (
-    <CreateAttendanceForm key={organisationId} organisationId={organisationId} />
+    <CreateAttendanceForm
+      key={organisationId}
+      organisationId={organisationId}
+    />
   );
 };
 

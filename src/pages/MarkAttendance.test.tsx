@@ -1,4 +1,11 @@
-import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { confirmAlert } from "react-confirm-alert";
@@ -31,11 +38,39 @@ const mockConfirm = confirmAlert as jest.Mock;
 
 // Configured order is the tap-cycle order.
 const STATUSES = [
-  statusDefinition({ key: "no_show", label: "No Show", shortLabel: "NS", color: "red", behavior: "absent", isDefault: true }),
-  statusDefinition({ key: "present", label: "Present", shortLabel: "P", color: "green" }),
-  statusDefinition({ key: "late", label: "Late", shortLabel: "L", color: "yellow" }),
-  statusDefinition({ key: "excused", label: "Excused", shortLabel: "EX", color: "orange", behavior: "excused" }),
-  statusDefinition({ key: "remote", label: "Remote", shortLabel: "R", active: false }),
+  statusDefinition({
+    key: "no_show",
+    label: "No Show",
+    shortLabel: "NS",
+    color: "red",
+    behavior: "absent",
+    isDefault: true,
+  }),
+  statusDefinition({
+    key: "present",
+    label: "Present",
+    shortLabel: "P",
+    color: "green",
+  }),
+  statusDefinition({
+    key: "late",
+    label: "Late",
+    shortLabel: "L",
+    color: "yellow",
+  }),
+  statusDefinition({
+    key: "excused",
+    label: "Excused",
+    shortLabel: "EX",
+    color: "orange",
+    behavior: "excused",
+  }),
+  statusDefinition({
+    key: "remote",
+    label: "Remote",
+    shortLabel: "R",
+    active: false,
+  }),
 ];
 
 const ROSTER = [
@@ -63,11 +98,13 @@ const renderAt = (path: string) =>
           <Route path="/all-attendance" element={<div>all attendance</div>} />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 
-const rowOf = (name: string) => screen.getByText(name).closest("button") as HTMLElement;
-const statusOf = (name: string) => within(rowOf(name)).getAllByText(/.+/).pop()?.textContent;
+const rowOf = (name: string) =>
+  screen.getByText(name).closest("button") as HTMLElement;
+const statusOf = (name: string) =>
+  within(rowOf(name)).getAllByText(/.+/).pop()?.textContent;
 const tap = (name: string, times = 1) => {
   for (let i = 0; i < times; i += 1) fireEvent.click(rowOf(name));
 };
@@ -89,7 +126,8 @@ describe("<MarkAttendance> with configured statuses", () => {
       currentAttendance: { name: "Rehearsal", date: "2026-10-01", members: [] },
     });
     mockGet.mockImplementation((url: string) => {
-      if (url.includes("/members")) return Promise.resolve({ data: { data: ROSTER } });
+      if (url.includes("/members"))
+        return Promise.resolve({ data: { data: ROSTER } });
       if (url.startsWith("/attendance/org1/att1")) {
         return Promise.resolve({ data: { data: HISTORICAL } });
       }
@@ -143,7 +181,11 @@ describe("<MarkAttendance> with configured statuses", () => {
       { memberId: "m1", status: "late" },
       { memberId: "m2", status: "no_show" },
     ]);
-    expect(body).toMatchObject({ name: "Rehearsal", date: "2026-10-01", organisationId: "org1" });
+    expect(body).toMatchObject({
+      name: "Rehearsal",
+      date: "2026-10-01",
+      organisationId: "org1",
+    });
     expect(body).not.toHaveProperty("members");
     expect(body).not.toHaveProperty("presentMembers");
     expect(body).not.toHaveProperty("apologisedMembers");
@@ -180,11 +222,39 @@ describe("<MarkAttendance> with configured statuses", () => {
 describe("<MarkAttendance> quick marking", () => {
   // Present, Late, Apology, Absent (default) plus an inactive historical status.
   const QUICK_STATUSES = [
-    statusDefinition({ key: "present", label: "Present", shortLabel: "P", color: "green" }),
-    statusDefinition({ key: "late", label: "Late", shortLabel: "L", color: "yellow" }),
-    statusDefinition({ key: "apology", label: "Apology", shortLabel: "AP", color: "orange", behavior: "excused" }),
-    statusDefinition({ key: "absent", label: "Absent", shortLabel: "A", color: "red", behavior: "absent", isDefault: true }),
-    statusDefinition({ key: "remote", label: "Remote", shortLabel: "R", active: false }),
+    statusDefinition({
+      key: "present",
+      label: "Present",
+      shortLabel: "P",
+      color: "green",
+    }),
+    statusDefinition({
+      key: "late",
+      label: "Late",
+      shortLabel: "L",
+      color: "yellow",
+    }),
+    statusDefinition({
+      key: "apology",
+      label: "Apology",
+      shortLabel: "AP",
+      color: "orange",
+      behavior: "excused",
+    }),
+    statusDefinition({
+      key: "absent",
+      label: "Absent",
+      shortLabel: "A",
+      color: "red",
+      behavior: "absent",
+      isDefault: true,
+    }),
+    statusDefinition({
+      key: "remote",
+      label: "Remote",
+      shortLabel: "R",
+      active: false,
+    }),
   ];
   const FIVE = [
     // Already in the roster's alphabetical display order.
@@ -200,15 +270,24 @@ describe("<MarkAttendance> quick marking", () => {
   const chooseMode = (label: string) =>
     fireEvent.click(within(modes()).getByRole("button", { name: label }));
   const search = (query: string) =>
-    fireEvent.change(screen.getByPlaceholderText("Search member"), { target: { value: query } });
+    fireEvent.change(screen.getByPlaceholderText("Search member"), {
+      target: { value: query },
+    });
   const allStatuses = () => FIVE.map((m) => statusOf(m.name));
   const draftStatuses = () =>
     JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map(
-      (m: { id: string; attendanceStatus: string }) => [m.id, m.attendanceStatus]
+      (m: { id: string; attendanceStatus: string }) => [
+        m.id,
+        m.attendanceStatus,
+      ]
     );
   const displayedStatuses = () =>
-    FIVE.map((m) => [m.id, QUICK_STATUSES.find((s) => s.label === statusOf(m.name))!.key]);
-  const undoButton = () => screen.queryByRole("button", { name: "Undo bulk change" });
+    FIVE.map((m) => [
+      m.id,
+      QUICK_STATUSES.find((s) => s.label === statusOf(m.name))!.key,
+    ]);
+  const undoButton = () =>
+    screen.queryByRole("button", { name: "Undo bulk change" });
 
   beforeEach(() => {
     queryClient.clear();
@@ -216,11 +295,16 @@ describe("<MarkAttendance> quick marking", () => {
     mockConfirm.mockClear();
     mockPost.mockClear();
     useGlobalStore.setState({
-      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: QUICK_STATUSES },
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: QUICK_STATUSES,
+      },
       currentAttendance: { name: "Rehearsal", date: "2026-10-01", members: [] },
     });
     mockGet.mockImplementation((url: string) => {
-      if (url.includes("/members")) return Promise.resolve({ data: { data: FIVE } });
+      if (url.includes("/members"))
+        return Promise.resolve({ data: { data: FIVE } });
       if (/^\/attendance\/org1\/att\d$/.test(url)) {
         return Promise.resolve({
           data: {
@@ -248,8 +332,12 @@ describe("<MarkAttendance> quick marking", () => {
   describe("modes", () => {
     it("defaults to Cycle", async () => {
       await start();
-      expect(within(modes()).getByRole("button", { name: "Cycle" })).toHaveAttribute("aria-pressed", "true");
-      expect(within(modes()).getByRole("button", { name: "Present" })).toHaveAttribute("aria-pressed", "false");
+      expect(
+        within(modes()).getByRole("button", { name: "Cycle" })
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        within(modes()).getByRole("button", { name: "Present" })
+      ).toHaveAttribute("aria-pressed", "false");
     });
 
     it("keeps the existing next-status behavior in Cycle mode", async () => {
@@ -280,7 +368,9 @@ describe("<MarkAttendance> quick marking", () => {
 
     it("never offers an inactive status as a mode", async () => {
       await start();
-      const labels = within(modes()).getAllByRole("button").map((b) => b.textContent);
+      const labels = within(modes())
+        .getAllByRole("button")
+        .map((b) => b.textContent);
       expect(labels).toEqual(["Cycle", "Present", "Late", "Apology", "Absent"]);
     });
   });
@@ -288,11 +378,15 @@ describe("<MarkAttendance> quick marking", () => {
   describe("bulk visible", () => {
     it("applies the selected status only to the searched members and persists the same roster", async () => {
       await start();
-      expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /^Apply/ })
+      ).not.toBeInTheDocument();
       chooseMode("Present");
       search("Ada");
 
-      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 2 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 2 visible" })
+      );
 
       expect(statusOf("Ada Eze")).toBe("Present");
       expect(statusOf("Ada Obi")).toBe("Present");
@@ -300,7 +394,13 @@ describe("<MarkAttendance> quick marking", () => {
       expect(countText("Absent")).toBe("Absent: 3");
 
       search("");
-      expect(allStatuses()).toEqual(["Present", "Present", "Absent", "Absent", "Absent"]);
+      expect(allStatuses()).toEqual([
+        "Present",
+        "Present",
+        "Absent",
+        "Absent",
+        "Absent",
+      ]);
       expect(draftStatuses()).toEqual(displayedStatuses());
     });
 
@@ -310,17 +410,27 @@ describe("<MarkAttendance> quick marking", () => {
       FIVE.forEach((m) => tap(m.name));
       search("Ada");
 
-      fireEvent.click(screen.getByRole("button", { name: "Reset 2 visible to Absent" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 2 visible to Absent" })
+      );
       search("");
 
-      expect(allStatuses()).toEqual(["Absent", "Absent", "Late", "Late", "Late"]);
+      expect(allStatuses()).toEqual([
+        "Absent",
+        "Absent",
+        "Late",
+        "Late",
+        "Late",
+      ]);
       expect(draftStatuses()).toEqual(displayedStatuses());
     });
 
     it("resets in Cycle mode too", async () => {
       await start();
       tap("Bola");
-      fireEvent.click(screen.getByRole("button", { name: "Reset 5 visible to Absent" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+      );
       expect(statusOf("Bola")).toBe("Absent");
     });
   });
@@ -332,12 +442,20 @@ describe("<MarkAttendance> quick marking", () => {
       expect(undoButton()).not.toBeInTheDocument();
       chooseMode("Present");
       search("Ada");
-      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 2 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 2 visible" })
+      );
 
       fireEvent.click(undoButton() as HTMLElement);
       search("");
 
-      expect(allStatuses()).toEqual(["Late", "Absent", "Absent", "Absent", "Absent"]);
+      expect(allStatuses()).toEqual([
+        "Late",
+        "Absent",
+        "Absent",
+        "Absent",
+        "Absent",
+      ]);
       expect(draftStatuses()).toEqual(displayedStatuses());
       expect(undoButton()).not.toBeInTheDocument();
     });
@@ -345,20 +463,32 @@ describe("<MarkAttendance> quick marking", () => {
     it("only undoes the most recent bulk change", async () => {
       await start();
       chooseMode("Present");
-      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 5 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 5 visible" })
+      );
       chooseMode("Late");
       search("Ada");
-      fireEvent.click(screen.getByRole("button", { name: "Apply Late to 2 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Late to 2 visible" })
+      );
 
       fireEvent.click(undoButton() as HTMLElement);
       search("");
 
-      expect(allStatuses()).toEqual(["Present", "Present", "Present", "Present", "Present"]);
+      expect(allStatuses()).toEqual([
+        "Present",
+        "Present",
+        "Present",
+        "Present",
+        "Present",
+      ]);
     });
 
     it("is cleared by a manual single tap", async () => {
       await start();
-      fireEvent.click(screen.getByRole("button", { name: "Reset 5 visible to Absent" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+      );
       expect(undoButton()).toBeInTheDocument();
       tap("Bola");
       expect(undoButton()).not.toBeInTheDocument();
@@ -367,18 +497,30 @@ describe("<MarkAttendance> quick marking", () => {
     it("survives a roster refetch (e.g. the app regaining focus)", async () => {
       await start();
       chooseMode("Present");
-      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 5 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 5 visible" })
+      );
 
-      await act(() => queryClient.refetchQueries({ queryKey: queryKeys.members("org1") }));
+      await act(() =>
+        queryClient.refetchQueries({ queryKey: queryKeys.members("org1") })
+      );
 
       fireEvent.click(undoButton() as HTMLElement);
-      expect(allStatuses()).toEqual(["Absent", "Absent", "Absent", "Absent", "Absent"]);
+      expect(allStatuses()).toEqual([
+        "Absent",
+        "Absent",
+        "Absent",
+        "Absent",
+        "Absent",
+      ]);
     });
 
     it("is cleared when a different session is opened", async () => {
       const OpenOtherSession = () => {
         const navigate = useNavigate();
-        return <button onClick={() => navigate("/mark/att2")}>open other</button>;
+        return (
+          <button onClick={() => navigate("/mark/att2")}>open other</button>
+        );
       };
       render(
         <QueryClientProvider client={queryClient}>
@@ -388,33 +530,45 @@ describe("<MarkAttendance> quick marking", () => {
               <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
             </Routes>
           </MemoryRouter>
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
       await screen.findByText("Bola");
-      fireEvent.click(screen.getByRole("button", { name: "Reset 5 visible to Absent" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+      );
       expect(undoButton()).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "open other" }));
 
-      await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/attendance/org1/att2"));
+      await waitFor(() =>
+        expect(mockGet).toHaveBeenCalledWith("/attendance/org1/att2")
+      );
       expect(undoButton()).not.toBeInTheDocument();
     });
 
     it("and the quick-mark mode are reset by an organisation switch", async () => {
       await start();
       chooseMode("Present");
-      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 5 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 5 visible" })
+      );
       expect(undoButton()).toBeInTheDocument();
 
       act(() => {
         useGlobalStore.setState({
-          organisation: { ...EMPTY_ORG, id: "org2", attendanceStatuses: QUICK_STATUSES },
+          organisation: {
+            ...EMPTY_ORG,
+            id: "org2",
+            attendanceStatuses: QUICK_STATUSES,
+          },
         });
       });
       await screen.findByText("Bola");
 
       expect(undoButton()).not.toBeInTheDocument();
-      expect(within(modes()).getByRole("button", { name: "Cycle" })).toHaveAttribute("aria-pressed", "true");
+      expect(
+        within(modes()).getByRole("button", { name: "Cycle" })
+      ).toHaveAttribute("aria-pressed", "true");
     });
   });
 
@@ -429,14 +583,20 @@ describe("<MarkAttendance> quick marking", () => {
 
     it("is restored by Undo after a bulk replace", async () => {
       await start("/mark/att1");
-      fireEvent.click(screen.getByRole("button", { name: "Reset 5 visible to Absent" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+      );
       expect(statusOf("Ada Eze")).toBe("Absent");
 
       fireEvent.click(undoButton() as HTMLElement);
 
       expect(statusOf("Ada Eze")).toBe("Remote");
       expect(countText("Remote")).toBe("Remote: 1");
-      expect(JSON.parse(localStorage.getItem("attendance-draft-org1-att1") as string)[0]).toMatchObject({
+      expect(
+        JSON.parse(
+          localStorage.getItem("attendance-draft-org1-att1") as string
+        )[0]
+      ).toMatchObject({
         id: "m1",
         attendanceStatus: "remote",
       });
@@ -447,7 +607,9 @@ describe("<MarkAttendance> quick marking", () => {
     await start();
     chooseMode("Present");
     search("Ada");
-    fireEvent.click(screen.getByRole("button", { name: "Apply Present to 2 visible" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply Present to 2 visible" })
+    );
     search("");
 
     const message = submitAndConfirm();
@@ -474,10 +636,32 @@ describe("<MarkAttendance> quick marking", () => {
 
 describe("<MarkAttendance> eligibility", () => {
   const STATUSES_5 = [
-    statusDefinition({ key: "present", label: "Present", shortLabel: "P", color: "green" }),
-    statusDefinition({ key: "late", label: "Late", shortLabel: "L", color: "yellow" }),
-    statusDefinition({ key: "absent", label: "Absent", shortLabel: "A", color: "red", behavior: "absent", isDefault: true }),
-    statusDefinition({ key: "remote", label: "Remote", shortLabel: "R", active: false }),
+    statusDefinition({
+      key: "present",
+      label: "Present",
+      shortLabel: "P",
+      color: "green",
+    }),
+    statusDefinition({
+      key: "late",
+      label: "Late",
+      shortLabel: "L",
+      color: "yellow",
+    }),
+    statusDefinition({
+      key: "absent",
+      label: "Absent",
+      shortLabel: "A",
+      color: "red",
+      behavior: "absent",
+      isDefault: true,
+    }),
+    statusDefinition({
+      key: "remote",
+      label: "Remote",
+      shortLabel: "R",
+      active: false,
+    }),
   ];
   const SOP_ALTO_ACTIVE = [
     { field: "part", values: ["soprano", "alto"] },
@@ -487,11 +671,17 @@ describe("<MarkAttendance> eligibility", () => {
   let roster: Array<Record<string, string | undefined>>;
 
   const draftIds = () =>
-    JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map((m: { id: string }) => m.id);
+    JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map(
+      (m: { id: string }) => m.id
+    );
   const rowNames = () =>
-    ELIGIBILITY_ROSTER.map((m) => m.name).filter((name) => screen.queryByText(name));
+    ELIGIBILITY_ROSTER.map((m) => m.name).filter((name) =>
+      screen.queryByText(name)
+    );
   const refetchRoster = () =>
-    act(() => queryClient.refetchQueries({ queryKey: queryKeys.members("org1") }));
+    act(() =>
+      queryClient.refetchQueries({ queryKey: queryKeys.members("org1") })
+    );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -516,7 +706,9 @@ describe("<MarkAttendance> eligibility", () => {
     mockGet.mockImplementation((url: string) => {
       // A fresh copy per request, as the API would return.
       if (url.includes("/members")) {
-        return Promise.resolve({ data: { data: roster.map((m) => ({ ...m })) } });
+        return Promise.resolve({
+          data: { data: roster.map((m) => ({ ...m })) },
+        });
       }
       return Promise.resolve({ data: { data: [] } });
     });
@@ -532,19 +724,164 @@ describe("<MarkAttendance> eligibility", () => {
     it("renders only the expected members and summarises the rules", async () => {
       await start();
       expect(rowNames()).toEqual(["Ada", "Chioma"]);
-      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
-      expect(screen.getByText("Part: Soprano, Alto · Status: Active")).toBeInTheDocument();
+      expect(
+        screen.getByText("Expected roster: 2 members")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Part: Soprano, Alto · Status: Active")
+      ).toBeInTheDocument();
       expect(draftIds()).toEqual(["m1", "m3"]);
+    });
+
+    it("filters unavailable members and submits only the available roster", async () => {
+      roster = [
+        { id: "m1", name: "Ada" },
+        { id: "m2", name: "Bea" },
+      ];
+      useGlobalStore.setState({
+        currentAttendance: {
+          name: "Sectional",
+          date: "2026-10-01",
+          eligibilityRules: [],
+        },
+      });
+      mockGet.mockImplementation((url: string) => {
+        if (url.includes("/members")) {
+          return Promise.resolve({ data: { data: roster } });
+        }
+        return Promise.resolve({
+          data: {
+            data: [
+              {
+                memberId: "m1",
+                startDate: "2026-10-01",
+                endDate: "2026-10-01",
+              },
+            ],
+          },
+        });
+      });
+
+      renderAt("/mark");
+      await screen.findByText("Bea");
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      tap("Bea");
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
+        { memberId: "m2", status: "present" },
+      ]);
+    });
+
+    it("does not expose a stale roster during refresh and reconciles fresh availability", async () => {
+      roster = [
+        { id: "m1", name: "Ada" },
+        { id: "m2", name: "Bea" },
+      ];
+      useGlobalStore.setState({
+        currentAttendance: {
+          name: "Sectional",
+          date: "2026-10-01",
+          eligibilityRules: [],
+        },
+      });
+      let refreshPending = false;
+      let resolveRefresh!: (value: unknown) => void;
+      const refreshAvailability = new Promise((resolve) => {
+        resolveRefresh = resolve;
+      });
+      mockGet.mockImplementation((url: string) => {
+        if (url.includes("/members"))
+          return Promise.resolve({ data: { data: roster } });
+        return refreshPending
+          ? refreshAvailability
+          : Promise.resolve({ data: { data: [] } });
+      });
+
+      renderAt("/mark");
+      await screen.findByText("Ada");
+      tap("Bea");
+      refreshPending = true;
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      await screen.findByText(/Checking attendance availability/);
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(screen.queryByText("Bea")).not.toBeInTheDocument();
+
+      resolveRefresh({
+        data: {
+          data: [
+            {
+              memberId: "m1",
+              startDate: "2026-10-01",
+              endDate: "2026-10-01",
+            },
+          ],
+        },
+      });
+      await screen.findByText("Bea");
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(statusOf("Bea")).toBe("Present");
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
+        { memberId: "m2", status: "present" },
+      ]);
+    });
+
+    it("keeps the roster unavailable when availability refresh fails", async () => {
+      roster = [
+        { id: "m1", name: "Ada" },
+        { id: "m2", name: "Bea" },
+      ];
+      useGlobalStore.setState({
+        currentAttendance: {
+          name: "Sectional",
+          date: "2026-10-01",
+          eligibilityRules: [],
+        },
+      });
+      let refreshPending = false;
+      let rejectRefresh!: (error: Error) => void;
+      const refreshAvailability = new Promise((_, reject) => {
+        rejectRefresh = reject;
+      });
+      refreshAvailability.catch(() => undefined);
+      mockGet.mockImplementation((url: string) => {
+        if (url.includes("/members"))
+          return Promise.resolve({ data: { data: roster } });
+        return refreshPending
+          ? refreshAvailability
+          : Promise.resolve({ data: { data: [] } });
+      });
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+      renderAt("/mark");
+      await screen.findByText("Ada");
+      refreshPending = true;
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      await screen.findByText(/Checking attendance availability/);
+      rejectRefresh(new Error("availability offline"));
+      await screen.findByText(/Attendance availability could not be loaded/);
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(screen.queryByText("Bea")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Submit" })
+      ).not.toBeInTheDocument();
+      (console.error as jest.Mock).mockRestore();
     });
 
     it("limits bulk actions to the expected roster", async () => {
       await start();
       fireEvent.click(
-        within(screen.getByRole("group", { name: "Tap a member to" })).getByRole("button", {
+        within(
+          screen.getByRole("group", { name: "Tap a member to" })
+        ).getByRole("button", {
           name: "Present",
         })
       );
-      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 2 visible" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 2 visible" })
+      );
       expect(statusOf("Ada")).toBe("Present");
       expect(statusOf("Chioma")).toBe("Present");
       expect(countText("Present")).toBe("Present: 2");
@@ -570,7 +907,9 @@ describe("<MarkAttendance> eligibility", () => {
 
       await refetchRoster();
 
-      await waitFor(() => expect(screen.queryByText("Chioma")).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.queryByText("Chioma")).not.toBeInTheDocument()
+      );
       expect(draftIds()).toEqual(["m1"]);
     });
 
@@ -613,23 +952,38 @@ describe("<MarkAttendance> eligibility", () => {
       jest.spyOn(console, "error").mockImplementation(() => undefined);
       mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
       renderAt("/mark");
-      expect(await screen.findByText(/Members could not be loaded/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(
+          "Attendance availability could not be loaded. Use Refresh to try again."
+        )
+      ).toBeInTheDocument();
       expect(screen.queryByText(/Expected roster/)).not.toBeInTheDocument();
       (console.error as jest.Mock).mockRestore();
     });
 
     it("keeps the draft and shows the backend error when the roster changed", async () => {
       // React Query logs the rejected mutation; the rejection is the scenario.
-      const silence = jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const silence = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
       mockPost.mockImplementation(() =>
-        Promise.reject({ response: { status: 422, data: { error: "The expected roster has changed. Refresh to reload it." } } })
+        Promise.reject({
+          response: {
+            status: 422,
+            data: {
+              error: "The expected roster has changed. Refresh to reload it.",
+            },
+          },
+        })
       );
       await start();
       tap("Ada");
       submitAndConfirm();
 
       await waitFor(() =>
-        expect(toast.error).toHaveBeenCalledWith("The expected roster has changed. Refresh to reload it.")
+        expect(toast.error).toHaveBeenCalledWith(
+          "The expected roster has changed. Refresh to reload it."
+        )
       );
       expect(draftIds()).toEqual(["m1", "m3"]);
       expect(statusOf("Ada")).toBe("Present");
@@ -658,9 +1012,21 @@ describe("<MarkAttendance> eligibility", () => {
       organisationId: "org1",
       eligibilityRules: SOP_ALTO_ACTIVE,
       attendance: [
-        { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "present" },
-        { memberId: "m2", member: { name: "Bisi" }, attendanceStatus: "absent" },
-        { memberId: "m4", member: { name: "Dayo" }, attendanceStatus: "remote" },
+        {
+          memberId: "m1",
+          member: { name: "Ada" },
+          attendanceStatus: "present",
+        },
+        {
+          memberId: "m2",
+          member: { name: "Bisi" },
+          attendanceStatus: "absent",
+        },
+        {
+          memberId: "m4",
+          member: { name: "Dayo" },
+          attendanceStatus: "remote",
+        },
       ],
     };
 
@@ -668,11 +1034,14 @@ describe("<MarkAttendance> eligibility", () => {
       roster.find((m) => m.id === "m1")!.status = "inactive";
       roster.push({ id: "m9", name: "Ife", part: "alto", status: "active" });
       mockGet.mockImplementation((url: string) => {
-        if (url === "/attendance/org1/att9") return Promise.resolve({ data: { data: RECORD } });
+        if (url === "/attendance/org1/att9")
+          return Promise.resolve({ data: { data: RECORD } });
         // A fresh copy per request, as the API would return.
-      if (url.includes("/members")) {
-        return Promise.resolve({ data: { data: roster.map((m) => ({ ...m })) } });
-      }
+        if (url.includes("/members")) {
+          return Promise.resolve({
+            data: { data: roster.map((m) => ({ ...m })) },
+          });
+        }
         return Promise.resolve({ data: { data: [] } });
       });
       mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
@@ -687,15 +1056,23 @@ describe("<MarkAttendance> eligibility", () => {
       await open();
       expect(rowNames()).toEqual(["Ada", "Bisi", "Dayo"]);
       expect(screen.queryByText("Ife")).not.toBeInTheDocument();
-      expect(screen.getByText("Expected roster: 3 members")).toBeInTheDocument();
-      expect(screen.getByText("Part: Soprano, Alto · Status: Active")).toBeInTheDocument();
-      expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(false);
+      expect(
+        screen.getByText("Expected roster: 3 members")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Part: Soprano, Alto · Status: Active")
+      ).toBeInTheDocument();
+      expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(
+        false
+      );
     });
 
     it("keeps inactive statuses and bulk Undo working on the stored roster", async () => {
       await open();
       expect(statusOf("Dayo")).toBe("Remote");
-      fireEvent.click(screen.getByRole("button", { name: "Reset 3 visible to Absent" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 3 visible to Absent" })
+      );
       expect(statusOf("Dayo")).toBe("Absent");
       fireEvent.click(screen.getByRole("button", { name: "Undo bulk change" }));
       expect(statusOf("Dayo")).toBe("Remote");
@@ -724,9 +1101,26 @@ describe("<MarkAttendance> eligibility", () => {
 
 describe("<MarkAttendance> editing a roster with an unresolvable member", () => {
   const STATUSES_3 = [
-    statusDefinition({ key: "present", label: "Present", shortLabel: "P", color: "green" }),
-    statusDefinition({ key: "late", label: "Late", shortLabel: "L", color: "yellow" }),
-    statusDefinition({ key: "absent", label: "Absent", shortLabel: "A", color: "red", behavior: "absent", isDefault: true }),
+    statusDefinition({
+      key: "present",
+      label: "Present",
+      shortLabel: "P",
+      color: "green",
+    }),
+    statusDefinition({
+      key: "late",
+      label: "Late",
+      shortLabel: "L",
+      color: "yellow",
+    }),
+    statusDefinition({
+      key: "absent",
+      label: "Absent",
+      shortLabel: "A",
+      color: "red",
+      behavior: "absent",
+      isDefault: true,
+    }),
   ];
   const RECORD = {
     name: "Small Sectional",
@@ -736,7 +1130,11 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
     attendance: [
       { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "absent" },
       { memberId: "m2", member: null, attendanceStatus: "late" },
-      { memberId: "m3", member: { name: "Chioma" }, attendanceStatus: "absent" },
+      {
+        memberId: "m3",
+        member: { name: "Chioma" },
+        attendanceStatus: "absent",
+      },
     ],
   };
 
@@ -745,13 +1143,20 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
     queryClient.clear();
     localStorage.clear();
     useGlobalStore.setState({
-      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES_3 },
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: STATUSES_3,
+      },
       currentAttendance: { name: "", date: "" },
     });
     mockGet.mockImplementation((url: string) => {
-      if (url === "/attendance/org1/att3") return Promise.resolve({ data: { data: RECORD } });
+      if (url === "/attendance/org1/att3")
+        return Promise.resolve({ data: { data: RECORD } });
       // A newly joined member exists in the current roster.
-      return Promise.resolve({ data: { data: [{ id: "m9", name: "Newbie" }] } });
+      return Promise.resolve({
+        data: { data: [{ id: "m9", name: "Newbie" }] },
+      });
     });
     mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
   });
@@ -763,7 +1168,9 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
     expect(screen.getByText("Expected roster: 3 members")).toBeInTheDocument();
     const placeholder = screen.getByText("Former member (profile unavailable)");
     expect(placeholder.closest("button")).toBeNull();
-    expect(screen.getByRole("button", { name: "Reset 2 visible to Absent" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reset 2 visible to Absent" })
+    ).toBeInTheDocument();
     expect(screen.queryByText("Newbie")).not.toBeInTheDocument();
 
     tap("Chioma"); // Absent -> Present
@@ -774,10 +1181,11 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
       { memberId: "m1", status: "absent" },
       { memberId: "m3", status: "present" },
     ]);
-    expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(false);
+    expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(
+      false
+    );
   });
 });
-
 
 const SCHOOL_TERMS = {
   ...DEFAULT_TERMINOLOGY,
@@ -801,7 +1209,8 @@ describe("<MarkAttendance> with custom terminology", () => {
       currentAttendance: { name: "Rehearsal", date: "2026-10-01", members: [] },
     });
     mockGet.mockImplementation((url: string) => {
-      if (url.includes("/members")) return Promise.resolve({ data: { data: ROSTER } });
+      if (url.includes("/members"))
+        return Promise.resolve({ data: { data: ROSTER } });
       if (url.startsWith("/attendance/org1/att1")) {
         return Promise.resolve({ data: { data: HISTORICAL } });
       }
@@ -814,7 +1223,9 @@ describe("<MarkAttendance> with custom terminology", () => {
   it("names the member term while the roster loads", async () => {
     mockGet.mockImplementation(() => new Promise(() => undefined));
     renderAt("/mark");
-    expect(await screen.findByText("Loading students...")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Checking session availability...")
+    ).toBeInTheDocument();
   });
 
   it("names the member term when the roster could not be loaded", async () => {
@@ -823,8 +1234,8 @@ describe("<MarkAttendance> with custom terminology", () => {
     renderAt("/mark");
     expect(
       await screen.findByText(
-        "Students could not be loaded. Use Refresh to try again.",
-      ),
+        "Session availability could not be loaded. Use Refresh to try again."
+      )
     ).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
@@ -835,7 +1246,7 @@ describe("<MarkAttendance> with custom terminology", () => {
     submitAndConfirm();
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Session Created successfully"),
+      expect(toast.success).toHaveBeenCalledWith("Session Created successfully")
     );
   });
 
@@ -845,7 +1256,7 @@ describe("<MarkAttendance> with custom terminology", () => {
     submitAndConfirm();
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Session Updated"),
+      expect(toast.success).toHaveBeenCalledWith("Session Updated")
     );
   });
 });

@@ -14,6 +14,7 @@ export const LABELS = {
   updateMember: (t: Terms) => `Update ${t.memberSingular}`,
   viewMembers: (t: Terms) => `View ${t.memberPlural}`,
   memberAnalytics: (t: Terms) => `${t.memberSingular} Analytics`,
+  memberAvailability: (t: Terms) => `${t.memberSingular} Availability`,
   memberModel: (t: Terms) => `${t.memberSingular} Model`,
   markAttendance: (t: Terms) => `Mark ${t.attendanceSingular}`,
   createAttendance: (t: Terms) => `Create ${t.attendanceSingular}`,
@@ -28,5 +29,7 @@ export const LABELS = {
 /** A static string or one derived from terminology. */
 export type PresentationText = string | TermLabel;
 
-export const resolveText = (text: PresentationText, terms: OrganisationTerminology) =>
-  typeof text === "function" ? text(terms) : text;
+export const resolveText = (
+  text: PresentationText,
+  terms: OrganisationTerminology
+) => (typeof text === "function" ? text(terms) : text);

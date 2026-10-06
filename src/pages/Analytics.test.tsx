@@ -46,21 +46,27 @@ const ANALYTICS = {
 
 // The response's own config wins over the selected org's copy.
 const RESPONSE_STATUSES = CUSTOM_STATUSES.map((status) =>
-  status.key === "late" ? { ...status, label: "Tardy", shortLabel: "T" } : status,
+  status.key === "late"
+    ? { ...status, label: "Tardy", shortLabel: "T" }
+    : status
 );
 
 describe("<Analytics> with configured statuses", () => {
   beforeEach(() => {
     queryClient.clear();
     useGlobalStore.setState({
-      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+      },
     });
     mockGet.mockImplementation((url: string) =>
       Promise.resolve({
         data: url.includes("/analytics?")
           ? { data: { ...ANALYTICS, attendanceStatuses: RESPONSE_STATUSES } }
           : { data: {} },
-      }),
+      })
     );
   });
 
@@ -80,11 +86,15 @@ describe("<Analytics> with configured statuses", () => {
   it("shows behavior totals from attendanceBehaviorCounts as semantic columns", async () => {
     await search();
     ["Present", "Excused", "Absent"].forEach((label) =>
-      expect(screen.getByRole("columnheader", { name: label })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("columnheader", { name: label })
+      ).toBeInTheDocument()
     );
     // The row is a button (opens member analytics), so cells lose their role.
     const adaCells = Array.from(
-      (screen.getByText("Ada").closest("tr") as HTMLElement).querySelectorAll("td"),
+      (screen.getByText("Ada").closest("tr") as HTMLElement).querySelectorAll(
+        "td"
+      )
     ).map((cell) => cell.textContent);
     expect(adaCells).toEqual(["1", "Ada", "1", "0", "1", "T", "NS"]);
   });
@@ -95,24 +105,36 @@ describe("<Analytics> with configured statuses", () => {
     expect(screen.getByTitle("Remote")).toHaveTextContent("R");
     // Legend: every active status plus inactive Remote seen in results.
     ["Present", "Tardy", "No Show", "Remote"].forEach((label) =>
-      expect(screen.getAllByText(label).length).toBeGreaterThan(0),
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     );
     expect(screen.queryByText("Apology")).not.toBeInTheDocument();
   });
 
-  it("shows a neutral not-on-roster cell, not an absence, for a session the member was not expected at", async () => {
+  it("shows N/A for a session the member was not expected at", async () => {
     await search();
     const chiCells = Array.from(
-      (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll("td"),
+      (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll(
+        "td"
+      )
     );
     const missing = chiCells[chiCells.length - 1];
-    const cell = within(missing).getByRole("img", { name: "Not on this attendance roster" });
-    expect(cell).toHaveAttribute("title", "Not on this attendance roster");
+    const cell = within(missing).getByRole("img", {
+      name: "Not applicable: not on this attendance roster",
+    });
+    expect(cell).toHaveAttribute(
+      "title",
+      "Not applicable: not on this attendance roster"
+    );
     // Neither the configured absent status (No Show / NS) nor a behavior label.
     ["No Show", "NS", "Absent"].forEach((text) =>
-      expect(missing).not.toHaveTextContent(text),
+      expect(missing).not.toHaveTextContent(text)
     );
+    expect(missing).toHaveTextContent("N/A");
     // Totals come straight from the backend: Present 1, Excused 0, Absent 0.
-    expect(chiCells.slice(2, 5).map((cell) => cell.textContent)).toEqual(["1", "0", "0"]);
+    expect(chiCells.slice(2, 5).map((cell) => cell.textContent)).toEqual([
+      "1",
+      "0",
+      "0",
+    ]);
   });
 });

@@ -80,17 +80,22 @@ const ViewMembers: React.FC = () => {
   // The keys you always want to exclude
   const filteredKeys = useMemo(
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
-    [],
+    []
   );
   // Display labels only; filters, query params and saved columns keep storage keys.
   const { fields: modelFields } = useMemberModel(org.id);
-  const labelFor = useMemo(() => memberFieldLabeler(modelFields), [modelFields]);
+  const labelFor = useMemo(
+    () => memberFieldLabeler(modelFields),
+    [modelFields]
+  );
   const filterableFields = useMemo<FilterableField[]>(
     () =>
       modelFields
-        .filter((field) => field.type === "option" && Array.isArray(field.options))
+        .filter(
+          (field) => field.type === "option" && Array.isArray(field.options)
+        )
         .map((field) => ({ name: field.name, options: field.options ?? [] })),
-    [modelFields],
+    [modelFields]
   );
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
@@ -103,7 +108,7 @@ const ViewMembers: React.FC = () => {
   }, [members, filteredKeys]);
   const activeExportFilters = useMemo(
     () => Object.entries(filters).filter(([, values]) => values.length > 0),
-    [filters],
+    [filters]
   );
   const exportFields = useMemo(
     () =>
@@ -111,9 +116,9 @@ const ViewMembers: React.FC = () => {
         new Set([
           ...REQUIRED_EXPORT_FIELDS,
           ...selectedFields.filter((field) => Boolean(field)),
-        ]),
+        ])
       ),
-    [selectedFields],
+    [selectedFields]
   );
   const exportQueryString = useMemo(() => {
     const queryParams = new URLSearchParams();
@@ -130,15 +135,18 @@ const ViewMembers: React.FC = () => {
   }, [exportFields, activeExportFilters]);
   const exportMembersUrl = useMemo(
     () => `${url}/export${exportQueryString}`,
-    [exportQueryString, url],
+    [exportQueryString, url]
   );
   const exportMembersPdfUrl = useMemo(
     () => `${url}/export/pdf${exportQueryString}`,
-    [exportQueryString, url],
+    [exportQueryString, url]
   );
 
   useEffect(() => {
-    localStorage.setItem(selectedFieldsStorageKey, JSON.stringify(selectedFields));
+    localStorage.setItem(
+      selectedFieldsStorageKey,
+      JSON.stringify(selectedFields)
+    );
   }, [selectedFields, selectedFieldsStorageKey]);
   useEffect(() => {
     if (members.length > 0 && selectedFields.length === 0) {
@@ -167,7 +175,7 @@ const ViewMembers: React.FC = () => {
             window.open(response.data, "_blank");
           }
         },
-      },
+      }
     );
   const { refetch: exportMembersPdf, isFetching: isExportingMembersPdf } =
     useQueryWrapper(
@@ -185,12 +193,12 @@ const ViewMembers: React.FC = () => {
             window.open(response.data, "_blank");
           }
         },
-      },
+      }
     );
 
   const activeFilterCount = useMemo(
     () => Object.values(filters).filter((values) => values.length > 0).length,
-    [filters],
+    [filters]
   );
 
   const filteredMembers = members.filter((member) => {
@@ -298,7 +306,7 @@ const ViewMembers: React.FC = () => {
           >
             <Text color="red.500" fontWeight="bold">
               {`Error occurred while fetching ${lowerTerm(
-                terms.memberPlural,
+                terms.memberPlural
               )}.`}
             </Text>
           </Box>
@@ -352,10 +360,10 @@ const ViewMembers: React.FC = () => {
                           (option) => ({
                             value: option,
                             label: capitalize(option),
-                          }),
+                          })
                         );
                         const selected = options.filter((option) =>
-                          (filters[field.name] ?? []).includes(option.value),
+                          (filters[field.name] ?? []).includes(option.value)
                         );
                         return (
                           <Box key={field.name} mb={3}>
@@ -368,9 +376,11 @@ const ViewMembers: React.FC = () => {
                               options={options}
                               value={selected}
                               closeMenuOnSelect={false}
-                              onChange={(selected: MultiValue<SelectOption>) => {
+                              onChange={(
+                                selected: MultiValue<SelectOption>
+                              ) => {
                                 const values = selected.map(
-                                  (item) => item.value,
+                                  (item) => item.value
                                 );
                                 setFilters((prev) => ({
                                   ...prev,
@@ -464,12 +474,29 @@ const ViewMembers: React.FC = () => {
                             onClick={() => {
                               const pagePath = convertParamsToString(
                                 PROTECTED_PATHS.UPDATE_MEMBER,
-                                { memberId: member.id },
+                                { memberId: member.id }
                               );
                               navigate(pagePath);
                             }}
                           >
                             <FaPencilAlt />
+                          </Button>
+                        </Can>
+                        <Can perm="attendance.view">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            colorScheme="teal"
+                            onClick={() =>
+                              navigate(
+                                convertParamsToString(
+                                  PROTECTED_PATHS.MEMBER_ATTENDANCE_AVAILABILITY,
+                                  { memberId: member.id }
+                                )
+                              )
+                            }
+                          >
+                            Availability
                           </Button>
                         </Can>
                       </Flex>

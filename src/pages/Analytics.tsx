@@ -79,15 +79,21 @@ const formatDayHeader = (key: string) => {
 
 // A member with no cell for a session was not on its roster — neither present
 // nor absent, so it is neutral rather than a status of its own.
-const NOT_ON_ROSTER = (session: string) => `Not on this ${lowerTerm(session)} roster`;
+const NOT_ON_ROSTER = (session: string) =>
+  `Not applicable: not on this ${lowerTerm(session)} roster`;
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
   const [hasSearched, setHasSearched] = useState(false);
   const {
-    fromDate, toDate, setFromDate, setToDate,
-    activePreset, applyPreset, handleDateChange,
+    fromDate,
+    toDate,
+    setFromDate,
+    setToDate,
+    activePreset,
+    applyPreset,
+    handleDateChange,
   } = useDateRange({ onChange: () => setHasSearched(false) });
   const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
   const [statusOptions, setStatusOptions] = useState<string[]>([
@@ -97,7 +103,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const goToMemberAnalytics = (memberId: string) => {
-    const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, { memberId });
+    const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, {
+      memberId,
+    });
     const params = new URLSearchParams();
     if (fromDate) params.set("fromDate", fromDate);
     if (toDate) params.set("toDate", toDate);
@@ -124,7 +132,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
   const selectedStatuses = useMemo(
     () => statusFilter.filter((status) => status !== "all"),
-    [statusFilter],
+    [statusFilter]
   );
 
   const queryString = useMemo(() => {
@@ -168,7 +176,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     url,
     {
       enabled: false,
-    },
+    }
   );
 
   const exportExcelUrl = useMemo(() => {
@@ -177,7 +185,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
       attendanceRequest.ANALYTICS_EXPORT_EXCEL,
       {
         organisationId: org.id,
-      },
+      }
     );
     return `${path}?${queryString}`;
   }, [canRunQuery, org.id, queryString]);
@@ -204,7 +212,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
         enabled: false,
         onSuccess: (response: any) => openExportUrl(response, "Excel"),
         onError: (err: any) => handleExportError(err, "Excel"),
-      },
+      }
     );
 
   const { refetch: refetchPdf, isFetching: isExportingPdf } = useQueryWrapper(
@@ -220,7 +228,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
       enabled: false,
       onSuccess: (response: any) => openExportUrl(response, "PDF"),
       onError: (err: any) => handleExportError(err, "PDF"),
-    },
+    }
   );
 
   const handleSearch = () => {
@@ -233,13 +241,15 @@ const AttendanceAnalyticsPage: React.FC = () => {
   // pull out keys & data rows
   const keys: string[] = useMemo(
     () => analyticsResponse?.data.keys || [],
-    [analyticsResponse?.data.keys],
+    [analyticsResponse?.data.keys]
   );
   // The response carries the org's effective config at query time.
-  const statuses = useAttendanceStatuses(analyticsResponse?.data.attendanceStatuses);
+  const statuses = useAttendanceStatuses(
+    analyticsResponse?.data.attendanceStatuses
+  );
   const rows: any[] = useMemo(
     () => analyticsResponse?.data.analytics || [],
-    [analyticsResponse?.data.analytics],
+    [analyticsResponse?.data.analytics]
   );
 
   const statusSelectOptions = useMemo<StatusOption[]>(
@@ -250,21 +260,21 @@ const AttendanceAnalyticsPage: React.FC = () => {
         label: capitalize(option),
       })),
     ],
-    [statusOptions],
+    [statusOptions]
   );
 
   const selectedStatusOptions = useMemo(
     () =>
       statusSelectOptions.filter((option) =>
-        statusFilter.includes(option.value),
+        statusFilter.includes(option.value)
       ),
-    [statusFilter, statusSelectOptions],
+    [statusFilter, statusSelectOptions]
   );
 
   // detect which columns are dates
   const dateKeys = useMemo(
     () => keys.filter((k) => /\d{4}-\d{2}-\d{2}$/.test(k)),
-    [keys],
+    [keys]
   );
 
   // Legend: active statuses plus any inactive/unknown key in these results.
@@ -273,7 +283,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
     rows.forEach((row) =>
       dateKeys.forEach((d) => {
         if (row[d]) usedKeys.add(row[d] as string);
-      }),
+      })
     );
     return statuses.legendFor(usedKeys);
   }, [rows, dateKeys, statuses]);
@@ -321,7 +331,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
                   <ReactSelect
                     isMulti
                     placeholder={`Filter ${lowerTerm(
-                      terms.memberPlural,
+                      terms.memberPlural
                     )} by status`}
                     options={statusSelectOptions}
                     value={selectedStatusOptions}
@@ -335,7 +345,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
                       }
                       if (values.includes("all") && values.length > 1) {
                         setStatusFilter(
-                          values.filter((value) => value !== "all"),
+                          values.filter((value) => value !== "all")
                         );
                         setHasSearched(false);
                         return;
@@ -387,7 +397,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
                 <Flex gap={4} flexWrap="wrap">
                   {legend.map((status) => (
                     <Flex key={status.key} align="center" gap={1}>
-                      <Badge colorScheme={status.color}>{status.shortLabel}</Badge>
+                      <Badge colorScheme={status.color}>
+                        {status.shortLabel}
+                      </Badge>
                       <Text fontSize="sm">{status.label}</Text>
                     </Flex>
                   ))}
@@ -401,7 +413,11 @@ const AttendanceAnalyticsPage: React.FC = () => {
                       <Th isNumeric>SN</Th>
                       <Th>Name</Th>
                       {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                        <Th key={behavior} textAlign="center" verticalAlign="bottom">
+                        <Th
+                          key={behavior}
+                          textAlign="center"
+                          verticalAlign="bottom"
+                        >
                           <Box as="span" sx={VERTICAL_LABEL_SX}>
                             {BEHAVIOR_META[behavior].label}
                           </Box>
@@ -420,18 +436,25 @@ const AttendanceAnalyticsPage: React.FC = () => {
                     {rows.map((row, index) => (
                       <Tr
                         key={row.memberId}
-                        onClick={() => row.memberId && goToMemberAnalytics(row.memberId)}
+                        onClick={() =>
+                          row.memberId && goToMemberAnalytics(row.memberId)
+                        }
                         cursor={row.memberId ? "pointer" : "default"}
                         _hover={row.memberId ? { bg: "blue.50" } : undefined}
                         title={
                           row.memberId
-                            ? `View ${lowerTerm(terms.memberSingular)} analytics`
+                            ? `View ${lowerTerm(
+                                terms.memberSingular
+                              )} analytics`
                             : undefined
                         }
                         role={row.memberId ? "button" : undefined}
                         tabIndex={row.memberId ? 0 : undefined}
                         onKeyDown={(e) => {
-                          if (row.memberId && (e.key === "Enter" || e.key === " ")) {
+                          if (
+                            row.memberId &&
+                            (e.key === "Enter" || e.key === " ")
+                          ) {
                             e.preventDefault();
                             goToMemberAnalytics(row.memberId);
                           }
@@ -455,10 +478,14 @@ const AttendanceAnalyticsPage: React.FC = () => {
                               <Td key={d} textAlign="center">
                                 <Badge
                                   role="img"
-                                  aria-label={NOT_ON_ROSTER(terms.attendanceSingular)}
-                                  title={NOT_ON_ROSTER(terms.attendanceSingular)}
+                                  aria-label={NOT_ON_ROSTER(
+                                    terms.attendanceSingular
+                                  )}
+                                  title={NOT_ON_ROSTER(
+                                    terms.attendanceSingular
+                                  )}
                                 >
-                                  -
+                                  N/A
                                 </Badge>
                               </Td>
                             );
@@ -466,7 +493,10 @@ const AttendanceAnalyticsPage: React.FC = () => {
                           const status = statuses.resolve(key);
                           return (
                             <Td key={d} textAlign="center">
-                              <Badge colorScheme={status.color} title={status.label}>
+                              <Badge
+                                colorScheme={status.color}
+                                title={status.label}
+                              >
                                 {status.shortLabel}
                               </Badge>
                             </Td>
@@ -483,7 +513,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
           {/* No data message */}
           {!isFetching && !error && hasSearched && rows.length === 0 && (
             <Text>{`No ${lowerTerm(
-              terms.attendanceSingular,
+              terms.attendanceSingular
             )} records found for this range.`}</Text>
           )}
         </>

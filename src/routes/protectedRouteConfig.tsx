@@ -19,7 +19,9 @@ const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const ViewMembers = WithSuspense(lazy(() => import("pages/ViewMembers")));
 const Analytics = WithSuspense(lazy(() => import("pages/Analytics")));
-const MemberAnalytics = WithSuspense(lazy(() => import("pages/MemberAnalytics")));
+const MemberAnalytics = WithSuspense(
+  lazy(() => import("pages/MemberAnalytics"))
+);
 const Birthday = WithSuspense(lazy(() => import("pages/Birthday")));
 const Finance = WithSuspense(lazy(() => import("pages/Finance")));
 const OfficersRoles = WithSuspense(lazy(() => import("pages/OfficersRoles")));
@@ -28,6 +30,9 @@ const AddOrganisation = WithSuspense(
 );
 const OrganisationSettings = WithSuspense(
   lazy(() => import("pages/OrganisationSettings"))
+);
+const MemberAttendanceAvailability = WithSuspense(
+  lazy(() => import("pages/MemberAttendanceAvailability"))
 );
 
 const {
@@ -39,6 +44,7 @@ const {
   SUB_CATEGORY,
   ADD_MEMBER,
   UPDATE_MEMBER,
+  MEMBER_ATTENDANCE_AVAILABILITY,
   CREATE_ATTENDANCE,
   MARK_ATTENANCE,
   ATTENDANCE,
@@ -69,8 +75,18 @@ export type PageRouteConfig = {
 };
 
 export const PAGE_ROUTES: PageRouteConfig[] = [
-  { path: ALL_ORG, element: <OrgList />, title: "Organisations", showBack: false },
-  { path: DASHBOARD, element: <Dashboard />, title: "Dashboard", showBack: false },
+  {
+    path: ALL_ORG,
+    element: <OrgList />,
+    title: "Organisations",
+    showBack: false,
+  },
+  {
+    path: DASHBOARD,
+    element: <Dashboard />,
+    title: "Dashboard",
+    showBack: false,
+  },
   { path: ADD_ORG, element: <AddOrganisation />, title: "New Organisation" },
   {
     path: USER_MODEL,
@@ -101,6 +117,12 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
     element: <AddMember />,
     title: LABELS.updateMember,
     perm: "members.manage",
+  },
+  {
+    path: MEMBER_ATTENDANCE_AVAILABILITY,
+    element: <MemberAttendanceAvailability />,
+    title: LABELS.memberAvailability,
+    perm: "attendance.view",
   },
   {
     path: MARK_ATTENANCE,

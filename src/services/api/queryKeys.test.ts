@@ -21,16 +21,43 @@ describe("queryKeys tenant scoping", () => {
   });
 
   it("scopes officers, roles and invites to the organisation", () => {
-    expect(queryKeys.rbac.officers("orgA")).not.toEqual(queryKeys.rbac.officers("orgB"));
-    expect(queryKeys.rbac.roles("orgA")).not.toEqual(queryKeys.rbac.roles("orgB"));
-    expect(queryKeys.rbac.invites("orgA")).not.toEqual(queryKeys.rbac.invites("orgB"));
+    expect(queryKeys.rbac.officers("orgA")).not.toEqual(
+      queryKeys.rbac.officers("orgB")
+    );
+    expect(queryKeys.rbac.roles("orgA")).not.toEqual(
+      queryKeys.rbac.roles("orgB")
+    );
+    expect(queryKeys.rbac.invites("orgA")).not.toEqual(
+      queryKeys.rbac.invites("orgB")
+    );
   });
 
   it("scopes attendance templates to the organisation", () => {
-    expect(queryKeys.attendanceTemplates("orgA")).toEqual(["attendance-templates", "orgA"]);
+    expect(queryKeys.attendanceTemplates("orgA")).toEqual([
+      "attendance-templates",
+      "orgA",
+    ]);
     expect(queryKeys.attendanceTemplates("orgA")).not.toEqual(
       queryKeys.attendanceTemplates("orgB")
     );
+  });
+
+  it("scopes attendance availability by organisation, member and date", () => {
+    expect(queryKeys.attendanceAvailability.root("orgA")).not.toEqual(
+      queryKeys.attendanceAvailability.root("orgB")
+    );
+    expect(
+      queryKeys.attendanceAvailability.member("orgA", "member-1")
+    ).not.toEqual(queryKeys.attendanceAvailability.member("orgA", "member-2"));
+    expect(
+      queryKeys.attendanceAvailability.date("orgA", "2026-10-10")
+    ).not.toEqual(queryKeys.attendanceAvailability.date("orgA", "2026-10-11"));
+    expect(
+      matches(
+        queryKeys.attendanceAvailability.root("orgA"),
+        queryKeys.attendanceAvailability.member("orgA", "member-1")
+      )
+    ).toBe(true);
   });
 
   it("keeps the permissions catalog global", () => {
@@ -40,8 +67,12 @@ describe("queryKeys tenant scoping", () => {
 
   it("does not let one organisation's prefix invalidate another's cache", () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.finance.compliance("orgA", "ob1"), { org: "A" });
-    client.setQueryData(queryKeys.finance.compliance("orgB", "ob1"), { org: "B" });
+    client.setQueryData(queryKeys.finance.compliance("orgA", "ob1"), {
+      org: "A",
+    });
+    client.setQueryData(queryKeys.finance.compliance("orgB", "ob1"), {
+      org: "B",
+    });
     client.setQueryData(queryKeys.rbac.officers("orgA"), []);
     client.setQueryData(queryKeys.rbac.officers("orgB"), []);
 

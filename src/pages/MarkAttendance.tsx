@@ -73,6 +73,8 @@ import {
 } from "helpers/attendanceBulk";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
+import { useAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
+import { filterAvailableMembers } from "helpers/attendanceAvailability";
 
 export type MemberType = {
   /** A configured status key of the selected organisation. */
@@ -93,7 +95,9 @@ const MarkAttendanceSession = () => {
   const isUpdate = params.attendanceId !== undefined;
   const draftIdentity = isUpdate
     ? params.attendanceId
-    : `${currentAttendance.date || "undated"}-${currentAttendance.name || "untitled"}`;
+    : `${currentAttendance.date || "undated"}-${
+        currentAttendance.name || "untitled"
+      }`;
   const localStorageKey = `attendance-draft-${org.id}-${draftIdentity}`;
   // Every roster change goes through commitMembers so the draft never diverges.
   const [allMembers, commitMembers] =
@@ -108,14 +112,21 @@ const MarkAttendanceSession = () => {
     () => normalizeEligibilityRules(currentAttendance.eligibilityRules),
     [currentAttendance.eligibilityRules]
   );
-  const [recordRules, setRecordRules] = useState<AttendanceEligibilityRule[]>([]);
+  const [recordRules, setRecordRules] = useState<AttendanceEligibilityRule[]>(
+    []
+  );
   // Stored roster entries whose member no longer resolves: shown read-only and
   // never submitted, so the backend keeps their stored status.
-  const [unresolvedEntries, setUnresolvedEntries] = useState<UnresolvedRosterEntry[]>([]);
+  const [unresolvedEntries, setUnresolvedEntries] = useState<
+    UnresolvedRosterEntry[]
+  >([]);
   const displayedRules = isUpdate ? recordRules : sessionRules;
   // Labels only: the rules (and the roster they froze) stay keyed by storage key.
   const { fields: memberFields } = useMemberModel(org.id);
-  const labelFor = useMemo(() => memberFieldLabeler(memberFields), [memberFields]);
+  const labelFor = useMemo(
+    () => memberFieldLabeler(memberFields),
+    [memberFields]
+  );
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
   const statuses = useAttendanceStatuses();
@@ -127,6 +138,16 @@ const MarkAttendanceSession = () => {
     subCategoryId: currentAttendance.subCategoryId ?? "",
     date: (currentAttendance.date ?? "").slice(0, 10),
   };
+  const {
+    unavailableMemberIds,
+    isLoading: availabilityLoading,
+    isFetching: availabilityFetching,
+    isSuccess: availabilitySuccess,
+    isError: availabilityFailed,
+    refetch: refetchAvailability,
+  } = useAttendanceAvailabilityForDate(org.id, details.date, {
+    enabled: !isUpdate,
+  });
 
   const onDetailsChange = (next: AttendanceDetails) => {
     setAttendance({
@@ -169,10 +190,17 @@ const MarkAttendanceSession = () => {
   // or stopped matching drop out, and newly matching members (or stale draft
   // statuses) start at the organisation's default status.
   useEffect(() => {
-    if (isUpdate || !membersLoaded) return;
-    const roster = filterEligibleMembers(currentMembers, sessionRules).sort(
-      (a, b) => a.name.localeCompare(b.name)
-    );
+    if (
+      isUpdate ||
+      !membersLoaded ||
+      !availabilitySuccess ||
+      availabilityFetching
+    )
+      return;
+    const roster = filterAvailableMembers(
+      filterEligibleMembers(currentMembers, sessionRules),
+      unavailableMemberIds
+    ).sort((a, b) => a.name.localeCompare(b.name));
 
     let draft: unknown = null;
     const localAttendance = localStorage.getItem(localStorageKey);
@@ -189,8 +217,11 @@ const MarkAttendanceSession = () => {
   }, [
     isUpdate,
     membersLoaded,
+    availabilitySuccess,
+    availabilityFetching,
     currentMembers,
     sessionRules,
+    unavailableMemberIds,
     statuses,
     localStorageKey,
     commitMembers,
@@ -212,11 +243,11 @@ const MarkAttendanceSession = () => {
     const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
     setUnresolvedEntries(unresolved);
     const updatedMembers = resolved.map((attend) => ({
-        id: attend.memberId,
-        name: attend.member.name,
-        // Kept verbatim, even when the status has since been deactivated.
-        attendanceStatus: attend.attendanceStatus,
-      }));
+      id: attend.memberId,
+      name: attend.member.name,
+      // Kept verbatim, even when the status has since been deactivated.
+      attendanceStatus: attend.attendanceStatus,
+    }));
     commitMembers(() => updatedMembers);
   };
 
@@ -239,8 +270,13 @@ const MarkAttendanceSession = () => {
 
   const isLoadingData = isUpdate
     ? isGettingAttendance
-    : !rosterReady && !membersFailed;
-  const rosterFailed = !isUpdate && !rosterReady && membersFailed;
+    : !rosterReady &&
+      !membersFailed &&
+      !availabilityFailed &&
+      !availabilityLoading &&
+      !availabilityFetching;
+  const rosterFailed =
+    !isUpdate && !rosterReady && (membersFailed || availabilityFailed);
 
   // A new session re-reads the roster but keeps its marks (e.g. after the
   // backend rejects a submit because the expected roster changed). An edit
@@ -252,7 +288,8 @@ const MarkAttendanceSession = () => {
       window.location.reload();
       return;
     }
-    refetchMembers();
+    setRosterReady(false);
+    void Promise.all([refetchMembers(), refetchAvailability()]);
   };
 
   const handleSearch = useCallback((e) => {
@@ -331,7 +368,12 @@ const MarkAttendanceSession = () => {
     // Only the session fields the API accepts — never stray persisted state.
     // Rules only define a NEW session's roster; an update never re-resolves it.
     const data = {
-      ..._.pick(currentAttendance, ["name", "date", "categoryId", "subCategoryId"]),
+      ..._.pick(currentAttendance, [
+        "name",
+        "date",
+        "categoryId",
+        "subCategoryId",
+      ]),
       organisationId: org.id,
       ...(isUpdate ? {} : { eligibilityRules: sessionRules }),
       memberStatuses: allMembers.map((member) => ({
@@ -339,9 +381,12 @@ const MarkAttendanceSession = () => {
         status: member.attendanceStatus,
       })),
     };
-    const upateUrl = convertParamsToString(attendanceRequest.UPDATE_ATTENDANCE, {
-      attendanceId: params.attendanceId as string,
-    });
+    const upateUrl = convertParamsToString(
+      attendanceRequest.UPDATE_ATTENDANCE,
+      {
+        attendanceId: params.attendanceId as string,
+      }
+    );
     mutate({
       url: isUpdate ? upateUrl : attendanceRequest.ATTENDANCE,
       data,
@@ -359,7 +404,9 @@ const MarkAttendanceSession = () => {
   const onSubmit = () => {
     confirmAlert({
       title: "Please verify count",
-      message: `${formatStatusCounts(statusCounts)}. Are you sure you want to submit?`,
+      message: `${formatStatusCounts(
+        statusCounts
+      )}. Are you sure you want to submit?`,
       buttons: [
         {
           label: "Yes",
@@ -384,7 +431,9 @@ const MarkAttendanceSession = () => {
           <Flex gap={2} alignItems="center" flexShrink={0}>
             {isUpdate && (
               <IconButton
-                aria-label={`Edit ${lowerTerm(terms.attendanceSingular)} details`}
+                aria-label={`Edit ${lowerTerm(
+                  terms.attendanceSingular
+                )} details`}
                 icon={<FaPencilAlt />}
                 variant="outline"
                 colorScheme="blue"
@@ -403,13 +452,21 @@ const MarkAttendanceSession = () => {
           />
         ) : rosterFailed ? (
           <Text mt="6" color="red.500">
-            {`${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
+            {availabilityFailed
+              ? `${terms.attendanceSingular} availability could not be loaded. Use Refresh to try again.`
+              : `${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
+          </Text>
+        ) : !isUpdate && (availabilityLoading || availabilityFetching) ? (
+          <Text mt="6" color="gray.600">
+            Checking {lowerTerm(terms.attendanceSingular)} availability...
           </Text>
         ) : (
           <>
             <ExpectedRosterSummary
               title={`Expected roster: ${expectedRosterSize} ${lowerTerm(
-                expectedRosterSize === 1 ? terms.memberSingular : terms.memberPlural
+                expectedRosterSize === 1
+                  ? terms.memberSingular
+                  : terms.memberPlural
               )}`}
               rules={displayedRules}
               labelFor={labelFor}
@@ -446,7 +503,9 @@ const MarkAttendanceSession = () => {
               selectedStatus={selectedStatus}
               defaultStatus={statuses.defaultStatus}
               canUndo={undoSnapshot !== null}
-              onApply={() => selectedStatus && setVisibleStatus(selectedStatus.key)}
+              onApply={() =>
+                selectedStatus && setVisibleStatus(selectedStatus.key)
+              }
               onReset={() => setVisibleStatus(statuses.defaultStatus.key)}
               onUndo={undoBulkChange}
             />
@@ -469,7 +528,10 @@ const MarkAttendanceSession = () => {
                 />
               ))}
             </Box>
-            <UnresolvedRosterEntries entries={unresolvedEntries} statuses={statuses} />
+            <UnresolvedRosterEntries
+              entries={unresolvedEntries}
+              statuses={statuses}
+            />
             <Button
               onClick={onSubmit}
               w="full"
@@ -514,7 +576,11 @@ const MarkAttendanceSession = () => {
               />
             </DrawerBody>
             <DrawerFooter>
-              <Button w="full" variant="primary" onClick={detailsDrawer.onClose}>
+              <Button
+                w="full"
+                variant="primary"
+                onClick={detailsDrawer.onClose}
+              >
                 Done
               </Button>
             </DrawerFooter>
@@ -533,7 +599,9 @@ const MarkAttendanceSession = () => {
 const MarkAttendance = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);
   const { attendanceId } = useParams();
-  return <MarkAttendanceSession key={`${organisationId}:${attendanceId ?? "new"}`} />;
+  return (
+    <MarkAttendanceSession key={`${organisationId}:${attendanceId ?? "new"}`} />
+  );
 };
 
 export default MarkAttendance;
