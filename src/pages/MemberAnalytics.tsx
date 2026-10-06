@@ -18,6 +18,7 @@ import { MemberAnalytics as MemberAnalyticsData } from "components/analytics/mem
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
+import { queryKeys } from "services/api/queryKeys";
 
 const buildQuery = (fromDate: string, toDate: string) => {
   const params = new URLSearchParams();
@@ -56,7 +57,7 @@ const MemberAnalyticsPage: React.FC = () => {
   }, [canQuery, org.id, memberId, queryString]);
 
   const { data: response, isFetching, error } = useQueryWrapper(
-    ["memberAnalytics", org.id, memberId, fromDate, toDate],
+    queryKeys.analytics.member(org.id, memberId, fromDate, toDate),
     url,
     { enabled: canQuery },
   );
@@ -148,7 +149,7 @@ const MemberAnalyticsPage: React.FC = () => {
         )}
         {!isFetching && !error && analytics && !hasData && (
           <Text mt={4}>
-            {`No ${lowerTerm(terms.attendanceSingular)} records for this range.`}
+            {`No included ${lowerTerm(terms.attendanceSingular)} records for this range.`}
           </Text>
         )}
         {!isFetching && !error && hasData && analytics && (

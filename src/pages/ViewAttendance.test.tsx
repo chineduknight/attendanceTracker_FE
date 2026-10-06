@@ -8,6 +8,7 @@ import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { MEMBER_MODEL } from "test-utils/eligibilityFixtures";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
+import { PermissionKey } from "rbac/permissions";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -16,13 +17,15 @@ jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
-  default: { get: jest.fn(), delete: jest.fn() },
+  default: { get: jest.fn(), delete: jest.fn(), patch: jest.fn() },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockGet: jest.Mock = require("services/api").default.get;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockDelete: jest.Mock = require("services/api").default.delete;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockPatch: jest.Mock = require("services/api").default.patch;
 const mockConfirm = confirmAlert as jest.Mock;
 
 const entry = (memberId: string, name: string, attendanceStatus: string) => ({
@@ -268,6 +271,190 @@ describe("<ViewAttendance> with custom terminology", () => {
     expect(screen.getByText("Former student (profile unavailable)")).toBeInTheDocument();
     expect(
       screen.getByText(/1 student on this roster no longer has a profile/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("<ViewAttendance> analytics inclusion", () => {
+  const EXCLUDED = {
+    ...SESSION,
+    analyticsIncluded: false,
+    analyticsExclusionReason: "Incomplete marking",
+    analyticsExcludedAt: "2026-10-15T09:00:00.000Z",
+    analyticsExcludedBy: "user-1",
+  };
+  const REHEARSAL_TERMS = {
+    ...DEFAULT_TERMINOLOGY,
+    memberSingular: "Student",
+    memberPlural: "Students",
+    attendanceSingular: "Rehearsal",
+    attendancePlural: "Rehearsals",
+  };
+
+  let session: object;
+  const setup = (permissions: PermissionKey[], terminology = DEFAULT_TERMINOLOGY) => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        permissions,
+        terminology,
+      },
+    });
+  };
+  const renderPage = async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+  };
+  const dialog = () => within(screen.getByRole("dialog"));
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    session = SESSION;
+    mockGet.mockImplementation(() =>
+      Promise.resolve({ data: { data: session } })
+    );
+  });
+
+  it("shows a legacy record as included to a view-only user without controls", async () => {
+    setup(["attendance.view"]);
+    await renderPage();
+    expect(screen.getByText("Included in analytics")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Exclude from analytics" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the excluded state, reason and date read-only", async () => {
+    session = EXCLUDED;
+    setup(["attendance.view"]);
+    await renderPage();
+    expect(screen.getByText("Excluded from analytics")).toBeInTheDocument();
+    expect(screen.getByText("Reason: Incomplete marking")).toBeInTheDocument();
+    expect(screen.getByText("Excluded date: 15 Oct 2026")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Restore to analytics" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers exclusion to a manager even when marking edits are locked", async () => {
+    session = { ...SESSION, editsLocked: true, editsRemaining: 0, editCount: 3 };
+    setup(["attendance.view", "attendance.manage"]);
+    await renderPage();
+    expect(
+      screen.getByRole("button", { name: "Exclude from analytics" })
+    ).toBeInTheDocument();
+  });
+
+  it("excludes after a deliberate confirmation with a reason", async () => {
+    setup(["attendance.view", "attendance.manage"]);
+    mockPatch.mockImplementation(() => {
+      session = EXCLUDED;
+      return Promise.resolve({ data: { data: {} } });
+    });
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
+    expect(mockPatch).not.toHaveBeenCalled();
+    expect(
+      dialog().getByText(
+        "This attendance will remain available in attendance history, but it will not count toward organisation or member analytics."
+      )
+    ).toBeInTheDocument();
+    const reason = dialog().getByLabelText("Reason (optional)");
+    expect(reason).toHaveAttribute("maxLength", "200");
+    fireEvent.change(reason, { target: { value: " Incomplete marking " } });
+    expect(dialog().getByText("20/200 characters")).toBeInTheDocument();
+    fireEvent.click(
+      dialog().getByRole("button", { name: "Exclude from analytics" })
+    );
+
+    await waitFor(() =>
+      expect(mockPatch).toHaveBeenCalledWith(
+        "/attendance/org1/att1/analytics-inclusion",
+        { analyticsIncluded: false, reason: "Incomplete marking" }
+      )
+    );
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Attendance excluded from analytics."
+      )
+    );
+    expect(await screen.findByText("Excluded from analytics")).toBeInTheDocument();
+    expect(screen.getByText("Reason: Incomplete marking")).toBeInTheDocument();
+  });
+
+  it("cancelling the confirmation sends nothing", async () => {
+    setup(["attendance.view", "attendance.manage"]);
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
+    fireEvent.click(dialog().getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+    expect(mockPatch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed restore visibly excluded and shows the backend error", async () => {
+    session = EXCLUDED;
+    setup(["attendance.view", "attendance.manage"]);
+    mockPatch.mockRejectedValue({
+      response: { status: 422, data: { error: "Restore not allowed" } },
+    });
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore to analytics" }));
+    fireEvent.click(dialog().getByRole("button", { name: "Restore" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Restore not allowed")
+    );
+    expect(screen.getByText("Excluded from analytics")).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("uses organisation terms in the confirmation and toast copy", async () => {
+    session = EXCLUDED;
+    setup(["attendance.view", "attendance.manage"], REHEARSAL_TERMS);
+    mockPatch.mockResolvedValue({ data: { data: {} } });
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore to analytics" }));
+    expect(
+      dialog().getByText("Restore this rehearsal to analytics?")
+    ).toBeInTheDocument();
+    expect(
+      dialog().getByText(
+        "Its stored attendance will count again in organisation and student analytics."
+      )
+    ).toBeInTheDocument();
+    fireEvent.click(dialog().getByRole("button", { name: "Restore" }));
+    await waitFor(() =>
+      expect(mockPatch).toHaveBeenCalledWith(
+        "/attendance/org1/att1/analytics-inclusion",
+        { analyticsIncluded: true }
+      )
+    );
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Rehearsal restored to analytics."
+      )
+    );
+  });
+
+  it("names the rehearsal term in the exclusion confirmation", async () => {
+    setup(["attendance.view", "attendance.manage"], REHEARSAL_TERMS);
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
+    expect(
+      dialog().getByText("Exclude this rehearsal from analytics?")
+    ).toBeInTheDocument();
+    expect(
+      dialog().getByText(
+        "This rehearsal will remain available in rehearsal history, but it will not count toward organisation or student analytics."
+      )
     ).toBeInTheDocument();
   });
 });

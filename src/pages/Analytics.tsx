@@ -38,6 +38,8 @@ import {
   formatRangeLabel,
 } from "components/analytics/useDateRange";
 import DateRangeControls from "components/analytics/DateRangeControls";
+import SessionSummary from "components/analytics/SessionSummary";
+import { AnalyticsSessionSummary } from "helpers/attendanceAnalyticsInclusion";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -166,13 +168,12 @@ const AttendanceAnalyticsPage: React.FC = () => {
     error,
     refetch,
   } = useQueryWrapper(
-    [
-      "attendanceAnalytics",
+    queryKeys.analytics.organisation(
+      org.id,
       fromDate,
       toDate,
-      org.id,
-      selectedStatuses.join(","),
-    ],
+      selectedStatuses.join(",")
+    ),
     url,
     {
       enabled: false,
@@ -247,6 +248,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
   const statuses = useAttendanceStatuses(
     analyticsResponse?.data.attendanceStatuses
   );
+  const sessionSummary: AnalyticsSessionSummary | undefined =
+    analyticsResponse?.data.sessionSummary;
   const rows: any[] = useMemo(
     () => analyticsResponse?.data.analytics || [],
     [analyticsResponse?.data.analytics]
@@ -378,6 +381,10 @@ const AttendanceAnalyticsPage: React.FC = () => {
             <Text color="red.500" mb={4}>
               Error fetching analytics.
             </Text>
+          )}
+
+          {!isFetching && !error && hasSearched && sessionSummary && (
+            <SessionSummary summary={sessionSummary} />
           )}
 
           {/* Table */}

@@ -35,6 +35,35 @@ export const queryKeys = {
     date: (organisationId: string, date: string) =>
       ["attendance-availability", organisationId, "date", date] as const,
   },
+  analytics: {
+    /** Prefix covering every organisation analytics query for one org. */
+    root: (organisationId: string) =>
+      ["attendance-analytics", organisationId] as const,
+    organisation: (
+      organisationId: string,
+      fromDate: string,
+      toDate: string,
+      statuses: string
+    ) =>
+      [
+        "attendance-analytics",
+        organisationId,
+        "organisation",
+        fromDate,
+        toDate,
+        statuses,
+      ] as const,
+    /** Prefix covering every member analytics query for one org. */
+    memberRoot: (organisationId: string) =>
+      ["member-analytics", organisationId] as const,
+    member: (
+      organisationId: string,
+      memberId: string,
+      fromDate: string,
+      toDate: string
+    ) =>
+      ["member-analytics", organisationId, memberId, fromDate, toDate] as const,
+  },
 
   finance: {
     obligations: (organisationId: string) =>
