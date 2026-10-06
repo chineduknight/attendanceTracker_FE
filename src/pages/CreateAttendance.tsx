@@ -25,11 +25,14 @@ import {
   AttendanceEligibilityRule,
   countEligibleMembers,
   eligibilityFields,
+  isAttendanceEligibilityEnabled,
   normalizeEligibilityRules,
 } from "helpers/attendanceEligibility";
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
+
+const NO_RULES: AttendanceEligibilityRule[] = [];
 
 const EMPTY_DETAILS: AttendanceDetails = {
   name: "",
@@ -44,6 +47,11 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
   const updateCurrentAttendance = useGlobalStore(
     (state) => state.updateCurrentAttendance,
   );
+  // Off, the page behaves as if eligibility did not exist: no editor, no
+  // member-field dependency, and every new session expects everyone.
+  const eligibilityEnabled = useGlobalStore((state) =>
+    isAttendanceEligibilityEnabled(state.organisation),
+  );
   const {
     categories,
     isSuccess: categoriesLoaded,
@@ -53,17 +61,20 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
     fields: memberFields,
     isSuccess: memberModelLoaded,
     isError: memberModelFailed,
-  } = useMemberModel(organisationId);
+  } = useMemberModel(organisationId, { enabled: eligibilityEnabled });
   const { members, isSuccess: membersLoaded } = useMembers(organisationId);
   const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
   const [eligibilityRules, setEligibilityRules] = useState<
     AttendanceEligibilityRule[]
   >([]);
 
+  // Rules entered while eligibility was on never leak into an Everyone session.
+  const activeRules = eligibilityEnabled ? eligibilityRules : NO_RULES;
   const optionFields = useMemo(() => eligibilityFields(memberFields), [memberFields]);
-  const expectedCount = membersLoaded
-    ? countEligibleMembers(members, eligibilityRules)
-    : null;
+  const expectedCount =
+    eligibilityEnabled && membersLoaded
+      ? countEligibleMembers(members, activeRules)
+      : null;
 
   // A template fills everything but the date, which belongs to this session.
   const applyTemplate = (applied: AppliedTemplate) => {
@@ -81,7 +92,7 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
       date: details.date,
       ...(details.categoryId ? { categoryId: details.categoryId } : {}),
       ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
-      eligibilityRules: normalizeEligibilityRules(eligibilityRules),
+      eligibilityRules: normalizeEligibilityRules(activeRules),
     };
     updateCurrentAttendance(payload);
     queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
@@ -122,11 +133,16 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
           <AttendanceTemplatePicker
             organisationId={organisationId}
             details={details}
-            eligibilityRules={eligibilityRules}
+            eligibilityRules={activeRules}
+            eligibilityEnabled={eligibilityEnabled}
             categories={categories}
             memberFields={memberFields}
-            setupLoaded={categoriesLoaded && memberModelLoaded}
-            setupFailed={categoriesFailed || memberModelFailed}
+            setupLoaded={
+              categoriesLoaded && (!eligibilityEnabled || memberModelLoaded)
+            }
+            setupFailed={
+              categoriesFailed || (eligibilityEnabled && memberModelFailed)
+            }
             onApply={applyTemplate}
           />
           <AttendanceDetailsForm
@@ -134,16 +150,19 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             onChange={setDetails}
             categories={categories}
           />
-          <AttendanceEligibilityEditor
-            fields={optionFields}
-            fieldsStatus={
-              memberModelLoaded ? "ready" : memberModelFailed ? "error" : "loading"
-            }
-            rules={eligibilityRules}
-            onChange={setEligibilityRules}
-            expectedCount={expectedCount}
-            totalCount={members.length}
-          />
+          {eligibilityEnabled && (
+            <AttendanceEligibilityEditor
+              fields={optionFields}
+              fieldsStatus={
+                memberModelLoaded ? "ready" : memberModelFailed ? "error" : "loading"
+              }
+              rules={eligibilityRules}
+              onChange={setEligibilityRules}
+              expectedCount={expectedCount}
+              totalCount={members.length}
+            />
+          )}
+
           <Button
             w="full"
             mt="40px"

@@ -124,6 +124,16 @@ export const templateStaleness = (
 export const isStale = ({ category, eligibility }: TemplateStaleness) =>
   category || eligibility.length > 0;
 
+/**
+ * Whether a template restricts who is expected — including rules that could
+ * not be read. Such a template needs eligibility enabled to be applied.
+ */
+export const usesEligibility = (
+  template: Pick<AttendanceTemplate, "eligibilityRules" | "hasUnreadableEligibility">,
+): boolean =>
+  template.eligibilityRules.length > 0 || Boolean(template.hasUnreadableEligibility);
+
+
 const nameKey = (name: string) => name.trim().toLowerCase();
 
 /**

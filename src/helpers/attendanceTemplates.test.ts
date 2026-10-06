@@ -10,7 +10,9 @@ import {
   templateFieldsError,
   toTemplateFields,
   TEMPLATE_NAME_MAX_LENGTH,
+  usesEligibility,
 } from "helpers/attendanceTemplates";
+
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 const categories: CategoryType[] = [
@@ -147,5 +149,16 @@ describe("eligibility on templates", () => {
       eligibility: ["Part: Mezzo is no longer an option."],
     });
     expect(isStale(staleness)).toBe(true);
+  });
+});
+
+describe("usesEligibility", () => {
+  it("is false only for a template that expects everyone", () => {
+    expect(usesEligibility({ eligibilityRules: [] })).toBe(false);
+    expect(usesEligibility({ eligibilityRules: [{ field: "part", values: ["alto"] }] })).toBe(true);
+  });
+
+  it("counts unreadable stored rules as restricted, never as Everyone", () => {
+    expect(usesEligibility({ eligibilityRules: [], hasUnreadableEligibility: true })).toBe(true);
   });
 });

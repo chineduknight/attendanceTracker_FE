@@ -110,7 +110,13 @@ describe("<ViewAttendance> expected roster", () => {
   beforeEach(() => {
     queryClient.clear();
     useGlobalStore.setState({
-      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+      // Historical rosters and rules stay visible with eligibility now off.
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        attendanceEligibilityEnabled: false,
+      },
     });
   });
 

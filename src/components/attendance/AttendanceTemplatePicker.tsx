@@ -21,6 +21,7 @@ import {
   templateStaleness,
   TemplateStaleness,
   toTemplateFields,
+  usesEligibility,
 } from "helpers/attendanceTemplates";
 import {
   AttendanceEligibilityRule,
@@ -47,11 +48,16 @@ interface AttendanceTemplatePickerProps {
   /** Current form values; the source for Save as / Update template. */
   details: AttendanceDetails;
   eligibilityRules: AttendanceEligibilityRule[];
+  /**
+   * The organisation's eligibility setting. Off, templates with rules stay
+   * listed but cannot be applied or overwritten — never silently widened.
+   */
+  eligibilityEnabled: boolean;
   categories: CategoryType[];
   memberFields: MemberModelField[];
   /** Staleness is only judged once the category tree and member model are known. */
   setupLoaded: boolean;
-  /** Categories or member fields failed to load, so no template can be applied. */
+  /** Setup data failed to load, so no template can be applied. */
   setupFailed: boolean;
   onApply: (applied: AppliedTemplate) => void;
 }
@@ -86,11 +92,15 @@ const staleReason = (
  * stays with the session being created. Templates that no longer fit the
  * organisation's categories or member model stay visible as "Needs update"
  * and cannot be applied until repaired — never silently widened to Everyone.
+ * Likewise, while eligibility is off a template with rules is shown as
+ * requiring eligibility and is neither applied nor updated; its stored rules
+ * are untouched and it works again once eligibility is re-enabled.
  */
 const AttendanceTemplatePicker = ({
   organisationId,
   details,
   eligibilityRules,
+  eligibilityEnabled,
   categories,
   memberFields,
   setupLoaded,
@@ -102,25 +112,39 @@ const AttendanceTemplatePicker = ({
     useAttendanceTemplates(organisationId);
   const [selectedId, setSelectedId] = useState("");
 
+  const needsEligibility = (template: AttendanceTemplate) =>
+    !eligibilityEnabled && usesEligibility(template);
+
   const stalenessById = useMemo(() => {
     const stale = new Map<string, TemplateStaleness>();
     if (!setupLoaded) return stale;
     templates.forEach((template) => {
+      // Unavailable for another reason; its rules are not judged while off.
+      if (!eligibilityEnabled && usesEligibility(template)) return;
       const staleness = templateStaleness(template, categories, memberFields, terms);
       if (isStale(staleness)) stale.set(template.id, staleness);
     });
     return stale;
-  }, [templates, categories, memberFields, setupLoaded, terms]);
+  }, [templates, categories, memberFields, setupLoaded, eligibilityEnabled, terms]);
   const selected = templates.find((template) => template.id === selectedId);
   const selectedStaleness = selected ? stalenessById.get(selected.id) : undefined;
-  const canApply = Boolean(selected) && setupLoaded && !selectedStaleness;
+  const selectedNeedsEligibility = Boolean(selected && needsEligibility(selected));
+  const canApply =
+    Boolean(selected) && setupLoaded && !selectedStaleness && !selectedNeedsEligibility;
 
   const apply = (template: AttendanceTemplate) => onApply(toApplied(template));
 
   const onSelect = (id: string) => {
     setSelectedId(id);
     const template = templates.find((t) => t.id === id);
-    if (template && setupLoaded && !stalenessById.has(id)) apply(template);
+    if (
+      template &&
+      setupLoaded &&
+      !stalenessById.has(id) &&
+      !needsEligibility(template)
+    ) {
+      apply(template);
+    }
   };
 
   /** Validates the current form values for saving over `excludeId` (or new). */
@@ -146,7 +170,8 @@ const AttendanceTemplatePicker = ({
   };
 
   const onUpdate = () => {
-    if (!selected) return;
+    // The form has no rules while off; saving would widen the template.
+    if (!selected || selectedNeedsEligibility) return;
     const fields = validFields(selected.id);
     if (!fields) return;
     update(selected.id, fields, {
@@ -209,9 +234,11 @@ const AttendanceTemplatePicker = ({
             >
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
-                  {stalenessById.has(template.id)
-                    ? `${template.name} (Needs update)`
-                    : template.name}
+                  {needsEligibility(template)
+                    ? `${template.name} (Requires eligibility)`
+                    : stalenessById.has(template.id)
+                      ? `${template.name} (Needs update)`
+                      : template.name}
                 </option>
               ))}
             </Select>
@@ -219,9 +246,23 @@ const AttendanceTemplatePicker = ({
         )}
         {selected && setupFailed && (
           <FormHelperText color="red.500">
-            {`Templates can't be applied until ${lowerTerm(
-              terms.categoryPlural,
-            )} and ${lowerTerm(terms.memberSingular)} fields load.`}
+            {eligibilityEnabled
+              ? `Templates can't be applied until ${lowerTerm(
+                  terms.categoryPlural,
+                )} and ${lowerTerm(terms.memberSingular)} fields load.`
+              : `Templates can't be applied until ${lowerTerm(
+                  terms.categoryPlural,
+                )} load.`}
+          </FormHelperText>
+        )}
+        {selectedNeedsEligibility && (
+          <FormHelperText>
+            <Badge colorScheme="purple" mr={2}>
+              Requires eligibility
+            </Badge>
+            {`Uses ${lowerTerm(
+              terms.attendanceSingular,
+            )} eligibility. Enable eligibility in Organisation Settings to use this template.`}
           </FormHelperText>
         )}
         {selectedStaleness && (
@@ -251,10 +292,11 @@ const AttendanceTemplatePicker = ({
               size="sm"
               variant="outline"
               onClick={onUpdate}
-              isDisabled={isSaving}
+              isDisabled={isSaving || selectedNeedsEligibility}
             >
               Update template
             </Button>
+
             <Button
               size="sm"
               variant="outline"

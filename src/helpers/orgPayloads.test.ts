@@ -14,6 +14,7 @@ describe("buildOrgUpdatePayload", () => {
     name: "VOB Choir",
     image: "https://cdn.example.com/logo.png",
     collapseAttendanceByDay: true,
+    attendanceEligibilityEnabled: false,
     terminology: { ...DEFAULT_TERMINOLOGY },
     featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
   };
@@ -58,6 +59,7 @@ describe("buildOrgUpdatePayload", () => {
         image: "  https://x/y.png ",
         collapseAttendanceByDay: false,
         maxAttendanceEdits: "",
+        attendanceEligibilityEnabled: false,
         terminology: { ...DEFAULT_TERMINOLOGY },
         featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
       },
@@ -88,6 +90,7 @@ describe("buildOrgUpdatePayload", () => {
     const form = {
       ...base,
       maxAttendanceEdits: "",
+      attendanceEligibilityEnabled: true,
       terminology: {
         ...DEFAULT_TERMINOLOGY,
         memberSingular: "  Student ",
@@ -109,6 +112,7 @@ describe("buildOrgUpdatePayload", () => {
       collapseAttendanceByDay: true,
       maxAttendanceEdits: null,
       attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
+      attendanceEligibilityEnabled: true,
       terminology: {
         ...DEFAULT_TERMINOLOGY,
         memberSingular: "Student",
@@ -118,4 +122,46 @@ describe("buildOrgUpdatePayload", () => {
       featureVisibility: { finance: false, birthdays: false, analytics: true },
     });
   });
+
+  describe("attendance eligibility setting", () => {
+    it.each([true, false])("sends attendanceEligibilityEnabled: %s with every other setting", (enabled) => {
+      expect(
+        buildOrgUpdatePayload(
+          { ...base, maxAttendanceEdits: "2", attendanceEligibilityEnabled: enabled },
+          rows,
+        ),
+      ).toEqual({
+        name: "VOB Choir",
+        image: "https://cdn.example.com/logo.png",
+        collapseAttendanceByDay: true,
+        maxAttendanceEdits: 2,
+        attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
+        attendanceEligibilityEnabled: enabled,
+        terminology: { ...DEFAULT_TERMINOLOGY },
+        featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+      });
+    });
+
+    it("omits the switch for a backend that does not support it, keeping presentation", () => {
+      const result = buildOrgUpdatePayload(
+        { ...base, maxAttendanceEdits: "", attendanceEligibilityEnabled: true },
+        rows,
+        { includeEligibilitySetting: false },
+      );
+      expect(result).not.toHaveProperty("attendanceEligibilityEnabled");
+      expect(result.terminology).toEqual(DEFAULT_TERMINOLOGY);
+    });
+
+    it("sends the switch independently of presentation support", () => {
+      const result = buildOrgUpdatePayload(
+        { ...base, maxAttendanceEdits: "", attendanceEligibilityEnabled: true },
+        rows,
+        { includePresentation: false },
+      );
+      expect(result.attendanceEligibilityEnabled).toBe(true);
+      expect(result).not.toHaveProperty("terminology");
+      expect(result).not.toHaveProperty("featureVisibility");
+    });
+  });
 });
+

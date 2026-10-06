@@ -499,7 +499,14 @@ describe("<MarkAttendance> eligibility", () => {
     localStorage.clear();
     roster = ELIGIBILITY_ROSTER.map((m) => ({ ...m }));
     useGlobalStore.setState({
-      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES_5 },
+      // Stored rosters stay authoritative even after the organisation turns
+      // eligibility off; the setting only shapes Create Attendance.
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: STATUSES_5,
+        attendanceEligibilityEnabled: false,
+      },
       currentAttendance: {
         name: "Sectional",
         date: "2026-10-01",

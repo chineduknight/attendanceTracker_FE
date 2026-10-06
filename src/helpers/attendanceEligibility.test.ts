@@ -9,7 +9,9 @@ import {
   normalizeEligibilityRules,
   setRuleValues,
   summarizeEligibilityRules,
+  isAttendanceEligibilityEnabled,
 } from "helpers/attendanceEligibility";
+
 import { MEMBER_MODEL, ROSTER } from "test-utils/eligibilityFixtures";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
@@ -181,5 +183,18 @@ describe("backend-compatible casing", () => {
   it("does not flag a stored lowercased field or canonical option as stale", () => {
     const model = [{ name: "Part", type: "option", options: ["Soprano", "Alto"] }];
     expect(eligibilityIssues([{ field: "part", values: ["soprano"] }], model)).toEqual([]);
+  });
+});
+
+describe("isAttendanceEligibilityEnabled", () => {
+  it("is on only when the organisation explicitly enabled it", () => {
+    expect(isAttendanceEligibilityEnabled({ attendanceEligibilityEnabled: true })).toBe(true);
+    expect(isAttendanceEligibilityEnabled({ attendanceEligibilityEnabled: false })).toBe(false);
+  });
+
+  it("is off for an organisation cached before the setting existed", () => {
+    expect(isAttendanceEligibilityEnabled({})).toBe(false);
+    expect(isAttendanceEligibilityEnabled({ attendanceEligibilityEnabled: null })).toBe(false);
+    expect(isAttendanceEligibilityEnabled(undefined)).toBe(false);
   });
 });
