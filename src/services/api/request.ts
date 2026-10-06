@@ -46,6 +46,7 @@ export const attendanceRequest = {
   ATTENDANCE_AVAILABILITY: "/attendance/:organisationId/availability",
   ATTENDANCE_AVAILABILITY_ONE:
     "/attendance/:organisationId/availability/:availabilityId",
+  ANALYTICS_INCLUSION: "/attendance/:organisationId/:id/analytics-inclusion",
 };
 
 export const financeRequest = {

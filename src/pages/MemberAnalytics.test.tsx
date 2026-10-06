@@ -96,6 +96,30 @@ describe("<MemberAnalytics>", () => {
     const tile = screen.getByText("Total Attendance").parentElement as HTMLElement;
     expect(tile).toHaveTextContent("Total Attendance2");
   });
+
+  it("says no included records when every session in range was excluded", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          data: {
+            ...ANALYTICS,
+            summary: {
+              ...ANALYTICS.summary,
+              totalSessions: 0,
+              behaviorCounts: { present: 0, excused: 0, absent: 0 },
+            },
+            verdicts: [],
+            records: [],
+          },
+        },
+      }),
+    );
+    renderPage();
+    expect(
+      await screen.findByText("No included attendance records for this range."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Excluded/)).not.toBeInTheDocument();
+  });
 });
 
 const SCHOOL_TERMS = {
@@ -158,7 +182,7 @@ describe("<MemberAnalytics> with custom terminology", () => {
     );
     renderPage();
     expect(
-      await screen.findByText("No session records for this range."),
+      await screen.findByText("No included session records for this range."),
     ).toBeInTheDocument();
   });
 });

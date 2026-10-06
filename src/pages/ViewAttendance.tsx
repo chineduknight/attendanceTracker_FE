@@ -45,6 +45,11 @@ import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntri
 import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
+import AnalyticsInclusionPanel from "components/attendance/AnalyticsInclusionPanel";
+import {
+  AnalyticsInclusion,
+  toAnalyticsInclusion,
+} from "helpers/attendanceAnalyticsInclusion";
 
 type StatusOption = {
   value: string;
@@ -74,6 +79,7 @@ type AttendanceInfoType = {
   expectedCount: number;
   unresolved: UnresolvedRosterEntry[];
   eligibilityRules: AttendanceEligibilityRule[];
+  analyticsInclusion: AnalyticsInclusion;
 };
 
 // "All" sentinel shared by both multi-selects: selecting it clears the others.
@@ -112,6 +118,7 @@ const Attendance = () => {
       expectedCount,
       unresolved,
       eligibilityRules: normalizeEligibilityRules(data.data.eligibilityRules),
+      analyticsInclusion: toAnalyticsInclusion(data.data),
     });
 
     setAllMembers(members);
@@ -343,6 +350,13 @@ const Attendance = () => {
                 rules={storedRules}
                 isOutdated={rulesOutdated}
                 labelFor={labelFor}
+              />
+            )}
+            {attendanceInfo && (
+              <AnalyticsInclusionPanel
+                organisationId={org.id}
+                attendanceId={param.id as string}
+                inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
             <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>

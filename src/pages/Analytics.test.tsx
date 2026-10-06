@@ -4,6 +4,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Analytics from "pages/Analytics";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -136,5 +137,97 @@ describe("<Analytics> with configured statuses", () => {
       "0",
       "0",
     ]);
+  });
+});
+
+describe("<Analytics> session summary", () => {
+  // R2 (2026-09-08) is excluded: the backend omits its column and its totals.
+  const EXCLUDED_RANGE = {
+    keys: ["name", D1],
+    analytics: [
+      {
+        memberId: "m1",
+        name: "Ada",
+        attendanceBehaviorCounts: { present: 1, excused: 0, absent: 0 },
+        [D1]: "late",
+      },
+      {
+        // Off the included D1 roster: still N/A.
+        memberId: "m3",
+        name: "Chi",
+        attendanceBehaviorCounts: { present: 0, excused: 0, absent: 0 },
+      },
+    ],
+    attendanceStatuses: CUSTOM_STATUSES,
+    sessionSummary: { recorded: 3, included: 2, excluded: 1 },
+  };
+
+  const search = async (terminology = DEFAULT_TERMINOLOGY) => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        terminology,
+      },
+    });
+    renderRoute(<Analytics />, "/analytics", "/analytics");
+    fireEvent.change(screen.getByPlaceholderText("From date"), {
+      target: { value: "2026-09-01" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("To date"), {
+      target: { value: "2026-09-30" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByText("Ada");
+  };
+
+  beforeEach(() => {
+    queryClient.clear();
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.includes("/analytics?")
+          ? { data: EXCLUDED_RANGE }
+          : { data: {} },
+      })
+    );
+  });
+
+  it("discloses recorded, included and excluded counts from the backend", async () => {
+    await search();
+    expect(screen.getByText("Attendance recorded: 3")).toBeInTheDocument();
+    expect(screen.getByText("Included in analytics: 2")).toBeInTheDocument();
+    expect(screen.getByText("Excluded: 1")).toBeInTheDocument();
+  });
+
+  it("uses the organisation's attendance term", async () => {
+    await search({
+      ...DEFAULT_TERMINOLOGY,
+      attendanceSingular: "Rehearsal",
+      attendancePlural: "Rehearsals",
+    });
+    expect(screen.getByText("Rehearsals recorded: 3")).toBeInTheDocument();
+  });
+
+  it("renders no column, cell or legend entry for an excluded session", async () => {
+    await search();
+    const headers = screen
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+    expect(headers).toEqual(["SN", "Name", "Present", "Excused", "Absent", "Tue 1, Sep"]);
+    expect(screen.queryByText(/Excluded from analytics/)).not.toBeInTheDocument();
+    const adaCells = Array.from(
+      (screen.getByText("Ada").closest("tr") as HTMLElement).querySelectorAll("td")
+    );
+    expect(adaCells).toHaveLength(6);
+  });
+
+  it("keeps N/A for an off-roster member on an included session", async () => {
+    await search();
+    const chiCells = Array.from(
+      (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll("td")
+    );
+    expect(chiCells).toHaveLength(6);
+    expect(chiCells[5]).toHaveTextContent("N/A");
   });
 });

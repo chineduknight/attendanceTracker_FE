@@ -60,6 +60,25 @@ describe("queryKeys tenant scoping", () => {
     ).toBe(true);
   });
 
+  it("scopes organisation and member analytics under per-org roots", () => {
+    const orgKey = queryKeys.analytics.organisation("orgA", "f", "t", "");
+    const memberKey = queryKeys.analytics.member("orgA", "m1", "f", "t");
+    expect(orgKey).not.toEqual(
+      queryKeys.analytics.organisation("orgB", "f", "t", "")
+    );
+    expect(memberKey).not.toEqual(
+      queryKeys.analytics.member("orgB", "m1", "f", "t")
+    );
+    expect(matches(queryKeys.analytics.root("orgA"), orgKey)).toBe(true);
+    expect(matches(queryKeys.analytics.root("orgB"), orgKey)).toBe(false);
+    expect(matches(queryKeys.analytics.memberRoot("orgA"), memberKey)).toBe(
+      true
+    );
+    expect(matches(queryKeys.analytics.memberRoot("orgB"), memberKey)).toBe(
+      false
+    );
+  });
+
   it("keeps the permissions catalog global", () => {
     expect(queryKeys.permissionsCatalog).toEqual(["permissions-catalog"]);
     expect(queryKeys.permissionsCatalog).not.toContain("orgA");
