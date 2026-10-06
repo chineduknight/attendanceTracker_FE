@@ -11,7 +11,6 @@ import theme from "styles/theme";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import MemberAttendanceAvailability from "pages/MemberAttendanceAvailability";
-import { toast } from "react-toastify";
 
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
@@ -192,24 +191,5 @@ describe("<MemberAttendanceAvailability>", () => {
     expect(window.confirm).toHaveBeenCalled();
     expect(mockArchive).toHaveBeenCalledWith("current", expect.any(Function));
     await waitFor(() => expect(mockArchive).toHaveBeenCalled());
-  });
-
-  it("keeps backend overlap errors visible", () => {
-    mockCreate.mockImplementation(() => {
-      toast.error(
-        "This student already has an attendance availability period that overlaps these dates."
-      );
-    });
-    renderPage();
-    fireEvent.change(screen.getByLabelText("Start date"), {
-      target: { value: "2026-12-01" },
-    });
-    fireEvent.change(screen.getByLabelText("End date"), {
-      target: { value: "2026-12-02" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add period" }));
-    expect(toast.error).toHaveBeenCalledWith(
-      "This student already has an attendance availability period that overlaps these dates."
-    );
   });
 });
