@@ -1,4 +1,8 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { render } from "@testing-library/react";
+import { ChakraProvider } from "@chakra-ui/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewMembers from "pages/ViewMembers";
@@ -64,8 +68,63 @@ describe("<ViewMembers> with custom terminology", () => {
     mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
     renderPage();
     expect(
-      await screen.findByText("Error occurred while fetching students."),
+      await screen.findByText("Error occurred while fetching students.")
     ).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
+  });
+
+  it("shows availability with attendance.view and navigates to the member route", async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/model"))
+        return Promise.resolve({ data: { data: { fields: [] } } });
+      return Promise.resolve({
+        data: { data: [{ id: "member-1", name: "Ada" }] },
+      });
+    });
+    render(
+      <ChakraProvider>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/members"]}>
+            <Routes>
+              <Route path="/members" element={<ViewMembers />} />
+              <Route
+                path="/member/:memberId/attendance-availability"
+                element={<div>availability destination</div>}
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>
+    );
+    expect(
+      await screen.findByRole("button", { name: "Availability" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Availability" }));
+    expect(
+      await screen.findByText("availability destination")
+    ).toBeInTheDocument();
+  });
+
+  it("hides availability without attendance.view", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        isOwner: false,
+        permissions: [],
+      },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/model"))
+        return Promise.resolve({ data: { data: { fields: [] } } });
+      return Promise.resolve({
+        data: { data: [{ id: "member-1", name: "Ada" }] },
+      });
+    });
+    renderPage();
+    await screen.findByText("Ada");
+    expect(
+      screen.queryByRole("button", { name: "Availability" })
+    ).not.toBeInTheDocument();
   });
 });

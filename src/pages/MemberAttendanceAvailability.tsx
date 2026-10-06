@@ -163,8 +163,9 @@ const MemberAttendanceAvailability = () => {
         {member?.name ?? terms.memberSingular} attendance availability
       </Heading>
       <Text mb={6}>
-        This {lowerTerm(terms.memberSingular)} will not be expected for sessions
-        in an unavailable period.
+        This {lowerTerm(terms.memberSingular)} will not be expected for{" "}
+        {lowerTerm(terms.attendancePlural).toLowerCase()} in an unavailable
+        period.
       </Text>
       <Alert status="info" mb={6}>
         <AlertIcon />

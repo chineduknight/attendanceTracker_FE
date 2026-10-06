@@ -556,7 +556,7 @@ describe("<CreateAttendance> eligibility", () => {
       screen.queryByText("No members match these eligibility rules.")
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("No members are available for this session.")
+      screen.getByText("No members are available for this attendance.")
     ).toBeInTheDocument();
     expect(button("Continue")).toBeDisabled();
   });
@@ -978,7 +978,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
       ).not.toBeInTheDocument()
     );
     expect(
-      screen.getByText("No members are available for this session.")
+      screen.getByText("No members are available for this attendance.")
     ).toBeInTheDocument();
   });
 

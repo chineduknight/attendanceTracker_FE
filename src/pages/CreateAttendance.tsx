@@ -81,6 +81,7 @@ const CreateAttendanceForm = ({
   const {
     unavailableMemberIds,
     isLoading: availabilityLoading,
+    isFetching: availabilityFetching,
     isSuccess: availabilitySuccess,
     isError: availabilityFailed,
   } = useAttendanceAvailabilityForDate(organisationId, details.date);
@@ -100,19 +101,20 @@ const CreateAttendanceForm = ({
   );
   const rawEligibilityCount =
     eligibilityEnabled && membersLoaded ? rawEligibleMembers.length : null;
+  const validDate = isValidAvailabilityDate(details.date);
+  const availabilityReady =
+    !validDate || (availabilitySuccess && !availabilityFetching);
   const finalExpectedMembers = useMemo(
     () =>
-      availabilitySuccess
+      availabilityReady
         ? filterAvailableMembers(rawEligibleMembers, unavailableMemberIds)
         : [],
-    [availabilitySuccess, rawEligibleMembers, unavailableMemberIds]
+    [availabilityReady, rawEligibleMembers, unavailableMemberIds]
   );
-  const finalExpectedCount = availabilitySuccess
+  const finalExpectedCount = availabilityReady
     ? finalExpectedMembers.length
     : null;
-  const validDate = isValidAvailabilityDate(details.date);
-  const availabilityReady = !validDate || availabilitySuccess;
-  const unavailableExpectedCount = availabilitySuccess
+  const unavailableExpectedCount = availabilityReady
     ? rawEligibleMembers.length - finalExpectedMembers.length
     : 0;
 
@@ -198,7 +200,7 @@ const CreateAttendanceForm = ({
             onChange={setDetails}
             categories={categories}
           />
-          {details.date && availabilityLoading && (
+          {details.date && (availabilityLoading || availabilityFetching) && (
             <Text color="gray.600">Checking attendance availability...</Text>
           )}
           {details.date && availabilityFailed && (
@@ -207,7 +209,7 @@ const CreateAttendanceForm = ({
               continuing.
             </Text>
           )}
-          {validDate && availabilitySuccess && unavailableExpectedCount > 0 && (
+          {validDate && availabilityReady && unavailableExpectedCount > 0 && (
             <Box borderWidth="1px" borderRadius="md" p={3}>
               <Text fontWeight="bold">Attendance availability</Text>
               <Text fontSize="sm">
@@ -227,9 +229,10 @@ const CreateAttendanceForm = ({
               </Text>
             </Box>
           )}
-          {validDate && availabilitySuccess && finalExpectedCount === 0 && (
+          {validDate && availabilityReady && finalExpectedCount === 0 && (
             <Text color="red.500">
-              No {lowerTerm(terms.memberPlural)} are available for this session.
+              No {lowerTerm(terms.memberPlural)} are available for this{" "}
+              {lowerTerm(terms.attendanceSingular)}.
             </Text>
           )}
           {eligibilityEnabled && (
@@ -261,6 +264,7 @@ const CreateAttendanceForm = ({
               !membersLoaded ||
               !availabilityReady ||
               availabilityLoading ||
+              availabilityFetching ||
               availabilityFailed ||
               finalExpectedCount === 0
             }

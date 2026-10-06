@@ -190,7 +190,13 @@ const MarkAttendanceSession = () => {
   // or stopped matching drop out, and newly matching members (or stale draft
   // statuses) start at the organisation's default status.
   useEffect(() => {
-    if (isUpdate || !membersLoaded || !availabilitySuccess) return;
+    if (
+      isUpdate ||
+      !membersLoaded ||
+      !availabilitySuccess ||
+      availabilityFetching
+    )
+      return;
     const roster = filterAvailableMembers(
       filterEligibleMembers(currentMembers, sessionRules),
       unavailableMemberIds
@@ -212,6 +218,7 @@ const MarkAttendanceSession = () => {
     isUpdate,
     membersLoaded,
     availabilitySuccess,
+    availabilityFetching,
     currentMembers,
     sessionRules,
     unavailableMemberIds,
