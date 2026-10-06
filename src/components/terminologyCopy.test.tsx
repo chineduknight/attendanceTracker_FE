@@ -10,6 +10,7 @@ import { DEFAULT_TERMINOLOGY, OrganisationTerminology } from "helpers/organisati
 import AccountabilityTab from "components/finance/AccountabilityTab";
 import ComplianceTab from "components/finance/ComplianceTab";
 import PendingInvitesTab from "components/officers/PendingInvitesTab";
+import QuickMarkToolbar from "components/attendance/QuickMarkToolbar";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn(), info: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -83,4 +84,13 @@ describe("terminology in finance and officer copy", () => {
     renderWithTerms(<PendingInvitesTab organisationId="org1" />, terms);
     expect(await screen.findByText(copy)).toBeInTheDocument();
   });
+
+  it.each([
+    [DEFAULT_TERMINOLOGY, "Tap a member to"],
+    [SCHOOL, "Tap a student to"],
+  ])("labels the quick-mark modes with the member term", (terms, label) => {
+    renderWithTerms(<QuickMarkToolbar statuses={[]} mode={null} onModeChange={jest.fn()} />, terms);
+    expect(screen.getByRole("group", { name: label })).toBeInTheDocument();
+  });
 });
+

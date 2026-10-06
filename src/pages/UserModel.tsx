@@ -38,6 +38,7 @@ import {
   toModelPayload,
   validateEditorFields,
 } from "helpers/memberModelEditor";
+import { LABELS } from "config/presentationLabels";
 
 const NO_ERRORS = new Map<string, FieldErrors>();
 
@@ -82,13 +83,15 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
     () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.memberModel(organisationId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
-      toast.success(isUpdating ? "Model updated successfully" : "Model created successfully");
+      const model = LABELS.memberModel(terms);
+      toast.success(`${model} ${isUpdating ? "updated" : "created"} successfully`);
       navigate(PROTECTED_PATHS.ADD_MEMBER);
     },
     (error: any) => {
       if (error?.response?.status === 401) return;
       const message: string =
-        error?.response?.data?.error ?? "The model could not be saved. Please try again.";
+        error?.response?.data?.error ??
+        `The ${lowerTerm(LABELS.memberModel(terms))} could not be saved. Please try again.`;
       setServerError(message);
       toast.error(message);
     },

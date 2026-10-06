@@ -10,6 +10,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import UserModel from "pages/UserModel";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -247,4 +248,35 @@ describe("<UserModel>", () => {
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     expect(posted()[1]).toEqual({ ...select, label: "Voice Part" });
   });
+
+  it.each([
+    [undefined, "Member Model updated successfully", "The member model could not be saved. Please try again."],
+    ["Student", "Student Model updated successfully", "The student model could not be saved. Please try again."],
+  ])("names the model in its save messages with the member term (%s)", async (memberSingular, success, failure) => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "orgA",
+        permissions: [],
+        ...(memberSingular && {
+          terminology: { ...DEFAULT_TERMINOLOGY, memberSingular, memberPlural: `${memberSingular}s` },
+        }),
+      },
+    });
+    renderPage();
+    await waitFor(() => card("Part"));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(success));
+
+    cleanup();
+    queryClient.clear();
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    mockPost.mockImplementation(() => Promise.reject({ response: { status: 500, data: {} } }));
+    renderPage();
+    await waitFor(() => card("Part"));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(await screen.findByText(failure)).toBeInTheDocument();
+    (console.error as jest.Mock).mockRestore();
+  });
 });
+
