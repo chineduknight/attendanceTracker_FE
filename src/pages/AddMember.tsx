@@ -20,7 +20,7 @@ import {
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
-import { capitalize, convertParamsToString } from "helpers/stringManipulations";
+import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import { useForm } from "react-hook-form";
@@ -28,7 +28,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
-import { FieldType } from "./UserModel";
+import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
@@ -39,7 +39,7 @@ interface FormData {
 
 const AddOrUpdateMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const [membersModel, setMembersModel] = useState<FieldType[]>([]);
+  const [membersModel, setMembersModel] = useState<MemberModelField[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [currentMember, setcurrentMember] = useState({});
   const navigate = useNavigate();
@@ -171,12 +171,13 @@ const AddOrUpdateMember = () => {
 
   // Render the form fields based on the members' model
   const renderFormFields = () => {
+    // Labels are display-only; every input stays registered under its storage key.
     return membersModel.map((field) => {
       if (field.type === "checkbox") {
         const fieldValue = isUpdating ? currentMember[field.name] : false; // Get the current member field value when updating
         return (
-          <FormControl key={field._id} id={field.name}>
-            <FormLabel>{capitalize(field.name)}</FormLabel>
+          <FormControl key={field._id ?? field.name} id={field.name}>
+            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
             <Checkbox
               {...register(field.name)}
               colorScheme="blue"
@@ -188,11 +189,11 @@ const AddOrUpdateMember = () => {
         const fieldValue = isUpdating ? currentMember[field.name] : "";
         return (
           <FormControl
-            key={field._id}
+            key={field._id ?? field.name}
             id={field.name}
             isRequired={field.required}
           >
-            <FormLabel>{capitalize(field.name)}</FormLabel>
+            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
             <Select
               defaultValue={fieldValue}
               {...register(field.name, { required: field.required })}
@@ -210,11 +211,11 @@ const AddOrUpdateMember = () => {
         const fieldValue = isUpdating ? currentMember[field.name] : ""; // Get the current member field value when updating
         return (
           <FormControl
-            key={field._id}
+            key={field._id ?? field.name}
             id={field.name}
             isRequired={field.required}
           >
-            <FormLabel>{capitalize(field.name)}</FormLabel>
+            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
             <Input
               type={field.type}
               defaultValue={fieldValue}

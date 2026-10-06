@@ -126,6 +126,17 @@ describe("<ViewAttendance> expected roster", () => {
     expect(screen.queryByText(OUTDATED_NOTICE)).not.toBeInTheDocument();
   });
 
+  it("summarises stored rules with the current label without changing the roster", async () => {
+    serve(
+      { ...SESSION, eligibilityRules: [{ field: "part", values: ["soprano"] }] },
+      MEMBER_MODEL.map((f) => (f.name === "part" ? { ...f, label: "Voice Part" } : f)),
+    );
+    await renderPage();
+    expect(await screen.findByText("Voice Part: Soprano")).toBeInTheDocument();
+    expect(screen.getByText("Expected members: 6")).toBeInTheDocument();
+    expect(screen.queryByText(OUTDATED_NOTICE)).not.toBeInTheDocument();
+  });
+
   it("flags a rule the current model no longer understands without changing the roster", async () => {
     serve(
       { ...SESSION, eligibilityRules: [{ field: "part", values: ["mezzo"] }] },

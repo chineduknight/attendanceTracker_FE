@@ -39,6 +39,7 @@ import {
   normalizeEligibilityRules,
 } from "helpers/attendanceEligibility";
 import { useMemberModel } from "hooks/useMemberModel";
+import { memberFieldLabeler } from "helpers/memberFields";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
 import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
@@ -132,6 +133,7 @@ const Attendance = () => {
     org.id,
   );
   const storedRules = attendanceInfo?.eligibilityRules ?? [];
+  const labelFor = useMemo(() => memberFieldLabeler(memberFields), [memberFields]);
   // Only flagged once the current model is known; the roster itself is untouched.
   const rulesOutdated =
     memberModelLoaded && eligibilityIssues(storedRules, memberFields).length > 0;
@@ -331,6 +333,7 @@ const Attendance = () => {
                 title={`Expected members: ${attendanceInfo.expectedCount}`}
                 rules={storedRules}
                 isOutdated={rulesOutdated}
+                labelFor={labelFor}
               />
             )}
             <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>

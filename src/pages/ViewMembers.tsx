@@ -45,6 +45,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import ReactSelect, { MultiValue } from "react-select";
+import { useMemberModel } from "hooks/useMemberModel";
+import { memberFieldLabeler } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
@@ -67,9 +69,6 @@ const ViewMembers: React.FC = () => {
     const stored = localStorage.getItem(selectedFieldsStorageKey);
     return stored ? JSON.parse(stored) : [];
   });
-  const [filterableFields, setFilterableFields] = useState<FilterableField[]>(
-    [],
-  );
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const navigate = useNavigate();
   const isCompactActions = useBreakpointValue({ base: true, sm: false });
@@ -79,21 +78,16 @@ const ViewMembers: React.FC = () => {
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
     [],
   );
-  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
-    organisationId: org.id,
-  });
-
-  useQueryWrapper(queryKeys.memberModel(org.id), modelURL, {
-    onSuccess: (data) => {
-      const fields = data?.data.fields ?? [];
-      const optionFields = fields
-        .filter(
-          (field: any) => field.type === "option" && Array.isArray(field.options),
-        )
-        .map((field: any) => ({ name: field.name, options: field.options }));
-      setFilterableFields(optionFields);
-    },
-  });
+  // Display labels only; filters, query params and saved columns keep storage keys.
+  const { fields: modelFields } = useMemberModel(org.id);
+  const labelFor = useMemo(() => memberFieldLabeler(modelFields), [modelFields]);
+  const filterableFields = useMemo<FilterableField[]>(
+    () =>
+      modelFields
+        .filter((field) => field.type === "option" && Array.isArray(field.options))
+        .map((field) => ({ name: field.name, options: field.options ?? [] })),
+    [modelFields],
+  );
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
@@ -353,11 +347,11 @@ const ViewMembers: React.FC = () => {
                         return (
                           <Box key={field.name} mb={3}>
                             <Text fontSize="sm" fontWeight="bold" mb={1}>
-                              {capitalize(field.name)}
+                              {labelFor(field.name)}
                             </Text>
                             <ReactSelect
                               isMulti
-                              placeholder={`Filter by ${capitalize(field.name)}`}
+                              placeholder={`Filter by ${labelFor(field.name)}`}
                               options={options}
                               value={selected}
                               closeMenuOnSelect={false}
@@ -410,7 +404,7 @@ const ViewMembers: React.FC = () => {
                   <Flex gap={4} wrap="wrap" pt={2}>
                     {allExtraFields.map((field) => (
                       <Checkbox key={field} value={field}>
-                        {capitalize(field)}
+                        {labelFor(field)}
                       </Checkbox>
                     ))}
                   </Flex>
@@ -470,7 +464,7 @@ const ViewMembers: React.FC = () => {
                       {getDisplayFields(member).map(([key, value]) => (
                         <Flex key={key} align="center">
                           <Text fontWeight="bold" flexShrink={0} mr={2}>
-                            {capitalize(key)}:
+                            {labelFor(key)}:
                           </Text>
                           <Text>{formatFieldValue(value)}</Text>
                         </Flex>

@@ -62,6 +62,8 @@ import {
 } from "helpers/attendanceEligibility";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 import { useMembers } from "hooks/useMembers";
+import { useMemberModel } from "hooks/useMemberModel";
+import { memberFieldLabeler } from "helpers/memberFields";
 import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
 import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
 import {
@@ -108,6 +110,9 @@ const MarkAttendanceSession = () => {
   // never submitted, so the backend keeps their stored status.
   const [unresolvedEntries, setUnresolvedEntries] = useState<UnresolvedRosterEntry[]>([]);
   const displayedRules = isUpdate ? recordRules : sessionRules;
+  // Labels only: the rules (and the roster they froze) stay keyed by storage key.
+  const { fields: memberFields } = useMemberModel(org.id);
+  const labelFor = useMemo(() => memberFieldLabeler(memberFields), [memberFields]);
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
   const statuses = useAttendanceStatuses();
@@ -399,6 +404,7 @@ const MarkAttendanceSession = () => {
                 expectedRosterSize === 1 ? "member" : "members"
               }`}
               rules={displayedRules}
+              labelFor={labelFor}
             />
             <QuickMarkToolbar
               statuses={statuses.active}

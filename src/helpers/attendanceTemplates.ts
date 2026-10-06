@@ -7,6 +7,7 @@ import {
   MemberModelField,
   normalizeEligibilityRules,
 } from "helpers/attendanceEligibility";
+import { memberFieldLabeler } from "helpers/memberFields";
 
 /**
  * A reusable shortcut for the Create Attendance form: the session name, its
@@ -102,14 +103,17 @@ export const templateStaleness = (
   template: AttendanceTemplate,
   categories: readonly CategoryType[],
   modelFields: readonly MemberModelField[],
-): TemplateStaleness => ({
-  category: isCategoryPlacementStale(template, categories),
-  eligibility: template.hasUnreadableEligibility
-    ? ["Its stored eligibility rules could not be read."]
-    : eligibilityIssues(template.eligibilityRules, modelFields).map(
-        describeEligibilityIssue,
-      ),
-});
+): TemplateStaleness => {
+  const labelFor = memberFieldLabeler(modelFields);
+  return {
+    category: isCategoryPlacementStale(template, categories),
+    eligibility: template.hasUnreadableEligibility
+      ? ["Its stored eligibility rules could not be read."]
+      : eligibilityIssues(template.eligibilityRules, modelFields).map((issue) =>
+          describeEligibilityIssue(issue, labelFor),
+        ),
+  };
+};
 
 export const isStale = ({ category, eligibility }: TemplateStaleness) =>
   category || eligibility.length > 0;
