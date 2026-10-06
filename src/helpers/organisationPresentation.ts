@@ -94,13 +94,14 @@ export const termError = (value: string): string | null => {
 /**
  * A term inside a sentence, e.g. `Search ${lowerTerm(t.memberSingular)}`.
  * Only plainly capitalised words are lowercased, so acronyms and stylised
- * terms ("CYON Member" → "CYON member", "MP") keep their casing.
+ * terms ("CYON Member" → "CYON member", "MP") keep their casing. Hyphenated
+ * terms lowercase per part ("Sub-category" → "sub-category").
  */
 export const lowerTerm = (term: string): string =>
   term
-    .split(" ")
-    .map((word) => (/^[A-Z][a-z]+$/.test(word) ? word.toLowerCase() : word))
-    .join(" ");
+    .split(/(\s+|-)/)
+    .map((part) => (/^[A-Z][a-z]+$/.test(part) ? part.toLowerCase() : part))
+    .join("");
 
 /** One editable term pair in Organisation Settings. */
 export interface TermGroup {

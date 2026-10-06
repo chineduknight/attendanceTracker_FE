@@ -9,6 +9,7 @@ import MarkAttendance from "pages/MarkAttendance";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
 import { ROSTER as ELIGIBILITY_ROSTER } from "test-utils/eligibilityFixtures";
 import { toast } from "react-toastify";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -770,3 +771,74 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
   });
 });
 
+
+const SCHOOL_TERMS = {
+  ...DEFAULT_TERMINOLOGY,
+  memberSingular: "Student",
+  memberPlural: "Students",
+  attendanceSingular: "Session",
+  attendancePlural: "Sessions",
+};
+
+describe("<MarkAttendance> with custom terminology", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: STATUSES,
+        terminology: SCHOOL_TERMS,
+      },
+      currentAttendance: { name: "Rehearsal", date: "2026-10-01", members: [] },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/members")) return Promise.resolve({ data: { data: ROSTER } });
+      if (url.startsWith("/attendance/org1/att1")) {
+        return Promise.resolve({ data: { data: HISTORICAL } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+    mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  it("names the member term while the roster loads", async () => {
+    mockGet.mockImplementation(() => new Promise(() => undefined));
+    renderAt("/mark");
+    expect(await screen.findByText("Loading students...")).toBeInTheDocument();
+  });
+
+  it("names the member term when the roster could not be loaded", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
+    renderAt("/mark");
+    expect(
+      await screen.findByText(
+        "Students could not be loaded. Use Refresh to try again.",
+      ),
+    ).toBeInTheDocument();
+    (console.error as jest.Mock).mockRestore();
+  });
+
+  it("uses the session term in created success copy", async () => {
+    renderAt("/mark");
+    await screen.findByText("Ada");
+    submitAndConfirm();
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Session Created successfully"),
+    );
+  });
+
+  it("uses the session term in updated success copy", async () => {
+    renderAt("/mark/att1");
+    await screen.findByText("Ada");
+    submitAndConfirm();
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Session Updated"),
+    );
+  });
+});

@@ -219,7 +219,7 @@ describe("<CreateAttendance> session templates", () => {
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     fireEvent.click(button("Save as template"));
-    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Enter an attendance name/));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Enter the attendance name/));
     expect(mockPost).not.toHaveBeenCalled();
   });
 

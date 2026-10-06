@@ -24,6 +24,7 @@ import {
   AttendanceBehavior,
   AttendanceStatusColor,
   BEHAVIOR_META,
+  behaviorDescription,
 } from "helpers/attendanceStatuses";
 import {
   createStatusRow,
@@ -34,6 +35,7 @@ import {
   setDefaultStatus,
   StatusRow,
 } from "helpers/attendanceStatusSettings";
+import { useTerms } from "hooks/useOrgPresentation";
 
 interface AttendanceStatusesEditorProps {
   rows: StatusRow[];
@@ -48,6 +50,7 @@ const AttendanceStatusesEditor = ({
   errors,
   isReadOnly,
 }: AttendanceStatusesEditorProps) => {
+  const terms = useTerms();
   const [newLabel, setNewLabel] = useState("");
 
   const updateRow = (key: string, patch: Partial<StatusRow>) =>
@@ -62,17 +65,16 @@ const AttendanceStatusesEditor = ({
   return (
     <Stack spacing={3} as="section" aria-labelledby="attendance-statuses-heading">
       <Heading id="attendance-statuses-heading" size="sm">
-        Attendance statuses
+        {`${terms.attendanceSingular} statuses`}
       </Heading>
       <Text fontSize="sm" color="gray.600">
-        Members are marked with these statuses, in this order. Each status has a
-        behavior that decides how analytics treat it:
+        {`${terms.memberPlural} are marked with these statuses, in this order. Each status has a behavior that decides how analytics treat it:`}
       </Text>
       <UnorderedList fontSize="sm" color="gray.600" spacing={1}>
         {ATTENDANCE_BEHAVIORS.map((behavior) => (
           <ListItem key={behavior}>
             <strong>{BEHAVIOR_META[behavior].label}:</strong>{" "}
-            {BEHAVIOR_META[behavior].description}
+            {behaviorDescription(behavior, terms.attendanceSingular)}
           </ListItem>
         ))}
       </UnorderedList>

@@ -260,7 +260,9 @@ const ViewMembers: React.FC = () => {
                     !org.id || isLoading || Boolean(error) || isExportingMembers
                   }
                 >
-                  {isExportingMembers ? "Exporting..." : "Export Member List"}
+                  {isExportingMembers
+                    ? "Exporting..."
+                    : `Export ${terms.memberSingular} List`}
                 </MenuItem>
                 <MenuItem
                   icon={<Icon as={FaFilePdf} color="red.500" />}
@@ -273,14 +275,19 @@ const ViewMembers: React.FC = () => {
                     isExportingMembersPdf
                   }
                 >
-                  {isExportingMembersPdf ? "Exporting..." : "Export Member PDF"}
+                  {isExportingMembersPdf
+                    ? "Exporting..."
+                    : `Export ${terms.memberSingular} PDF`}
                 </MenuItem>
               </MenuList>
             </Menu>
           </Flex>
         </Flex>
         {isLoading ? (
-          <LoadingSpinner h="45vh" text="Loading members..." />
+          <LoadingSpinner
+            h="45vh"
+            text={`Loading ${lowerTerm(terms.memberPlural)}...`}
+          />
         ) : error ? (
           <Box
             bg="#fff"
@@ -290,7 +297,9 @@ const ViewMembers: React.FC = () => {
             textAlign="center"
           >
             <Text color="red.500" fontWeight="bold">
-              Error occurred while fetching members.
+              {`Error occurred while fetching ${lowerTerm(
+                terms.memberPlural,
+              )}.`}
             </Text>
           </Box>
         ) : (

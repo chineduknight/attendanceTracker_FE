@@ -20,6 +20,8 @@ import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import { Can } from "rbac/Can";
 import { usePermissions } from "rbac/usePermissions";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 import { orgRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import {
@@ -64,6 +66,7 @@ const OrganisationSettings = () => {
     s.organisation,
     s.updateOrganisation,
   ]);
+  const terms = useTerms();
   const cardBg = useColorModeValue("white", "gray.700");
   const pageBg = useColorModeValue("gray.50", "gray.800");
   const canManage = usePermissions().has("settings.manage");
@@ -217,12 +220,16 @@ const OrganisationSettings = () => {
                 </FormControl>
 
                 <FormControl display="flex" alignItems="center">
-                  <FormLabel mb="0">Collapse attendance by day</FormLabel>
+                  <FormLabel mb="0">{`Collapse ${lowerTerm(
+                    terms.attendanceSingular,
+                  )} by day`}</FormLabel>
                   <Switch {...register("collapseAttendanceByDay")} />
                 </FormControl>
 
                 <FormControl isInvalid={Boolean(errors.maxAttendanceEdits)}>
-                  <FormLabel>Max attendance edits</FormLabel>
+                  <FormLabel>{`Max ${lowerTerm(
+                    terms.attendanceSingular,
+                  )} edits`}</FormLabel>
                   <Input
                     type="number"
                     placeholder={`${DEFAULT_MAX_EDITS} (default)`}

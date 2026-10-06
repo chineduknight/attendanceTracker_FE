@@ -33,6 +33,7 @@ import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface FormData {
   [fieldName: string]: string;
@@ -73,7 +74,9 @@ const AddOrUpdateMember = () => {
 
   const onSuccess = () => {
     toast.success(
-      isUpdating ? "Member updated successfully" : "Member added successfully",
+      isUpdating
+        ? `${terms.memberSingular} updated successfully`
+        : `${terms.memberSingular} added successfully`,
     );
     queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
@@ -118,13 +121,14 @@ const AddOrUpdateMember = () => {
   const { mutate: deleteMember, isLoading: isDeleting } = useMutationWrapper(
     deleteRequest,
     () => {
-      toast.success("Member deleted successfully");
+      toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
       const message =
-        error?.response?.data?.error ?? "Failed to delete member.";
+        error?.response?.data?.error ??
+        `Failed to delete ${lowerTerm(terms.memberSingular)}.`;
       toast.error(message);
     },
   );
@@ -136,8 +140,9 @@ const AddOrUpdateMember = () => {
     });
     confirmAlert({
       title: `Delete ${terms.memberSingular}`,
-      message:
-        "Are you sure you want to delete this member? This cannot be undone.",
+      message: `Are you sure you want to delete this ${lowerTerm(
+        terms.memberSingular,
+      )}? This cannot be undone.`,
       buttons: [
         {
           label: "Yes",
@@ -157,7 +162,7 @@ const AddOrUpdateMember = () => {
       title: "Confirmation",
       message: `Are you sure you want to ${
         isUpdating ? "update" : "submit"
-      } the member?`,
+      } the ${lowerTerm(terms.memberSingular)}?`,
       buttons: [
         {
           label: "Yes",

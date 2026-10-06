@@ -4,6 +4,11 @@ import {
   AttendanceStatusConfig,
   BEHAVIOR_META,
 } from "helpers/attendanceStatuses";
+import {
+  DEFAULT_TERMINOLOGY,
+  lowerTerm,
+  OrganisationTerminology,
+} from "helpers/organisationPresentation";
 
 /*
  * WhatsApp summary for one attendance session.
@@ -31,6 +36,8 @@ export interface ShareMessageInput {
   formattedDate: string;
   members: ShareMember[];
   statuses: AttendanceStatusConfig;
+  /** Organisation terminology for the generic nouns in the message. */
+  terminology?: OrganisationTerminology;
   /** Injectable for deterministic tests. */
   random?: () => number;
 }
@@ -114,6 +121,7 @@ export const buildAttendanceShareMessage = ({
   formattedDate,
   members,
   statuses,
+  terminology = DEFAULT_TERMINOLOGY,
   random = Math.random,
 }: ShareMessageInput): string => {
   const behaviorOf = (item: ShareMember) =>
@@ -127,7 +135,7 @@ export const buildAttendanceShareMessage = ({
 
   // Header: org name, session name, date, and a compact non-absent summary
   // using the organisation's own status labels.
-  const headerBlock = `🎶 *${(orgName || "Choir").toUpperCase()} ATTENDANCE*`;
+  const headerBlock = `🎶 *${(orgName || "Choir").toUpperCase()} ${terminology.attendanceSingular.toUpperCase()}*`;
   const sessionBlock = [`*${sessionName}*`, `📅 ${formattedDate}`].join("\n");
   const summaryBlock = statuses
     .countStatuses(members.map((item) => item.attendanceStatus))
@@ -159,8 +167,8 @@ export const buildAttendanceShareMessage = ({
           ].join("\n");
         })
         .join("\n\n")
-    : "No members recorded as present.";
-  const presentSection = `*PRESENT MEMBERS*\n\n${presentBody}`;
+    : `No ${lowerTerm(terminology.memberPlural)} recorded as present.`;
+  const presentSection = `*PRESENT ${terminology.memberPlural.toUpperCase()}*\n\n${presentBody}`;
 
   // Excused: one combined list ordered by part. A single excused status is
   // named by its own label; several are labelled per member.
@@ -183,7 +191,7 @@ export const buildAttendanceShareMessage = ({
       ].join("\n")
     : "";
 
-  const absentSection = `🔴 *${BEHAVIOR_META.absent.label} Members: ${absentCount}*`;
+  const absentSection = `🔴 *${BEHAVIOR_META.absent.label} ${terminology.memberPlural}: ${absentCount}*`;
   const closingSection = `_${pickClosingMessage(
     presentMembers.length,
     excusedMembers.length,

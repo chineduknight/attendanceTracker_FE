@@ -24,7 +24,7 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
   const { register, handleSubmit, reset, formState: { errors } } = useForm<InviteInputs>();
 
   const onSuccess = (res: { data: InviteResponse }) => {
-    if ("attached" in res.data) toast.success("Officer added");
+    if ("attached" in res.data) toast.success(`${terms.officerSingular} added`);
     else toast.success("Invite pending — they'll join when they sign up with that email");
     queryClient.invalidateQueries({ queryKey: queryKeys.rbac.officers(organisationId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.rbac.invites(organisationId) });

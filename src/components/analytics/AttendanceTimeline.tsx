@@ -4,6 +4,7 @@ import { format, parseISO } from "date-fns";
 import { MemberVerdict } from "components/analytics/memberAnalyticsTypes";
 import { AttendanceStatusConfig, solidColor } from "helpers/attendanceStatuses";
 import { FULL_DATE_FORMAT } from "components/analytics/dateFormats";
+import { useTerms } from "hooks/useOrgPresentation";
 
 const groupByMonth = (verdicts: MemberVerdict[]) => {
   const sorted = [...verdicts].sort((a, b) => a.date.localeCompare(b.date));
@@ -23,11 +24,12 @@ interface AttendanceTimelineProps {
 }
 
 const AttendanceTimeline: React.FC<AttendanceTimelineProps> = ({ verdicts, statuses }) => {
+  const terms = useTerms();
   const groups = groupByMonth(verdicts);
   const legend = statuses.legendFor(verdicts.map((verdict) => verdict.status));
   return (
     <Box bg="white" borderRadius="12px" border="1px solid" borderColor="gray.200" p={4}>
-      <Text fontSize="sm" fontWeight="semibold" mb={3}>Attendance history</Text>
+      <Text fontSize="sm" fontWeight="semibold" mb={3}>{`${terms.attendanceSingular} history`}</Text>
       {groups.map((group) => (
         <Box key={group.label} mb={3}>
           <Text fontSize="xs" color="gray.500" textTransform="uppercase" letterSpacing="wider" mb={1}>

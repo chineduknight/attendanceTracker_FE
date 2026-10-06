@@ -90,15 +90,17 @@ const AttendanceEligibilityEditor = ({
 
       {fieldsStatus === "loading" ? (
         <Text fontSize="sm" color="gray.500">
-          Loading member fields…
+          {`Loading ${lowerTerm(terms.memberSingular)} fields…`}
         </Text>
       ) : fieldsStatus === "error" ? (
         <Text fontSize="sm" color="red.500">
-          Member fields could not be loaded, so everyone is expected.
+          {`${terms.memberSingular} fields could not be loaded, so everyone is expected.`}
         </Text>
       ) : fields.length === 0 ? (
         <Text fontSize="sm" color="gray.500">
-          Add option fields to the member model to limit who is expected.
+          {`Add option fields to the ${lowerTerm(
+            terms.memberSingular,
+          )} model to limit who is expected.`}
         </Text>
       ) : (
         <>

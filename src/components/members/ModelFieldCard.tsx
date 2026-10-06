@@ -16,6 +16,8 @@ import {
 import { FaLock, FaTimesCircle } from "react-icons/fa";
 import { MEMBER_FIELD_TYPES } from "helpers/memberFields";
 import { EditorField, FieldErrors } from "helpers/memberModelEditor";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface ModelFieldCardProps {
   field: EditorField;
@@ -25,10 +27,11 @@ interface ModelFieldCardProps {
   onRemove?: () => void;
 }
 
-const KEY_HELP =
-  "Internal key is used by stored member records and eligibility rules and cannot be renamed after saving.";
-
 const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardProps) => {
+  const terms = useTerms();
+  const keyHelp = `Internal key is used by stored ${lowerTerm(
+    terms.memberSingular,
+  )} records and eligibility rules and cannot be renamed after saving.`;
   const saved = field.persisted;
   const isPinned = field.pinned;
   const id = field.reactKey;
@@ -84,7 +87,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
         {errors?.name ? (
           <FormErrorMessage>{errors.name}</FormErrorMessage>
         ) : (
-          <FormHelperText>{KEY_HELP}</FormHelperText>
+          <FormHelperText>{keyHelp}</FormHelperText>
         )}
       </FormControl>
 

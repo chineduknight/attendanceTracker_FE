@@ -34,6 +34,7 @@ import {
   Obligation,
 } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
+import { useTerms } from "hooks/useOrgPresentation";
 
 interface Props {
   organisationId: string;
@@ -107,6 +108,7 @@ const LEGEND = [
 ];
 
 const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) => {
+  const terms = useTerms();
   const [payFor, setPayFor] = useState<ComplianceRow | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -317,7 +319,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
 
       <SimpleGrid columns={[2, 4]} spacing={4} mb={6}>
         <Stat>
-          <StatLabel>Members</StatLabel>
+          <StatLabel>{terms.memberPlural}</StatLabel>
           <StatNumber>{payload.summary.totalMembers}</StatNumber>
         </Stat>
         <Stat>

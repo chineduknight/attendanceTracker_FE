@@ -10,6 +10,7 @@
  * Components never compare against literal status keys — they resolve a key
  * through an `AttendanceStatusConfig` built from the selected organisation.
  */
+import { lowerTerm } from "helpers/organisationPresentation";
 
 export type AttendanceBehavior = "present" | "excused" | "absent";
 
@@ -47,24 +48,30 @@ export const ATTENDANCE_BEHAVIORS: readonly AttendanceBehavior[] = [
 /** Semantic buckets used by analytics totals — not configured labels. */
 export const BEHAVIOR_META: Record<
   AttendanceBehavior,
-  { label: string; color: AttendanceStatusColor; description: string }
+  { label: string; color: AttendanceStatusColor }
 > = {
-  present: {
-    label: "Present",
-    color: "green",
-    description: "Counts as attendance and extends the streak.",
-  },
-  excused: {
-    label: "Excused",
-    color: "orange",
-    description:
-      "Counts toward the attendance rate but does not extend the streak.",
-  },
-  absent: {
-    label: "Absent",
-    color: "red",
-    description: "No attendance credit and breaks the streak.",
-  },
+  present: { label: "Present", color: "green" },
+  excused: { label: "Excused", color: "orange" },
+  absent: { label: "Absent", color: "red" },
+};
+
+/**
+ * Explanation of one behavior for the settings editor, in the organisation's
+ * attendance term. Behavior is semantic, so the wording never changes meaning.
+ */
+export const behaviorDescription = (
+  behavior: AttendanceBehavior,
+  attendanceSingular: string,
+): string => {
+  const term = lowerTerm(attendanceSingular);
+  switch (behavior) {
+    case "present":
+      return `Counts as ${term} and extends the streak.`;
+    case "excused":
+      return `Counts toward the ${term} rate but does not extend the streak.`;
+    case "absent":
+      return `No ${term} credit and breaks the streak.`;
+  }
 };
 
 /**

@@ -51,6 +51,7 @@ describe("organisation presentation", () => {
   it("lowercases only plainly capitalised words inside sentences", () => {
     expect(lowerTerm("Member")).toBe("member");
     expect(lowerTerm("Activity type")).toBe("activity type");
+    expect(lowerTerm("Sub-category")).toBe("sub-category");
     expect(lowerTerm("CYON Member")).toBe("CYON member");
     expect(lowerTerm("MP")).toBe("MP");
   });

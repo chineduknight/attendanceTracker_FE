@@ -307,7 +307,9 @@ const MarkAttendanceSession = () => {
     setUndoSnapshot(null);
     localStorage.removeItem(localStorageKey);
     toast.success(
-      isUpdate ? "Attendance Updated" : "Attendance Created successfully"
+      isUpdate
+        ? `${terms.attendanceSingular} Updated`
+        : `${terms.attendanceSingular} Created successfully`
     );
     navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
   };
@@ -382,7 +384,7 @@ const MarkAttendanceSession = () => {
           <Flex gap={2} alignItems="center" flexShrink={0}>
             {isUpdate && (
               <IconButton
-                aria-label="Edit session details"
+                aria-label={`Edit ${lowerTerm(terms.attendanceSingular)} details`}
                 icon={<FaPencilAlt />}
                 variant="outline"
                 colorScheme="blue"
@@ -395,10 +397,13 @@ const MarkAttendanceSession = () => {
           </Flex>
         </Flex>
         {isLoadingData ? (
-          <LoadingSpinner h="45vh" text="Loading members..." />
+          <LoadingSpinner
+            h="45vh"
+            text={`Loading ${lowerTerm(terms.memberPlural)}...`}
+          />
         ) : rosterFailed ? (
           <Text mt="6" color="red.500">
-            Members could not be loaded. Use Refresh to try again.
+            {`${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
           </Text>
         ) : (
           <>
@@ -500,7 +505,7 @@ const MarkAttendanceSession = () => {
           <DrawerOverlay />
           <DrawerContent>
             <DrawerCloseButton />
-            <DrawerHeader>Session details</DrawerHeader>
+            <DrawerHeader>{`${terms.attendanceSingular} details`}</DrawerHeader>
             <DrawerBody>
               <AttendanceDetailsForm
                 value={details}

@@ -27,6 +27,11 @@ import {
   MemberModelField,
 } from "helpers/attendanceEligibility";
 import { AttendanceDetails } from "components/attendance/AttendanceDetailsForm";
+import { useTerms } from "hooks/useOrgPresentation";
+import {
+  lowerTerm,
+  OrganisationTerminology,
+} from "helpers/organisationPresentation";
 
 /** The details a template fills in — everything except the date. */
 export type TemplateDetails = Omit<AttendanceDetails, "date">;
@@ -60,9 +65,18 @@ const toApplied = (template: AttendanceTemplate): AppliedTemplate => ({
   eligibilityRules: template.eligibilityRules,
 });
 
-const staleReason = ({ category, eligibility }: TemplateStaleness): string =>
+const staleReason = (
+  { category, eligibility }: TemplateStaleness,
+  terms: OrganisationTerminology,
+): string =>
   [
-    ...(category ? ["Its category or sub-category no longer exists."] : []),
+    ...(category
+      ? [
+          `Its ${lowerTerm(terms.categorySingular)} or ${lowerTerm(
+            terms.subCategorySingular,
+          )} no longer exists.`,
+        ]
+      : []),
     ...eligibility,
   ].join(" ");
 
@@ -83,6 +97,7 @@ const AttendanceTemplatePicker = ({
   setupFailed,
   onApply,
 }: AttendanceTemplatePickerProps) => {
+  const terms = useTerms();
   const { templates, isLoading, isError, create, update, remove, isSaving } =
     useAttendanceTemplates(organisationId);
   const [selectedId, setSelectedId] = useState("");
@@ -91,11 +106,11 @@ const AttendanceTemplatePicker = ({
     const stale = new Map<string, TemplateStaleness>();
     if (!setupLoaded) return stale;
     templates.forEach((template) => {
-      const staleness = templateStaleness(template, categories, memberFields);
+      const staleness = templateStaleness(template, categories, memberFields, terms);
       if (isStale(staleness)) stale.set(template.id, staleness);
     });
     return stale;
-  }, [templates, categories, memberFields, setupLoaded]);
+  }, [templates, categories, memberFields, setupLoaded, terms]);
   const selected = templates.find((template) => template.id === selectedId);
   const selectedStaleness = selected ? stalenessById.get(selected.id) : undefined;
   const canApply = Boolean(selected) && setupLoaded && !selectedStaleness;
@@ -111,7 +126,7 @@ const AttendanceTemplatePicker = ({
   /** Validates the current form values for saving over `excludeId` (or new). */
   const validFields = (excludeId?: string) => {
     const fields = toTemplateFields(details, eligibilityRules);
-    const error = templateFieldsError(fields, templates, excludeId);
+    const error = templateFieldsError(fields, templates, excludeId, terms);
     if (error) {
       toast.error(error);
       return null;
@@ -204,7 +219,9 @@ const AttendanceTemplatePicker = ({
         )}
         {selected && setupFailed && (
           <FormHelperText color="red.500">
-            Templates can't be applied until categories and member fields load.
+            {`Templates can't be applied until ${lowerTerm(
+              terms.categoryPlural,
+            )} and ${lowerTerm(terms.memberSingular)} fields load.`}
           </FormHelperText>
         )}
         {selectedStaleness && (
@@ -212,7 +229,7 @@ const AttendanceTemplatePicker = ({
             <Badge colorScheme="orange" mr={2}>
               Needs update
             </Badge>
-            {staleReason(selectedStaleness)} Fix it below, then update the
+            {staleReason(selectedStaleness, terms)} Fix it below, then update the
             template.
           </FormHelperText>
         )}

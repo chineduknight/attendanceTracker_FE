@@ -6,6 +6,7 @@ import {
   solidColor,
 } from "helpers/attendanceStatuses";
 import { BehaviorCounts } from "components/analytics/memberAnalyticsTypes";
+import { useTerms } from "hooks/useOrgPresentation";
 
 interface StatTilesProps {
   behaviorCounts: BehaviorCounts;
@@ -15,6 +16,7 @@ interface StatTilesProps {
 // Behavior buckets are semantic (Present / Excused / Absent), not the
 // organisation's configured labels.
 const StatTiles: React.FC<StatTilesProps> = ({ behaviorCounts, totalSessions }) => {
+  const terms = useTerms();
   const tiles = [
     ...ATTENDANCE_BEHAVIORS.map((behavior) => ({
       key: behavior,
@@ -22,7 +24,12 @@ const StatTiles: React.FC<StatTilesProps> = ({ behaviorCounts, totalSessions }) 
       bg: solidColor(BEHAVIOR_META[behavior].color),
       value: behaviorCounts[behavior] ?? 0,
     })),
-    { key: "totalSessions", label: "Total Sessions", bg: "blue.500", value: totalSessions },
+    {
+      key: "totalSessions",
+      label: `Total ${terms.attendancePlural}`,
+      bg: "blue.500",
+      value: totalSessions,
+    },
   ];
   return (
     <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>

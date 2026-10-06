@@ -4,6 +4,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import MemberAnalytics from "pages/MemberAnalytics";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -63,7 +64,7 @@ describe("<MemberAnalytics>", () => {
   it("shows behavior tiles and configured, inactive and unknown history", async () => {
     renderPage();
     await screen.findByText("Ada Obi");
-    expect(screen.getByText("Total Sessions")).toBeInTheDocument();
+    expect(screen.getByText("Total Attendance")).toBeInTheDocument();
     expect(screen.getAllByText("Excused").length).toBeGreaterThan(0);
     // Timeline legend + record badges resolve via configuration.
     expect(screen.getAllByText("Late").length).toBeGreaterThanOrEqual(2);
@@ -92,7 +93,72 @@ describe("<MemberAnalytics>", () => {
     );
     renderPage();
     await screen.findByText("Ada Obi");
-    const tile = screen.getByText("Total Sessions").parentElement as HTMLElement;
-    expect(tile).toHaveTextContent("Total Sessions2");
+    const tile = screen.getByText("Total Attendance").parentElement as HTMLElement;
+    expect(tile).toHaveTextContent("Total Attendance2");
+  });
+});
+
+const SCHOOL_TERMS = {
+  ...DEFAULT_TERMINOLOGY,
+  memberSingular: "Student",
+  memberPlural: "Students",
+  attendanceSingular: "Session",
+  attendancePlural: "Sessions",
+};
+
+describe("<MemberAnalytics> with custom terminology", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        terminology: SCHOOL_TERMS,
+      },
+    });
+  });
+
+  it("names the member term when they are not found", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.reject({ response: { status: 404 } }),
+    );
+    renderPage();
+    expect(
+      await screen.findByText("Student not found in this organisation."),
+    ).toBeInTheDocument();
+  });
+
+  it("names the member term in analytics load errors", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.reject({ response: { status: 500 } }),
+    );
+    renderPage();
+    expect(
+      await screen.findByText("Error loading student analytics."),
+    ).toBeInTheDocument();
+  });
+
+  it("names the session term in the empty-records message", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          data: {
+            ...ANALYTICS,
+            summary: {
+              ...ANALYTICS.summary,
+              totalSessions: 0,
+              behaviorCounts: { present: 0, excused: 0, absent: 0 },
+            },
+            verdicts: [],
+            records: [],
+          },
+        },
+      }),
+    );
+    renderPage();
+    expect(
+      await screen.findByText("No session records for this range."),
+    ).toBeInTheDocument();
   });
 });

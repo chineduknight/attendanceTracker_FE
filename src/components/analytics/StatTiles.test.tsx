@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import StatTiles from "components/analytics/StatTiles";
 
-it("renders behavior tiles and total sessions", () => {
+it("renders behavior tiles and the organisation's total", () => {
   render(
     <StatTiles
       behaviorCounts={{ present: 30, excused: 4, absent: 6 }}
@@ -12,7 +12,7 @@ it("renders behavior tiles and total sessions", () => {
     ["Present", "30"],
     ["Excused", "4"],
     ["Absent", "6"],
-    ["Total Sessions", "40"],
+    ["Total Attendance", "40"],
   ].forEach(([label, value]) => {
     expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.getByText(value)).toBeInTheDocument();

@@ -8,12 +8,15 @@ import { queryKeys } from "services/api/queryKeys";
 import { Obligation, ComplianceRow } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
 import { Can } from "rbac/Can";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface Props {
   organisationId: string;
 }
 
 const PaymentsTab = ({ organisationId }: Props) => {
+  const terms = useTerms();
   const [obligationId, setObligationId] = useState("");
   const [memberId, setMemberId] = useState("");
   const [open, setOpen] = useState(false);
@@ -71,7 +74,7 @@ const PaymentsTab = ({ organisationId }: Props) => {
           ))}
         </Select>
         <Select
-          placeholder="Select member"
+          placeholder={`Select ${lowerTerm(terms.memberSingular)}`}
           value={memberId}
           onChange={(e) => setMemberId(e.target.value)}
         >

@@ -90,7 +90,10 @@ const AllAttendance = () => {
         mx="auto"
       >
         {isLoading ? (
-          <LoadingSpinner h="30vh" text="Loading attendance..." />
+          <LoadingSpinner
+            h="30vh"
+            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+          />
         ) : allAttend.length ? (
           <>
             {[...allAttend]

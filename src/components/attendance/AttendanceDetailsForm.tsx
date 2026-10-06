@@ -37,7 +37,7 @@ const AttendanceDetailsForm = ({
         <FormLabel mb="0">Name</FormLabel>
         <Input
           type="text"
-          placeholder="Attendance Name"
+          placeholder={`${terms.attendanceSingular} Name`}
           value={value.name}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
         />
