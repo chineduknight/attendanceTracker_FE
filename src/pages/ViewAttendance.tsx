@@ -283,7 +283,7 @@ const Attendance = () => {
 
   const handleDelete = () => {
     confirmAlert({
-      title: "Delete Attendance",
+      title: `Delete ${terms.attendanceSingular}`,
       message:
         "Are you sure you want to delete this attendance record? This cannot be undone.",
       buttons: [
@@ -416,7 +416,7 @@ const Attendance = () => {
               mt="4"
               mb="8"
             >
-              Delete Attendance
+              {`Delete ${terms.attendanceSingular}`}
             </Button>
           </>
         )}

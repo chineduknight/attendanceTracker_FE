@@ -35,10 +35,10 @@ describe("applyRoutePermissions", () => {
     PAGE_ROUTES.forEach((original, index) => {
       const element = routes[index].element;
       if (original.feature) {
-        // Visibility first, then RBAC inside it.
-        expect(element.type).toBe(RequireFeature);
-        expect(element.props.feature).toBe(original.feature);
-        expect(element.props.children.type).toBe(RequirePermission);
+        // RBAC first, then visibility inside it.
+        expect(element.type).toBe(RequirePermission);
+        expect(element.props.children.type).toBe(RequireFeature);
+        expect(element.props.children.props.feature).toBe(original.feature);
       } else if (original.perm) {
         expect(element.type).toBe(RequirePermission);
       } else {

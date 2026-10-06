@@ -41,8 +41,7 @@ const EMPTY_DETAILS: AttendanceDetails = {
 const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) => {
   const navigate = useNavigate();
   const terms = useTerms();
-  const updateCurrentAttendance
- = useGlobalStore(
+  const updateCurrentAttendance = useGlobalStore(
     (state) => state.updateCurrentAttendance,
   );
   const {

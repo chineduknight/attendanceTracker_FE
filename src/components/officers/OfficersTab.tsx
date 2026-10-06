@@ -51,7 +51,7 @@ const OfficersTab = ({ organisationId }: Props) => {
 
   const handleRemove = (o: Officer) =>
     confirmAlert({
-      title: "Remove officer",
+      title: `Remove ${lowerTerm(terms.officerSingular)}`,
       message: `Remove ${o.username} from this organisation?`,
       buttons: [
         {
@@ -142,7 +142,7 @@ const OfficersTab = ({ organisationId }: Props) => {
             {officers.length === 0 && (
               <Tr>
                 <Td colSpan={5}>
-                  <Text color="gray.500">No officers yet.</Text>
+                  <Text color="gray.500">{`No ${lowerTerm(terms.officerPlural)} yet.`}</Text>
                 </Td>
               </Tr>
             )}

@@ -91,8 +91,16 @@ export const termError = (value: string): string | null => {
   return null;
 };
 
-/** A term inside a sentence, e.g. `Search ${lowerTerm(t.memberSingular)}`. */
-export const lowerTerm = (term: string): string => term.toLowerCase();
+/**
+ * A term inside a sentence, e.g. `Search ${lowerTerm(t.memberSingular)}`.
+ * Only plainly capitalised words are lowercased, so acronyms and stylised
+ * terms ("CYON Member" → "CYON member", "MP") keep their casing.
+ */
+export const lowerTerm = (term: string): string =>
+  term
+    .split(" ")
+    .map((word) => (/^[A-Z][a-z]+$/.test(word) ? word.toLowerCase() : word))
+    .join(" ");
 
 /** One editable term pair in Organisation Settings. */
 export interface TermGroup {

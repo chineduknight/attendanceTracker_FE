@@ -105,13 +105,13 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
   {
     path: MARK_ATTENANCE,
     element: <MarkAttendance />,
-    title: "Mark Attendance",
+    title: LABELS.markAttendance,
     perm: "attendance.manage",
   },
   {
     path: UPDATE_ATTENANCE,
     element: <MarkAttendance />,
-    title: "Mark Attendance",
+    title: LABELS.markAttendance,
     perm: "attendance.manage",
   },
   {

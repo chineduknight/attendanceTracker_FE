@@ -32,6 +32,7 @@ import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields"
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
 
 interface FormData {
   [fieldName: string]: string;
@@ -39,6 +40,7 @@ interface FormData {
 
 const AddOrUpdateMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
   const [membersModel, setMembersModel] = useState<MemberModelField[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [currentMember, setcurrentMember] = useState({});
@@ -133,7 +135,7 @@ const AddOrUpdateMember = () => {
       id: params.memberId as string,
     });
     confirmAlert({
-      title: "Delete Member",
+      title: `Delete ${terms.memberSingular}`,
       message:
         "Are you sure you want to delete this member? This cannot be undone.",
       buttons: [
@@ -318,7 +320,7 @@ const AddOrUpdateMember = () => {
                             isLoading={isDeleting}
                             onClick={handleDeleteMember}
                           >
-                            Delete Member
+                            {`Delete ${terms.memberSingular}`}
                           </Button>
                         </Can>
                       )}

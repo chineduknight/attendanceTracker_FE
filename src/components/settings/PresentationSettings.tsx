@@ -47,7 +47,6 @@ export const TerminologySettings = ({ register, errors, isReadOnly }: Presentati
             <FormLabel mb="1">{label}</FormLabel>
             <Input
               isReadOnly={isReadOnly}
-              maxLength={60}
               {...register(`terminology.${key}`, { validate: validateTerm })}
             />
             <FormErrorMessage>{errors.terminology?.[key]?.message}</FormErrorMessage>

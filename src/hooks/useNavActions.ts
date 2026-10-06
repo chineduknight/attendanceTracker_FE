@@ -1,18 +1,10 @@
 import { useMemo } from "react";
-import { IconType } from "react-icons";
-import { NAV_ACTIONS } from "config/navActions";
+import { NAV_ACTIONS, NavAction } from "config/navActions";
 import { resolveText } from "config/presentationLabels";
 import { useOrgPresentation } from "hooks/useOrgPresentation";
 import { usePermissions } from "rbac/usePermissions";
-import { PermissionKey } from "rbac/permissions";
 
-export interface ResolvedNavAction {
-  label: string;
-  icon: IconType;
-  colorScheme: string;
-  path: string;
-  perm: PermissionKey;
-}
+export type ResolvedNavAction = Omit<NavAction, "label" | "feature"> & { label: string };
 
 /**
  * The selected organisation's navigation, shared by the Dashboard and the

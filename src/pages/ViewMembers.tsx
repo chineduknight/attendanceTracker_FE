@@ -51,6 +51,8 @@ import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
+import { LABELS } from "config/presentationLabels";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type SelectOption = {
   value: string;
@@ -232,10 +234,10 @@ const ViewMembers: React.FC = () => {
                 colorScheme="blue"
                 onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
                 leftIcon={<FaUserPlus />}
-                aria-label="Add Member"
+                aria-label={LABELS.addMember(terms)}
                 px={isCompactActions ? 3 : 4}
               >
-                {!isCompactActions && "Add Member"}
+                {!isCompactActions && LABELS.addMember(terms)}
               </Button>
             </Can>
             <Menu>
@@ -422,7 +424,7 @@ const ViewMembers: React.FC = () => {
                 textAlign="center"
               >
                 <Heading as="h2" size="lg">
-                  No members found
+                  {`No ${lowerTerm(terms.memberPlural)} found`}
                 </Heading>
               </Box>
             ) : (

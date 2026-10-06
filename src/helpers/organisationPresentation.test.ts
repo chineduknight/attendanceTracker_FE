@@ -4,6 +4,7 @@ import {
   effectiveFeatureVisibility,
   effectiveTerminology,
   isFeatureVisible,
+  lowerTerm,
   termError,
 } from "helpers/organisationPresentation";
 
@@ -45,6 +46,13 @@ describe("organisation presentation", () => {
     terms.memberSingular = "Mutated";
     expect(DEFAULT_TERMINOLOGY.memberSingular).toBe("Member");
     expect(effectiveFeatureVisibility(undefined)).not.toBe(DEFAULT_FEATURE_VISIBILITY);
+  });
+
+  it("lowercases only plainly capitalised words inside sentences", () => {
+    expect(lowerTerm("Member")).toBe("member");
+    expect(lowerTerm("Activity type")).toBe("activity type");
+    expect(lowerTerm("CYON Member")).toBe("CYON member");
+    expect(lowerTerm("MP")).toBe("MP");
   });
 
   it("validates terms: required, trimmed, at most 40 characters", () => {

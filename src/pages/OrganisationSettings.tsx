@@ -29,11 +29,7 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
-import {
-  buildOrgUpdatePayload,
-  OrgSettingsForm,
-  OrgUpdatePayload,
-} from "helpers/orgPayloads";
+import { buildOrgUpdatePayload, OrgSettingsForm } from "helpers/orgPayloads";
 import {
   effectiveFeatureVisibility,
   effectiveTerminology,
@@ -92,8 +88,11 @@ const OrganisationSettings = () => {
       featureVisibility: effectiveFeatureVisibility(org),
     },
   });
-  // The body last sent, so a reply from an older backend still updates nav.
-  const lastPayload = useRef<OrgUpdatePayload | null>(null);
+  // Only a backend that returns presentation settings can store them; an
+  // older validator would reject the whole save if they were sent.
+  const [presentationSupported, setPresentationSupported] = useState(false);
+  // The organisation a save was submitted for; its reply may land after a switch.
+  const savingOrgId = useRef<string | null>(null);
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
@@ -113,6 +112,9 @@ const OrganisationSettings = () => {
         terminology: effectiveTerminology(data),
         featureVisibility: effectiveFeatureVisibility(data),
       });
+      setPresentationSupported(
+        data.terminology != null && data.featureVisibility != null,
+      );
       setStatusRows(toStatusRows(data.attendanceStatuses));
       setStatusErrors([]);
     },
@@ -121,16 +123,16 @@ const OrganisationSettings = () => {
   const { mutate, isLoading: isSaving } = useMutationWrapper(
     putRequest,
     (res: any) => {
+      // A reply for an organisation the officer has since switched away from
+      // must not re-select it.
+      const current = useGlobalStore.getState().organisation;
+      if (current.id !== savingOrgId.current) return;
       // PUT returns org fields but NOT permissions/isOwner/roleName —
       // merge over the selected org so RBAC state is preserved. Statuses,
       // terminology and visibility apply immediately to marking and nav.
       setOrg({
-        ...org,
+        ...current,
         attendanceStatuses: toStatusDefinitions(statusRows),
-        ...(lastPayload.current && {
-          terminology: lastPayload.current.terminology,
-          featureVisibility: lastPayload.current.featureVisibility,
-        }),
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
@@ -150,9 +152,13 @@ const OrganisationSettings = () => {
     const errors = validateStatusRows(statusRows);
     setStatusErrors(errors);
     if (errors.length) return;
-    const payload = buildOrgUpdatePayload(form, statusRows);
-    lastPayload.current = payload;
-    mutate({ url, data: payload });
+    savingOrgId.current = org.id;
+    mutate({
+      url,
+      data: buildOrgUpdatePayload(form, statusRows, {
+        includePresentation: presentationSupported,
+      }),
+    });
   };
 
   return (
@@ -247,19 +253,23 @@ const OrganisationSettings = () => {
                   isReadOnly={!canManage}
                 />
 
-                <Divider />
-                <TerminologySettings
-                  register={register}
-                  errors={errors}
-                  isReadOnly={!canManage}
-                />
+                {presentationSupported && (
+                  <>
+                    <Divider />
+                    <TerminologySettings
+                      register={register}
+                      errors={errors}
+                      isReadOnly={!canManage}
+                    />
 
-                <Divider />
-                <FeatureVisibilitySettings
-                  register={register}
-                  errors={errors}
-                  isReadOnly={!canManage}
-                />
+                    <Divider />
+                    <FeatureVisibilitySettings
+                      register={register}
+                      errors={errors}
+                      isReadOnly={!canManage}
+                    />
+                  </>
+                )}
 
                 <Can perm="settings.manage">
                   <Button variant="primary" type="submit" isLoading={isSaving}>

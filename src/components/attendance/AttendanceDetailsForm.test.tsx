@@ -26,6 +26,8 @@ const categories: CategoryType[] = [
   },
 ];
 
+afterEach(() => act(() => useGlobalStore.setState({ organisation: EMPTY_ORG })));
+
 const base: AttendanceDetails = { name: "", categoryId: "", subCategoryId: "", date: "" };
 
 it("renders all four fields", () => {
@@ -104,6 +106,5 @@ it("labels category fields with the organisation's terms but keeps category ids"
 
   expect(screen.getByLabelText("Activity type")).toBeInTheDocument();
   expect(onChange).toHaveBeenCalledWith({ ...base, categoryId: "c1", subCategoryId: "" });
-  act(() => useGlobalStore.setState({ organisation: EMPTY_ORG }));
 });
 

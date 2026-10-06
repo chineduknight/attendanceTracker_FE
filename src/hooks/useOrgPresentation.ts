@@ -3,21 +3,20 @@ import useGlobalStore from "zStore";
 import {
   effectiveFeatureVisibility,
   effectiveTerminology,
+  isFeatureVisible,
   OptionalFeature,
 } from "helpers/organisationPresentation";
 
 /** The selected organisation's effective terminology and module visibility. */
 export function useOrgPresentation() {
-  const [terminology, featureVisibility] = useGlobalStore((s) => [
-    s.organisation.terminology,
-    s.organisation.featureVisibility,
-  ]);
+  const terminology = useGlobalStore((s) => s.organisation.terminology);
+  const featureVisibility = useGlobalStore((s) => s.organisation.featureVisibility);
   return useMemo(() => {
-    const visibility = effectiveFeatureVisibility({ featureVisibility });
+    const source = { terminology, featureVisibility };
     return {
-      terms: effectiveTerminology({ terminology }),
-      visibility,
-      isFeatureVisible: (feature: OptionalFeature) => visibility[feature],
+      terms: effectiveTerminology(source),
+      visibility: effectiveFeatureVisibility(source),
+      isFeatureVisible: (feature: OptionalFeature) => isFeatureVisible(source, feature),
     };
   }, [terminology, featureVisibility]);
 }

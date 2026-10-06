@@ -14,6 +14,7 @@ export const LABELS = {
   updateMember: (t: Terms) => `Update ${t.memberSingular}`,
   viewMembers: (t: Terms) => `View ${t.memberPlural}`,
   memberAnalytics: (t: Terms) => `${t.memberSingular} Analytics`,
+  markAttendance: (t: Terms) => `Mark ${t.attendanceSingular}`,
   createAttendance: (t: Terms) => `Create ${t.attendanceSingular}`,
   allAttendance: (t: Terms) => `All ${t.attendancePlural}`,
   viewAttendance: (t: Terms) => `View ${t.attendanceSingular}`,

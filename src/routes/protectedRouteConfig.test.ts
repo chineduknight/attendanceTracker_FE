@@ -38,6 +38,12 @@ describe("PAGE_ROUTES", () => {
     expect(titleFor(PROTECTED_PATHS.ANALYTICS)).toBe("Attendance Analytics");
     expect(titleFor(PROTECTED_PATHS.OFFICERS_ROLES)).toBe("Officers & Roles");
     expect(titleFor(PROTECTED_PATHS.CATEGORY)).toBe("Create Category");
+    expect(titleFor(PROTECTED_PATHS.UPDATE_MEMBER)).toBe("Update Member");
+    expect(titleFor(PROTECTED_PATHS.ATTENDANCE)).toBe("View Attendance");
+    expect(titleFor(PROTECTED_PATHS.MEMBER_ANALYTICS)).toBe("Member Analytics");
+    expect(titleFor(PROTECTED_PATHS.MARK_ATTENANCE)).toBe("Mark Attendance");
+    // The one default wording change: the contract's "Sub-category" term.
+    expect(titleFor(PROTECTED_PATHS.SUB_CATEGORY)).toBe("Create Sub-category");
   });
 
   it("derives titles from the organisation's terminology without changing paths", () => {
@@ -50,6 +56,8 @@ describe("PAGE_ROUTES", () => {
     expect(titleFor(PROTECTED_PATHS.CATEGORY, SCHOOL)).toBe("Create Activity");
     expect(titleFor(PROTECTED_PATHS.SUB_CATEGORY, SCHOOL)).toBe("Create Activity type");
     expect(titleFor(PROTECTED_PATHS.OFFICERS_ROLES, SCHOOL)).toBe("Coordinators & Roles");
+    expect(titleFor(PROTECTED_PATHS.MARK_ATTENANCE, SCHOOL)).toBe("Mark Session");
+    expect(titleFor(PROTECTED_PATHS.ATTENDANCE, SCHOOL)).toBe("View Session");
     expect(PAGE_ROUTES.find((r) => r.path === PROTECTED_PATHS.ADD_MEMBER)?.path).toBe("/member/add");
   });
 

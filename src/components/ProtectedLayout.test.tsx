@@ -20,6 +20,8 @@ const renderWithProviders = (ui: React.ReactElement) =>
   render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 
 describe("<ProtectedLayout>", () => {
+  afterEach(() => act(() => useGlobalStore.setState({ organisation: EMPTY_ORG })));
+
   it("shows the matched route's title and its child content", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/finance"]}>
@@ -78,7 +80,6 @@ describe("<ProtectedLayout>", () => {
       </MemoryRouter>
     );
     expect(screen.getByText("View Students")).toBeInTheDocument();
-    act(() => useGlobalStore.setState({ organisation: EMPTY_ORG }));
   });
 });
 

@@ -22,8 +22,9 @@ export interface OrgUpdatePayload {
   collapseAttendanceByDay: boolean;
   maxAttendanceEdits: number | null;
   attendanceStatuses: AttendanceStatusDefinition[];
-  terminology: OrganisationTerminology;
-  featureVisibility: OrganisationFeatureVisibility;
+  /** Sent only to a backend that supports presentation settings. */
+  terminology?: OrganisationTerminology;
+  featureVisibility?: OrganisationFeatureVisibility;
 }
 
 /**
@@ -32,12 +33,14 @@ export interface OrgUpdatePayload {
  * removes the logo (omitting it would leave the old logo in place).
  * A blank `maxAttendanceEdits` maps to `null` so the BE applies its default.
  * Attendance statuses, terminology and module visibility travel in the same
- * body — always complete, as the backend requires — so saving one setting
- * never wipes another.
+ * body — terminology and visibility always complete, as the backend requires —
+ * so saving one setting never wipes another. Presentation settings are only
+ * included for a backend that returned them (an older validator rejects them).
  */
 export const buildOrgUpdatePayload = (
   form: OrgSettingsForm,
   statusRows: readonly StatusRow[],
+  { includePresentation = true }: { includePresentation?: boolean } = {},
 ): OrgUpdatePayload => {
   const trimmedMax = form.maxAttendanceEdits.trim();
   return {
@@ -46,14 +49,16 @@ export const buildOrgUpdatePayload = (
     collapseAttendanceByDay: form.collapseAttendanceByDay,
     maxAttendanceEdits: trimmedMax === "" ? null : Number(trimmedMax),
     attendanceStatuses: toStatusDefinitions(statusRows),
-    terminology: TERM_KEYS.reduce((terms, key) => {
-      terms[key] = form.terminology[key].trim();
-      return terms;
-    }, {} as OrganisationTerminology),
-    featureVisibility: {
-      finance: form.featureVisibility.finance,
-      birthdays: form.featureVisibility.birthdays,
-      analytics: form.featureVisibility.analytics,
-    },
+    ...(includePresentation && {
+      terminology: TERM_KEYS.reduce((terms, key) => {
+        terms[key] = form.terminology[key].trim();
+        return terms;
+      }, {} as OrganisationTerminology),
+      featureVisibility: {
+        finance: form.featureVisibility.finance,
+        birthdays: form.featureVisibility.birthdays,
+        analytics: form.featureVisibility.analytics,
+      },
+    }),
   };
 };
