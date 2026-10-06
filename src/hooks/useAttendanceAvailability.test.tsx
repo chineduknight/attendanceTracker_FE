@@ -3,7 +3,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
-import { useAttendanceAvailabilityMutations } from "hooks/useAttendanceAvailability";
+import {
+  useAttendanceAvailabilityForDate,
+  useAttendanceAvailabilityForMember,
+  useAttendanceAvailabilityMutations,
+} from "hooks/useAttendanceAvailability";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -19,6 +23,7 @@ jest.mock("services/api", () => ({
   },
 }));
 
+const mockGet: jest.Mock = require("services/api").default.get;
 const mockPost: jest.Mock = require("services/api").default.post;
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -56,6 +61,38 @@ describe("useAttendanceAvailabilityMutations", () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
         "This availability period overlaps an existing period."
+      )
+    );
+  });
+});
+
+describe("availability list queries", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    mockGet.mockResolvedValue({ data: { data: [] } });
+  });
+
+  it("sends memberId as a query param", async () => {
+    renderHook(() => useAttendanceAvailabilityForMember("org-1", "member-1"), {
+      wrapper,
+    });
+
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        "/attendance/org-1/availability?memberId=member-1"
+      )
+    );
+  });
+
+  it("sends date as a query param", async () => {
+    renderHook(() => useAttendanceAvailabilityForDate("org-1", "2026-12-01"), {
+      wrapper,
+    });
+
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        "/attendance/org-1/availability?date=2026-12-01"
       )
     );
   });

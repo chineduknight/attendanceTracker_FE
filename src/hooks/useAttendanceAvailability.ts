@@ -27,12 +27,14 @@ const emptyPeriods: AttendanceAvailability[] = [];
 
 const availabilityListUrl = (
   organisationId: string,
-  params?: Record<string, string>
-) =>
-  convertParamsToString(attendanceRequest.ATTENDANCE_AVAILABILITY, {
-    organisationId,
-    ...params,
-  });
+  filters?: { memberId: string } | { date: string }
+) => {
+  const path = convertParamsToString(
+    attendanceRequest.ATTENDANCE_AVAILABILITY,
+    { organisationId }
+  );
+  return filters ? `${path}?${new URLSearchParams(filters)}` : path;
+};
 
 const availabilityItemUrl = (organisationId: string, availabilityId: string) =>
   convertParamsToString(attendanceRequest.ATTENDANCE_AVAILABILITY_ONE, {
