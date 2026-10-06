@@ -1,4 +1,11 @@
 import { capitalizeFirstLetter } from "helpers/stringManipulations";
+import {
+  displayMemberFieldLabel,
+  fallbackFieldLabel,
+  MemberModelField,
+} from "helpers/memberFields";
+
+export type { MemberModelField };
 
 /**
  * Who is expected at a session: a member is expected when, for every rule,
@@ -10,17 +17,12 @@ export interface AttendanceEligibilityRule {
   values: string[];
 }
 
-/** One configured member-model field, as returned by the model endpoint. */
-export interface MemberModelField {
-  name: string;
-  type: string;
-  options?: string[];
-  required?: boolean;
-}
-
 /** A member-model field eligibility can be defined on. */
 export interface EligibilityField {
+  /** Storage key — what rules are keyed by. */
   name: string;
+  /** Display label only; never written into a rule. */
+  label: string;
   options: string[];
 }
 
@@ -52,7 +54,11 @@ export const eligibilityFields = (
         Array.isArray(field.options) &&
         field.options.length > 0,
     )
-    .map((field) => ({ name: field.name, options: [...(field.options ?? [])] }));
+    .map((field) => ({
+      name: field.name,
+      label: displayMemberFieldLabel(field),
+      options: [...(field.options ?? [])],
+    }));
 
 const isRuleLike = (value: unknown): value is { field: unknown; values: unknown } =>
   typeof value === "object" && value !== null && "field" in value && "values" in value;
@@ -150,7 +156,7 @@ export const countEligibleMembers = (
   rules: readonly AttendanceEligibilityRule[],
 ): number => filterEligibleMembers(members, rules).length;
 
-const fieldLabel = capitalizeFirstLetter;
+const fieldLabel = fallbackFieldLabel;
 
 /** One sentence explaining an issue, e.g. `Part: Mezzo is no longer an option.` */
 export const describeEligibilityIssue = (issue: EligibilityIssue): string => {
@@ -167,15 +173,19 @@ export const describeEligibilityIssue = (issue: EligibilityIssue): string => {
   }
 };
 
-/** e.g. `Part: Soprano, Alto · Status: Active`, or `Everyone`. */
+/**
+ * e.g. `Voice Part: Soprano, Alto · Status: Active`, or `Everyone`. Pass the
+ * current model to show field labels; rules themselves stay keyed by name.
+ */
 export const summarizeEligibilityRules = (
   rules: readonly AttendanceEligibilityRule[],
+  labelFor: (field: string) => string = fieldLabel,
 ): string =>
   rules.length
     ? rules
         .map(
           (rule) =>
-            `${fieldLabel(rule.field)}: ${rule.values
+            `${labelFor(rule.field)}: ${rule.values
               .map(capitalizeFirstLetter)
               .join(", ")}`,
         )

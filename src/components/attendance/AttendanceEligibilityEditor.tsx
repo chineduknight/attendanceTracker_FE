@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import ReactSelect, { MultiValue } from "react-select";
 import { capitalizeFirstLetter } from "helpers/stringManipulations";
+import { memberFieldLabeler } from "helpers/memberFields";
 import {
   AttendanceEligibilityRule,
   EligibilityField,
@@ -41,6 +43,7 @@ const AttendanceEligibilityEditor = ({
   expectedCount,
   totalCount,
 }: AttendanceEligibilityEditorProps) => {
+  const labelFor = useMemo(() => memberFieldLabeler(fields), [fields]);
   // Stored rules use lowercased field names and may differ in option casing.
   const selectedValues = (field: string) =>
     (
@@ -63,7 +66,7 @@ const AttendanceEligibilityEditor = ({
         </Text>
         <Text fontSize="sm" color="gray.500">
           {rules.length
-            ? summarizeEligibilityRules(rules)
+            ? summarizeEligibilityRules(rules, labelFor)
             : "Everyone is expected"}
         </Text>
         {expectedCount === 0 && (
@@ -90,7 +93,8 @@ const AttendanceEligibilityEditor = ({
       ) : (
         <>
           {fields.map((field) => {
-            const label = capitalizeFirstLetter(field.name);
+            // Shown as the field's label; the rule is still keyed by `field.name`.
+            const label = field.label;
             const options = field.options.map(toOption);
             const selected = selectedValues(field.name);
             return (

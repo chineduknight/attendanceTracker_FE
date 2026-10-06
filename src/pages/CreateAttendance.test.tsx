@@ -598,3 +598,60 @@ describe("<CreateAttendance> eligibility", () => {
     });
   });
 });
+
+describe("<CreateAttendance> with relabelled member fields", () => {
+  const RELABELLED = MEMBER_MODEL.map((field) =>
+    field.name === "part" ? { ...field, _id: "f-part", label: "Voice Part" } : field
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    selectOrg("orgA");
+    templatesByOrg = {
+      orgA: [
+        template({
+          id: "t-sop",
+          name: "Soprano Rehearsal",
+          eligibilityRules: [{ field: "part", values: ["soprano"] }],
+        }),
+      ],
+      orgB: [],
+    };
+    rosterByOrg = { orgA: ROSTER, orgB: [] };
+    modelByOrg = { orgA: RELABELLED, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  it("shows the label but keys rules, Continue and template saves by the storage key", async () => {
+    renderPage();
+    await waitForRoster();
+    expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
+    await pickEligibility("Voice Part", "Soprano");
+    expect(screen.getByText("Voice Part: Soprano")).toBeInTheDocument();
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+
+    type(nameInput(), "Sopranos only");
+    fireEvent.click(button("Save as template"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(mockPost.mock.calls[0][1].eligibilityRules).toEqual([{ field: "part", values: ["soprano"] }]);
+
+    type(dateInput(), "2026-10-01");
+    fireEvent.click(button("Continue"));
+    await screen.findByText("marking");
+    expect(useGlobalStore.getState().currentAttendance.eligibilityRules).toEqual([
+      { field: "part", values: ["soprano"] },
+    ]);
+  });
+
+  it("does not mark a part-keyed template stale after a label-only rename", async () => {
+    renderPage();
+    await waitForRoster();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    expect(await screen.findByRole("option", { name: "Soprano Rehearsal" })).toBeInTheDocument();
+    type(templateSelect(), "t-sop");
+    expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
+    expect(button("Apply")).toBeEnabled();
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+  });
+});

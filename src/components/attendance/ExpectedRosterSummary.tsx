@@ -10,6 +10,8 @@ interface ExpectedRosterSummaryProps {
   rules: readonly AttendanceEligibilityRule[];
   /** The stored rules no longer fit the current member model. */
   isOutdated?: boolean;
+  /** Current display label for a rule's storage key. */
+  labelFor?: (field: string) => string;
 }
 
 /** Read-only "who was expected" line for a session's roster. */
@@ -17,12 +19,13 @@ const ExpectedRosterSummary = ({
   title,
   rules,
   isOutdated = false,
+  labelFor,
 }: ExpectedRosterSummaryProps) => (
   <Box mt="3">
     <Text fontWeight="bold">{title}</Text>
     {rules.length > 0 && (
       <Text fontSize="sm" color="gray.500">
-        {summarizeEligibilityRules(rules)}
+        {summarizeEligibilityRules(rules, labelFor)}
       </Text>
     )}
     {isOutdated && (
