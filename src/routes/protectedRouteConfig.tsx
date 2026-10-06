@@ -121,7 +121,7 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
   {
     path: MEMBER_ATTENDANCE_AVAILABILITY,
     element: <MemberAttendanceAvailability />,
-    title: "Attendance availability",
+    title: LABELS.memberAvailability,
     perm: "attendance.view",
   },
   {

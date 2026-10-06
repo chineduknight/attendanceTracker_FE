@@ -72,14 +72,17 @@ export const useAttendanceAvailabilityForMember = (
 
 export const useAttendanceAvailabilityForDate = (
   organisationId: string,
-  date: string
+  date: string,
+  { enabled = true }: { enabled?: boolean } = {}
 ) => {
-  const enabled = Boolean(organisationId && isValidAvailabilityDate(date));
-  const { data, isLoading, isSuccess, isError, refetch } = useQueryWrapper(
-    queryKeys.attendanceAvailability.date(organisationId, date),
-    availabilityListUrl(organisationId, { date }),
-    { enabled }
-  );
+  const queryEnabled =
+    enabled && Boolean(organisationId && isValidAvailabilityDate(date));
+  const { data, isLoading, isFetching, isSuccess, isError, refetch } =
+    useQueryWrapper(
+      queryKeys.attendanceAvailability.date(organisationId, date),
+      availabilityListUrl(organisationId, { date }),
+      { enabled: queryEnabled }
+    );
   const periods = useMemo(
     () =>
       sortAvailabilityPeriods(
@@ -95,6 +98,7 @@ export const useAttendanceAvailabilityForDate = (
       [periods]
     ),
     isLoading,
+    isFetching,
     isSuccess,
     isError,
     refetch,

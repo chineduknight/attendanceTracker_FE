@@ -25,6 +25,8 @@ import {
 import { AttendanceAvailability } from "helpers/attendanceAvailability";
 import { Can } from "rbac/Can";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type FormValue = { startDate: string; endDate: string; reason: string };
 const EMPTY_FORM: FormValue = { startDate: "", endDate: "", reason: "" };
@@ -33,6 +35,7 @@ const displayDate = (value: string) => format(parseISO(value), "dd MMM yyyy");
 
 const MemberAttendanceAvailability = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);
+  const terms = useTerms();
   const memberId = useParams<{ memberId: string }>().memberId ?? "";
   const navigate = useNavigate();
   const { members } = useMembers(organisationId);
@@ -45,7 +48,7 @@ const MemberAttendanceAvailability = () => {
     useAttendanceAvailabilityMutations(organisationId);
   const [form, setForm] = useState<FormValue>(EMPTY_FORM);
   const [editing, setEditing] = useState<AttendanceAvailability | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = format(new Date(), "yyyy-MM-dd");
 
   const { current, upcoming, past } = useMemo(() => {
     const currentPeriods = periods.filter(
@@ -76,6 +79,10 @@ const MemberAttendanceAvailability = () => {
       toast.error("End date cannot be before start date");
       return;
     }
+    if (form.reason.trim().length > 200) {
+      toast.error("Reason must be 200 characters or fewer");
+      return;
+    }
     const reason = form.reason.trim();
     if (editing) {
       update(
@@ -83,7 +90,7 @@ const MemberAttendanceAvailability = () => {
         {
           startDate: form.startDate,
           endDate: form.endDate,
-          ...(reason ? { reason } : {}),
+          reason,
         },
         resetForm
       );
@@ -110,7 +117,12 @@ const MemberAttendanceAvailability = () => {
   };
 
   const remove = (period: AttendanceAvailability) => {
-    if (!window.confirm("Remove this attendance availability period?")) return;
+    if (
+      !window.confirm(
+        "Remove this attendance availability period? This will affect only attendance created after the change. Existing attendance records will stay unchanged."
+      )
+    )
+      return;
     archive(period.id, () => toast.success("Availability period removed"));
   };
 
@@ -145,14 +157,20 @@ const MemberAttendanceAvailability = () => {
         mb={4}
         onClick={() => navigate(PROTECTED_PATHS.VIEW_MEMBER)}
       >
-        Back to members
+        Back to {lowerTerm(terms.memberPlural)}
       </Button>
       <Heading size="lg" mb={2}>
-        {member?.name ?? "Member"} attendance availability
+        {member?.name ?? terms.memberSingular} attendance availability
       </Heading>
       <Text mb={6}>
-        This member will not be expected for sessions in an unavailable period.
+        This {lowerTerm(terms.memberSingular)} will not be expected for sessions
+        in an unavailable period.
       </Text>
+      <Alert status="info" mb={6}>
+        <AlertIcon />
+        Availability affects attendance created after it is saved. Existing
+        attendance records are not recalculated.
+      </Alert>
 
       <Can perm="attendance.manage">
         <Box bg="white" borderRadius="lg" p={5} mb={8} boxShadow="sm">
@@ -185,6 +203,7 @@ const MemberAttendanceAvailability = () => {
             <FormLabel>Reason (optional)</FormLabel>
             <Textarea
               value={form.reason}
+              maxLength={200}
               onChange={(event) =>
                 setForm({ ...form, reason: event.target.value })
               }
@@ -209,7 +228,10 @@ const MemberAttendanceAvailability = () => {
       {isLoading && <Text>Loading attendance availability...</Text>}
       {!isLoading && !isError && periods.length === 0 && (
         <Box bg="white" borderRadius="lg" p={6}>
-          <Text>No attendance availability periods have been added.</Text>
+          <Text>
+            No attendance availability periods for this{" "}
+            {lowerTerm(terms.memberSingular)}.
+          </Text>
         </Box>
       )}
       {!isLoading && !isError && periods.length > 0 && (

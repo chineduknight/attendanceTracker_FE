@@ -138,10 +138,16 @@ const MarkAttendanceSession = () => {
     subCategoryId: currentAttendance.subCategoryId ?? "",
     date: (currentAttendance.date ?? "").slice(0, 10),
   };
-  const { unavailableMemberIds } = useAttendanceAvailabilityForDate(
-    org.id,
-    details.date
-  );
+  const {
+    unavailableMemberIds,
+    isLoading: availabilityLoading,
+    isFetching: availabilityFetching,
+    isSuccess: availabilitySuccess,
+    isError: availabilityFailed,
+    refetch: refetchAvailability,
+  } = useAttendanceAvailabilityForDate(org.id, details.date, {
+    enabled: !isUpdate,
+  });
 
   const onDetailsChange = (next: AttendanceDetails) => {
     setAttendance({
@@ -184,7 +190,7 @@ const MarkAttendanceSession = () => {
   // or stopped matching drop out, and newly matching members (or stale draft
   // statuses) start at the organisation's default status.
   useEffect(() => {
-    if (isUpdate || !membersLoaded) return;
+    if (isUpdate || !membersLoaded || !availabilitySuccess) return;
     const roster = filterAvailableMembers(
       filterEligibleMembers(currentMembers, sessionRules),
       unavailableMemberIds
@@ -205,6 +211,7 @@ const MarkAttendanceSession = () => {
   }, [
     isUpdate,
     membersLoaded,
+    availabilitySuccess,
     currentMembers,
     sessionRules,
     unavailableMemberIds,
@@ -256,8 +263,13 @@ const MarkAttendanceSession = () => {
 
   const isLoadingData = isUpdate
     ? isGettingAttendance
-    : !rosterReady && !membersFailed;
-  const rosterFailed = !isUpdate && !rosterReady && membersFailed;
+    : !rosterReady &&
+      !membersFailed &&
+      !availabilityFailed &&
+      !availabilityLoading &&
+      !availabilityFetching;
+  const rosterFailed =
+    !isUpdate && !rosterReady && (membersFailed || availabilityFailed);
 
   // A new session re-reads the roster but keeps its marks (e.g. after the
   // backend rejects a submit because the expected roster changed). An edit
@@ -269,7 +281,8 @@ const MarkAttendanceSession = () => {
       window.location.reload();
       return;
     }
-    refetchMembers();
+    setRosterReady(false);
+    void Promise.all([refetchMembers(), refetchAvailability()]);
   };
 
   const handleSearch = useCallback((e) => {
@@ -432,7 +445,13 @@ const MarkAttendanceSession = () => {
           />
         ) : rosterFailed ? (
           <Text mt="6" color="red.500">
-            {`${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
+            {availabilityFailed
+              ? "Attendance availability could not be loaded. Use Refresh to try again."
+              : `${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
+          </Text>
+        ) : !isUpdate && (availabilityLoading || availabilityFetching) ? (
+          <Text mt="6" color="gray.600">
+            Checking attendance availability...
           </Text>
         ) : (
           <>

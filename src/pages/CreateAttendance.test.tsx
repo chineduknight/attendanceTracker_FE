@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -22,7 +28,12 @@ jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
-  default: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() },
+  default: {
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    delete: jest.fn(),
+  },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -38,7 +49,9 @@ const CATEGORIES: CategoryType[] = [
     id: "c1",
     name: "Rehearsal",
     status: "active",
-    subCategories: [{ id: "s1", name: "Choir", status: "active", parentCategoryId: "c1" }],
+    subCategories: [
+      { id: "s1", name: "Choir", status: "active", parentCategoryId: "c1" },
+    ],
   },
   { id: "c2", name: "Service", status: "active", subCategories: [] },
 ];
@@ -61,12 +74,14 @@ let modelByOrg: Record<string, typeof MEMBER_MODEL>;
 
 /** Eligibility is off unless a test opts in, as for a new organisation. */
 const selectOrg = (id: string, { eligibility = false } = {}) =>
-  useGlobalStore.setState({ organisation: {
+  useGlobalStore.setState({
+    organisation: {
       ...EMPTY_ORG,
       id,
       permissions: [],
       attendanceEligibilityEnabled: eligibility,
-    }, });
+    },
+  });
 
 const renderPage = () =>
   render(
@@ -75,32 +90,43 @@ const renderPage = () =>
         <MemoryRouter initialEntries={["/create"]}>
           <Routes>
             <Route path="/create" element={<CreateAttendance />} />
-            <Route path={PROTECTED_PATHS.MARK_ATTENANCE} element={<div>marking</div>} />
+            <Route
+              path={PROTECTED_PATHS.MARK_ATTENANCE}
+              element={<div>marking</div>}
+            />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
-    </ChakraProvider>,
+    </ChakraProvider>
   );
 
 const nameInput = () => screen.getByLabelText(/Name/) as HTMLInputElement;
 const dateInput = () => screen.getByLabelText(/Date/) as HTMLInputElement;
-const categorySelect = () => screen.getByLabelText("Category") as HTMLSelectElement;
-const subCategorySelect = () => screen.getByLabelText("Sub-category") as HTMLSelectElement;
-const templateSelect = () => screen.getByLabelText("Template") as HTMLSelectElement;
+const categorySelect = () =>
+  screen.getByLabelText("Category") as HTMLSelectElement;
+const subCategorySelect = () =>
+  screen.getByLabelText("Sub-category") as HTMLSelectElement;
+const templateSelect = () =>
+  screen.getByLabelText("Template") as HTMLSelectElement;
 const button = (name: string) => screen.getByRole("button", { name });
+const waitForContinue = () =>
+  waitFor(() => expect(button("Continue")).toBeEnabled());
 
 const type = (input: HTMLElement, value: string) =>
   fireEvent.change(input, { target: { value } });
 
 const pickEligibility = async (field: string, option: string) => {
-  fireEvent.keyDown(screen.getByLabelText(`${field} eligibility`), { key: "ArrowDown" });
+  fireEvent.keyDown(screen.getByLabelText(`${field} eligibility`), {
+    key: "ArrowDown",
+  });
   fireEvent.click(await screen.findByRole("option", { name: option }));
 };
 const expectedText = () => screen.getByText(/^Expected members:/).textContent;
 const waitForRoster = () => screen.findByText(/^Expected members: \d+ of/);
 
 const orgBInvalidated = () =>
-  queryClient.getQueryState(queryKeys.attendanceTemplates("orgB"))?.isInvalidated;
+  queryClient.getQueryState(queryKeys.attendanceTemplates("orgB"))
+    ?.isInvalidated;
 
 const confirmDialog = () => {
   const options = mockConfirm.mock.calls[mockConfirm.mock.calls.length - 1][0];
@@ -111,27 +137,37 @@ const mockApi = () => {
   mockGet.mockImplementation((url: string) => {
     const templates = url.match(/^\/attendance\/(\w+)\/templates$/);
     if (templates) {
-      return Promise.resolve({ data: { data: templatesByOrg[templates[1]] ?? [] } });
+      return Promise.resolve({
+        data: { data: templatesByOrg[templates[1]] ?? [] },
+      });
     }
     const orgScoped = url.match(/^\/organisations\/(\w+)\/(members|model)$/);
     if (orgScoped) {
       const [, orgId, resource] = orgScoped;
       return Promise.resolve({
         data: {
-          data: resource === "members" ? rosterByOrg[orgId] : { fields: modelByOrg[orgId] },
+          data:
+            resource === "members"
+              ? rosterByOrg[orgId]
+              : { fields: modelByOrg[orgId] },
         },
       });
     }
-    if (url.endsWith("/category")) return Promise.resolve({ data: { data: CATEGORIES } });
+    if (url.endsWith("/category"))
+      return Promise.resolve({ data: { data: CATEGORIES } });
     return Promise.resolve({ data: { data: [] } });
   });
   mockPost.mockImplementation((_url: string, body: object) =>
     Promise.resolve({ data: { data: template({ id: "t-new", ...body }) } })
   );
   mockPut.mockImplementation((url: string, body: object) =>
-    Promise.resolve({ data: { data: template({ id: url.split("/").pop(), ...body }) } })
+    Promise.resolve({
+      data: { data: template({ id: url.split("/").pop(), ...body }) },
+    })
   );
-  mockDelete.mockImplementation(() => Promise.resolve({ data: { data: "deleted" } }));
+  mockDelete.mockImplementation(() =>
+    Promise.resolve({ data: { data: "deleted" } })
+  );
 };
 
 describe("<CreateAttendance> session templates", () => {
@@ -149,7 +185,9 @@ describe("<CreateAttendance> session templates", () => {
 
   it("lists the current organisation's templates", async () => {
     renderPage();
-    expect(await screen.findByRole("option", { name: "Thursday Rehearsal" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: "Thursday Rehearsal" })
+    ).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgA/templates");
   });
 
@@ -159,6 +197,8 @@ describe("<CreateAttendance> session templates", () => {
     expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
     type(nameInput(), "Ad-hoc meeting");
     type(dateInput(), "2026-10-01");
+    await waitFor(() => expect(button("Continue")).toBeEnabled());
+    await waitForContinue();
     fireEvent.click(button("Continue"));
     expect(await screen.findByText("marking")).toBeInTheDocument();
     expect(useGlobalStore.getState().currentAttendance).toEqual({
@@ -186,14 +226,25 @@ describe("<CreateAttendance> session templates", () => {
     templatesByOrg.orgA = [];
     renderPage();
     await screen.findByText(/No templates yet/);
-    await waitFor(() => expect(categorySelect().options.length).toBeGreaterThan(1));
+    await waitFor(() =>
+      expect(categorySelect().options.length).toBeGreaterThan(1)
+    );
     type(nameInput(), "Friday Vigil");
     type(categorySelect(), "c2");
     type(dateInput(), "2026-10-02");
     const invalidate = jest.spyOn(queryClient, "invalidateQueries");
-    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), { data: [] });
+    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
+      data: [],
+    });
 
-    templatesByOrg.orgA = [template({ id: "t-new", name: "Friday Vigil", categoryId: "c2", subCategoryId: null })];
+    templatesByOrg.orgA = [
+      template({
+        id: "t-new",
+        name: "Friday Vigil",
+        categoryId: "c2",
+        subCategoryId: null,
+      }),
+    ];
     fireEvent.click(button("Save as template"));
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
@@ -204,8 +255,12 @@ describe("<CreateAttendance> session templates", () => {
       eligibilityRules: [],
     });
     await waitFor(() => expect(templateSelect().value).toBe("t-new"));
-    expect(toast.success).toHaveBeenCalledWith('Saved "Friday Vigil" as a template');
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.attendanceTemplates("orgA") });
+    expect(toast.success).toHaveBeenCalledWith(
+      'Saved "Friday Vigil" as a template'
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.attendanceTemplates("orgA"),
+    });
     expect(orgBInvalidated()).toBe(false);
     // Saving does not navigate or clear what was typed.
     expect(dateInput().value).toBe("2026-10-02");
@@ -217,7 +272,9 @@ describe("<CreateAttendance> session templates", () => {
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     type(nameInput(), "thursday rehearsal");
     fireEvent.click(button("Save as template"));
-    expect(toast.error).toHaveBeenCalledWith('A template named "thursday rehearsal" already exists');
+    expect(toast.error).toHaveBeenCalledWith(
+      'A template named "thursday rehearsal" already exists'
+    );
     expect(mockPost).not.toHaveBeenCalled();
   });
 
@@ -225,7 +282,9 @@ describe("<CreateAttendance> session templates", () => {
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     fireEvent.click(button("Save as template"));
-    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Enter the attendance name/));
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/Enter the attendance name/)
+    );
     expect(mockPost).not.toHaveBeenCalled();
   });
 
@@ -237,13 +296,19 @@ describe("<CreateAttendance> session templates", () => {
     type(nameInput(), "Thursday Practice");
     type(categorySelect(), "c2");
     type(dateInput(), "2026-10-01");
-    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), { data: [] });
+    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
+      data: [],
+    });
 
     fireEvent.click(button("Update template"));
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(mockGet.mock.calls.filter(([url]) => url === "/attendance/orgA/templates")).toHaveLength(2)
+      expect(
+        mockGet.mock.calls.filter(
+          ([url]) => url === "/attendance/orgA/templates"
+        )
+      ).toHaveLength(2)
     );
     expect(orgBInvalidated()).toBe(false);
     expect(mockPut).toHaveBeenCalledWith("/attendance/orgA/templates/t1", {
@@ -263,7 +328,9 @@ describe("<CreateAttendance> session templates", () => {
 
     fireEvent.click(button("Delete template"));
     templatesByOrg.orgA = [];
-    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), { data: [] });
+    queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
+      data: [],
+    });
     confirmDialog();
 
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
@@ -286,9 +353,13 @@ describe("<CreateAttendance> session templates", () => {
     act(() => selectOrg("orgB"));
 
     expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Thursday Rehearsal" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Thursday Rehearsal" })
+    ).not.toBeInTheDocument();
     expect(nameInput().value).toBe("");
-    expect(screen.queryByRole("button", { name: "Update template" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Update template" })
+    ).not.toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgB/templates");
   });
 
@@ -297,10 +368,14 @@ describe("<CreateAttendance> session templates", () => {
     jest.spyOn(console, "error").mockImplementation(() => undefined);
     const serve = mockGet.getMockImplementation()!;
     mockGet.mockImplementation((url: string) =>
-      url.endsWith("/templates") ? Promise.reject(new Error("offline")) : serve(url)
+      url.endsWith("/templates")
+        ? Promise.reject(new Error("offline"))
+        : serve(url)
     );
     renderPage();
-    expect(await screen.findByText(/Templates could not be loaded/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Templates could not be loaded/)
+    ).toBeInTheDocument();
     expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
   });
 
@@ -310,7 +385,9 @@ describe("<CreateAttendance> session templates", () => {
     templatesByOrg.orgA = [template({})];
     const serve = mockGet.getMockImplementation()!;
     mockGet.mockImplementation((url: string) =>
-      url.endsWith("/category") ? Promise.reject(new Error("offline")) : serve(url)
+      url.endsWith("/category")
+        ? Promise.reject(new Error("offline"))
+        : serve(url)
     );
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
@@ -322,7 +399,14 @@ describe("<CreateAttendance> session templates", () => {
 
   describe("stale templates", () => {
     beforeEach(() => {
-      templatesByOrg.orgA = [template({ id: "t-stale", name: "Old Vigil", categoryId: "archived", subCategoryId: null })];
+      templatesByOrg.orgA = [
+        template({
+          id: "t-stale",
+          name: "Old Vigil",
+          categoryId: "archived",
+          subCategoryId: null,
+        }),
+      ];
     });
 
     const selectStale = async () => {
@@ -346,12 +430,15 @@ describe("<CreateAttendance> session templates", () => {
       type(categorySelect(), "c2");
       fireEvent.click(button("Update template"));
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
-      expect(mockPut).toHaveBeenCalledWith("/attendance/orgA/templates/t-stale", {
-        name: "Old Vigil",
-        categoryId: "c2",
-        subCategoryId: null,
-        eligibilityRules: [],
-      });
+      expect(mockPut).toHaveBeenCalledWith(
+        "/attendance/orgA/templates/t-stale",
+        {
+          name: "Old Vigil",
+          categoryId: "c2",
+          subCategoryId: null,
+          eligibilityRules: [],
+        }
+      );
     });
 
     it("can be deleted", async () => {
@@ -359,7 +446,9 @@ describe("<CreateAttendance> session templates", () => {
       fireEvent.click(button("Delete template"));
       confirmDialog();
       await waitFor(() =>
-        expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t-stale")
+        expect(mockDelete.mock.calls[0][0]).toBe(
+          "/attendance/orgA/templates/t-stale"
+        )
       );
     });
   });
@@ -390,8 +479,12 @@ describe("<CreateAttendance> eligibility", () => {
       expect(screen.getByLabelText(`${label} eligibility`)).toBeInTheDocument()
     );
     expect(screen.queryByLabelText("Name eligibility")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Profession eligibility")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Clear eligibility" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Profession eligibility")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Clear eligibility" })
+    ).not.toBeInTheDocument();
   });
 
   it("previews OR within a field and AND across fields, then clears back to Everyone", async () => {
@@ -404,7 +497,9 @@ describe("<CreateAttendance> eligibility", () => {
     expect(expectedText()).toBe("Expected members: 4 of 8");
     await pickEligibility("Status", "Active");
     expect(expectedText()).toBe("Expected members: 2 of 8");
-    expect(screen.getByText("Part: Soprano, Alto · Status: Active")).toBeInTheDocument();
+    expect(
+      screen.getByText("Part: Soprano, Alto · Status: Active")
+    ).toBeInTheDocument();
 
     fireEvent.click(button("Clear eligibility"));
     expect(expectedText()).toBe("Expected members: 8 of 8");
@@ -418,19 +513,67 @@ describe("<CreateAttendance> eligibility", () => {
     await pickEligibility("Part", "Bass");
     await pickEligibility("Gender", "Female");
     expect(expectedText()).toBe("Expected members: 0 of 8");
-    expect(screen.getByText("No members match these eligibility rules.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No members match these eligibility rules.")
+    ).toBeInTheDocument();
+    expect(button("Continue")).toBeDisabled();
+  });
+
+  it("keeps raw eligibility counts when eligible members are unavailable", async () => {
+    const baseGet = mockGet.getMockImplementation() as (
+      url: string
+    ) => Promise<unknown>;
+    mockGet.mockImplementation((url: string) =>
+      url.includes("/availability")
+        ? Promise.resolve({
+            data: {
+              data: [
+                {
+                  memberId: "m1",
+                  startDate: "2026-10-01",
+                  endDate: "2026-10-01",
+                },
+                {
+                  memberId: "m2",
+                  startDate: "2026-10-01",
+                  endDate: "2026-10-01",
+                },
+              ],
+            },
+          })
+        : baseGet(url)
+    );
+    renderPage();
+    await waitForRoster();
+    fillDetails();
+    await pickEligibility("Part", "Soprano");
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+    await screen.findByText("2 members are unavailable on this date.");
+    expect(
+      screen.getByText("Final expected roster: 0 members.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No members match these eligibility rules.")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No members are available for this session.")
+    ).toBeInTheDocument();
     expect(button("Continue")).toBeDisabled();
   });
 
   it("stores normalised rules with the unchanged details on Continue, without member ids", async () => {
     renderPage();
     await waitForRoster();
-    await waitFor(() => expect(categorySelect().options.length).toBeGreaterThan(1));
+    await waitFor(() =>
+      expect(categorySelect().options.length).toBeGreaterThan(1)
+    );
     fillDetails();
     type(categorySelect(), "c1");
     await pickEligibility("Part", "Soprano");
     await pickEligibility("Status", "Active");
 
+    await waitFor(() => expect(button("Continue")).toBeEnabled());
+    await waitForContinue();
     fireEvent.click(button("Continue"));
 
     await screen.findByText("marking");
@@ -465,12 +608,18 @@ describe("<CreateAttendance> eligibility", () => {
       url.endsWith("/model") ? Promise.reject(new Error("offline")) : serve(url)
     );
     renderPage();
-    expect(await screen.findByText(/Member fields could not be loaded/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Member fields could not be loaded/)
+    ).toBeInTheDocument();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     type(templateSelect(), "t1");
     expect(button("Apply")).toBeDisabled();
     expect(nameInput().value).toBe("");
-    expect(await screen.findByText(/can't be applied until categories and member fields load/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /can't be applied until categories and member fields load/
+      )
+    ).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
 
@@ -482,7 +631,10 @@ describe("<CreateAttendance> eligibility", () => {
     });
 
     it("treats a template without rules as Everyone", async () => {
-      const { eligibilityRules, ...legacy } = template({ id: "t-old", name: "Legacy" });
+      const { eligibilityRules, ...legacy } = template({
+        id: "t-old",
+        name: "Legacy",
+      });
       templatesByOrg.orgA = [legacy];
       renderPage();
       await waitForRoster();
@@ -553,14 +705,18 @@ describe("<CreateAttendance> eligibility", () => {
         renderPage();
         await waitForRoster();
         await screen.findByRole("option", { name: "Rehearsal" });
-        await screen.findByRole("option", { name: "Mezzo Sectional (Needs update)" });
+        await screen.findByRole("option", {
+          name: "Mezzo Sectional (Needs update)",
+        });
         type(templateSelect(), "t-mezzo");
       };
 
       it("needs an update, explains why and cannot be applied", async () => {
         await selectStale();
         expect(screen.getByText("Needs update")).toBeInTheDocument();
-        expect(screen.getByText(/Part: Mezzo is no longer an option\./)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Part: Mezzo is no longer an option\./)
+        ).toBeInTheDocument();
         expect(button("Apply")).toBeDisabled();
         expect(nameInput().value).toBe("");
         expect(expectedText()).toBe("Expected members: 8 of 8");
@@ -582,7 +738,9 @@ describe("<CreateAttendance> eligibility", () => {
         fireEvent.click(button("Delete template"));
         confirmDialog();
         await waitFor(() =>
-          expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t-mezzo")
+          expect(mockDelete.mock.calls[0][0]).toBe(
+            "/attendance/orgA/templates/t-mezzo"
+          )
         );
       });
 
@@ -598,7 +756,9 @@ describe("<CreateAttendance> eligibility", () => {
         ];
         await selectStale();
         expect(
-          screen.getByText(/no longer exists\. Part: Mezzo is no longer an option\./)
+          screen.getByText(
+            /no longer exists\. Part: Mezzo is no longer an option\./
+          )
         ).toBeInTheDocument();
       });
     });
@@ -607,7 +767,9 @@ describe("<CreateAttendance> eligibility", () => {
 
 describe("<CreateAttendance> with relabelled member fields", () => {
   const RELABELLED = MEMBER_MODEL.map((field) =>
-    field.name === "part" ? { ...field, _id: "f-part", label: "Voice Part" } : field
+    field.name === "part"
+      ? { ...field, _id: "f-part", label: "Voice Part" }
+      : field
   );
 
   beforeEach(() => {
@@ -640,14 +802,17 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     type(nameInput(), "Sopranos only");
     fireEvent.click(button("Save as template"));
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
-    expect(mockPost.mock.calls[0][1].eligibilityRules).toEqual([{ field: "part", values: ["soprano"] }]);
-
-    type(dateInput(), "2026-10-01");
-    fireEvent.click(button("Continue"));
-    await screen.findByText("marking");
-    expect(useGlobalStore.getState().currentAttendance.eligibilityRules).toEqual([
+    expect(mockPost.mock.calls[0][1].eligibilityRules).toEqual([
       { field: "part", values: ["soprano"] },
     ]);
+
+    type(dateInput(), "2026-10-01");
+    await waitForContinue();
+    fireEvent.click(button("Continue"));
+    await screen.findByText("marking");
+    expect(
+      useGlobalStore.getState().currentAttendance.eligibilityRules
+    ).toEqual([{ field: "part", values: ["soprano"] }]);
   });
 
   it("names a genuinely stale rule by its current label", async () => {
@@ -661,9 +826,13 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     renderPage();
     await waitForRoster();
     await screen.findByRole("option", { name: "Rehearsal" });
-    await screen.findByRole("option", { name: "Mezzo Sectional (Needs update)" });
+    await screen.findByRole("option", {
+      name: "Mezzo Sectional (Needs update)",
+    });
     type(templateSelect(), "t-mezzo");
-    expect(screen.getByText(/Voice Part: Mezzo is no longer an option\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Voice Part: Mezzo is no longer an option\./)
+    ).toBeInTheDocument();
     expect(button("Apply")).toBeDisabled();
   });
 
@@ -671,7 +840,9 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     renderPage();
     await waitForRoster();
     await screen.findByRole("option", { name: "Rehearsal" });
-    expect(await screen.findByRole("option", { name: "Soprano Rehearsal" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: "Soprano Rehearsal" })
+    ).toBeInTheDocument();
     type(templateSelect(), "t-sop");
     expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
     expect(button("Apply")).toBeEnabled();
@@ -713,13 +884,16 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
     renderPage();
     await screen.findByText(/^Expected students: \d+ of/);
     await waitFor(() =>
-      expect((screen.getByLabelText("Activity") as HTMLSelectElement).options.length).toBeGreaterThan(1)
+      expect(
+        (screen.getByLabelText("Activity") as HTMLSelectElement).options.length
+      ).toBeGreaterThan(1)
     );
     type(nameInput(), "Rehearsal");
     type(dateInput(), "2026-10-01");
     type(screen.getByLabelText("Activity"), "c1");
     await pickEligibility("Part", "Soprano");
 
+    await waitForContinue();
     fireEvent.click(button("Continue"));
 
     await screen.findByText("marking");
@@ -732,7 +906,6 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
     expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members");
   });
 });
-
 
 describe("<CreateAttendance> with attendance eligibility off", () => {
   const sopranoTemplate = template({
@@ -754,7 +927,8 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
   });
 
   it("treats a cached organisation without the setting as off", async () => {
-    const { attendanceEligibilityEnabled, ...legacy } = useGlobalStore.getState().organisation;
+    const { attendanceEligibilityEnabled, ...legacy } =
+      useGlobalStore.getState().organisation;
     useGlobalStore.setState({ organisation: legacy });
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
@@ -765,17 +939,21 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     templatesByOrg.orgA = [];
     renderPage();
     await screen.findByText(/No templates yet/);
-    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members"));
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members")
+    );
 
     expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Everyone/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /clear/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /clear/i })
+    ).not.toBeInTheDocument();
     expect(memberModelRequested()).toBe(false);
 
     type(nameInput(), "Ad-hoc meeting");
     type(dateInput(), "2026-10-01");
-    expect(button("Continue")).toBeEnabled();
+    await waitForContinue();
     fireEvent.click(button("Continue"));
 
     expect(await screen.findByText("marking")).toBeInTheDocument();
@@ -786,11 +964,22 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     });
   });
 
-  it("keeps Continue available with an empty roster", async () => {
+  it("blocks Continue with an empty final roster", async () => {
     rosterByOrg.orgA = [];
     renderPage();
-    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members"));
-    expect(button("Continue")).toBeEnabled();
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members")
+    );
+    type(dateInput(), "2026-10-01");
+    await waitFor(() => expect(button("Continue")).toBeDisabled());
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Checking attendance availability...")
+      ).not.toBeInTheDocument()
+    );
+    expect(
+      screen.getByText("No members are available for this session.")
+    ).toBeInTheDocument();
   });
 
   it("never shows the member-field load error", async () => {
@@ -798,12 +987,18 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
       url.endsWith("/model")
         ? Promise.reject(new Error("boom"))
         : url.endsWith("/category")
-          ? Promise.resolve({ data: { data: CATEGORIES } })
-          : Promise.resolve({ data: { data: url.endsWith("/templates") ? [template({})] : ROSTER } }),
+        ? Promise.resolve({ data: { data: CATEGORIES } })
+        : Promise.resolve({
+            data: {
+              data: url.endsWith("/templates") ? [template({})] : ROSTER,
+            },
+          })
     );
     renderPage();
     await screen.findByRole("option", { name: "Rehearsal" });
-    expect(screen.queryByText(/fields could not be loaded/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/fields could not be loaded/)
+    ).not.toBeInTheDocument();
 
     // Unrestricted templates do not depend on member fields while off.
     type(templateSelect(), "t1");
@@ -824,7 +1019,9 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     renderPage();
     await screen.findByRole("option", { name: "Rehearsal" });
     expect(
-      await screen.findByRole("option", { name: "Soprano Rehearsal (Requires eligibility)" }),
+      await screen.findByRole("option", {
+        name: "Soprano Rehearsal (Requires eligibility)",
+      })
     ).toBeInTheDocument();
 
     type(templateSelect(), "t-sop");
@@ -832,8 +1029,8 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     expect(nameInput().value).toBe("");
     expect(
       screen.getByText(
-        /Uses attendance eligibility\. Enable eligibility in Organisation Settings to use this template\./,
-      ),
+        /Uses attendance eligibility\. Enable eligibility in Organisation Settings to use this template\./
+      )
     ).toBeInTheDocument();
     expect(button("Apply")).toBeDisabled();
     expect(button("Update template")).toBeDisabled();
@@ -845,15 +1042,18 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     fireEvent.click(button("Delete template"));
     confirmDialog();
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
-    expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t-sop");
-
+    expect(mockDelete.mock.calls[0][0]).toBe(
+      "/attendance/orgA/templates/t-sop"
+    );
   });
 
   it("treats a template with unreadable rules as restricted", async () => {
-    templatesByOrg.orgA = [template({ id: "t-bad", name: "Odd", eligibilityRules: "nope" as never })];
+    templatesByOrg.orgA = [
+      template({ id: "t-bad", name: "Odd", eligibilityRules: "nope" as never }),
+    ];
     renderPage();
     expect(
-      await screen.findByRole("option", { name: "Odd (Requires eligibility)" }),
+      await screen.findByRole("option", { name: "Odd (Requires eligibility)" })
     ).toBeInTheDocument();
   });
 
@@ -880,16 +1080,22 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
 
     act(() =>
       useGlobalStore.setState((state) => ({
-        organisation: { ...state.organisation, attendanceEligibilityEnabled: false },
-      })),
+        organisation: {
+          ...state.organisation,
+          attendanceEligibilityEnabled: false,
+        },
+      }))
     );
 
     expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
     type(nameInput(), "Full rehearsal");
     type(dateInput(), "2026-10-03");
+    await waitForContinue();
     fireEvent.click(button("Continue"));
     await screen.findByText("marking");
-    expect(useGlobalStore.getState().currentAttendance.eligibilityRules).toEqual([]);
+    expect(
+      useGlobalStore.getState().currentAttendance.eligibilityRules
+    ).toEqual([]);
   });
 
   it("restores a restricted template when eligibility is switched back on, with its rules intact", async () => {
@@ -904,15 +1110,20 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     // Off: the editor is gone, the template is unavailable, Everyone still works.
     selectOrg("orgA");
     const off = renderPage();
-    await screen.findByRole("option", { name: "Soprano Rehearsal (Requires eligibility)" });
+    await screen.findByRole("option", {
+      name: "Soprano Rehearsal (Requires eligibility)",
+    });
     expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
     type(templateSelect(), "t-sop");
     expect(button("Apply")).toBeDisabled();
     type(nameInput(), "Everyone rehearsal");
     type(dateInput(), "2026-10-04");
+    await waitForContinue();
     fireEvent.click(button("Continue"));
     await screen.findByText("marking");
-    expect(useGlobalStore.getState().currentAttendance.eligibilityRules).toEqual([]);
+    expect(
+      useGlobalStore.getState().currentAttendance.eligibilityRules
+    ).toEqual([]);
     off.unmount();
     expect(mockPut).not.toHaveBeenCalled();
 
@@ -921,7 +1132,9 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     renderPage();
     await waitForRoster();
     await screen.findByRole("option", { name: "Rehearsal" });
-    expect(screen.getByRole("option", { name: "Soprano Rehearsal" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Soprano Rehearsal" })
+    ).toBeInTheDocument();
     type(templateSelect(), "t-sop");
     expect(nameInput().value).toBe("Soprano Rehearsal");
     expect(expectedText()).toBe("Expected members: 2 of 8");
@@ -929,7 +1142,12 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
 
   it("does not bleed the setting between organisations", async () => {
     useGlobalStore.setState({
-      organisation: { ...EMPTY_ORG, id: "orgB", permissions: [], attendanceEligibilityEnabled: true },
+      organisation: {
+        ...EMPTY_ORG,
+        id: "orgB",
+        permissions: [],
+        attendanceEligibilityEnabled: true,
+      },
     });
     rosterByOrg.orgB = ROSTER;
     renderPage();
@@ -941,9 +1159,16 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
 
     act(() =>
       useGlobalStore.setState({
-        organisation: { ...EMPTY_ORG, id: "orgB", permissions: [], attendanceEligibilityEnabled: true },
-      }),
+        organisation: {
+          ...EMPTY_ORG,
+          id: "orgB",
+          permissions: [],
+          attendanceEligibilityEnabled: true,
+        },
+      })
     );
-    expect(await screen.findByText(/^Expected members: 8 of 8/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/^Expected members: 8 of 8/)
+    ).toBeInTheDocument();
   });
 });

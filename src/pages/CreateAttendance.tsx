@@ -24,16 +24,20 @@ import { useMembers } from "hooks/useMembers";
 import { useMemberModel } from "hooks/useMemberModel";
 import {
   AttendanceEligibilityRule,
-  countEligibleMembers,
   eligibilityFields,
   isAttendanceEligibilityEnabled,
   normalizeEligibilityRules,
+  filterEligibleMembers,
 } from "helpers/attendanceEligibility";
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
 import { useAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
-import { filterAvailableMembers } from "helpers/attendanceAvailability";
+import {
+  filterAvailableMembers,
+  isValidAvailabilityDate,
+} from "helpers/attendanceAvailability";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -77,6 +81,7 @@ const CreateAttendanceForm = ({
   const {
     unavailableMemberIds,
     isLoading: availabilityLoading,
+    isSuccess: availabilitySuccess,
     isError: availabilityFailed,
   } = useAttendanceAvailabilityForDate(organisationId, details.date);
 
@@ -86,14 +91,30 @@ const CreateAttendanceForm = ({
     () => eligibilityFields(memberFields),
     [memberFields]
   );
-  const expectedMembers = useMemo(
-    () => filterAvailableMembers(members, unavailableMemberIds),
-    [members, unavailableMemberIds]
+  const rawEligibleMembers = useMemo(
+    () =>
+      eligibilityEnabled
+        ? filterEligibleMembers(members, activeRules)
+        : members,
+    [activeRules, eligibilityEnabled, members]
   );
-  const expectedCount =
-    eligibilityEnabled && membersLoaded
-      ? countEligibleMembers(expectedMembers, activeRules)
-      : null;
+  const rawEligibilityCount =
+    eligibilityEnabled && membersLoaded ? rawEligibleMembers.length : null;
+  const finalExpectedMembers = useMemo(
+    () =>
+      availabilitySuccess
+        ? filterAvailableMembers(rawEligibleMembers, unavailableMemberIds)
+        : [],
+    [availabilitySuccess, rawEligibleMembers, unavailableMemberIds]
+  );
+  const finalExpectedCount = availabilitySuccess
+    ? finalExpectedMembers.length
+    : null;
+  const validDate = isValidAvailabilityDate(details.date);
+  const availabilityReady = !validDate || availabilitySuccess;
+  const unavailableExpectedCount = availabilitySuccess
+    ? rawEligibleMembers.length - finalExpectedMembers.length
+    : 0;
 
   // A template fills everything but the date, which belongs to this session.
   const applyTemplate = (applied: AppliedTemplate) => {
@@ -177,13 +198,39 @@ const CreateAttendanceForm = ({
             onChange={setDetails}
             categories={categories}
           />
-          {details.date && availabilityFailed && (
-            <Text color="red.500">
-              Unable to load attendance availability for this date.
-            </Text>
-          )}
           {details.date && availabilityLoading && (
             <Text color="gray.600">Checking attendance availability...</Text>
+          )}
+          {details.date && availabilityFailed && (
+            <Text color="red.500">
+              Attendance availability could not be loaded. Try again before
+              continuing.
+            </Text>
+          )}
+          {validDate && availabilitySuccess && unavailableExpectedCount > 0 && (
+            <Box borderWidth="1px" borderRadius="md" p={3}>
+              <Text fontWeight="bold">Attendance availability</Text>
+              <Text fontSize="sm">
+                {unavailableExpectedCount}{" "}
+                {unavailableExpectedCount === 1
+                  ? lowerTerm(terms.memberSingular)
+                  : lowerTerm(terms.memberPlural)}{" "}
+                {unavailableExpectedCount === 1 ? "is" : "are"} unavailable on
+                this date.
+              </Text>
+              <Text fontSize="sm">
+                Final expected roster: {finalExpectedCount}{" "}
+                {finalExpectedCount === 1
+                  ? lowerTerm(terms.memberSingular)
+                  : lowerTerm(terms.memberPlural)}
+                .
+              </Text>
+            </Box>
+          )}
+          {validDate && availabilitySuccess && finalExpectedCount === 0 && (
+            <Text color="red.500">
+              No {lowerTerm(terms.memberPlural)} are available for this session.
+            </Text>
           )}
           {eligibilityEnabled && (
             <AttendanceEligibilityEditor
@@ -197,7 +244,7 @@ const CreateAttendanceForm = ({
               }
               rules={eligibilityRules}
               onChange={setEligibilityRules}
-              expectedCount={expectedCount}
+              expectedCount={rawEligibilityCount}
               totalCount={members.length}
             />
           )}
@@ -210,7 +257,13 @@ const CreateAttendanceForm = ({
             _hover={{ bg: "blue.500" }}
             fontWeight="bold"
             fontSize="15px"
-            isDisabled={expectedCount === 0}
+            isDisabled={
+              !membersLoaded ||
+              !availabilityReady ||
+              availabilityLoading ||
+              availabilityFailed ||
+              finalExpectedCount === 0
+            }
             onClick={onContinue}
           >
             Continue
