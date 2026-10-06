@@ -15,6 +15,9 @@ import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
+import AttendanceTemplatePicker, {
+  TemplateDetails,
+} from "components/attendance/AttendanceTemplatePicker";
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
 
@@ -25,14 +28,18 @@ const EMPTY_DETAILS: AttendanceDetails = {
   date: "",
 };
 
-const CreateAttendance = () => {
+const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) => {
   const navigate = useNavigate();
-  const [updateCurrentAttendance, org] = useGlobalStore((state) => [
-    state.updateCurrentAttendance,
-    state.organisation,
-  ]);
-  const { categories } = useCategories(org.id);
+  const updateCurrentAttendance = useGlobalStore(
+    (state) => state.updateCurrentAttendance,
+  );
+  const { categories, isSuccess: categoriesLoaded } =
+    useCategories(organisationId);
   const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
+
+  // A template fills everything but the date, which belongs to this session.
+  const applyTemplate = (templateDetails: TemplateDetails) =>
+    setDetails((current) => ({ ...current, ...templateDetails }));
 
   const onContinue = () => {
     if (!details.name.trim() || !details.date) {
@@ -46,7 +53,7 @@ const CreateAttendance = () => {
       ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
     };
     updateCurrentAttendance(payload);
-    queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
@@ -81,6 +88,13 @@ const CreateAttendance = () => {
           boxShadow={"lg"}
           p={6}
         >
+          <AttendanceTemplatePicker
+            organisationId={organisationId}
+            details={details}
+            categories={categories}
+            categoriesLoaded={categoriesLoaded}
+            onApply={applyTemplate}
+          />
           <AttendanceDetailsForm
             value={details}
             onChange={setDetails}
@@ -101,6 +115,17 @@ const CreateAttendance = () => {
         </Stack>
       </Flex>
     </Box>
+  );
+};
+
+/**
+ * Remounts the form whenever the selected organisation changes, so no entered
+ * details or selected template from one organisation survive into another.
+ */
+const CreateAttendance = () => {
+  const organisationId = useGlobalStore((state) => state.organisation.id);
+  return (
+    <CreateAttendanceForm key={organisationId} organisationId={organisationId} />
   );
 };
 

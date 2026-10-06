@@ -30,6 +30,8 @@ export const attendanceRequest = {
   GET_ATTENDANCE:"/attendance/:organisationId/:id",
   DELETE_ATTENDANCE:"/attendance/:organisationId/:id",
   ALL_ATTENDANCE:"/attendance/:organisationId",
+  ATTENDANCE_TEMPLATES: "/attendance/:organisationId/templates",
+  ATTENDANCE_TEMPLATE: "/attendance/:organisationId/templates/:templateId",
   EXPORT:"/attendance/export/:organisationId/:id",
   ANALYTICS: "/attendance/:organisationId/analytics",
   ANALYTICS_EXPORT_EXCEL: "/attendance/:organisationId/analytics/export/excel",
