@@ -75,7 +75,7 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
   {
     path: USER_MODEL,
     element: <UserModel />,
-    title: "User Model",
+    title: LABELS.memberModel,
     perm: "members.manage",
   },
   {

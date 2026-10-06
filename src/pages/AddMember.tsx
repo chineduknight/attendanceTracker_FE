@@ -34,6 +34,7 @@ import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
+import { LABELS } from "config/presentationLabels";
 
 interface FormData {
   [fieldName: string]: string;
@@ -245,7 +246,7 @@ const AddOrUpdateMember = () => {
               variant="outline"
               onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
             >
-              Update Model
+              {`Update ${LABELS.memberModel(terms)}`}
             </Button>
           </Can>
         )}
@@ -264,7 +265,7 @@ const AddOrUpdateMember = () => {
                   rounded={"xl"}
                   boxShadow={"lg"}
                 >
-                  <Heading>You don't have a model yet</Heading>
+                  <Heading>{`You don't have a ${lowerTerm(LABELS.memberModel(terms))} yet`}</Heading>
                   <Can perm="members.manage">
                     <Button
                       mt="4"
@@ -273,7 +274,7 @@ const AddOrUpdateMember = () => {
                       variant="outline"
                       onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
                     >
-                      Create Model
+                      {`Create ${LABELS.memberModel(terms)}`}
                     </Button>
                   </Can>
                 </Flex>

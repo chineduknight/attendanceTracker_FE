@@ -163,3 +163,38 @@ describe("<AddMember> with custom terminology", () => {
     );
   });
 });
+
+describe("<AddMember> member-model copy", () => {
+  const STUDENT = { ...DEFAULT_TERMINOLOGY, memberSingular: "Student", memberPlural: "Students" };
+  const owner = (terminology = DEFAULT_TERMINOLOGY) =>
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", isOwner: true, permissions: [], terminology },
+    });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+  });
+
+  it.each([
+    [DEFAULT_TERMINOLOGY, "Update Member Model"],
+    [STUDENT, "Update Student Model"],
+  ])("labels the update button with the member term", async (terminology, label) => {
+    owner(terminology);
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: MODEL } }));
+    renderAt(PROTECTED_PATHS.ADD_MEMBER);
+    expect(await screen.findByRole("button", { name: label })).toBeInTheDocument();
+  });
+
+  it.each([
+    [DEFAULT_TERMINOLOGY, "You don't have a member model yet", "Create Member Model"],
+    [STUDENT, "You don't have a student model yet", "Create Student Model"],
+  ])("explains a missing model in the member term", async (terminology, heading, button) => {
+    owner(terminology);
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: { fields: [] } } }));
+    renderAt(PROTECTED_PATHS.ADD_MEMBER);
+    expect(await screen.findByText(heading)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: button })).toBeInTheDocument();
+  });
+});
+

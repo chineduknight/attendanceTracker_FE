@@ -42,6 +42,7 @@ describe("PAGE_ROUTES", () => {
     expect(titleFor(PROTECTED_PATHS.ATTENDANCE)).toBe("View Attendance");
     expect(titleFor(PROTECTED_PATHS.MEMBER_ANALYTICS)).toBe("Member Analytics");
     expect(titleFor(PROTECTED_PATHS.MARK_ATTENANCE)).toBe("Mark Attendance");
+    expect(titleFor(PROTECTED_PATHS.USER_MODEL)).toBe("Member Model");
     // The one default wording change: the contract's "Sub-category" term.
     expect(titleFor(PROTECTED_PATHS.SUB_CATEGORY)).toBe("Create Sub-category");
   });
@@ -57,6 +58,8 @@ describe("PAGE_ROUTES", () => {
     expect(titleFor(PROTECTED_PATHS.SUB_CATEGORY, SCHOOL)).toBe("Create Activity type");
     expect(titleFor(PROTECTED_PATHS.OFFICERS_ROLES, SCHOOL)).toBe("Coordinators & Roles");
     expect(titleFor(PROTECTED_PATHS.MARK_ATTENANCE, SCHOOL)).toBe("Mark Session");
+    expect(titleFor(PROTECTED_PATHS.USER_MODEL, SCHOOL)).toBe("Student Model");
+    expect(PAGE_ROUTES.find((r) => r.path === PROTECTED_PATHS.USER_MODEL)?.path).toBe("/user-model");
     expect(titleFor(PROTECTED_PATHS.ATTENDANCE, SCHOOL)).toBe("View Session");
     expect(PAGE_ROUTES.find((r) => r.path === PROTECTED_PATHS.ADD_MEMBER)?.path).toBe("/member/add");
   });

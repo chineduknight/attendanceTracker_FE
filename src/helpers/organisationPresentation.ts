@@ -103,6 +103,10 @@ export const lowerTerm = (term: string): string =>
     .map((part) => (/^[A-Z][a-z]+$/.test(part) ? part.toLowerCase() : part))
     .join("");
 
+/** A term with its indefinite article, e.g. `an officer`, `a coordinator`. */
+export const withArticle = (term: string): string =>
+  `${/^[aeiou]/i.test(term) ? "an" : "a"} ${term}`;
+
 /** One editable term pair in Organisation Settings. */
 export interface TermGroup {
   title: string;

@@ -163,7 +163,7 @@ const AccountabilityTab = ({ organisationId, prefillMemberId }: Props) => {
   return (
     <Box>
       <Heading size="md" mb={4}>
-        Member accountability
+        {`${terms.memberSingular} accountability`}
       </Heading>
 
       <Can perm="finance.manage">

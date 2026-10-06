@@ -35,6 +35,7 @@ import {
 } from "components/finance/financeTypes";
 import RecordPaymentModal from "components/finance/RecordPaymentModal";
 import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface Props {
   organisationId: string;
@@ -424,7 +425,7 @@ const ComplianceTab = ({ organisationId, obligationId, onSetStartDate }: Props) 
               <Tr>
                 <Td colSpan={totalCols}>
                   <Text color="gray.500" py={2}>
-                    No members match your search or filter.
+                    {`No ${lowerTerm(terms.memberPlural)} match your search or filter.`}
                   </Text>
                 </Td>
               </Tr>

@@ -6,6 +6,7 @@ import {
   isFeatureVisible,
   lowerTerm,
   termError,
+  withArticle,
 } from "helpers/organisationPresentation";
 
 describe("organisation presentation", () => {
@@ -54,6 +55,11 @@ describe("organisation presentation", () => {
     expect(lowerTerm("Sub-category")).toBe("sub-category");
     expect(lowerTerm("CYON Member")).toBe("CYON member");
     expect(lowerTerm("MP")).toBe("MP");
+  });
+
+  it("picks the indefinite article from the term", () => {
+    expect(withArticle("officer")).toBe("an officer");
+    expect(withArticle("coordinator")).toBe("a coordinator");
   });
 
   it("validates terms: required, trimmed, at most 40 characters", () => {
