@@ -56,6 +56,13 @@ import QuickMarkToolbar, {
 import VisibleBulkActions from "components/attendance/VisibleBulkActions";
 import { usePersistedRoster } from "hooks/usePersistedRoster";
 import {
+  AttendanceEligibilityRule,
+  filterEligibleMembers,
+  normalizeEligibilityRules,
+} from "helpers/attendanceEligibility";
+import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
+import { MemberRecord } from "hooks/useMembers";
+import {
   restoreStatuses,
   StatusSnapshot,
   updateStatuses,
@@ -88,6 +95,14 @@ const MarkAttendanceSession = () => {
   const [quickMarkMode, setQuickMarkMode] = useState<QuickMarkMode>(null);
   // Previous statuses of the last bulk change; null when there is nothing to undo.
   const [undoSnapshot, setUndoSnapshot] = useState<StatusSnapshot | null>(null);
+  // A new session's expected roster comes from its rules; an existing session's
+  // roster is the stored snapshot and its rules are display-only metadata.
+  const sessionRules = useMemo(
+    () => normalizeEligibilityRules(currentAttendance.eligibilityRules),
+    [currentAttendance.eligibilityRules]
+  );
+  const [recordRules, setRecordRules] = useState<AttendanceEligibilityRule[]>([]);
+  const displayedRules = isUpdate ? recordRules : sessionRules;
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
   const statuses = useAttendanceStatuses();
@@ -124,12 +139,15 @@ const MarkAttendanceSession = () => {
     [allMembers, statuses]
   );
 
-  // Called when the roster loads for a new attendance session. Any locally-saved
-  // draft is reconciled against the live roster, so members who were removed no
-  // longer appear, and newly eligible members (or stale draft statuses) start at
+  // Called when the roster loads for a new attendance session. Only members
+  // expected under the session's rules are kept, then any locally-saved draft
+  // is reconciled against them: members who were removed or stopped matching
+  // drop out, and newly matching members (or stale draft statuses) start at
   // the organisation's default status instead of trusting stale draft data.
   const onGetMembersSuccess = (data) => {
-    const roster = [...data.data].sort((a, b) => a.name.localeCompare(b.name));
+    const roster = filterEligibleMembers<MemberRecord>(data.data, sessionRules).sort(
+      (a, b) => a.name.localeCompare(b.name)
+    );
 
     let draft: unknown = null;
     const localAttendance = localStorage.getItem(localStorageKey);
@@ -142,7 +160,7 @@ const MarkAttendanceSession = () => {
     }
 
     commitMembers(() =>
-      reconcileAttendanceDraft<MemberType>(draft, roster, statuses)
+      reconcileAttendanceDraft(draft, roster, statuses)
     );
   };
 
@@ -166,6 +184,7 @@ const MarkAttendanceSession = () => {
       "subCategoryId",
     ]);
     setAttendance(currentAtt);
+    setRecordRules(normalizeEligibilityRules(res.data.eligibilityRules));
     // Transform API response to MemberType array (must include attendanceStatus)
     // Filter out entries whose member was deleted (member == null), otherwise
     // reading attend.member.name throws and the list renders empty.
@@ -271,9 +290,11 @@ const MarkAttendanceSession = () => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     // Only the session fields the API accepts — never stray persisted state.
+    // Rules only define a NEW session's roster; an update never re-resolves it.
     const data = {
       ..._.pick(currentAttendance, ["name", "date", "categoryId", "subCategoryId"]),
       organisationId: org.id,
+      ...(isUpdate ? {} : { eligibilityRules: sessionRules }),
       memberStatuses: allMembers.map((member) => ({
         memberId: member.id,
         status: member.attendanceStatus,
@@ -286,7 +307,15 @@ const MarkAttendanceSession = () => {
       url: isUpdate ? upateUrl : attendanceRequest.ATTENDANCE,
       data,
     });
-  }, [allMembers, currentAttendance, org.id, params.attendanceId, mutate, isUpdate]);
+  }, [
+    allMembers,
+    currentAttendance,
+    org.id,
+    params.attendanceId,
+    mutate,
+    isUpdate,
+    sessionRules,
+  ]);
 
   const onSubmit = () => {
     confirmAlert({
@@ -338,6 +367,12 @@ const MarkAttendanceSession = () => {
           <LoadingSpinner h="45vh" text="Loading members..." />
         ) : (
           <>
+            <ExpectedRosterSummary
+              title={`Expected roster: ${allMembers.length} ${
+                allMembers.length === 1 ? "member" : "members"
+              }`}
+              rules={displayedRules}
+            />
             <QuickMarkToolbar
               statuses={statuses.active}
               mode={selectedStatus?.key ?? null}

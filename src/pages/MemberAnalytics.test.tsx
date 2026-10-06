@@ -71,4 +71,28 @@ describe("<MemberAnalytics>", () => {
     expect(screen.getByText("Unknown")).toBeInTheDocument();
     expect(screen.queryByText("Apology")).not.toBeInTheDocument();
   });
+
+  it("shows the backend's expected-session total without client denominator math", async () => {
+    // The org held 3 sessions in range; the member was expected at only 2.
+    mockGet.mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          data: {
+            ...ANALYTICS,
+            summary: {
+              ...ANALYTICS.summary,
+              totalSessions: 2,
+              behaviorCounts: { present: 1, excused: 0, absent: 1 },
+              attendanceRate: 50,
+            },
+            verdicts: ANALYTICS.verdicts.slice(0, 2),
+          },
+        },
+      }),
+    );
+    renderPage();
+    await screen.findByText("Ada Obi");
+    const tile = screen.getByText("Total Sessions").parentElement as HTMLElement;
+    expect(tile).toHaveTextContent("Total Sessions2");
+  });
 });

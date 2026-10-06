@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Analytics from "pages/Analytics";
@@ -33,6 +33,13 @@ const ANALYTICS = {
       attendanceBehaviorCounts: { present: 1, excused: 1, absent: 0 },
       [D1]: "remote",
       [D2]: "excused",
+    },
+    {
+      // Not on the D2 roster: no cell value, and no absence in the totals.
+      memberId: "m3",
+      name: "Chi",
+      attendanceBehaviorCounts: { present: 1, excused: 0, absent: 0 },
+      [D1]: "present",
     },
   ],
 };
@@ -91,5 +98,18 @@ describe("<Analytics> with configured statuses", () => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0),
     );
     expect(screen.queryByText("Apology")).not.toBeInTheDocument();
+  });
+
+  it("shows a neutral not-on-roster cell, not an absence, for a session the member was not expected at", async () => {
+    await search();
+    const chiCells = Array.from(
+      (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll("td"),
+    );
+    const missing = chiCells[chiCells.length - 1];
+    expect(within(missing).getByTitle("Not on this session roster")).toBeInTheDocument();
+    expect(missing).toHaveTextContent("Not on this session roster");
+    expect(within(missing).queryByText("NS")).not.toBeInTheDocument();
+    // Totals come straight from the backend: Present 1, Excused 0, Absent 0.
+    expect(chiCells.slice(2, 5).map((cell) => cell.textContent)).toEqual(["1", "0", "0"]);
   });
 });

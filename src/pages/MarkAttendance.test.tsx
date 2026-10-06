@@ -7,6 +7,8 @@ import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
+import { ROSTER as ELIGIBILITY_ROSTER } from "test-utils/eligibilityFixtures";
+import { toast } from "react-toastify";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -23,6 +25,7 @@ jest.mock("services/api", () => ({
 const mockedAxios = require("services/api").default;
 const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
+const mockPut: jest.Mock = mockedAxios.put;
 const mockConfirm = confirmAlert as jest.Mock;
 
 // Configured order is the tap-cycle order.
@@ -455,6 +458,7 @@ describe("<MarkAttendance> quick marking", () => {
       name: "Rehearsal",
       date: "2026-10-01",
       organisationId: "org1",
+      eligibilityRules: [],
       memberStatuses: [
         { memberId: "m1", status: "present" },
         { memberId: "m2", status: "present" },
@@ -464,5 +468,205 @@ describe("<MarkAttendance> quick marking", () => {
       ],
     });
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+});
+
+describe("<MarkAttendance> eligibility", () => {
+  const STATUSES_5 = [
+    statusDefinition({ key: "present", label: "Present", shortLabel: "P", color: "green" }),
+    statusDefinition({ key: "late", label: "Late", shortLabel: "L", color: "yellow" }),
+    statusDefinition({ key: "absent", label: "Absent", shortLabel: "A", color: "red", behavior: "absent", isDefault: true }),
+    statusDefinition({ key: "remote", label: "Remote", shortLabel: "R", active: false }),
+  ];
+  const SOP_ALTO_ACTIVE = [
+    { field: "part", values: ["soprano", "alto"] },
+    { field: "status", values: ["active"] },
+  ];
+  const DRAFT_KEY = "attendance-draft-org1-2026-10-01-Sectional";
+  let roster: Array<Record<string, string | undefined>>;
+
+  const draftIds = () =>
+    JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map((m: { id: string }) => m.id);
+  const rowNames = () =>
+    ELIGIBILITY_ROSTER.map((m) => m.name).filter((name) => screen.queryByText(name));
+  const refetchRoster = () =>
+    act(() => queryClient.refetchQueries({ queryKey: queryKeys.members("org1") }));
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    roster = ELIGIBILITY_ROSTER.map((m) => ({ ...m }));
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES_5 },
+      currentAttendance: {
+        name: "Sectional",
+        date: "2026-10-01",
+        eligibilityRules: SOP_ALTO_ACTIVE,
+      },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/members")) return Promise.resolve({ data: { data: roster } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  describe("new session", () => {
+    const start = async () => {
+      renderAt("/mark");
+      await screen.findByText("Ada");
+    };
+
+    it("renders only the expected members and summarises the rules", async () => {
+      await start();
+      expect(rowNames()).toEqual(["Ada", "Chioma"]);
+      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(screen.getByText("Part: Soprano, Alto · Status: Active")).toBeInTheDocument();
+      expect(draftIds()).toEqual(["m1", "m3"]);
+    });
+
+    it("limits bulk actions to the expected roster", async () => {
+      await start();
+      fireEvent.click(
+        within(screen.getByRole("group", { name: "Tap a member to" })).getByRole("button", {
+          name: "Present",
+        })
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Apply Present to 2 visible" }));
+      expect(statusOf("Ada")).toBe("Present");
+      expect(statusOf("Chioma")).toBe("Present");
+      expect(countText("Present")).toBe("Present: 2");
+      expect(countText("Absent")).toBe("Absent: 0");
+    });
+
+    it("adds a newly matching member at the default and keeps existing marks after a refetch", async () => {
+      await start();
+      tap("Ada"); // Present
+      roster.push({ id: "m9", name: "Ife", part: "alto", status: "active" });
+
+      await refetchRoster();
+
+      await screen.findByText("Ife");
+      expect(statusOf("Ife")).toBe("Absent");
+      expect(statusOf("Ada")).toBe("Present");
+      expect(draftIds()).toEqual(["m1", "m3", "m9"]);
+    });
+
+    it("drops a member who stops matching before submit", async () => {
+      await start();
+      roster.find((m) => m.id === "m3")!.status = "inactive";
+
+      await refetchRoster();
+
+      await waitFor(() => expect(screen.queryByText("Chioma")).not.toBeInTheDocument());
+      expect(draftIds()).toEqual(["m1"]);
+    });
+
+    it("creates with the rules and only the expected members' statuses", async () => {
+      await start();
+      tap("Chioma"); // Present
+      submitAndConfirm();
+
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0]).toEqual([
+        "/attendance",
+        {
+          name: "Sectional",
+          date: "2026-10-01",
+          organisationId: "org1",
+          eligibilityRules: SOP_ALTO_ACTIVE,
+          memberStatuses: [
+            { memberId: "m1", status: "absent" },
+            { memberId: "m3", status: "present" },
+          ],
+        },
+      ]);
+    });
+
+    it("keeps the draft and shows the backend error when the roster changed", async () => {
+      mockPost.mockImplementation(() =>
+        Promise.reject({ response: { status: 422, data: { error: "The expected roster has changed. Refresh to reload it." } } })
+      );
+      await start();
+      tap("Ada");
+      submitAndConfirm();
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith("The expected roster has changed. Refresh to reload it.")
+      );
+      expect(draftIds()).toEqual(["m1", "m3"]);
+      expect(statusOf("Ada")).toBe("Present");
+    });
+  });
+
+  describe("existing session", () => {
+    // Stored roster: Ada (now inactive in her profile), Bisi (never matched),
+    // and Dayo with an inactive historical status. Chioma now matches but was
+    // not on the roster; a brand-new matching member exists too.
+    const RECORD = {
+      name: "Old Sectional",
+      date: "2026-09-01T00:00:00.000Z",
+      organisationId: "org1",
+      eligibilityRules: SOP_ALTO_ACTIVE,
+      attendance: [
+        { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "present" },
+        { memberId: "m2", member: { name: "Bisi" }, attendanceStatus: "absent" },
+        { memberId: "m4", member: { name: "Dayo" }, attendanceStatus: "remote" },
+      ],
+    };
+
+    beforeEach(() => {
+      roster.find((m) => m.id === "m1")!.status = "inactive";
+      roster.push({ id: "m9", name: "Ife", part: "alto", status: "active" });
+      mockGet.mockImplementation((url: string) => {
+        if (url === "/attendance/org1/att9") return Promise.resolve({ data: { data: RECORD } });
+        if (url.includes("/members")) return Promise.resolve({ data: { data: roster } });
+        return Promise.resolve({ data: { data: [] } });
+      });
+      mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+    });
+
+    const open = async () => {
+      renderAt("/mark/att9");
+      await screen.findByText("Ada");
+    };
+
+    it("loads the stored roster unchanged, never re-filtering or adding members", async () => {
+      await open();
+      expect(rowNames()).toEqual(["Ada", "Bisi", "Dayo"]);
+      expect(screen.queryByText("Ife")).not.toBeInTheDocument();
+      expect(screen.getByText("Expected roster: 3 members")).toBeInTheDocument();
+      expect(screen.getByText("Part: Soprano, Alto · Status: Active")).toBeInTheDocument();
+      expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(false);
+    });
+
+    it("keeps inactive statuses and bulk Undo working on the stored roster", async () => {
+      await open();
+      expect(statusOf("Dayo")).toBe("Remote");
+      fireEvent.click(screen.getByRole("button", { name: "Reset 3 visible to Absent" }));
+      expect(statusOf("Dayo")).toBe("Absent");
+      fireEvent.click(screen.getByRole("button", { name: "Undo bulk change" }));
+      expect(statusOf("Dayo")).toBe("Remote");
+    });
+
+    it("updates without eligibility rules", async () => {
+      await open();
+      submitAndConfirm();
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0]).toEqual([
+        "/attendance/att9",
+        {
+          name: "Old Sectional",
+          date: "2026-09-01T00:00:00.000Z",
+          organisationId: "org1",
+          memberStatuses: [
+            { memberId: "m1", status: "present" },
+            { memberId: "m2", status: "absent" },
+            { memberId: "m4", status: "remote" },
+          ],
+        },
+      ]);
+    });
   });
 });

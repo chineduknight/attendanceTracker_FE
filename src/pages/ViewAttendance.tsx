@@ -33,6 +33,13 @@ import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
 import { buildAttendanceShareMessage } from "helpers/attendanceShareMessage";
+import {
+  AttendanceEligibilityRule,
+  eligibilityIssues,
+  normalizeEligibilityRules,
+} from "helpers/attendanceEligibility";
+import { useMemberModel } from "hooks/useMemberModel";
+import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 
 type StatusOption = {
   value: string;
@@ -55,6 +62,9 @@ type MemberType = {
 type AttendanceInfoType = {
   name: string;
   date: Date;
+  /** Size of the stored roster snapshot — never recomputed from current members. */
+  expectedCount: number;
+  eligibilityRules: AttendanceEligibilityRule[];
 };
 
 // "All" sentinel shared by both multi-selects: selecting it clears the others.
@@ -84,7 +94,12 @@ const Attendance = () => {
         a.member.name.localeCompare(b.member.name),
     );
 
-    setAttendanceInfo({ name: data.data.name, date: data.data.date });
+    setAttendanceInfo({
+      name: data.data.name,
+      date: data.data.date,
+      expectedCount: data.data.attendance.length,
+      eligibilityRules: normalizeEligibilityRules(data.data.eligibilityRules),
+    });
 
     setAllMembers(members);
   };
@@ -103,6 +118,14 @@ const Attendance = () => {
     },
   );
   const isLoadingAttendance = isFetchingAttendance && allMembers.length === 0;
+
+  const { fields: memberFields, isSuccess: memberModelLoaded } = useMemberModel(
+    org.id,
+  );
+  const storedRules = attendanceInfo?.eligibilityRules ?? [];
+  // Only flagged once the current model is known; the roster itself is untouched.
+  const rulesOutdated =
+    memberModelLoaded && eligibilityIssues(storedRules, memberFields).length > 0;
 
   const handleSearch = useCallback((e) => setSearchQuery(e.target.value), []);
 
@@ -294,6 +317,13 @@ const Attendance = () => {
               <Heading fontSize="22px">{attendanceInfo?.name}</Heading>
               <Text>{formattedDate}</Text>
             </Flex>
+            {attendanceInfo && (
+              <ExpectedRosterSummary
+                title={`Expected members: ${attendanceInfo.expectedCount}`}
+                rules={storedRules}
+                isOutdated={rulesOutdated}
+              />
+            )}
             <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
               <InputGroup>
                 <InputLeftElement pointerEvents="none" />

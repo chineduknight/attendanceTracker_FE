@@ -16,75 +16,101 @@ import { CategoryType } from "hooks/useCategories";
 import { useAttendanceTemplates } from "hooks/useAttendanceTemplates";
 import {
   AttendanceTemplate,
-  AttendanceTemplateFields,
-  isTemplateStale,
+  isStale,
   templateFieldsError,
+  templateStaleness,
+  TemplateStaleness,
   toTemplateFields,
 } from "helpers/attendanceTemplates";
+import {
+  AttendanceEligibilityRule,
+  MemberModelField,
+} from "helpers/attendanceEligibility";
 import { AttendanceDetails } from "components/attendance/AttendanceDetailsForm";
 
 /** The details a template fills in — everything except the date. */
 export type TemplateDetails = Omit<AttendanceDetails, "date">;
 
+/** What applying a template fills in on Create Attendance. */
+export interface AppliedTemplate {
+  details: TemplateDetails;
+  eligibilityRules: AttendanceEligibilityRule[];
+}
+
 interface AttendanceTemplatePickerProps {
   organisationId: string;
   /** Current form values; the source for Save as / Update template. */
   details: AttendanceDetails;
+  eligibilityRules: AttendanceEligibilityRule[];
   categories: CategoryType[];
-  /** Staleness is only judged once the category tree is known. */
-  categoriesLoaded: boolean;
-  onApply: (details: TemplateDetails) => void;
+  memberFields: MemberModelField[];
+  /** Staleness is only judged once the category tree and member model are known. */
+  setupLoaded: boolean;
+  onApply: (applied: AppliedTemplate) => void;
 }
 
-const toDetails = (template: AttendanceTemplateFields): TemplateDetails => ({
-  name: template.name,
-  categoryId: template.categoryId ?? "",
-  subCategoryId: template.subCategoryId ?? "",
+const toApplied = (template: AttendanceTemplate): AppliedTemplate => ({
+  details: {
+    name: template.name,
+    categoryId: template.categoryId ?? "",
+    subCategoryId: template.subCategoryId ?? "",
+  },
+  eligibilityRules: template.eligibilityRules,
 });
+
+const staleReason = ({ category, eligibility }: TemplateStaleness): string => {
+  if (category && eligibility) {
+    return "Its category and its eligibility rules no longer match this organisation's setup.";
+  }
+  return category
+    ? "Its category or sub-category no longer exists."
+    : "Its eligibility rules use a member field or option that no longer exists.";
+};
 
 /**
  * Picks, saves, updates and deletes the organisation's attendance templates.
- * A template only ever fills name/category/sub-category; the date stays with
- * the session being created. Templates whose category placement no longer
- * exists stay visible as "Needs update" and cannot be applied until repaired.
+ * A template fills name, category placement and eligibility rules; the date
+ * stays with the session being created. Templates that no longer fit the
+ * organisation's categories or member model stay visible as "Needs update"
+ * and cannot be applied until repaired — never silently widened to Everyone.
  */
 const AttendanceTemplatePicker = ({
   organisationId,
   details,
+  eligibilityRules,
   categories,
-  categoriesLoaded,
+  memberFields,
+  setupLoaded,
   onApply,
 }: AttendanceTemplatePickerProps) => {
   const { templates, isLoading, isError, create, update, remove, isSaving } =
     useAttendanceTemplates(organisationId);
   const [selectedId, setSelectedId] = useState("");
 
-  const staleIds = useMemo(
-    () =>
-      new Set(
-        categoriesLoaded
-          ? templates
-              .filter((template) => isTemplateStale(template, categories))
-              .map((template) => template.id)
-          : []
-      ),
-    [templates, categories, categoriesLoaded]
-  );
+  const stalenessById = useMemo(() => {
+    const stale = new Map<string, TemplateStaleness>();
+    if (!setupLoaded) return stale;
+    templates.forEach((template) => {
+      const staleness = templateStaleness(template, categories, memberFields);
+      if (isStale(staleness)) stale.set(template.id, staleness);
+    });
+    return stale;
+  }, [templates, categories, memberFields, setupLoaded]);
   const selected = templates.find((template) => template.id === selectedId);
-  const isSelectedStale = selected ? staleIds.has(selected.id) : false;
-  const canApply = Boolean(selected) && categoriesLoaded && !isSelectedStale;
+  const selectedStaleness = selected ? stalenessById.get(selected.id) : undefined;
+  const canApply = Boolean(selected) && setupLoaded && !selectedStaleness;
 
-  const apply = (template: AttendanceTemplate) => onApply(toDetails(template));
+  const apply = (template: AttendanceTemplate) => onApply(toApplied(template));
 
   const onSelect = (id: string) => {
     setSelectedId(id);
     const template = templates.find((t) => t.id === id);
-    if (template && categoriesLoaded && !staleIds.has(id)) apply(template);
+    if (template && setupLoaded && !stalenessById.has(id)) apply(template);
   };
 
   /** Validates the current form values for saving over `excludeId` (or new). */
   const validFields = (excludeId?: string) => {
-    const fields = toTemplateFields(details);
+    const fields = toTemplateFields(details, eligibilityRules);
     const error = templateFieldsError(fields, templates, excludeId);
     if (error) {
       toast.error(error);
@@ -168,7 +194,7 @@ const AttendanceTemplatePicker = ({
             >
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
-                  {staleIds.has(template.id)
+                  {stalenessById.has(template.id)
                     ? `${template.name} (Needs update)`
                     : template.name}
                 </option>
@@ -176,13 +202,13 @@ const AttendanceTemplatePicker = ({
             </Select>
           </>
         )}
-        {isSelectedStale && (
+        {selectedStaleness && (
           <FormHelperText>
             <Badge colorScheme="orange" mr={2}>
               Needs update
             </Badge>
-            Its category or sub-category no longer exists. Choose current ones
-            below, then update the template.
+            {staleReason(selectedStaleness)} Fix it below, then update the
+            template.
           </FormHelperText>
         )}
       </FormControl>
