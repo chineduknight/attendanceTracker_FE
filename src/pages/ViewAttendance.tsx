@@ -40,6 +40,8 @@ import {
 } from "helpers/attendanceEligibility";
 import { useMemberModel } from "hooks/useMemberModel";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
+import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
+import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
 
 type StatusOption = {
   value: string;
@@ -63,10 +65,11 @@ type AttendanceInfoType = {
   name: string;
   date: Date;
   /**
-   * Size of the stored roster snapshot (rows whose member still exists, as
-   * listed below and on Mark Attendance) — never recomputed from current members.
+   * Size of the stored roster snapshot, including entries whose member profile
+   * no longer resolves — never recomputed from current members.
    */
   expectedCount: number;
+  unresolved: UnresolvedRosterEntry[];
   eligibilityRules: AttendanceEligibilityRule[];
 };
 
@@ -89,7 +92,9 @@ const Attendance = () => {
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
   const onSuccess = (data) => {
-    const unsorted = data.data.attendance.filter((a) => a.member != null);
+    const { resolved: unsorted, unresolved, expectedCount } = splitStoredRoster<MemberType>(
+      data.data.attendance,
+    );
     // Configured status order first; unknown historical statuses sort last.
     const members = unsorted.sort(
       (a, b) =>
@@ -100,7 +105,8 @@ const Attendance = () => {
     setAttendanceInfo({
       name: data.data.name,
       date: data.data.date,
-      expectedCount: unsorted.length,
+      expectedCount,
+      unresolved,
       eligibilityRules: normalizeEligibilityRules(data.data.eligibilityRules),
     });
 
@@ -387,6 +393,12 @@ const Attendance = () => {
                 />
               ))}
             </Box>
+            {attendanceInfo && (
+              <UnresolvedRosterEntries
+                entries={attendanceInfo.unresolved}
+                statuses={statuses}
+              />
+            )}
             <Button
               onClick={handleDelete}
               isLoading={isDeleting}

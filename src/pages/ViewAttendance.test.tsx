@@ -139,3 +139,36 @@ describe("<ViewAttendance> expected roster", () => {
     );
   });
 });
+
+describe("<ViewAttendance> with an unresolvable roster member", () => {
+  const THREE = {
+    name: "Small Sectional",
+    date: "2026-09-01T00:00:00.000Z",
+    attendance: [
+      entry("m1", "Zara", "present"),
+      { _id: "m2-row", memberId: "m2", attendanceStatus: "late", member: null },
+      entry("m3", "Xavi", "no_show"),
+    ],
+  };
+
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+    });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? { fields: [] } : THREE } }),
+    );
+  });
+
+  it("still counts the deleted member as expected and shows a read-only placeholder", async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    expect(screen.getByText("Expected members: 3")).toBeInTheDocument();
+    expect(screen.getByText(/1 member on this roster no longer has a profile/)).toBeInTheDocument();
+    const placeholder = screen.getByText("Former member (profile unavailable)");
+    expect(within(placeholder.parentElement as HTMLElement).getByTitle("Late")).toBeInTheDocument();
+    expect(placeholder.closest("button")).toBeNull();
+    expect(screen.getByText("Xavi")).toBeInTheDocument();
+  });
+});

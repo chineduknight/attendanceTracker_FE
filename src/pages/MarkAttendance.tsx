@@ -62,6 +62,8 @@ import {
 } from "helpers/attendanceEligibility";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 import { useMembers } from "hooks/useMembers";
+import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
+import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
 import {
   restoreStatuses,
   StatusSnapshot,
@@ -102,6 +104,9 @@ const MarkAttendanceSession = () => {
     [currentAttendance.eligibilityRules]
   );
   const [recordRules, setRecordRules] = useState<AttendanceEligibilityRule[]>([]);
+  // Stored roster entries whose member no longer resolves: shown read-only and
+  // never submitted, so the backend keeps their stored status.
+  const [unresolvedEntries, setUnresolvedEntries] = useState<UnresolvedRosterEntry[]>([]);
   const displayedRules = isUpdate ? recordRules : sessionRules;
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
@@ -138,6 +143,8 @@ const MarkAttendanceSession = () => {
     () => statuses.countStatuses(allMembers.map((m) => m.attendanceStatus)),
     [allMembers, statuses]
   );
+
+  const expectedRosterSize = allMembers.length + unresolvedEntries.length;
 
   // A new session's roster comes from the canonical members cache (cached data
   // included), so it is ready on mount and re-derived after every refetch.
@@ -192,12 +199,11 @@ const MarkAttendanceSession = () => {
     ]);
     setAttendance(currentAtt);
     setRecordRules(normalizeEligibilityRules(res.data.eligibilityRules));
-    // Transform API response to MemberType array (must include attendanceStatus)
-    // Filter out entries whose member was deleted (member == null), otherwise
-    // reading attend.member.name throws and the list renders empty.
-    const updatedMembers = res.data.attendance
-      .filter((attend) => attend.member != null)
-      .map((attend) => ({
+    // Only entries whose member still resolves are editable; the rest stay on
+    // the frozen roster as read-only placeholders.
+    const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
+    setUnresolvedEntries(unresolved);
+    const updatedMembers = resolved.map((attend) => ({
         id: attend.memberId,
         name: attend.member.name,
         // Kept verbatim, even when the status has since been deactivated.
@@ -389,8 +395,8 @@ const MarkAttendanceSession = () => {
         ) : (
           <>
             <ExpectedRosterSummary
-              title={`Expected roster: ${allMembers.length} ${
-                allMembers.length === 1 ? "member" : "members"
+              title={`Expected roster: ${expectedRosterSize} ${
+                expectedRosterSize === 1 ? "member" : "members"
               }`}
               rules={displayedRules}
             />
@@ -449,6 +455,7 @@ const MarkAttendanceSession = () => {
                 />
               ))}
             </Box>
+            <UnresolvedRosterEntries entries={unresolvedEntries} statuses={statuses} />
             <Button
               onClick={onSubmit}
               w="full"

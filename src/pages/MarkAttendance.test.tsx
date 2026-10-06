@@ -713,3 +713,60 @@ describe("<MarkAttendance> eligibility", () => {
     });
   });
 });
+
+describe("<MarkAttendance> editing a roster with an unresolvable member", () => {
+  const STATUSES_3 = [
+    statusDefinition({ key: "present", label: "Present", shortLabel: "P", color: "green" }),
+    statusDefinition({ key: "late", label: "Late", shortLabel: "L", color: "yellow" }),
+    statusDefinition({ key: "absent", label: "Absent", shortLabel: "A", color: "red", behavior: "absent", isDefault: true }),
+  ];
+  const RECORD = {
+    name: "Small Sectional",
+    date: "2026-09-01T00:00:00.000Z",
+    organisationId: "org1",
+    eligibilityRules: [],
+    attendance: [
+      { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "absent" },
+      { memberId: "m2", member: null, attendanceStatus: "late" },
+      { memberId: "m3", member: { name: "Chioma" }, attendanceStatus: "absent" },
+    ],
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES_3 },
+      currentAttendance: { name: "", date: "" },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url === "/attendance/org1/att3") return Promise.resolve({ data: { data: RECORD } });
+      // A newly joined member exists in the current roster.
+      return Promise.resolve({ data: { data: [{ id: "m9", name: "Newbie" }] } });
+    });
+    mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  it("keeps the deleted member on the roster read-only and submits only resolvable members", async () => {
+    renderAt("/mark/att3");
+    await screen.findByText("Ada");
+
+    expect(screen.getByText("Expected roster: 3 members")).toBeInTheDocument();
+    const placeholder = screen.getByText("Former member (profile unavailable)");
+    expect(placeholder.closest("button")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reset 2 visible to Absent" })).toBeInTheDocument();
+    expect(screen.queryByText("Newbie")).not.toBeInTheDocument();
+
+    tap("Chioma"); // Absent -> Present
+    submitAndConfirm();
+
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    expect(mockPut.mock.calls[0][1].memberStatuses).toEqual([
+      { memberId: "m1", status: "absent" },
+      { memberId: "m3", status: "present" },
+    ]);
+    expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(false);
+  });
+});
+
