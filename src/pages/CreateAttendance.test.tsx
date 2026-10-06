@@ -451,6 +451,23 @@ describe("<CreateAttendance> eligibility", () => {
     expect(screen.getByText("Everyone is expected")).toBeInTheDocument();
   });
 
+  it("explains when member fields fail to load and blocks applying templates", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    templatesByOrg.orgA = [template({})];
+    const serve = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) =>
+      url.endsWith("/model") ? Promise.reject(new Error("offline")) : serve(url)
+    );
+    renderPage();
+    expect(await screen.findByText(/Member fields could not be loaded/)).toBeInTheDocument();
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    type(templateSelect(), "t1");
+    expect(button("Apply")).toBeDisabled();
+    expect(nameInput().value).toBe("");
+    expect(await screen.findByText(/can't be applied until categories and member fields load/)).toBeInTheDocument();
+    (console.error as jest.Mock).mockRestore();
+  });
+
   describe("templates", () => {
     const sopranoTemplate = template({
       id: "t-sop",
@@ -537,7 +554,7 @@ describe("<CreateAttendance> eligibility", () => {
       it("needs an update, explains why and cannot be applied", async () => {
         await selectStale();
         expect(screen.getByText("Needs update")).toBeInTheDocument();
-        expect(screen.getByText(/eligibility rules use a member field or option/)).toBeInTheDocument();
+        expect(screen.getByText(/Part: Mezzo is no longer an option\./)).toBeInTheDocument();
         expect(button("Apply")).toBeDisabled();
         expect(nameInput().value).toBe("");
         expect(expectedText()).toBe("Expected members: 8 of 8");
@@ -574,7 +591,9 @@ describe("<CreateAttendance> eligibility", () => {
           }),
         ];
         await selectStale();
-        expect(screen.getByText(/category and its eligibility rules/)).toBeInTheDocument();
+        expect(
+          screen.getByText(/no longer exists\. Part: Mezzo is no longer an option\./)
+        ).toBeInTheDocument();
       });
     });
   });

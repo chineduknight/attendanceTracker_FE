@@ -26,7 +26,8 @@ const ExpectedRosterSummary = ({
       </Text>
     )}
     {isOutdated && (
-      <Alert status="info" mt={2} borderRadius="md" fontSize="sm">
+      // Informational, so announced politely rather than as an alert.
+      <Alert status="info" role="status" mt={2} borderRadius="md" fontSize="sm">
         <AlertIcon />
         <AlertDescription>
           Eligibility rule has changed since this session was created. The roster

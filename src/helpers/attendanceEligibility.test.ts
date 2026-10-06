@@ -1,5 +1,7 @@
 import {
   countEligibleMembers,
+  describeEligibilityIssue,
+  isUnreadableEligibility,
   eligibilityFields,
   eligibilityIssues,
   filterEligibleMembers,
@@ -104,6 +106,32 @@ describe("eligibilityIssues", () => {
       { field: "profession", kind: "not-option" },
       { field: "part", kind: "missing-option", values: ["mezzo"] },
     ]);
+  });
+});
+
+describe("isUnreadableEligibility", () => {
+  it("only treats missing rules as readable Everyone", () => {
+    expect(isUnreadableEligibility(undefined)).toBe(false);
+    expect(isUnreadableEligibility(null)).toBe(false);
+    expect(isUnreadableEligibility([])).toBe(false);
+    expect(isUnreadableEligibility([{ field: "part", values: ["alto"] }])).toBe(false);
+    expect(isUnreadableEligibility("part")).toBe(true);
+    expect(isUnreadableEligibility([{ field: "part", values: [] }])).toBe(true);
+    expect(isUnreadableEligibility([{ field: "part", values: [3] }])).toBe(true);
+  });
+});
+
+describe("describeEligibilityIssue", () => {
+  it("names the field and options", () => {
+    expect(describeEligibilityIssue({ field: "section", kind: "missing-field" })).toBe(
+      "Section is no longer a member field."
+    );
+    expect(describeEligibilityIssue({ field: "profession", kind: "not-option" })).toBe(
+      "Profession is no longer an option field."
+    );
+    expect(
+      describeEligibilityIssue({ field: "part", kind: "missing-option", values: ["mezzo", "contralto"] })
+    ).toBe("Part: Mezzo, Contralto are no longer an option.");
   });
 });
 

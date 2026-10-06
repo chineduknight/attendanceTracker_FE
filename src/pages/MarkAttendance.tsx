@@ -24,10 +24,10 @@ import {
 import { FaSearch, FaPencilAlt } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { attendanceRequest, orgRequest } from "services";
+import { attendanceRequest } from "services";
 import {
   postRequest,
   putRequest,
@@ -61,7 +61,7 @@ import {
   normalizeEligibilityRules,
 } from "helpers/attendanceEligibility";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
-import { MemberRecord } from "hooks/useMembers";
+import { useMembers } from "hooks/useMembers";
 import {
   restoreStatuses,
   StatusSnapshot,
@@ -139,13 +139,23 @@ const MarkAttendanceSession = () => {
     [allMembers, statuses]
   );
 
-  // Called when the roster loads for a new attendance session. Only members
-  // expected under the session's rules are kept, then any locally-saved draft
-  // is reconciled against them: members who were removed or stopped matching
-  // drop out, and newly matching members (or stale draft statuses) start at
-  // the organisation's default status instead of trusting stale draft data.
-  const onGetMembersSuccess = (data) => {
-    const roster = filterEligibleMembers<MemberRecord>(data.data, sessionRules).sort(
+  // A new session's roster comes from the canonical members cache (cached data
+  // included), so it is ready on mount and re-derived after every refetch.
+  const {
+    members: currentMembers,
+    isSuccess: membersLoaded,
+    isError: membersFailed,
+    refetch: refetchMembers,
+  } = useMembers(org.id, { enabled: !isUpdate });
+  const [rosterReady, setRosterReady] = useState(false);
+
+  // Only members expected under the session's rules are kept, then any
+  // locally-saved draft is reconciled against them: members who were removed
+  // or stopped matching drop out, and newly matching members (or stale draft
+  // statuses) start at the organisation's default status.
+  useEffect(() => {
+    if (isUpdate || !membersLoaded) return;
+    const roster = filterEligibleMembers(currentMembers, sessionRules).sort(
       (a, b) => a.name.localeCompare(b.name)
     );
 
@@ -159,20 +169,17 @@ const MarkAttendanceSession = () => {
       }
     }
 
-    commitMembers(() =>
-      reconcileAttendanceDraft(draft, roster, statuses)
-    );
-  };
-
-  // Query to fetch members (only when not updating)
-  const { isLoading: isGettingMembers } = useQueryWrapper(
-    queryKeys.members(org.id),
-    convertParamsToString(orgRequest.MEMBERS, { organisationId: org.id }),
-    {
-      onSuccess: onGetMembersSuccess,
-      enabled: !isUpdate,
-    }
-  );
+    commitMembers(() => reconcileAttendanceDraft(draft, roster, statuses));
+    setRosterReady(true);
+  }, [
+    isUpdate,
+    membersLoaded,
+    currentMembers,
+    sessionRules,
+    statuses,
+    localStorageKey,
+    commitMembers,
+  ]);
 
   // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
@@ -216,7 +223,23 @@ const MarkAttendanceSession = () => {
     }
   );
 
-  const isLoadingData = isUpdate ? isGettingAttendance : isGettingMembers;
+  const isLoadingData = isUpdate
+    ? isGettingAttendance
+    : !rosterReady && !membersFailed;
+  const rosterFailed = !isUpdate && !rosterReady && membersFailed;
+
+  // A new session re-reads the roster but keeps its marks (e.g. after the
+  // backend rejects a submit because the expected roster changed). An edit
+  // discards local changes and reloads the stored record.
+  const onRefresh = () => {
+    setUndoSnapshot(null);
+    if (isUpdate) {
+      localStorage.removeItem(localStorageKey);
+      window.location.reload();
+      return;
+    }
+    refetchMembers();
+  };
 
   const handleSearch = useCallback((e) => {
     setSearchQuery(e.target.value);
@@ -352,19 +375,17 @@ const MarkAttendanceSession = () => {
                 onClick={detailsDrawer.onOpen}
               />
             )}
-            <Button
-              variant="logout"
-              onClick={() => {
-                localStorage.removeItem(localStorageKey);
-                window.location.reload();
-              }}
-            >
+            <Button variant="logout" onClick={onRefresh}>
               Refresh
             </Button>
           </Flex>
         </Flex>
         {isLoadingData ? (
           <LoadingSpinner h="45vh" text="Loading members..." />
+        ) : rosterFailed ? (
+          <Text mt="6" color="red.500">
+            Members could not be loaded. Use Refresh to try again.
+          </Text>
         ) : (
           <>
             <ExpectedRosterSummary

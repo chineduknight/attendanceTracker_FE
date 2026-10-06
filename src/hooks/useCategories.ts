@@ -22,13 +22,15 @@ export interface CategoryType extends CommonTypeCategory {
  * create and edit attendance screens. The query key includes the organisation
  * so cached categories can never bleed between tenants.
  */
+const NO_CATEGORIES: CategoryType[] = [];
+
 export const useCategories = (organisationId: string) => {
   const url = convertParamsToString(orgRequest.CATEGORY, { organisationId });
-  const { data, isLoading, isSuccess } = useQueryWrapper(queryKeys.categories(organisationId), url, {
+  const { data, isLoading, isSuccess, isError } = useQueryWrapper(queryKeys.categories(organisationId), url, {
     enabled: Boolean(organisationId),
   });
   // The API wraps payloads as { data: ... }; derive the list straight from the
   // query cache rather than mirroring it into local state via onSuccess.
-  const categories: CategoryType[] = data?.data ?? [];
-  return { categories, isLoading, isSuccess };
+  const categories: CategoryType[] = data?.data ?? NO_CATEGORIES;
+  return { categories, isLoading, isSuccess, isError };
 };

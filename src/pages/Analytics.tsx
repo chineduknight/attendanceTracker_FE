@@ -13,7 +13,6 @@ import {
   Spinner,
   useColorModeValue,
   Text,
-  VisuallyHidden,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
@@ -445,9 +444,12 @@ const AttendanceAnalyticsPage: React.FC = () => {
                           if (!key) {
                             return (
                               <Td key={d} textAlign="center">
-                                <Badge title={NOT_ON_ROSTER}>
-                                  <span aria-hidden>-</span>
-                                  <VisuallyHidden>{NOT_ON_ROSTER}</VisuallyHidden>
+                                <Badge
+                                  role="img"
+                                  aria-label={NOT_ON_ROSTER}
+                                  title={NOT_ON_ROSTER}
+                                >
+                                  -
                                 </Badge>
                               </Td>
                             );

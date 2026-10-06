@@ -42,10 +42,16 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
   const updateCurrentAttendance = useGlobalStore(
     (state) => state.updateCurrentAttendance,
   );
-  const { categories, isSuccess: categoriesLoaded } =
-    useCategories(organisationId);
-  const { fields: memberFields, isSuccess: memberModelLoaded } =
-    useMemberModel(organisationId);
+  const {
+    categories,
+    isSuccess: categoriesLoaded,
+    isError: categoriesFailed,
+  } = useCategories(organisationId);
+  const {
+    fields: memberFields,
+    isSuccess: memberModelLoaded,
+    isError: memberModelFailed,
+  } = useMemberModel(organisationId);
   const { members, isSuccess: membersLoaded } = useMembers(organisationId);
   const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
   const [eligibilityRules, setEligibilityRules] = useState<
@@ -118,6 +124,7 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             categories={categories}
             memberFields={memberFields}
             setupLoaded={categoriesLoaded && memberModelLoaded}
+            setupFailed={categoriesFailed || memberModelFailed}
             onApply={applyTemplate}
           />
           <AttendanceDetailsForm
@@ -127,6 +134,9 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
           />
           <AttendanceEligibilityEditor
             fields={optionFields}
+            fieldsStatus={
+              memberModelLoaded ? "ready" : memberModelFailed ? "error" : "loading"
+            }
             rules={eligibilityRules}
             onChange={setEligibilityRules}
             expectedCount={expectedCount}

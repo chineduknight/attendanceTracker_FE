@@ -1,7 +1,9 @@
 import type { CategoryType } from "hooks/useCategories";
 import {
   AttendanceEligibilityRule,
+  describeEligibilityIssue,
   eligibilityIssues,
+  isUnreadableEligibility,
   MemberModelField,
   normalizeEligibilityRules,
 } from "helpers/attendanceEligibility";
@@ -18,6 +20,8 @@ export interface AttendanceTemplate {
   categoryId: string | null;
   subCategoryId: string | null;
   eligibilityRules: AttendanceEligibilityRule[];
+  /** The stored rules could not be read; the template is stale, never Everyone. */
+  hasUnreadableEligibility?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,17 +36,27 @@ export type AttendanceTemplateFields = Pick<
 export const TEMPLATE_NAME_MAX_LENGTH = 80;
 
 /** A template as the API returned it; older templates may lack rules. */
-export type AttendanceTemplateResponse = Omit<AttendanceTemplate, "eligibilityRules"> & {
+export type AttendanceTemplateResponse = Omit<
+  AttendanceTemplate,
+  "eligibilityRules" | "hasUnreadableEligibility"
+> & {
   eligibilityRules?: unknown;
 };
 
-/** Templates saved before eligibility existed mean Everyone (`[]`). */
+/**
+ * Templates saved before eligibility existed mean Everyone (`[]`). Rules that
+ * are present but unreadable are flagged instead of being widened.
+ */
 export const normalizeTemplate = (
   template: AttendanceTemplateResponse,
-): AttendanceTemplate => ({
-  ...template,
-  eligibilityRules: normalizeEligibilityRules(template.eligibilityRules),
-});
+): AttendanceTemplate => {
+  const unreadable = isUnreadableEligibility(template.eligibilityRules);
+  return {
+    ...template,
+    eligibilityRules: normalizeEligibilityRules(template.eligibilityRules),
+    ...(unreadable ? { hasUnreadableEligibility: true } : {}),
+  };
+};
 
 /**
  * The template fields of the Create Attendance form. Blank selects mean "no
@@ -80,7 +94,8 @@ export const isCategoryPlacementStale = (
 /** Which parts of a template no longer fit the organisation's current setup. */
 export interface TemplateStaleness {
   category: boolean;
-  eligibility: boolean;
+  /** One sentence per eligibility problem; empty when the rules still fit. */
+  eligibility: string[];
 }
 
 export const templateStaleness = (
@@ -89,11 +104,15 @@ export const templateStaleness = (
   modelFields: readonly MemberModelField[],
 ): TemplateStaleness => ({
   category: isCategoryPlacementStale(template, categories),
-  eligibility: eligibilityIssues(template.eligibilityRules, modelFields).length > 0,
+  eligibility: template.hasUnreadableEligibility
+    ? ["Its stored eligibility rules could not be read."]
+    : eligibilityIssues(template.eligibilityRules, modelFields).map(
+        describeEligibilityIssue,
+      ),
 });
 
 export const isStale = ({ category, eligibility }: TemplateStaleness) =>
-  category || eligibility;
+  category || eligibility.length > 0;
 
 const nameKey = (name: string) => name.trim().toLowerCase();
 

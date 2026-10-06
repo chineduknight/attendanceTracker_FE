@@ -46,6 +46,8 @@ interface AttendanceTemplatePickerProps {
   memberFields: MemberModelField[];
   /** Staleness is only judged once the category tree and member model are known. */
   setupLoaded: boolean;
+  /** Categories or member fields failed to load, so no template can be applied. */
+  setupFailed: boolean;
   onApply: (applied: AppliedTemplate) => void;
 }
 
@@ -58,14 +60,11 @@ const toApplied = (template: AttendanceTemplate): AppliedTemplate => ({
   eligibilityRules: template.eligibilityRules,
 });
 
-const staleReason = ({ category, eligibility }: TemplateStaleness): string => {
-  if (category && eligibility) {
-    return "Its category and its eligibility rules no longer match this organisation's setup.";
-  }
-  return category
-    ? "Its category or sub-category no longer exists."
-    : "Its eligibility rules use a member field or option that no longer exists.";
-};
+const staleReason = ({ category, eligibility }: TemplateStaleness): string =>
+  [
+    ...(category ? ["Its category or sub-category no longer exists."] : []),
+    ...eligibility,
+  ].join(" ");
 
 /**
  * Picks, saves, updates and deletes the organisation's attendance templates.
@@ -81,6 +80,7 @@ const AttendanceTemplatePicker = ({
   categories,
   memberFields,
   setupLoaded,
+  setupFailed,
   onApply,
 }: AttendanceTemplatePickerProps) => {
   const { templates, isLoading, isError, create, update, remove, isSaving } =
@@ -201,6 +201,11 @@ const AttendanceTemplatePicker = ({
               ))}
             </Select>
           </>
+        )}
+        {selected && setupFailed && (
+          <FormHelperText color="red.500">
+            Templates can't be applied until categories and member fields load.
+          </FormHelperText>
         )}
         {selectedStaleness && (
           <FormHelperText>

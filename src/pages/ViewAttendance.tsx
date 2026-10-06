@@ -62,7 +62,10 @@ type MemberType = {
 type AttendanceInfoType = {
   name: string;
   date: Date;
-  /** Size of the stored roster snapshot — never recomputed from current members. */
+  /**
+   * Size of the stored roster snapshot (rows whose member still exists, as
+   * listed below and on Mark Attendance) — never recomputed from current members.
+   */
   expectedCount: number;
   eligibilityRules: AttendanceEligibilityRule[];
 };
@@ -97,7 +100,7 @@ const Attendance = () => {
     setAttendanceInfo({
       name: data.data.name,
       date: data.data.date,
-      expectedCount: data.data.attendance.length,
+      expectedCount: unsorted.length,
       eligibilityRules: normalizeEligibilityRules(data.data.eligibilityRules),
     });
 

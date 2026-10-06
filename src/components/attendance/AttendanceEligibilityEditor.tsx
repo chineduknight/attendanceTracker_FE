@@ -10,9 +10,13 @@ import {
 
 type ValueOption = { value: string; label: string };
 
+/** Load state of the member model the fields come from. */
+export type MemberFieldsStatus = "loading" | "error" | "ready";
+
 interface AttendanceEligibilityEditorProps {
   /** Option-type member fields only. */
   fields: readonly EligibilityField[];
+  fieldsStatus: MemberFieldsStatus;
   rules: AttendanceEligibilityRule[];
   onChange: (rules: AttendanceEligibilityRule[]) => void;
   /** Members matching `rules`, or null while the roster is unknown. */
@@ -31,6 +35,7 @@ const toOption = (value: string): ValueOption => ({
  */
 const AttendanceEligibilityEditor = ({
   fields,
+  fieldsStatus,
   rules,
   onChange,
   expectedCount,
@@ -61,7 +66,15 @@ const AttendanceEligibilityEditor = ({
         )}
       </Box>
 
-      {fields.length === 0 ? (
+      {fieldsStatus === "loading" ? (
+        <Text fontSize="sm" color="gray.500">
+          Loading member fields…
+        </Text>
+      ) : fieldsStatus === "error" ? (
+        <Text fontSize="sm" color="red.500">
+          Member fields could not be loaded, so everyone is expected.
+        </Text>
+      ) : fields.length === 0 ? (
         <Text fontSize="sm" color="gray.500">
           Add option fields to the member model to limit who is expected.
         </Text>

@@ -104,6 +104,15 @@ describe("eligibility on templates", () => {
     expect(normalizeTemplate(legacy).eligibilityRules).toEqual([]);
   });
 
+  it("flags present-but-unreadable rules as stale instead of widening them to Everyone", () => {
+    const unreadable = normalizeTemplate({ ...template({}), eligibilityRules: [{ field: "part", values: [] }] });
+    expect(unreadable.hasUnreadableEligibility).toBe(true);
+    expect(templateStaleness(unreadable, categories, MEMBER_MODEL).eligibility).toEqual([
+      "Its stored eligibility rules could not be read.",
+    ]);
+    expect(normalizeTemplate({ ...template({}), eligibilityRules: null }).hasUnreadableEligibility).toBeUndefined();
+  });
+
   it("sends normalised rules explicitly", () => {
     const details = { name: "Sopranos", categoryId: "", subCategoryId: "" };
     expect(
@@ -116,14 +125,17 @@ describe("eligibility on templates", () => {
     const valid = template({ eligibilityRules: [{ field: "part", values: ["alto"] }] });
     expect(templateStaleness(valid, categories, MEMBER_MODEL)).toEqual({
       category: false,
-      eligibility: false,
+      eligibility: [],
     });
     const both = template({
       categoryId: "gone",
       eligibilityRules: [{ field: "part", values: ["mezzo"] }],
     });
     const staleness = templateStaleness(both, categories, MEMBER_MODEL);
-    expect(staleness).toEqual({ category: true, eligibility: true });
+    expect(staleness).toEqual({
+      category: true,
+      eligibility: ["Part: Mezzo is no longer an option."],
+    });
     expect(isStale(staleness)).toBe(true);
   });
 });

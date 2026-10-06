@@ -78,6 +78,21 @@ export const normalizeEligibilityRules = (
   })).filter((rule) => rule.values.length > 0);
 };
 
+const isWellFormedRule = (rule: unknown): boolean =>
+  isRuleLike(rule) &&
+  typeof rule.field === "string" &&
+  rule.field.length > 0 &&
+  Array.isArray(rule.values) &&
+  rule.values.length > 0 &&
+  rule.values.every((value) => typeof value === "string" && value.length > 0);
+
+/**
+ * Stored rules this client cannot read faithfully. Only a missing value means
+ * Everyone; anything else malformed must never be widened to Everyone.
+ */
+export const isUnreadableEligibility = (rules: unknown): boolean =>
+  rules != null && !(Array.isArray(rules) && rules.every(isWellFormedRule));
+
 /**
  * How each rule no longer matches the current member model. An empty result
  * means every rule can still be evaluated as it was written.
@@ -117,6 +132,23 @@ export const countEligibleMembers = (
   rules: readonly AttendanceEligibilityRule[],
 ): number => filterEligibleMembers(members, rules).length;
 
+const fieldLabel = capitalizeFirstLetter;
+
+/** One sentence explaining an issue, e.g. `Part: Mezzo is no longer an option.` */
+export const describeEligibilityIssue = (issue: EligibilityIssue): string => {
+  const label = fieldLabel(issue.field);
+  switch (issue.kind) {
+    case "missing-field":
+      return `${label} is no longer a member field.`;
+    case "not-option":
+      return `${label} is no longer an option field.`;
+    case "missing-option": {
+      const values = (issue.values ?? []).map(capitalizeFirstLetter).join(", ");
+      return `${label}: ${values} ${issue.values?.length === 1 ? "is" : "are"} no longer an option.`;
+    }
+  }
+};
+
 /** e.g. `Part: Soprano, Alto · Status: Active`, or `Everyone`. */
 export const summarizeEligibilityRules = (
   rules: readonly AttendanceEligibilityRule[],
@@ -125,7 +157,7 @@ export const summarizeEligibilityRules = (
     ? rules
         .map(
           (rule) =>
-            `${capitalizeFirstLetter(rule.field)}: ${rule.values
+            `${fieldLabel(rule.field)}: ${rule.values
               .map(capitalizeFirstLetter)
               .join(", ")}`,
         )

@@ -506,7 +506,10 @@ describe("<MarkAttendance> eligibility", () => {
       },
     });
     mockGet.mockImplementation((url: string) => {
-      if (url.includes("/members")) return Promise.resolve({ data: { data: roster } });
+      // A fresh copy per request, as the API would return.
+      if (url.includes("/members")) {
+        return Promise.resolve({ data: { data: roster.map((m) => ({ ...m })) } });
+      }
       return Promise.resolve({ data: { data: [] } });
     });
     mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
@@ -584,7 +587,32 @@ describe("<MarkAttendance> eligibility", () => {
       ]);
     });
 
+    it("drops a member outside the rules from an existing draft on first load", async () => {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify([
+          { id: "m1", name: "Ada", attendanceStatus: "late" },
+          { id: "m5", name: "Emeka", attendanceStatus: "present" },
+        ])
+      );
+      await start();
+      expect(rowNames()).toEqual(["Ada", "Chioma"]);
+      expect(statusOf("Ada")).toBe("Late");
+      expect(draftIds()).toEqual(["m1", "m3"]);
+    });
+
+    it("shows an error instead of an empty roster when members fail to load", async () => {
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+      mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
+      renderAt("/mark");
+      expect(await screen.findByText(/Members could not be loaded/)).toBeInTheDocument();
+      expect(screen.queryByText(/Expected roster/)).not.toBeInTheDocument();
+      (console.error as jest.Mock).mockRestore();
+    });
+
     it("keeps the draft and shows the backend error when the roster changed", async () => {
+      // React Query logs the rejected mutation; the rejection is the scenario.
+      const silence = jest.spyOn(console, "error").mockImplementation(() => undefined);
       mockPost.mockImplementation(() =>
         Promise.reject({ response: { status: 422, data: { error: "The expected roster has changed. Refresh to reload it." } } })
       );
@@ -597,6 +625,18 @@ describe("<MarkAttendance> eligibility", () => {
       );
       expect(draftIds()).toEqual(["m1", "m3"]);
       expect(statusOf("Ada")).toBe("Present");
+
+      // Refresh reloads the roster but keeps the marks already made.
+      roster.find((m) => m.id === "m3")!.status = "inactive";
+      roster.push({ id: "m9", name: "Ife", part: "soprano", status: "active" });
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+      await screen.findByText("Ife");
+      expect(rowNames()).toEqual(["Ada"]);
+      expect(statusOf("Ada")).toBe("Present");
+      expect(statusOf("Ife")).toBe("Absent");
+      expect(draftIds()).toEqual(["m1", "m9"]);
+      silence.mockRestore();
     });
   });
 
@@ -621,7 +661,10 @@ describe("<MarkAttendance> eligibility", () => {
       roster.push({ id: "m9", name: "Ife", part: "alto", status: "active" });
       mockGet.mockImplementation((url: string) => {
         if (url === "/attendance/org1/att9") return Promise.resolve({ data: { data: RECORD } });
-        if (url.includes("/members")) return Promise.resolve({ data: { data: roster } });
+        // A fresh copy per request, as the API would return.
+      if (url.includes("/members")) {
+        return Promise.resolve({ data: { data: roster.map((m) => ({ ...m })) } });
+      }
         return Promise.resolve({ data: { data: [] } });
       });
       mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
