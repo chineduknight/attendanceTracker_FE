@@ -27,6 +27,14 @@ export const queryKeys = {
     ["attendances", organisationId] as const,
   attendanceTemplates: (organisationId: string) =>
     ["attendance-templates", organisationId] as const,
+  attendanceAvailability: {
+    root: (organisationId: string) =>
+      ["attendance-availability", organisationId] as const,
+    member: (organisationId: string, memberId: string) =>
+      ["attendance-availability", organisationId, "member", memberId] as const,
+    date: (organisationId: string, date: string) =>
+      ["attendance-availability", organisationId, "date", date] as const,
+  },
 
   finance: {
     obligations: (organisationId: string) =>
@@ -39,7 +47,7 @@ export const queryKeys = {
     complianceExport: (
       organisationId: string,
       obligationId: string,
-      format: "excel" | "pdf",
+      format: "excel" | "pdf"
     ) =>
       [
         "finance",
@@ -54,7 +62,8 @@ export const queryKeys = {
   rbac: {
     officers: (organisationId: string) =>
       ["rbac", organisationId, "officers"] as const,
-    roles: (organisationId: string) => ["rbac", organisationId, "roles"] as const,
+    roles: (organisationId: string) =>
+      ["rbac", organisationId, "roles"] as const,
     invites: (organisationId: string) =>
       ["rbac", organisationId, "invites"] as const,
   },

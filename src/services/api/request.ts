@@ -14,25 +14,27 @@ export const orgRequest = {
   SUB_CATEGORY: "/organisations/:organisationId/sub-category",
   ORGANISATIONS: "/organisations",
   ORGANISATION_ONE: "/organisations/:id",
-  MEMBERS:"/organisations/:organisationId/members",
-  MEMBER_ONE:"/organisations/:organisationId/members/:id",
+  MEMBERS: "/organisations/:organisationId/members",
+  MEMBER_ONE: "/organisations/:organisationId/members/:id",
   DELETE_MEMBER: "/organisations/:organisationId/members/:id",
-  CONFIG_MODEL:"/organisations/:organisationId/model",
+  CONFIG_MODEL: "/organisations/:organisationId/model",
   BIRTHDAY: "/organisations/:organisationId/members/birthday",
-  BIRTHDAY_EXPORT_PDF: "/organisations/:organisationId/members/birthday/export/pdf",
-  BIRTHDAY_EXPORT_EXCEL: "/organisations/:organisationId/members/birthday/export",
+  BIRTHDAY_EXPORT_PDF:
+    "/organisations/:organisationId/members/birthday/export/pdf",
+  BIRTHDAY_EXPORT_EXCEL:
+    "/organisations/:organisationId/members/birthday/export",
   // organisations/:organisationId/members
 };
 
 export const attendanceRequest = {
-  ATTENDANCE:"/attendance",
-  UPDATE_ATTENDANCE:"/attendance/:attendanceId",
-  GET_ATTENDANCE:"/attendance/:organisationId/:id",
-  DELETE_ATTENDANCE:"/attendance/:organisationId/:id",
-  ALL_ATTENDANCE:"/attendance/:organisationId",
+  ATTENDANCE: "/attendance",
+  UPDATE_ATTENDANCE: "/attendance/:attendanceId",
+  GET_ATTENDANCE: "/attendance/:organisationId/:id",
+  DELETE_ATTENDANCE: "/attendance/:organisationId/:id",
+  ALL_ATTENDANCE: "/attendance/:organisationId",
   ATTENDANCE_TEMPLATES: "/attendance/:organisationId/templates",
   ATTENDANCE_TEMPLATE: "/attendance/:organisationId/templates/:templateId",
-  EXPORT:"/attendance/export/:organisationId/:id",
+  EXPORT: "/attendance/export/:organisationId/:id",
   ANALYTICS: "/attendance/:organisationId/analytics",
   ANALYTICS_EXPORT_EXCEL: "/attendance/:organisationId/analytics/export/excel",
   ANALYTICS_EXPORT_PDF: "/attendance/:organisationId/analytics/export/pdf",
@@ -41,6 +43,9 @@ export const attendanceRequest = {
     "/attendance/:organisationId/analytics/member/:memberId/export/excel",
   MEMBER_ANALYTICS_EXPORT_PDF:
     "/attendance/:organisationId/analytics/member/:memberId/export/pdf",
+  ATTENDANCE_AVAILABILITY: "/attendance/:organisationId/availability",
+  ATTENDANCE_AVAILABILITY_ONE:
+    "/attendance/:organisationId/availability/:availabilityId",
 };
 
 export const financeRequest = {

@@ -1,6 +1,7 @@
 import {
   Box,
   Flex,
+  Text,
   useColorModeValue,
   Button,
   Stack,
@@ -31,6 +32,8 @@ import {
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
+import { useAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
+import { filterAvailableMembers } from "helpers/attendanceAvailability";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -41,16 +44,20 @@ const EMPTY_DETAILS: AttendanceDetails = {
   date: "",
 };
 
-const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) => {
+const CreateAttendanceForm = ({
+  organisationId,
+}: {
+  organisationId: string;
+}) => {
   const navigate = useNavigate();
   const terms = useTerms();
   const updateCurrentAttendance = useGlobalStore(
-    (state) => state.updateCurrentAttendance,
+    (state) => state.updateCurrentAttendance
   );
   // Off, the page behaves as if eligibility did not exist: no editor, no
   // member-field dependency, and every new session expects everyone.
   const eligibilityEnabled = useGlobalStore((state) =>
-    isAttendanceEligibilityEnabled(state.organisation),
+    isAttendanceEligibilityEnabled(state.organisation)
   );
   const {
     categories,
@@ -67,13 +74,25 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
   const [eligibilityRules, setEligibilityRules] = useState<
     AttendanceEligibilityRule[]
   >([]);
+  const {
+    unavailableMemberIds,
+    isLoading: availabilityLoading,
+    isError: availabilityFailed,
+  } = useAttendanceAvailabilityForDate(organisationId, details.date);
 
   // Rules entered while eligibility was on never leak into an Everyone session.
   const activeRules = eligibilityEnabled ? eligibilityRules : NO_RULES;
-  const optionFields = useMemo(() => eligibilityFields(memberFields), [memberFields]);
+  const optionFields = useMemo(
+    () => eligibilityFields(memberFields),
+    [memberFields]
+  );
+  const expectedMembers = useMemo(
+    () => filterAvailableMembers(members, unavailableMemberIds),
+    [members, unavailableMemberIds]
+  );
   const expectedCount =
     eligibilityEnabled && membersLoaded
-      ? countEligibleMembers(members, activeRules)
+      ? countEligibleMembers(expectedMembers, activeRules)
       : null;
 
   // A template fills everything but the date, which belongs to this session.
@@ -91,11 +110,15 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
       name: details.name.trim(),
       date: details.date,
       ...(details.categoryId ? { categoryId: details.categoryId } : {}),
-      ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
+      ...(details.subCategoryId
+        ? { subCategoryId: details.subCategoryId }
+        : {}),
       eligibilityRules: normalizeEligibilityRules(activeRules),
     };
     updateCurrentAttendance(payload);
-    queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.members(organisationId),
+    });
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
@@ -103,7 +126,11 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
       <Can perm="categories.manage">
         <Flex>
-          <Button mt="4" ml="2" onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}>
+          <Button
+            mt="4"
+            ml="2"
+            onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}
+          >
             {`Add ${terms.categorySingular}`}
           </Button>
           <Button
@@ -150,11 +177,23 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             onChange={setDetails}
             categories={categories}
           />
+          {details.date && availabilityFailed && (
+            <Text color="red.500">
+              Unable to load attendance availability for this date.
+            </Text>
+          )}
+          {details.date && availabilityLoading && (
+            <Text color="gray.600">Checking attendance availability...</Text>
+          )}
           {eligibilityEnabled && (
             <AttendanceEligibilityEditor
               fields={optionFields}
               fieldsStatus={
-                memberModelLoaded ? "ready" : memberModelFailed ? "error" : "loading"
+                memberModelLoaded
+                  ? "ready"
+                  : memberModelFailed
+                  ? "error"
+                  : "loading"
               }
               rules={eligibilityRules}
               onChange={setEligibilityRules}
@@ -190,7 +229,10 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
 const CreateAttendance = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);
   return (
-    <CreateAttendanceForm key={organisationId} organisationId={organisationId} />
+    <CreateAttendanceForm
+      key={organisationId}
+      organisationId={organisationId}
+    />
   );
 };
 
