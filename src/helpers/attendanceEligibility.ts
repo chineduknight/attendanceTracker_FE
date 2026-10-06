@@ -159,8 +159,11 @@ export const countEligibleMembers = (
 const fieldLabel = fallbackFieldLabel;
 
 /** One sentence explaining an issue, e.g. `Part: Mezzo is no longer an option.` */
-export const describeEligibilityIssue = (issue: EligibilityIssue): string => {
-  const label = fieldLabel(issue.field);
+export const describeEligibilityIssue = (
+  issue: EligibilityIssue,
+  labelFor: (field: string) => string = fieldLabel,
+): string => {
+  const label = labelFor(issue.field);
   switch (issue.kind) {
     case "missing-field":
       return `${label} is no longer a member field.`;

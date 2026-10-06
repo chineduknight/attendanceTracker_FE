@@ -6,7 +6,6 @@ import {
   toEditorFields,
   toModelPayload,
   validateEditorFields,
-  editorFieldKey,
 } from "helpers/memberModelEditor";
 import { MemberModelField } from "helpers/memberFields";
 
@@ -22,13 +21,13 @@ describe("toEditorFields", () => {
       ["f-name", true, "Full Name", ""],
       ["f-part", true, "Part", "Soprano, Alto"],
     ]);
-    expect(fields.every((f) => f.draftId === null)).toBe(true);
+    expect(fields.map((f) => f.reactKey)).toEqual(["f-name", "f-part"]);
   });
 
   it("starts a new model with an unsaved, pinned name field", () => {
     const [name] = toEditorFields([]);
-    expect(name).toMatchObject({ persisted: false, savedId: null, name: "name", label: "Name", required: true });
-    expect(name.draftId).toMatch(/^draft-/);
+    expect(name).toMatchObject({ persisted: false, savedId: null, pinned: true, name: "name", label: "Name", required: true });
+    expect(name.reactKey).toMatch(/^draft-/);
   });
 
   it("treats a loaded field without _id as saved but never invents one", () => {
@@ -65,7 +64,7 @@ describe("toModelPayload", () => {
 describe("validateEditorFields", () => {
   const errorsOf = (fields: EditorField[]) => {
     const errors = validateEditorFields(fields);
-    return fields.map((f) => errors.get(editorFieldKey(f)) ?? {});
+    return fields.map((f) => errors.get(f.reactKey) ?? {});
   };
 
   it("accepts a valid model and grandfathers saved keys", () => {
@@ -83,7 +82,7 @@ describe("validateEditorFields", () => {
   });
 
   it("flags duplicate, reserved and unsafe new keys", () => {
-    const [, dup, reserved, unsafe, empty] = errorsOf([
+    const [saved, dup, reserved, unsafe, empty] = errorsOf([
       ...toEditorFields(SAVED).slice(1),
       newDraftField({ name: "PART", label: "Part again" }),
       newDraftField({ name: "createdAt", label: "Created" }),
@@ -91,6 +90,8 @@ describe("validateEditorFields", () => {
       newDraftField({ name: "", label: "No key" }),
     ]);
     expect(dup.name).toMatch(/already uses the key "part"/);
+    // The saved field's key can't be edited, so it carries no key error.
+    expect(saved.name).toBeUndefined();
     expect(reserved.name).toMatch(/reserved/);
     expect(unsafe.name).toMatch(/lowercase letters/);
     expect(empty.name).toMatch(/Enter an internal key/);
@@ -99,6 +100,26 @@ describe("validateEditorFields", () => {
   it("requires options for an option field", () => {
     const [field] = errorsOf([newDraftField({ name: "x", label: "X", type: "option", optionsText: " , " })]);
     expect(field.options).toMatch(/at least one option/);
+  });
+});
+
+describe("saved options and the name field", () => {
+  it("sends loaded options verbatim unless they were edited", () => {
+    const [field] = toEditorFields([
+      { _id: "f-x", name: "venue", type: "option", options: ["Hall, East", " Alto"] },
+    ]);
+    expect(toModelPayload([{ ...field, label: "Venue" }])[0].options).toEqual(["Hall, East", " Alto"]);
+    expect(
+      toModelPayload([{ ...field, optionsText: "Hall, West", optionsEdited: true }])[0].options
+    ).toEqual(["Hall", "West"]);
+  });
+
+  it("pins the name field by key wherever it sits in a legacy model", () => {
+    const fields = toEditorFields([
+      { _id: "f-part", name: "part", type: "text" },
+      { _id: "f-name", name: "Name", type: "text", required: true },
+    ]);
+    expect(fields.map((f) => f.pinned)).toEqual([false, true]);
   });
 });
 

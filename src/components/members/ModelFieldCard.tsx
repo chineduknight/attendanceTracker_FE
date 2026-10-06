@@ -15,17 +15,10 @@ import {
 } from "@chakra-ui/react";
 import { FaLock, FaTimesCircle } from "react-icons/fa";
 import { MEMBER_FIELD_TYPES } from "helpers/memberFields";
-import {
-  EditorField,
-  FieldErrors,
-  editorFieldKey,
-  isSavedField,
-} from "helpers/memberModelEditor";
+import { EditorField, FieldErrors } from "helpers/memberModelEditor";
 
 interface ModelFieldCardProps {
   field: EditorField;
-  /** The pinned `name` field: key, type and required flag are fixed. */
-  isPinned: boolean;
   errors?: FieldErrors;
   onChange: (patch: Partial<EditorField>) => void;
   /** Only unsaved fields can be removed. */
@@ -35,9 +28,10 @@ interface ModelFieldCardProps {
 const KEY_HELP =
   "Internal key is used by stored member records and eligibility rules and cannot be renamed after saving.";
 
-const ModelFieldCard = ({ field, isPinned, errors, onChange, onRemove }: ModelFieldCardProps) => {
-  const saved = isSavedField(field);
-  const id = editorFieldKey(field);
+const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardProps) => {
+  const saved = field.persisted;
+  const isPinned = field.pinned;
+  const id = field.reactKey;
   const keyLocked = saved || isPinned;
   return (
     <Stack spacing={3} borderWidth="1px" borderRadius="md" p={4}>
@@ -118,7 +112,9 @@ const ModelFieldCard = ({ field, isPinned, errors, onChange, onRemove }: ModelFi
           <Input
             value={field.optionsText}
             placeholder="Soprano, Alto, Tenor, Bass"
-            onChange={(e) => onChange({ optionsText: e.target.value })}
+            onChange={(e) =>
+              onChange({ optionsText: e.target.value, optionsEdited: true })
+            }
           />
           {errors?.options ? (
             <FormErrorMessage>{errors.options}</FormErrorMessage>

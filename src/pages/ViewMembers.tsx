@@ -69,9 +69,6 @@ const ViewMembers: React.FC = () => {
     const stored = localStorage.getItem(selectedFieldsStorageKey);
     return stored ? JSON.parse(stored) : [];
   });
-  const [filterableFields, setFilterableFields] = useState<FilterableField[]>(
-    [],
-  );
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const navigate = useNavigate();
   const isCompactActions = useBreakpointValue({ base: true, sm: false });
@@ -81,24 +78,16 @@ const ViewMembers: React.FC = () => {
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
     [],
   );
-  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
-    organisationId: org.id,
-  });
-
-  useQueryWrapper(queryKeys.memberModel(org.id), modelURL, {
-    onSuccess: (data) => {
-      const fields = data?.data.fields ?? [];
-      const optionFields = fields
-        .filter(
-          (field: any) => field.type === "option" && Array.isArray(field.options),
-        )
-        .map((field: any) => ({ name: field.name, options: field.options }));
-      setFilterableFields(optionFields);
-    },
-  });
   // Display labels only; filters, query params and saved columns keep storage keys.
   const { fields: modelFields } = useMemberModel(org.id);
   const labelFor = useMemo(() => memberFieldLabeler(modelFields), [modelFields]);
+  const filterableFields = useMemo<FilterableField[]>(
+    () =>
+      modelFields
+        .filter((field) => field.type === "option" && Array.isArray(field.options))
+        .map((field) => ({ name: field.name, options: field.options ?? [] })),
+    [modelFields],
+  );
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });

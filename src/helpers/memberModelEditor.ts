@@ -1,32 +1,36 @@
 import {
   displayMemberFieldLabel,
   fallbackFieldLabel,
-  MemberFieldType,
   MemberModelField,
 } from "helpers/memberFields";
 
-/** The always-present first field: every member has a name. */
+/** The always-present member field: every member has a name. */
 export const NAME_FIELD_KEY = "name";
 export const FIELD_LABEL_MAX_LENGTH = 80;
 
 /**
  * One field in the model editor. A saved field carries the backend's `_id`
- * and keeps its key and type; a new field has only a client-side `draftId`
- * (React key) that is never sent to the backend.
+ * and keeps its key and type; a new field is identified only by a client-side
+ * React key, which is never sent to the backend.
  */
 export interface EditorField {
+  /** Stable React key: the saved `_id`, or a client-only draft id. */
+  reactKey: string;
   /** Loaded from the backend: key and type are locked and it can't be removed. */
   persisted: boolean;
   /** Backend `_id` of a saved field (legacy records may lack one). */
   savedId: string | null;
-  /** Client-only React key for an unsaved field. */
-  draftId: string | null;
+  /** The `name` field: key, type and required flag are fixed. */
+  pinned: boolean;
   name: string;
   label: string;
-  type: MemberFieldType | string;
+  type: string;
   required: boolean;
   /** Comma-separated option text, kept even if a new field's type changes. */
   optionsText: string;
+  /** Options exactly as loaded; sent unchanged unless `optionsText` is edited. */
+  savedOptions: string[] | null;
+  optionsEdited: boolean;
   /** A new field's key follows its label until the officer edits the key. */
   keyEdited: boolean;
 }
@@ -44,28 +48,22 @@ export interface ModelFieldPayload {
 }
 
 let draftCounter = 0;
-const nextDraftId = () => `draft-${++draftCounter}`;
+const nextDraftKey = () => `draft-${++draftCounter}`;
 
-export const editorFieldKey = (field: EditorField): string =>
-  field.savedId ?? (field.draftId as string);
+const normalizeKey = (name: string) => name.trim().toLowerCase();
 
-export const isSavedField = (field: EditorField) => field.persisted;
-
-/** The pinned `name` field: its key, type and required flag never change. */
-export const isNameField = (field: EditorField, index: number) =>
-  index === 0 && field.name === NAME_FIELD_KEY;
-
-export const newDraftField = (
-  overrides: Partial<EditorField> = {},
-): EditorField => ({
+export const newDraftField = (overrides: Partial<EditorField> = {}): EditorField => ({
+  reactKey: nextDraftKey(),
   persisted: false,
   savedId: null,
-  draftId: nextDraftId(),
+  pinned: false,
   name: "",
   label: "",
   type: "text",
   required: false,
   optionsText: "",
+  savedOptions: null,
+  optionsEdited: false,
   keyEdited: false,
   ...overrides,
 });
@@ -76,18 +74,22 @@ export const toEditorFields = (
 ): EditorField[] =>
   fields?.length
     ? fields.map((field) => ({
+        reactKey: field._id ?? nextDraftKey(),
         persisted: true,
         savedId: field._id ?? null,
-        draftId: field._id ? null : nextDraftId(),
+        pinned: normalizeKey(field.name) === NAME_FIELD_KEY,
         name: field.name,
         label: displayMemberFieldLabel(field),
         type: field.type,
         required: Boolean(field.required),
         optionsText: (field.options ?? []).join(", "),
+        savedOptions: field.options ? [...field.options] : null,
+        optionsEdited: false,
         keyEdited: true,
       }))
     : [
         newDraftField({
+          pinned: true,
           name: NAME_FIELD_KEY,
           label: fallbackFieldLabel(NAME_FIELD_KEY),
           required: true,
@@ -114,6 +116,12 @@ export const parseOptions = (optionsText: string): string[] =>
     ),
   );
 
+/** The options a field will save: loaded ones verbatim unless edited. */
+export const fieldOptions = (field: EditorField): string[] =>
+  field.savedOptions && !field.optionsEdited
+    ? field.savedOptions
+    : parseOptions(field.optionsText);
+
 // Mirrors the backend: server-owned member paths can never be field keys.
 const RESERVED_KEYS = new Set(
   [
@@ -131,15 +139,14 @@ const RESERVED_KEYS = new Set(
     "__proto__",
     "constructor",
     "prototype",
-  ].map((key) => key.toLowerCase()),
+  ].map(normalizeKey),
 );
 const SAFE_KEY = /^[a-z_][a-z0-9_]*$/;
 
-const normalizeKey = (name: string) => name.trim().toLowerCase();
-
 /**
- * Local validation, keyed by `editorFieldKey`. Saved keys are grandfathered
- * (they can't change here); the backend stays authoritative.
+ * Local validation, keyed by `reactKey`. Saved keys are grandfathered (they
+ * can't change here) and never carry key errors; the backend stays
+ * authoritative.
  */
 export const validateEditorFields = (
   fields: readonly EditorField[],
@@ -159,39 +166,38 @@ export const validateEditorFields = (
       fieldErrors.label = `Labels can be at most ${FIELD_LABEL_MAX_LENGTH} characters.`;
     }
 
-    const key = normalizeKey(field.name);
-    if (!isSavedField(field)) {
+    if (!field.persisted && !field.pinned) {
+      const key = normalizeKey(field.name);
       if (!key) fieldErrors.name = "Enter an internal key.";
       else if (RESERVED_KEYS.has(key)) {
         fieldErrors.name = `"${key}" is reserved and can't be used.`;
       } else if (!SAFE_KEY.test(key)) {
         fieldErrors.name =
-          "Use lowercase letters, numbers and underscores, starting with a letter.";
+          "Use lowercase letters, numbers and underscores, not starting with a number.";
+      } else if ((keyCounts.get(key) ?? 0) > 1) {
+        fieldErrors.name = `Another field already uses the key "${key}".`;
       }
     }
-    if (key && (keyCounts.get(key) ?? 0) > 1) {
-      fieldErrors.name = `Another field already uses the key "${key}".`;
-    }
 
-    if (field.type === "option" && parseOptions(field.optionsText).length === 0) {
+    if (field.type === "option" && fieldOptions(field).length === 0) {
       fieldErrors.options = "Add at least one option, separated by commas.";
     }
 
-    if (Object.keys(fieldErrors).length) errors.set(editorFieldKey(field), fieldErrors);
+    if (Object.keys(fieldErrors).length) errors.set(field.reactKey, fieldErrors);
   });
   return errors;
 };
 
 /**
- * The model payload: saved fields keep their `_id`; new fields send none, so
- * the backend mints their persistent identity. `draftId` is never sent.
+ * The model payload: saved fields keep their `_id`, key and type; new fields
+ * send no id, so the backend mints their persistent identity.
  */
 export const toModelPayload = (fields: readonly EditorField[]): ModelFieldPayload[] =>
   fields.map((field) => ({
     ...(field.savedId ? { _id: field.savedId } : {}),
-    name: isSavedField(field) ? field.name : normalizeKey(field.name),
+    name: field.persisted ? field.name : normalizeKey(field.name),
     label: field.label.trim(),
     type: field.type,
     required: field.required,
-    ...(field.type === "option" ? { options: parseOptions(field.optionsText) } : {}),
+    ...(field.type === "option" ? { options: fieldOptions(field) } : {}),
   }));

@@ -44,6 +44,12 @@ const AttendanceEligibilityEditor = ({
   totalCount,
 }: AttendanceEligibilityEditorProps) => {
   const labelFor = useMemo(() => memberFieldLabeler(fields), [fields]);
+  // Labels needn't be unique, so a repeated label is disambiguated by its key.
+  const repeatedLabels = useMemo(() => {
+    const counts = new Map<string, number>();
+    fields.forEach((f) => counts.set(f.label, (counts.get(f.label) ?? 0) + 1));
+    return new Set(Array.from(counts).filter(([, n]) => n > 1).map(([label]) => label));
+  }, [fields]);
   // Stored rules use lowercased field names and may differ in option casing.
   const selectedValues = (field: string) =>
     (
@@ -104,7 +110,9 @@ const AttendanceEligibilityEditor = ({
                 </Text>
                 <ReactSelect
                   isMulti
-                  aria-label={`${label} eligibility`}
+                  aria-label={`${
+                    repeatedLabels.has(label) ? `${label} (${field.name})` : label
+                  } eligibility`}
                   placeholder={`Any ${label.toLowerCase()}`}
                   options={options}
                   value={options.filter((o) =>

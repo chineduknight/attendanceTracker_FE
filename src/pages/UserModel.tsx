@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   AlertDescription,
@@ -30,15 +30,14 @@ import { MemberModelField } from "helpers/memberFields";
 import {
   EditorField,
   FieldErrors,
-  editorFieldKey,
-  isNameField,
-  isSavedField,
   keyFromLabel,
   newDraftField,
   toEditorFields,
   toModelPayload,
   validateEditorFields,
 } from "helpers/memberModelEditor";
+
+const NO_ERRORS = new Map<string, FieldErrors>();
 
 interface ModelFormProps {
   organisationId: string;
@@ -48,7 +47,7 @@ interface ModelFormProps {
 /** Applies an edit; a new field's key follows its label until edited directly. */
 const applyPatch = (field: EditorField, patch: Partial<EditorField>): EditorField => {
   const next = { ...field, ...patch };
-  if (patch.label !== undefined && !isSavedField(field) && !field.keyEdited) {
+  if (patch.label !== undefined && !field.persisted && !field.keyEdited) {
     next.name = keyFromLabel(patch.label);
   }
   return next;
@@ -59,16 +58,21 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   // Initialised once from the loaded model, so a background refetch can't wipe
   // unsaved edits. The parent remounts this form on organisation change.
   const [fields, setFields] = useState<EditorField[]>(() => toEditorFields(savedFields));
-  const [errors, setErrors] = useState<Map<string, FieldErrors>>(new Map());
+  // Errors appear after the first save attempt, then track every edit.
+  const [submitted, setSubmitted] = useState(false);
+  const errors = useMemo(
+    () => (submitted ? validateEditorFields(fields) : NO_ERRORS),
+    [submitted, fields],
+  );
   const [serverError, setServerError] = useState<string | null>(null);
   const isUpdating = savedFields.length > 0;
 
   const updateField = (key: string, patch: Partial<EditorField>) =>
     setFields((current) =>
-      current.map((field) => (editorFieldKey(field) === key ? applyPatch(field, patch) : field)),
+      current.map((field) => (field.reactKey === key ? applyPatch(field, patch) : field)),
     );
   const removeField = (key: string) =>
-    setFields((current) => current.filter((field) => editorFieldKey(field) !== key));
+    setFields((current) => current.filter((field) => field.reactKey !== key));
 
   const { mutate, isLoading } = useMutationWrapper(
     postRequest,
@@ -88,10 +92,9 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   );
 
   const handleSubmit = () => {
-    const nextErrors = validateEditorFields(fields);
-    setErrors(nextErrors);
+    setSubmitted(true);
     setServerError(null);
-    if (nextErrors.size) {
+    if (validateEditorFields(fields).size) {
       toast.error("Fix the highlighted fields before saving.");
       return;
     }
@@ -121,20 +124,17 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
           <AlertDescription>{serverError}</AlertDescription>
         </Alert>
       )}
-      {fields.map((field, index) => {
-        const key = editorFieldKey(field);
-        const pinned = isNameField(field, index);
-        return (
-          <ModelFieldCard
-            key={key}
-            field={field}
-            isPinned={pinned}
-            errors={errors.get(key)}
-            onChange={(patch) => updateField(key, patch)}
-            onRemove={!pinned && !isSavedField(field) ? () => removeField(key) : undefined}
-          />
-        );
-      })}
+      {fields.map((field) => (
+        <ModelFieldCard
+          key={field.reactKey}
+          field={field}
+          errors={errors.get(field.reactKey)}
+          onChange={(patch) => updateField(field.reactKey, patch)}
+          onRemove={
+            field.pinned || field.persisted ? undefined : () => removeField(field.reactKey)
+          }
+        />
+      ))}
       <Button
         leftIcon={<FaPlusCircle aria-hidden />}
         variant="logout"
@@ -155,13 +155,25 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   );
 };
 
+/**
+ * Seeds the form once from a fresh copy of the model (not a possibly stale
+ * cache entry), then keeps it mounted: later refetches or refetch failures
+ * never replace or unmount the officer's unsaved edits.
+ */
 const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
-  const { fields, isSuccess, isError } = useMemberModel(organisationId);
-  if (isError) {
+  const { fields, hasData, isError, isFetchedAfterMount } = useMemberModel(organisationId, {
+    refetchOnWindowFocus: false,
+  });
+  const [seed, setSeed] = useState<MemberModelField[] | null>(null);
+  useEffect(() => {
+    if (seed === null && hasData && (isFetchedAfterMount || isError)) setSeed(fields);
+  }, [seed, hasData, isFetchedAfterMount, isError, fields]);
+
+  if (seed) return <ModelForm organisationId={organisationId} savedFields={seed} />;
+  if (isError && !hasData) {
     return <Text color="red.500">The member model could not be loaded. Please refresh.</Text>;
   }
-  if (!isSuccess) return <LoadingSpinner h="40vh" text="Loading member model..." />;
-  return <ModelForm organisationId={organisationId} savedFields={fields} />;
+  return <LoadingSpinner h="40vh" text="Loading member model..." />;
 };
 
 /**

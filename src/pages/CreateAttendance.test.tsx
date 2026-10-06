@@ -644,6 +644,23 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     ]);
   });
 
+  it("names a genuinely stale rule by its current label", async () => {
+    templatesByOrg.orgA = [
+      template({
+        id: "t-mezzo",
+        name: "Mezzo Sectional",
+        eligibilityRules: [{ field: "part", values: ["mezzo"] }],
+      }),
+    ];
+    renderPage();
+    await waitForRoster();
+    await screen.findByRole("option", { name: "Rehearsal" });
+    await screen.findByRole("option", { name: "Mezzo Sectional (Needs update)" });
+    type(templateSelect(), "t-mezzo");
+    expect(screen.getByText(/Voice Part: Mezzo is no longer an option\./)).toBeInTheDocument();
+    expect(button("Apply")).toBeDisabled();
+  });
+
   it("does not mark a part-keyed template stale after a label-only rename", async () => {
     renderPage();
     await waitForRoster();

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -175,10 +175,64 @@ describe("<UserModel>", () => {
     const section = await waitFor(() => card("Section"));
     expect(keyInput(section).value).toBe("part");
     expect(screen.queryByText("New field")).not.toBeInTheDocument();
+    expect(screen.queryAllByText("New", { selector: "span" })).toHaveLength(0);
     expect(screen.queryByDisplayValue("Unsaved A label")).not.toBeInTheDocument();
 
     act(() => selectOrg("orgA"));
     const partAgain = await waitFor(() => card("Part"));
     expect(labelInput(partAgain).value).toBe("Part");
   });
+
+  it("round-trips a new field: after save and reload it carries the backend _id", async () => {
+    renderPage();
+    await waitFor(() => card("Part"));
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.change(labelInput(card("New field")), { target: { value: "Shift" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(posted()[2]).not.toHaveProperty("_id");
+    await screen.findByText("add member page");
+
+    // The backend minted an id; the next visit loads and re-sends it.
+    models.orgA = [...ORG_A, { _id: "a-shift", name: "shift", label: "Shift", type: "text", required: false }];
+    cleanup();
+    queryClient.clear();
+    mockPost.mockClear();
+    renderPage();
+    const shift = await waitFor(() => card("Shift"));
+    expect(keyInput(shift)).toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(posted()[2]).toEqual({ _id: "a-shift", name: "shift", label: "Shift", type: "text", required: false });
+    models.orgA = ORG_A;
+  });
+
+  it("keeps a legacy field without _id locked and posts it by name only", async () => {
+    models.orgL = [
+      { _id: "l-name", name: "name", type: "text", required: true },
+      { name: "part", type: "text", required: false },
+    ];
+    selectOrg("orgL");
+    renderPage();
+    const part = await waitFor(() => card("Part"));
+    expect(keyInput(part)).toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(posted()[1]).toEqual({ name: "part", label: "Part", type: "text", required: false });
+  });
+
+  it("keeps unsaved edits when a background refetch of the model fails", async () => {
+    renderPage();
+    const part = await waitFor(() => card("Part"));
+    fireEvent.change(labelInput(part), { target: { value: "Voice Part" } });
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
+
+    await act(() => queryClient.refetchQueries({ queryKey: queryKeys.memberModel("orgA") }));
+
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Voice Part")).toBeInTheDocument();
+    (console.error as jest.Mock).mockRestore();
+  });
 });
+
