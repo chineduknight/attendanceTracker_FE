@@ -43,6 +43,8 @@ import { memberFieldLabeler } from "helpers/memberFields";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
 import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type StatusOption = {
   value: string;
@@ -84,6 +86,7 @@ const nextMultiFilter = (values: string[]): string[] => {
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
 const Attendance = () => {
+  const terms = useTerms();
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([ALL]);
@@ -330,7 +333,7 @@ const Attendance = () => {
             </Flex>
             {attendanceInfo && (
               <ExpectedRosterSummary
-                title={`Expected members: ${attendanceInfo.expectedCount}`}
+                title={`Expected ${lowerTerm(terms.memberPlural)}: ${attendanceInfo.expectedCount}`}
                 rules={storedRules}
                 isOutdated={rulesOutdated}
                 labelFor={labelFor}
@@ -341,7 +344,7 @@ const Attendance = () => {
                 <InputLeftElement pointerEvents="none" />
                 <Input
                   type="search"
-                  placeholder="Search member"
+                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
                   onChange={handleSearch}
                 />
               </InputGroup>
@@ -381,7 +384,7 @@ const Attendance = () => {
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
-                  No member found
+                  {`No ${lowerTerm(terms.memberSingular)} found`}
                 </Text>
               </Box>
             )}

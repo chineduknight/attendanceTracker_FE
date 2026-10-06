@@ -71,6 +71,8 @@ import {
   StatusSnapshot,
   updateStatuses,
 } from "helpers/attendanceBulk";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 export type MemberType = {
   /** A configured status key of the selected organisation. */
@@ -80,6 +82,7 @@ export type MemberType = {
 };
 
 const MarkAttendanceSession = () => {
+  const terms = useTerms();
   const [searchQuery, setSearchQuery] = useState("");
   const [org, currentAttendance, setAttendance] = useGlobalStore((state) => [
     state.organisation,
@@ -374,7 +377,7 @@ const MarkAttendanceSession = () => {
       <Container>
         <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
           <Heading fontSize="22px" noOfLines={1}>
-            {`Members ${currentAttendance.name}`}
+            {`${terms.memberPlural} ${currentAttendance.name}`}
           </Heading>
           <Flex gap={2} alignItems="center" flexShrink={0}>
             {isUpdate && (
@@ -400,9 +403,9 @@ const MarkAttendanceSession = () => {
         ) : (
           <>
             <ExpectedRosterSummary
-              title={`Expected roster: ${expectedRosterSize} ${
-                expectedRosterSize === 1 ? "member" : "members"
-              }`}
+              title={`Expected roster: ${expectedRosterSize} ${lowerTerm(
+                expectedRosterSize === 1 ? terms.memberSingular : terms.memberPlural
+              )}`}
               rules={displayedRules}
               labelFor={labelFor}
             />
@@ -417,7 +420,7 @@ const MarkAttendanceSession = () => {
               </InputLeftElement>
               <Input
                 type="text"
-                placeholder="Search member"
+                placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
                 value={searchQuery}
                 onChange={handleSearch}
               />
@@ -445,7 +448,7 @@ const MarkAttendanceSession = () => {
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
-                  No member found
+                  {`No ${lowerTerm(terms.memberSingular)} found`}
                 </Text>
               </Box>
             )}

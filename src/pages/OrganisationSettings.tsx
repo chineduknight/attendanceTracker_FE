@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Box,
   Flex,
@@ -29,7 +29,19 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { buildOrgUpdatePayload, OrgSettingsForm } from "helpers/orgPayloads";
+import {
+  buildOrgUpdatePayload,
+  OrgSettingsForm,
+  OrgUpdatePayload,
+} from "helpers/orgPayloads";
+import {
+  effectiveFeatureVisibility,
+  effectiveTerminology,
+} from "helpers/organisationPresentation";
+import {
+  FeatureVisibilitySettings,
+  TerminologySettings,
+} from "components/settings/PresentationSettings";
 import LoadingSpinner from "components/LoadingSpinner";
 import AttendanceStatusesEditor from "components/settings/AttendanceStatusesEditor";
 import {
@@ -76,8 +88,12 @@ const OrganisationSettings = () => {
       image: "",
       collapseAttendanceByDay: false,
       maxAttendanceEdits: "",
+      terminology: effectiveTerminology(org),
+      featureVisibility: effectiveFeatureVisibility(org),
     },
   });
+  // The body last sent, so a reply from an older backend still updates nav.
+  const lastPayload = useRef<OrgUpdatePayload | null>(null);
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
@@ -94,6 +110,8 @@ const OrganisationSettings = () => {
           data.maxAttendanceEdits == null
             ? ""
             : String(data.maxAttendanceEdits),
+        terminology: effectiveTerminology(data),
+        featureVisibility: effectiveFeatureVisibility(data),
       });
       setStatusRows(toStatusRows(data.attendanceStatuses));
       setStatusErrors([]);
@@ -104,11 +122,15 @@ const OrganisationSettings = () => {
     putRequest,
     (res: any) => {
       // PUT returns org fields but NOT permissions/isOwner/roleName —
-      // merge over the selected org so RBAC state is preserved. Statuses
-      // apply immediately so marking/analytics switch to the new config.
+      // merge over the selected org so RBAC state is preserved. Statuses,
+      // terminology and visibility apply immediately to marking and nav.
       setOrg({
         ...org,
         attendanceStatuses: toStatusDefinitions(statusRows),
+        ...(lastPayload.current && {
+          terminology: lastPayload.current.terminology,
+          featureVisibility: lastPayload.current.featureVisibility,
+        }),
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
@@ -128,7 +150,9 @@ const OrganisationSettings = () => {
     const errors = validateStatusRows(statusRows);
     setStatusErrors(errors);
     if (errors.length) return;
-    mutate({ url, data: buildOrgUpdatePayload(form, statusRows) });
+    const payload = buildOrgUpdatePayload(form, statusRows);
+    lastPayload.current = payload;
+    mutate({ url, data: payload });
   };
 
   return (
@@ -220,6 +244,20 @@ const OrganisationSettings = () => {
                   rows={statusRows}
                   onChange={onStatusRowsChange}
                   errors={statusErrors}
+                  isReadOnly={!canManage}
+                />
+
+                <Divider />
+                <TerminologySettings
+                  register={register}
+                  errors={errors}
+                  isReadOnly={!canManage}
+                />
+
+                <Divider />
+                <FeatureVisibilitySettings
+                  register={register}
+                  errors={errors}
                   isReadOnly={!canManage}
                 />
 

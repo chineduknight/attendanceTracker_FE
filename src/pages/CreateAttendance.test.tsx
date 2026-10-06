@@ -79,7 +79,7 @@ const renderPage = () =>
 const nameInput = () => screen.getByLabelText(/Name/) as HTMLInputElement;
 const dateInput = () => screen.getByLabelText(/Date/) as HTMLInputElement;
 const categorySelect = () => screen.getByLabelText("Category") as HTMLSelectElement;
-const subCategorySelect = () => screen.getByLabelText("Sub Category") as HTMLSelectElement;
+const subCategorySelect = () => screen.getByLabelText("Sub-category") as HTMLSelectElement;
 const templateSelect = () => screen.getByLabelText("Template") as HTMLSelectElement;
 const button = (name: string) => screen.getByRole("button", { name });
 

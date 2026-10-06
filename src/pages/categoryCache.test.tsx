@@ -78,7 +78,7 @@ describe("sub-category create cache invalidation", () => {
     const select = await screen.findByRole("combobox");
     await screen.findByRole("option", { name: "Choir" });
     fireEvent.change(select, { target: { value: "c1" } });
-    fireEvent.change(screen.getByLabelText(/Sub Category Name/), {
+    fireEvent.change(screen.getByLabelText(/Sub-category name/), {
       target: { value: "Soprano" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Submit/i }));

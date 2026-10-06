@@ -1,5 +1,6 @@
 import { FormControl, FormLabel, Input, Select, Stack } from "@chakra-ui/react";
 import { CategoryType } from "hooks/useCategories";
+import { useTerms } from "hooks/useOrgPresentation";
 
 export interface AttendanceDetails {
   name: string;
@@ -19,6 +20,7 @@ const AttendanceDetailsForm = ({
   onChange,
   categories,
 }: AttendanceDetailsFormProps) => {
+  const terms = useTerms();
   const subCategories =
     categories.find((c) => c.id === value.categoryId)?.subCategories ?? [];
   // Cap at the user's LOCAL calendar day. toISOString() would use the UTC day,
@@ -42,7 +44,7 @@ const AttendanceDetailsForm = ({
       </FormControl>
 
       <FormControl id="category">
-        <FormLabel mb="0">Category</FormLabel>
+        <FormLabel mb="0">{terms.categorySingular}</FormLabel>
         <Select
           placeholder="Select option"
           value={value.categoryId}
@@ -60,7 +62,7 @@ const AttendanceDetailsForm = ({
       </FormControl>
 
       <FormControl id="subCategory">
-        <FormLabel mb="0">Sub Category</FormLabel>
+        <FormLabel mb="0">{terms.subCategorySingular}</FormLabel>
         <Select
           placeholder="Select option"
           value={value.subCategoryId}

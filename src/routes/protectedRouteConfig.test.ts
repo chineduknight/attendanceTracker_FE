@@ -2,6 +2,23 @@ import { matchRoutes } from "react-router-dom";
 import { PAGE_ROUTES } from "routes/protectedRouteConfig";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { isPermissionKey } from "rbac/permissions";
+import { resolveText } from "config/presentationLabels";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
+
+const SCHOOL = {
+  ...DEFAULT_TERMINOLOGY,
+  memberSingular: "Student",
+  memberPlural: "Students",
+  attendanceSingular: "Session",
+  attendancePlural: "Sessions",
+  categorySingular: "Activity",
+  subCategorySingular: "Activity type",
+  officerPlural: "Coordinators",
+};
+const titleFor = (path: string, terms = DEFAULT_TERMINOLOGY) =>
+  resolveText(PAGE_ROUTES.find((route) => route.path === path)!.title, terms);
+const featureFor = (path: string) =>
+  PAGE_ROUTES.find((route) => route.path === path)?.feature;
 
 const permFor = (path: string) =>
   PAGE_ROUTES.find((route) => route.path === path)?.perm;
@@ -9,8 +26,40 @@ const permFor = (path: string) =>
 describe("PAGE_ROUTES", () => {
   it("gives every route a non-empty title", () => {
     PAGE_ROUTES.forEach((route) => {
-      expect(route.title.trim().length).toBeGreaterThan(0);
+      expect(resolveText(route.title, DEFAULT_TERMINOLOGY).trim().length).toBeGreaterThan(0);
     });
+  });
+
+  it("keeps today's titles with default terminology", () => {
+    expect(titleFor(PROTECTED_PATHS.ADD_MEMBER)).toBe("Add Member");
+    expect(titleFor(PROTECTED_PATHS.VIEW_MEMBER)).toBe("View Members");
+    expect(titleFor(PROTECTED_PATHS.CREATE_ATTENDANCE)).toBe("Create Attendance");
+    expect(titleFor(PROTECTED_PATHS.ALL_ATTENDANCE)).toBe("All Attendance");
+    expect(titleFor(PROTECTED_PATHS.ANALYTICS)).toBe("Attendance Analytics");
+    expect(titleFor(PROTECTED_PATHS.OFFICERS_ROLES)).toBe("Officers & Roles");
+    expect(titleFor(PROTECTED_PATHS.CATEGORY)).toBe("Create Category");
+  });
+
+  it("derives titles from the organisation's terminology without changing paths", () => {
+    expect(titleFor(PROTECTED_PATHS.ADD_MEMBER, SCHOOL)).toBe("Add Student");
+    expect(titleFor(PROTECTED_PATHS.UPDATE_MEMBER, SCHOOL)).toBe("Update Student");
+    expect(titleFor(PROTECTED_PATHS.VIEW_MEMBER, SCHOOL)).toBe("View Students");
+    expect(titleFor(PROTECTED_PATHS.MEMBER_ANALYTICS, SCHOOL)).toBe("Student Analytics");
+    expect(titleFor(PROTECTED_PATHS.CREATE_ATTENDANCE, SCHOOL)).toBe("Create Session");
+    expect(titleFor(PROTECTED_PATHS.ALL_ATTENDANCE, SCHOOL)).toBe("All Sessions");
+    expect(titleFor(PROTECTED_PATHS.CATEGORY, SCHOOL)).toBe("Create Activity");
+    expect(titleFor(PROTECTED_PATHS.SUB_CATEGORY, SCHOOL)).toBe("Create Activity type");
+    expect(titleFor(PROTECTED_PATHS.OFFICERS_ROLES, SCHOOL)).toBe("Coordinators & Roles");
+    expect(PAGE_ROUTES.find((r) => r.path === PROTECTED_PATHS.ADD_MEMBER)?.path).toBe("/member/add");
+  });
+
+  it("maps only the optional modules to a feature", () => {
+    expect(featureFor(PROTECTED_PATHS.FINANCE)).toBe("finance");
+    expect(featureFor(PROTECTED_PATHS.BIRTHDAY)).toBe("birthdays");
+    expect(featureFor(PROTECTED_PATHS.ANALYTICS)).toBe("analytics");
+    expect(featureFor(PROTECTED_PATHS.MEMBER_ANALYTICS)).toBe("analytics");
+    const gated = PAGE_ROUTES.filter((r) => r.feature).map((r) => r.path);
+    expect(gated).toHaveLength(4);
   });
 
   it("only hides the back button on Dashboard and Organisations", () => {

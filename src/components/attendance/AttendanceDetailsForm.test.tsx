@@ -1,8 +1,10 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
 import { CategoryType } from "hooks/useCategories";
+import useGlobalStore, { EMPTY_ORG } from "zStore";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 const categories: CategoryType[] = [
   {
@@ -32,7 +34,7 @@ it("renders all four fields", () => {
   // accessible label — match with a regex rather than the exact string.
   expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
   expect(screen.getByLabelText("Category")).toBeInTheDocument();
-  expect(screen.getByLabelText("Sub Category")).toBeInTheDocument();
+  expect(screen.getByLabelText("Sub-category")).toBeInTheDocument();
   expect(screen.getByLabelText(/Date/)).toBeInTheDocument();
 });
 
@@ -83,3 +85,25 @@ it("emits name edits", () => {
   fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "First Mass" } });
   expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ name: "First Mass" }));
 });
+
+it("labels category fields with the organisation's terms but keeps category ids", () => {
+  useGlobalStore.setState({
+    organisation: {
+      ...EMPTY_ORG,
+      terminology: {
+        ...DEFAULT_TERMINOLOGY,
+        categorySingular: "Activity",
+        subCategorySingular: "Activity type",
+      },
+    },
+  });
+  const onChange = jest.fn();
+  render(<AttendanceDetailsForm value={base} onChange={onChange} categories={categories} />);
+
+  fireEvent.change(screen.getByLabelText("Activity"), { target: { value: "c1" } });
+
+  expect(screen.getByLabelText("Activity type")).toBeInTheDocument();
+  expect(onChange).toHaveBeenCalledWith({ ...base, categoryId: "c1", subCategoryId: "" });
+  act(() => useGlobalStore.setState({ organisation: EMPTY_ORG }));
+});
+

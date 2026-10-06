@@ -9,11 +9,14 @@ import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { queryKeys } from "services/api/queryKeys";
 import { Role, InviteResponse } from "rbac/types";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface Props { organisationId: string; isOpen: boolean; onClose: () => void; }
 interface InviteInputs { email: string; roleId: string; }
 
 const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
+  const terms = useTerms();
   const rolesUrl = convertParamsToString(rbacRequest.ROLES, { organisationId });
   const { data: rolesData } = useQueryWrapper(queryKeys.rbac.roles(organisationId), rolesUrl, { enabled: isOpen });
   const roles: Role[] = rolesData?.data ?? [];
@@ -37,7 +40,7 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
     <Modal isOpen={isOpen} onClose={onClose} isCentered>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Invite officer</ModalHeader>
+        <ModalHeader>{`Invite ${lowerTerm(terms.officerSingular)}`}</ModalHeader>
         <ModalCloseButton />
         <form onSubmit={handleSubmit(onSubmit)}>
           <ModalBody>

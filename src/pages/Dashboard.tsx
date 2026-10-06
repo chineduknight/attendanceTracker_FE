@@ -7,12 +7,12 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import useGlobalStore from "zStore";
-import { Can } from "rbac/Can";
-import { NAV_ACTIONS } from "config/navActions";
+import { useNavActions } from "hooks/useNavActions";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const organisation = useGlobalStore((state) => state.organisation);
+  const actions = useNavActions();
 
   return (
     <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
@@ -25,17 +25,16 @@ const Dashboard = () => {
         gap={6}
         p={4}
       >
-        {NAV_ACTIONS.map(({ label, icon: Icon, colorScheme, path, perm }) => (
-          <Can key={label} perm={perm}>
-            <Button
-              leftIcon={<Icon />}
-              colorScheme={colorScheme}
-              variant="outline"
-              onClick={() => navigate(path)}
-            >
-              {label}
-            </Button>
-          </Can>
+        {actions.map(({ label, icon: Icon, colorScheme, path }) => (
+          <Button
+            key={path}
+            leftIcon={<Icon />}
+            colorScheme={colorScheme}
+            variant="outline"
+            onClick={() => navigate(path)}
+          >
+            {label}
+          </Button>
         ))}
       </Grid>
     </Box>

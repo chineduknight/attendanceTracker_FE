@@ -27,11 +27,14 @@ import { Officer } from "rbac/types";
 import InviteOfficerModal from "components/officers/InviteOfficerModal";
 import EditOfficerRoleModal from "components/officers/EditOfficerRoleModal";
 import EditOfficerPermissionsModal from "components/officers/EditOfficerPermissionsModal";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 interface Props { organisationId: string; }
 
 const OfficersTab = ({ organisationId }: Props) => {
   const [organisation] = useGlobalStore((s) => [s.organisation]);
+  const terms = useTerms();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [roleTarget, setRoleTarget] = useState<Officer | null>(null);
   const [permsTarget, setPermsTarget] = useState<Officer | null>(null);
@@ -76,7 +79,7 @@ const OfficersTab = ({ organisationId }: Props) => {
       <Flex justify="flex-end" mb={3}>
         <Can perm="officers.manage">
           <Button variant="primary" onClick={() => setInviteOpen(true)}>
-            Invite officer
+            {`Invite ${lowerTerm(terms.officerSingular)}`}
           </Button>
         </Can>
       </Flex>

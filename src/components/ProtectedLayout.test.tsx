@@ -1,8 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import ProtectedLayout from "components/ProtectedLayout";
+import useGlobalStore, { EMPTY_ORG } from "zStore";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 // NavDrawer renders ChangePasswordModal, which calls useMutation and requires a
@@ -57,4 +59,26 @@ describe("<ProtectedLayout>", () => {
     );
     expect(screen.queryByLabelText("Back")).not.toBeInTheDocument();
   });
+
+  it("titles the page with the selected organisation's terminology", () => {
+    useGlobalStore.setState({
+      organisation: {
+        // No id: keeps the org-sync query idle so the test stays synchronous.
+        ...EMPTY_ORG,
+        terminology: { ...DEFAULT_TERMINOLOGY, memberSingular: "Student", memberPlural: "Students" },
+      },
+    });
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/view-member"]}>
+        <Routes>
+          <Route element={<ProtectedLayout />}>
+            <Route path="/view-member" element={<div>members</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText("View Students")).toBeInTheDocument();
+    act(() => useGlobalStore.setState({ organisation: EMPTY_ORG }));
+  });
 });
+

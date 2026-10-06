@@ -200,4 +200,82 @@ describe("<OrganisationSettings>", () => {
       expect(screen.queryByRole("button", { name: "Add status" })).not.toBeInTheDocument();
     });
   });
+
+  describe("terminology and visible modules", () => {
+    it("shows read-only presentation controls to a view-only user", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderPage();
+      const member = await screen.findByLabelText(/Member singular/);
+      expect(member).toHaveAttribute("readonly");
+      expect(screen.getByLabelText("Finance")).toBeDisabled();
+      expect(screen.getByText(/do not rename stored data or API fields/)).toBeInTheDocument();
+      expect(screen.getByText(/Permissions are unchanged/)).toBeInTheDocument();
+    });
+
+    it("loads stored terms over defaults and saves complete config with every other setting", async () => {
+      mockGet.mockImplementation(() =>
+        Promise.resolve({
+          data: {
+            data: {
+              id: "org1",
+              name: "VOB Choir",
+              image: "",
+              collapseAttendanceByDay: false,
+              maxAttendanceEdits: 3,
+              terminology: { memberSingular: "Chorister", memberPlural: "Choristers" },
+            },
+          },
+        }),
+      );
+      setOrg({ id: "org1", roleName: "Owner", isOwner: true, permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      const memberSingular = (await screen.findByLabelText(/Member singular/)) as HTMLInputElement;
+      expect(memberSingular.value).toBe("Chorister");
+      expect((screen.getByLabelText(/Officer plural/) as HTMLInputElement).value).toBe("Officers");
+
+      fireEvent.change(screen.getByLabelText(/Officer plural/), { target: { value: " Coordinators " } });
+      fireEvent.click(screen.getByLabelText("Finance"));
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      const body = mockPut.mock.calls[0][1];
+      expect(body.terminology).toEqual({
+        memberSingular: "Chorister",
+        memberPlural: "Choristers",
+        attendanceSingular: "Attendance",
+        attendancePlural: "Attendance",
+        categorySingular: "Category",
+        categoryPlural: "Categories",
+        subCategorySingular: "Sub-category",
+        subCategoryPlural: "Sub-categories",
+        officerSingular: "Officer",
+        officerPlural: "Coordinators",
+      });
+      expect(body.featureVisibility).toEqual({ finance: false, birthdays: true, analytics: true });
+      expect(body).toMatchObject({ name: "VOB Choir", maxAttendanceEdits: 3 });
+      ["permissions", "isOwner", "roleName"].forEach((key) => expect(body).not.toHaveProperty(key));
+
+      // The selected org updates at once (navigation reads it) and keeps RBAC.
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.terminology?.officerPlural).toBe("Coordinators")
+      );
+      const org = useGlobalStore.getState().organisation;
+      expect(org.featureVisibility?.finance).toBe(false);
+      expect(org.roleName).toBe("Owner");
+      expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
+    });
+
+    it("blocks saving a blank or over-long term", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      const field = await screen.findByLabelText(/Member plural/);
+      fireEvent.change(field, { target: { value: "   " } });
+      fireEvent.change(screen.getByLabelText(/Officer singular/), { target: { value: "x".repeat(41) } });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      expect(await screen.findByText("Required")).toBeInTheDocument();
+      expect(screen.getByText(/At most 40 characters/)).toBeInTheDocument();
+      expect(mockPut).not.toHaveBeenCalled();
+    });
+  });
 });
+

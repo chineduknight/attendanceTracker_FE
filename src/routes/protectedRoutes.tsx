@@ -3,21 +3,29 @@ import { PROTECTED_PATHS, PUBLIC_PATHS } from "./pagePath";
 import { PageRouteConfig, PAGE_ROUTES } from "./protectedRouteConfig";
 import ProtectedLayout from "components/ProtectedLayout";
 import { RequirePermission } from "rbac/RequirePermission";
+import { RequireFeature } from "./RequireFeature";
 
 /**
- * Wrap each route element that declares a permission in RequirePermission.
- * Hiding dashboard buttons alone can be bypassed by typing a URL, so every
- * guarded route is re-checked here at navigation time.
+ * Wrap each route element in its guards. Hiding dashboard buttons alone can be
+ * bypassed by typing a URL, so every route is re-checked at navigation time:
+ * first whether the org shows the module at all, then RBAC as before.
  */
 export const applyRoutePermissions = (routes: PageRouteConfig[]) =>
-  routes.map(({ perm, element, ...route }) => ({
-    ...route,
-    element: perm ? (
+  routes.map(({ perm, feature, element, ...route }) => {
+    const permitted = perm ? (
       <RequirePermission perm={perm}>{element}</RequirePermission>
     ) : (
       element
-    ),
-  }));
+    );
+    return {
+      ...route,
+      element: feature ? (
+        <RequireFeature feature={feature}>{permitted}</RequireFeature>
+      ) : (
+        permitted
+      ),
+    };
+  });
 
 const PROTECTED_ROUTES = [
   {

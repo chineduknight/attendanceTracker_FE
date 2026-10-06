@@ -50,6 +50,7 @@ import { memberFieldLabeler } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
 
 type SelectOption = {
   value: string;
@@ -62,6 +63,7 @@ type FilterableField = {
 const REQUIRED_EXPORT_FIELDS = ["name"];
 
 const ViewMembers: React.FC = () => {
+  const terms = useTerms();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [searchQuery, setSearchQuery] = useState("");
   const selectedFieldsStorageKey = `selectedFields-${org.id}`;
@@ -374,7 +376,7 @@ const ViewMembers: React.FC = () => {
               )}
             </Flex>
             <Text mb={4} fontWeight="bold">
-              Total Members: {filteredMembers.length}
+              {`Total ${terms.memberPlural}: ${filteredMembers.length}`}
             </Text>
             <Box mb={8}>
               <Flex
