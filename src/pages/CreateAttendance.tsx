@@ -9,15 +9,24 @@ import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { queryClient } from "services/api/apiHelper";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
 import AttendanceTemplatePicker, {
-  TemplateDetails,
+  AppliedTemplate,
 } from "components/attendance/AttendanceTemplatePicker";
+import AttendanceEligibilityEditor from "components/attendance/AttendanceEligibilityEditor";
+import { useMembers } from "hooks/useMembers";
+import { useMemberModel } from "hooks/useMemberModel";
+import {
+  AttendanceEligibilityRule,
+  countEligibleMembers,
+  eligibilityFields,
+  normalizeEligibilityRules,
+} from "helpers/attendanceEligibility";
 import { queryKeys } from "services/api/queryKeys";
 import { Can } from "rbac/Can";
 
@@ -33,13 +42,32 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
   const updateCurrentAttendance = useGlobalStore(
     (state) => state.updateCurrentAttendance,
   );
-  const { categories, isSuccess: categoriesLoaded } =
-    useCategories(organisationId);
+  const {
+    categories,
+    isSuccess: categoriesLoaded,
+    isError: categoriesFailed,
+  } = useCategories(organisationId);
+  const {
+    fields: memberFields,
+    isSuccess: memberModelLoaded,
+    isError: memberModelFailed,
+  } = useMemberModel(organisationId);
+  const { members, isSuccess: membersLoaded } = useMembers(organisationId);
   const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
+  const [eligibilityRules, setEligibilityRules] = useState<
+    AttendanceEligibilityRule[]
+  >([]);
+
+  const optionFields = useMemo(() => eligibilityFields(memberFields), [memberFields]);
+  const expectedCount = membersLoaded
+    ? countEligibleMembers(members, eligibilityRules)
+    : null;
 
   // A template fills everything but the date, which belongs to this session.
-  const applyTemplate = (templateDetails: TemplateDetails) =>
-    setDetails((current) => ({ ...current, ...templateDetails }));
+  const applyTemplate = (applied: AppliedTemplate) => {
+    setDetails((current) => ({ ...current, ...applied.details }));
+    setEligibilityRules(applied.eligibilityRules);
+  };
 
   const onContinue = () => {
     if (!details.name.trim() || !details.date) {
@@ -51,6 +79,7 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
       date: details.date,
       ...(details.categoryId ? { categoryId: details.categoryId } : {}),
       ...(details.subCategoryId ? { subCategoryId: details.subCategoryId } : {}),
+      eligibilityRules: normalizeEligibilityRules(eligibilityRules),
     };
     updateCurrentAttendance(payload);
     queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
@@ -91,14 +120,27 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
           <AttendanceTemplatePicker
             organisationId={organisationId}
             details={details}
+            eligibilityRules={eligibilityRules}
             categories={categories}
-            categoriesLoaded={categoriesLoaded}
+            memberFields={memberFields}
+            setupLoaded={categoriesLoaded && memberModelLoaded}
+            setupFailed={categoriesFailed || memberModelFailed}
             onApply={applyTemplate}
           />
           <AttendanceDetailsForm
             value={details}
             onChange={setDetails}
             categories={categories}
+          />
+          <AttendanceEligibilityEditor
+            fields={optionFields}
+            fieldsStatus={
+              memberModelLoaded ? "ready" : memberModelFailed ? "error" : "loading"
+            }
+            rules={eligibilityRules}
+            onChange={setEligibilityRules}
+            expectedCount={expectedCount}
+            totalCount={members.length}
           />
           <Button
             w="full"
@@ -108,6 +150,7 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
             _hover={{ bg: "blue.500" }}
             fontWeight="bold"
             fontSize="15px"
+            isDisabled={expectedCount === 0}
             onClick={onContinue}
           >
             Continue
@@ -120,7 +163,8 @@ const CreateAttendanceForm = ({ organisationId }: { organisationId: string }) =>
 
 /**
  * Remounts the form whenever the selected organisation changes, so no entered
- * details or selected template from one organisation survive into another.
+ * details, eligibility rules or selected template from one organisation
+ * survive into another.
  */
 const CreateAttendance = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);

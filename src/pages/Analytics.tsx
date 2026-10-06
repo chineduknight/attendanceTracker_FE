@@ -75,6 +75,10 @@ const formatDayHeader = (key: string) => {
   return isoDate ? format(parseISO(isoDate), DAY_HEADER_FORMAT) : key;
 };
 
+// A member with no cell for a session was not on its roster — neither present
+// nor absent, so it is neutral rather than a status of its own.
+const NOT_ON_ROSTER = "Not on this session roster";
+
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -440,7 +444,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
                           if (!key) {
                             return (
                               <Td key={d} textAlign="center">
-                                <Badge title="No record">-</Badge>
+                                <Badge
+                                  role="img"
+                                  aria-label={NOT_ON_ROSTER}
+                                  title={NOT_ON_ROSTER}
+                                >
+                                  -
+                                </Badge>
                               </Td>
                             );
                           }

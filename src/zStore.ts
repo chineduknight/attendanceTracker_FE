@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { PermissionKey } from "rbac/permissions";
+import { AttendanceEligibilityRule } from "helpers/attendanceEligibility";
 import {
   AttendanceStatusDefinition,
   DEFAULT_ATTENDANCE_STATUSES,
@@ -14,6 +15,8 @@ export type currentAttendanceType = {
   subCategoryId?: string | null;
   date: string;
   members?: Array<any>;
+  /** New sessions only; `[]` means everyone is expected. */
+  eligibilityRules?: AttendanceEligibilityRule[];
 };
 
 export type UserType = {

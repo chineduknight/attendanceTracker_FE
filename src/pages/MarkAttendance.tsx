@@ -24,10 +24,10 @@ import {
 import { FaSearch, FaPencilAlt } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { attendanceRequest, orgRequest } from "services";
+import { attendanceRequest } from "services";
 import {
   postRequest,
   putRequest,
@@ -55,6 +55,15 @@ import QuickMarkToolbar, {
 } from "components/attendance/QuickMarkToolbar";
 import VisibleBulkActions from "components/attendance/VisibleBulkActions";
 import { usePersistedRoster } from "hooks/usePersistedRoster";
+import {
+  AttendanceEligibilityRule,
+  filterEligibleMembers,
+  normalizeEligibilityRules,
+} from "helpers/attendanceEligibility";
+import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
+import { useMembers } from "hooks/useMembers";
+import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
+import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
 import {
   restoreStatuses,
   StatusSnapshot,
@@ -88,6 +97,17 @@ const MarkAttendanceSession = () => {
   const [quickMarkMode, setQuickMarkMode] = useState<QuickMarkMode>(null);
   // Previous statuses of the last bulk change; null when there is nothing to undo.
   const [undoSnapshot, setUndoSnapshot] = useState<StatusSnapshot | null>(null);
+  // A new session's expected roster comes from its rules; an existing session's
+  // roster is the stored snapshot and its rules are display-only metadata.
+  const sessionRules = useMemo(
+    () => normalizeEligibilityRules(currentAttendance.eligibilityRules),
+    [currentAttendance.eligibilityRules]
+  );
+  const [recordRules, setRecordRules] = useState<AttendanceEligibilityRule[]>([]);
+  // Stored roster entries whose member no longer resolves: shown read-only and
+  // never submitted, so the backend keeps their stored status.
+  const [unresolvedEntries, setUnresolvedEntries] = useState<UnresolvedRosterEntry[]>([]);
+  const displayedRules = isUpdate ? recordRules : sessionRules;
   const { categories } = useCategories(org.id);
   const detailsDrawer = useDisclosure();
   const statuses = useAttendanceStatuses();
@@ -124,12 +144,27 @@ const MarkAttendanceSession = () => {
     [allMembers, statuses]
   );
 
-  // Called when the roster loads for a new attendance session. Any locally-saved
-  // draft is reconciled against the live roster, so members who were removed no
-  // longer appear, and newly eligible members (or stale draft statuses) start at
-  // the organisation's default status instead of trusting stale draft data.
-  const onGetMembersSuccess = (data) => {
-    const roster = [...data.data].sort((a, b) => a.name.localeCompare(b.name));
+  const expectedRosterSize = allMembers.length + unresolvedEntries.length;
+
+  // A new session's roster comes from the canonical members cache (cached data
+  // included), so it is ready on mount and re-derived after every refetch.
+  const {
+    members: currentMembers,
+    isSuccess: membersLoaded,
+    isError: membersFailed,
+    refetch: refetchMembers,
+  } = useMembers(org.id, { enabled: !isUpdate });
+  const [rosterReady, setRosterReady] = useState(false);
+
+  // Only members expected under the session's rules are kept, then any
+  // locally-saved draft is reconciled against them: members who were removed
+  // or stopped matching drop out, and newly matching members (or stale draft
+  // statuses) start at the organisation's default status.
+  useEffect(() => {
+    if (isUpdate || !membersLoaded) return;
+    const roster = filterEligibleMembers(currentMembers, sessionRules).sort(
+      (a, b) => a.name.localeCompare(b.name)
+    );
 
     let draft: unknown = null;
     const localAttendance = localStorage.getItem(localStorageKey);
@@ -141,20 +176,17 @@ const MarkAttendanceSession = () => {
       }
     }
 
-    commitMembers(() =>
-      reconcileAttendanceDraft<MemberType>(draft, roster, statuses)
-    );
-  };
-
-  // Query to fetch members (only when not updating)
-  const { isLoading: isGettingMembers } = useQueryWrapper(
-    queryKeys.members(org.id),
-    convertParamsToString(orgRequest.MEMBERS, { organisationId: org.id }),
-    {
-      onSuccess: onGetMembersSuccess,
-      enabled: !isUpdate,
-    }
-  );
+    commitMembers(() => reconcileAttendanceDraft(draft, roster, statuses));
+    setRosterReady(true);
+  }, [
+    isUpdate,
+    membersLoaded,
+    currentMembers,
+    sessionRules,
+    statuses,
+    localStorageKey,
+    commitMembers,
+  ]);
 
   // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
@@ -166,12 +198,12 @@ const MarkAttendanceSession = () => {
       "subCategoryId",
     ]);
     setAttendance(currentAtt);
-    // Transform API response to MemberType array (must include attendanceStatus)
-    // Filter out entries whose member was deleted (member == null), otherwise
-    // reading attend.member.name throws and the list renders empty.
-    const updatedMembers = res.data.attendance
-      .filter((attend) => attend.member != null)
-      .map((attend) => ({
+    setRecordRules(normalizeEligibilityRules(res.data.eligibilityRules));
+    // Only entries whose member still resolves are editable; the rest stay on
+    // the frozen roster as read-only placeholders.
+    const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
+    setUnresolvedEntries(unresolved);
+    const updatedMembers = resolved.map((attend) => ({
         id: attend.memberId,
         name: attend.member.name,
         // Kept verbatim, even when the status has since been deactivated.
@@ -197,7 +229,23 @@ const MarkAttendanceSession = () => {
     }
   );
 
-  const isLoadingData = isUpdate ? isGettingAttendance : isGettingMembers;
+  const isLoadingData = isUpdate
+    ? isGettingAttendance
+    : !rosterReady && !membersFailed;
+  const rosterFailed = !isUpdate && !rosterReady && membersFailed;
+
+  // A new session re-reads the roster but keeps its marks (e.g. after the
+  // backend rejects a submit because the expected roster changed). An edit
+  // discards local changes and reloads the stored record.
+  const onRefresh = () => {
+    setUndoSnapshot(null);
+    if (isUpdate) {
+      localStorage.removeItem(localStorageKey);
+      window.location.reload();
+      return;
+    }
+    refetchMembers();
+  };
 
   const handleSearch = useCallback((e) => {
     setSearchQuery(e.target.value);
@@ -271,9 +319,11 @@ const MarkAttendanceSession = () => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     // Only the session fields the API accepts — never stray persisted state.
+    // Rules only define a NEW session's roster; an update never re-resolves it.
     const data = {
       ..._.pick(currentAttendance, ["name", "date", "categoryId", "subCategoryId"]),
       organisationId: org.id,
+      ...(isUpdate ? {} : { eligibilityRules: sessionRules }),
       memberStatuses: allMembers.map((member) => ({
         memberId: member.id,
         status: member.attendanceStatus,
@@ -286,7 +336,15 @@ const MarkAttendanceSession = () => {
       url: isUpdate ? upateUrl : attendanceRequest.ATTENDANCE,
       data,
     });
-  }, [allMembers, currentAttendance, org.id, params.attendanceId, mutate, isUpdate]);
+  }, [
+    allMembers,
+    currentAttendance,
+    org.id,
+    params.attendanceId,
+    mutate,
+    isUpdate,
+    sessionRules,
+  ]);
 
   const onSubmit = () => {
     confirmAlert({
@@ -323,21 +381,25 @@ const MarkAttendanceSession = () => {
                 onClick={detailsDrawer.onOpen}
               />
             )}
-            <Button
-              variant="logout"
-              onClick={() => {
-                localStorage.removeItem(localStorageKey);
-                window.location.reload();
-              }}
-            >
+            <Button variant="logout" onClick={onRefresh}>
               Refresh
             </Button>
           </Flex>
         </Flex>
         {isLoadingData ? (
           <LoadingSpinner h="45vh" text="Loading members..." />
+        ) : rosterFailed ? (
+          <Text mt="6" color="red.500">
+            Members could not be loaded. Use Refresh to try again.
+          </Text>
         ) : (
           <>
+            <ExpectedRosterSummary
+              title={`Expected roster: ${expectedRosterSize} ${
+                expectedRosterSize === 1 ? "member" : "members"
+              }`}
+              rules={displayedRules}
+            />
             <QuickMarkToolbar
               statuses={statuses.active}
               mode={selectedStatus?.key ?? null}
@@ -393,6 +455,7 @@ const MarkAttendanceSession = () => {
                 />
               ))}
             </Box>
+            <UnresolvedRosterEntries entries={unresolvedEntries} statuses={statuses} />
             <Button
               onClick={onSubmit}
               w="full"

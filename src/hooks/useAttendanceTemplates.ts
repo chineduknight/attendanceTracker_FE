@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   deleteRequest,
   postRequest,
@@ -12,13 +13,15 @@ import { convertParamsToString } from "helpers/stringManipulations";
 import {
   AttendanceTemplate,
   AttendanceTemplateFields,
+  AttendanceTemplateResponse,
+  normalizeTemplate,
 } from "helpers/attendanceTemplates";
 
 interface MutationCallbacks<T> {
   onSuccess?: (result: T) => void;
 }
 
-type TemplateResponse = { data: AttendanceTemplate };
+type TemplateResponse = { data: AttendanceTemplateResponse };
 
 /**
  * The selected organisation's attendance templates plus their create, update
@@ -39,14 +42,20 @@ export const useAttendanceTemplates = (organisationId: string) => {
   const { data, isLoading, isError } = useQueryWrapper(listKey, listUrl, {
     enabled: Boolean(organisationId),
   });
-  const templates: AttendanceTemplate[] = data?.data ?? [];
+  const templates = useMemo(() => {
+    const raw: AttendanceTemplateResponse[] = data?.data ?? [];
+    return raw.map(normalizeTemplate);
+  }, [data]);
 
   // Refetch after failures too: a 404/422 usually means the list is out of date
   // (e.g. the template was deleted or renamed on another device).
   const onSettled = () => queryClient.invalidateQueries({ queryKey: listKey });
   const withTemplate =
     (onSuccess?: (template: AttendanceTemplate) => void) =>
-    ({ onSettled, onSuccess: (res: TemplateResponse) => onSuccess?.(res.data) });
+    ({
+      onSettled,
+      onSuccess: (res: TemplateResponse) => onSuccess?.(normalizeTemplate(res.data)),
+    });
 
   const createMutation = useMutationWrapper(postRequest);
   const updateMutation = useMutationWrapper(putRequest);

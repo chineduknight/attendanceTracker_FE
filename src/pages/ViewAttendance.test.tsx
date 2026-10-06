@@ -4,6 +4,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewAttendance from "pages/ViewAttendance";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
+import { MEMBER_MODEL } from "test-utils/eligibilityFixtures";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -86,5 +87,88 @@ describe("<ViewAttendance> with configured statuses", () => {
     await screen.findByText("Zara");
     expect(screen.getByLabelText("Filter by attendance status")).toBeInTheDocument();
     expect(screen.getByLabelText("Filter by member status")).toBeInTheDocument();
+  });
+});
+
+describe("<ViewAttendance> expected roster", () => {
+  const OUTDATED_NOTICE = /Eligibility rule has changed since this session was created/;
+
+  const serve = (session: object, fields = MEMBER_MODEL) =>
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: { data: url.endsWith("/model") ? { fields } : session },
+      }),
+    );
+
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+    });
+  });
+
+  const renderPage = async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+  };
+
+  it("shows the stored roster size for a session without rules", async () => {
+    serve(SESSION);
+    await renderPage();
+    expect(screen.getByText("Expected members: 6")).toBeInTheDocument();
+    expect(screen.queryByText(OUTDATED_NOTICE)).not.toBeInTheDocument();
+  });
+
+  it("summarises stored rules read-only", async () => {
+    serve({ ...SESSION, eligibilityRules: [{ field: "part", values: ["soprano"] }] });
+    await renderPage();
+    expect(screen.getByText("Part: Soprano")).toBeInTheDocument();
+    expect(screen.queryByText(OUTDATED_NOTICE)).not.toBeInTheDocument();
+  });
+
+  it("flags a rule the current model no longer understands without changing the roster", async () => {
+    serve(
+      { ...SESSION, eligibilityRules: [{ field: "part", values: ["mezzo"] }] },
+      MEMBER_MODEL,
+    );
+    await renderPage();
+    expect(await screen.findByText(OUTDATED_NOTICE)).toBeInTheDocument();
+    expect(screen.getByText("Expected members: 6")).toBeInTheDocument();
+    ["Zara", "Yemi", "Xavi", "Wale", "Vera", "Uche"].forEach((name) =>
+      expect(screen.getByText(name)).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("<ViewAttendance> with an unresolvable roster member", () => {
+  const THREE = {
+    name: "Small Sectional",
+    date: "2026-09-01T00:00:00.000Z",
+    attendance: [
+      entry("m1", "Zara", "present"),
+      { _id: "m2-row", memberId: "m2", attendanceStatus: "late", member: null },
+      entry("m3", "Xavi", "no_show"),
+    ],
+  };
+
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+    });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? { fields: [] } : THREE } }),
+    );
+  });
+
+  it("still counts the deleted member as expected and shows a read-only placeholder", async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    expect(screen.getByText("Expected members: 3")).toBeInTheDocument();
+    expect(screen.getByText(/1 member on this roster no longer has a profile/)).toBeInTheDocument();
+    const placeholder = screen.getByText("Former member (profile unavailable)");
+    expect(within(placeholder.parentElement as HTMLElement).getByTitle("Late")).toBeInTheDocument();
+    expect(placeholder.closest("button")).toBeNull();
+    expect(screen.getByText("Xavi")).toBeInTheDocument();
   });
 });

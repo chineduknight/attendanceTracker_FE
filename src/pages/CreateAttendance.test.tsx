@@ -12,6 +12,7 @@ import CreateAttendance from "pages/CreateAttendance";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { AttendanceTemplate } from "helpers/attendanceTemplates";
 import { CategoryType } from "hooks/useCategories";
+import { MEMBER_MODEL, ROSTER } from "test-utils/eligibilityFixtures";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -48,12 +49,15 @@ const template = (over: Partial<AttendanceTemplate>): AttendanceTemplate => ({
   name: "Thursday Rehearsal",
   categoryId: "c1",
   subCategoryId: "s1",
+  eligibilityRules: [],
   createdAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-01T00:00:00.000Z",
   ...over,
 });
 
-let templatesByOrg: Record<string, AttendanceTemplate[]>;
+let templatesByOrg: Record<string, Partial<AttendanceTemplate>[]>;
+let rosterByOrg: Record<string, typeof ROSTER>;
+let modelByOrg: Record<string, typeof MEMBER_MODEL>;
 
 const selectOrg = (id: string) =>
   useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id, permissions: [] } });
@@ -82,12 +86,46 @@ const button = (name: string) => screen.getByRole("button", { name });
 const type = (input: HTMLElement, value: string) =>
   fireEvent.change(input, { target: { value } });
 
+const pickEligibility = async (field: string, option: string) => {
+  fireEvent.keyDown(screen.getByLabelText(`${field} eligibility`), { key: "ArrowDown" });
+  fireEvent.click(await screen.findByRole("option", { name: option }));
+};
+const expectedText = () => screen.getByText(/^Expected members:/).textContent;
+const waitForRoster = () => screen.findByText(/^Expected members: \d+ of/);
+
 const orgBInvalidated = () =>
   queryClient.getQueryState(queryKeys.attendanceTemplates("orgB"))?.isInvalidated;
 
 const confirmDialog = () => {
   const options = mockConfirm.mock.calls[mockConfirm.mock.calls.length - 1][0];
   act(() => options.buttons[0].onClick());
+};
+
+const mockApi = () => {
+  mockGet.mockImplementation((url: string) => {
+    const templates = url.match(/^\/attendance\/(\w+)\/templates$/);
+    if (templates) {
+      return Promise.resolve({ data: { data: templatesByOrg[templates[1]] ?? [] } });
+    }
+    const orgScoped = url.match(/^\/organisations\/(\w+)\/(members|model)$/);
+    if (orgScoped) {
+      const [, orgId, resource] = orgScoped;
+      return Promise.resolve({
+        data: {
+          data: resource === "members" ? rosterByOrg[orgId] : { fields: modelByOrg[orgId] },
+        },
+      });
+    }
+    if (url.endsWith("/category")) return Promise.resolve({ data: { data: CATEGORIES } });
+    return Promise.resolve({ data: { data: [] } });
+  });
+  mockPost.mockImplementation((_url: string, body: object) =>
+    Promise.resolve({ data: { data: template({ id: "t-new", ...body }) } })
+  );
+  mockPut.mockImplementation((url: string, body: object) =>
+    Promise.resolve({ data: { data: template({ id: url.split("/").pop(), ...body }) } })
+  );
+  mockDelete.mockImplementation(() => Promise.resolve({ data: { data: "deleted" } }));
 };
 
 describe("<CreateAttendance> session templates", () => {
@@ -98,21 +136,9 @@ describe("<CreateAttendance> session templates", () => {
     queryClient.clear();
     selectOrg("orgA");
     templatesByOrg = { orgA: [template({})], orgB: [] };
-    mockGet.mockImplementation((url: string) => {
-      const templates = url.match(/^\/attendance\/(\w+)\/templates$/);
-      if (templates) {
-        return Promise.resolve({ data: { data: templatesByOrg[templates[1]] ?? [] } });
-      }
-      if (url.endsWith("/category")) return Promise.resolve({ data: { data: CATEGORIES } });
-      return Promise.resolve({ data: { data: [] } });
-    });
-    mockPost.mockImplementation((_url: string, body: object) =>
-      Promise.resolve({ data: { data: template({ id: "t-new", ...body }) } })
-    );
-    mockPut.mockImplementation((url: string, body: object) =>
-      Promise.resolve({ data: { data: template({ id: url.split("/").pop(), ...body }) } })
-    );
-    mockDelete.mockImplementation(() => Promise.resolve({ data: { data: "deleted" } }));
+    rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
   });
 
   it("lists the current organisation's templates", async () => {
@@ -132,6 +158,7 @@ describe("<CreateAttendance> session templates", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Ad-hoc meeting",
       date: "2026-10-01",
+      eligibilityRules: [],
     });
   });
 
@@ -168,6 +195,7 @@ describe("<CreateAttendance> session templates", () => {
       name: "Friday Vigil",
       categoryId: "c2",
       subCategoryId: null,
+      eligibilityRules: [],
     });
     await waitFor(() => expect(templateSelect().value).toBe("t-new"));
     expect(toast.success).toHaveBeenCalledWith('Saved "Friday Vigil" as a template');
@@ -216,6 +244,7 @@ describe("<CreateAttendance> session templates", () => {
       name: "Thursday Practice",
       categoryId: "c2",
       subCategoryId: null,
+      eligibilityRules: [],
     });
   });
 
@@ -260,10 +289,9 @@ describe("<CreateAttendance> session templates", () => {
   it("shows a load error rather than an empty state when the template list fails", async () => {
     // React Query logs the failed request; the failure itself is the scenario.
     jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const serve = mockGet.getMockImplementation()!;
     mockGet.mockImplementation((url: string) =>
-      url.endsWith("/templates")
-        ? Promise.reject(new Error("offline"))
-        : Promise.resolve({ data: { data: CATEGORIES } })
+      url.endsWith("/templates") ? Promise.reject(new Error("offline")) : serve(url)
     );
     renderPage();
     expect(await screen.findByText(/Templates could not be loaded/)).toBeInTheDocument();
@@ -274,10 +302,9 @@ describe("<CreateAttendance> session templates", () => {
     // React Query logs the failed request; the failure itself is the scenario.
     jest.spyOn(console, "error").mockImplementation(() => undefined);
     templatesByOrg.orgA = [template({})];
+    const serve = mockGet.getMockImplementation()!;
     mockGet.mockImplementation((url: string) =>
-      url.endsWith("/category")
-        ? Promise.reject(new Error("offline"))
-        : Promise.resolve({ data: { data: templatesByOrg.orgA } })
+      url.endsWith("/category") ? Promise.reject(new Error("offline")) : serve(url)
     );
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
@@ -317,6 +344,7 @@ describe("<CreateAttendance> session templates", () => {
         name: "Old Vigil",
         categoryId: "c2",
         subCategoryId: null,
+        eligibilityRules: [],
       });
     });
 
@@ -327,6 +355,246 @@ describe("<CreateAttendance> session templates", () => {
       await waitFor(() =>
         expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t-stale")
       );
+    });
+  });
+});
+
+describe("<CreateAttendance> eligibility", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    selectOrg("orgA");
+    templatesByOrg = { orgA: [], orgB: [] };
+    rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  const fillDetails = () => {
+    type(nameInput(), "Rehearsal");
+    type(dateInput(), "2026-10-01");
+  };
+
+  it("defaults to Everyone and offers only option fields", async () => {
+    renderPage();
+    await waitForRoster();
+    expect(expectedText()).toBe("Expected members: 8 of 8");
+    expect(screen.getByText("Everyone is expected")).toBeInTheDocument();
+    ["Part", "Gender", "Status", "Probationstatus"].forEach((label) =>
+      expect(screen.getByLabelText(`${label} eligibility`)).toBeInTheDocument()
+    );
+    expect(screen.queryByLabelText("Name eligibility")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Profession eligibility")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear eligibility" })).not.toBeInTheDocument();
+  });
+
+  it("previews OR within a field and AND across fields, then clears back to Everyone", async () => {
+    renderPage();
+    await waitForRoster();
+
+    await pickEligibility("Part", "Soprano");
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+    await pickEligibility("Part", "Alto");
+    expect(expectedText()).toBe("Expected members: 4 of 8");
+    await pickEligibility("Status", "Active");
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+    expect(screen.getByText("Part: Soprano, Alto · Status: Active")).toBeInTheDocument();
+
+    fireEvent.click(button("Clear eligibility"));
+    expect(expectedText()).toBe("Expected members: 8 of 8");
+    expect(screen.getByText("Everyone is expected")).toBeInTheDocument();
+  });
+
+  it("disables Continue when no members match", async () => {
+    renderPage();
+    await waitForRoster();
+    fillDetails();
+    await pickEligibility("Part", "Bass");
+    await pickEligibility("Gender", "Female");
+    expect(expectedText()).toBe("Expected members: 0 of 8");
+    expect(screen.getByText("No members match these eligibility rules.")).toBeInTheDocument();
+    expect(button("Continue")).toBeDisabled();
+  });
+
+  it("stores normalised rules with the unchanged details on Continue, without member ids", async () => {
+    renderPage();
+    await waitForRoster();
+    await waitFor(() => expect(categorySelect().options.length).toBeGreaterThan(1));
+    fillDetails();
+    type(categorySelect(), "c1");
+    await pickEligibility("Part", "Soprano");
+    await pickEligibility("Status", "Active");
+
+    fireEvent.click(button("Continue"));
+
+    await screen.findByText("marking");
+    expect(useGlobalStore.getState().currentAttendance).toEqual({
+      name: "Rehearsal",
+      date: "2026-10-01",
+      categoryId: "c1",
+      eligibilityRules: [
+        { field: "part", values: ["soprano"] },
+        { field: "status", values: ["active"] },
+      ],
+    });
+  });
+
+  it("resets organisation A's rules on switching to B and uses B's roster", async () => {
+    renderPage();
+    await waitForRoster();
+    await pickEligibility("Part", "Soprano");
+    expect(expectedText()).toBe("Expected members: 2 of 8");
+
+    act(() => selectOrg("orgB"));
+
+    await screen.findByText("Expected members: 3 of 3");
+    expect(screen.getByText("Everyone is expected")).toBeInTheDocument();
+  });
+
+  it("explains when member fields fail to load and blocks applying templates", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    templatesByOrg.orgA = [template({})];
+    const serve = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) =>
+      url.endsWith("/model") ? Promise.reject(new Error("offline")) : serve(url)
+    );
+    renderPage();
+    expect(await screen.findByText(/Member fields could not be loaded/)).toBeInTheDocument();
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    type(templateSelect(), "t1");
+    expect(button("Apply")).toBeDisabled();
+    expect(nameInput().value).toBe("");
+    expect(await screen.findByText(/can't be applied until categories and member fields load/)).toBeInTheDocument();
+    (console.error as jest.Mock).mockRestore();
+  });
+
+  describe("templates", () => {
+    const sopranoTemplate = template({
+      id: "t-sop",
+      name: "Soprano Rehearsal",
+      eligibilityRules: [{ field: "part", values: ["soprano"] }],
+    });
+
+    it("treats a template without rules as Everyone", async () => {
+      const { eligibilityRules, ...legacy } = template({ id: "t-old", name: "Legacy" });
+      templatesByOrg.orgA = [legacy];
+      renderPage();
+      await waitForRoster();
+      await screen.findByRole("option", { name: "Rehearsal" });
+      await pickEligibility("Part", "Alto");
+      type(templateSelect(), "t-old");
+      expect(expectedText()).toBe("Expected members: 8 of 8");
+    });
+
+    it("applies rules and details but never the date", async () => {
+      templatesByOrg.orgA = [sopranoTemplate];
+      renderPage();
+      await waitForRoster();
+      await screen.findByRole("option", { name: "Rehearsal" });
+      type(dateInput(), "2026-10-01");
+
+      type(templateSelect(), "t-sop");
+
+      expect(nameInput().value).toBe("Soprano Rehearsal");
+      expect(expectedText()).toBe("Expected members: 2 of 8");
+      expect(dateInput().value).toBe("2026-10-01");
+    });
+
+    it("saves the current rules with the template", async () => {
+      renderPage();
+      await waitForRoster();
+      type(nameInput(), "Soprano Rehearsal");
+      await pickEligibility("Part", "Soprano");
+      fireEvent.click(button("Save as template"));
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1]).toEqual({
+        name: "Soprano Rehearsal",
+        categoryId: null,
+        subCategoryId: null,
+        eligibilityRules: [{ field: "part", values: ["soprano"] }],
+      });
+    });
+
+    it("sends an explicit [] when updating a template to Everyone", async () => {
+      templatesByOrg.orgA = [sopranoTemplate];
+      renderPage();
+      await waitForRoster();
+      await screen.findByRole("option", { name: "Rehearsal" });
+      type(templateSelect(), "t-sop");
+      fireEvent.click(button("Clear eligibility"));
+      fireEvent.click(button("Update template"));
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0][1]).toEqual({
+        name: "Soprano Rehearsal",
+        categoryId: "c1",
+        subCategoryId: "s1",
+        eligibilityRules: [],
+      });
+    });
+
+    describe("with stale eligibility", () => {
+      beforeEach(() => {
+        templatesByOrg.orgA = [
+          template({
+            id: "t-mezzo",
+            name: "Mezzo Sectional",
+            eligibilityRules: [{ field: "part", values: ["mezzo"] }],
+          }),
+        ];
+      });
+
+      const selectStale = async () => {
+        renderPage();
+        await waitForRoster();
+        await screen.findByRole("option", { name: "Rehearsal" });
+        await screen.findByRole("option", { name: "Mezzo Sectional (Needs update)" });
+        type(templateSelect(), "t-mezzo");
+      };
+
+      it("needs an update, explains why and cannot be applied", async () => {
+        await selectStale();
+        expect(screen.getByText("Needs update")).toBeInTheDocument();
+        expect(screen.getByText(/Part: Mezzo is no longer an option\./)).toBeInTheDocument();
+        expect(button("Apply")).toBeDisabled();
+        expect(nameInput().value).toBe("");
+        expect(expectedText()).toBe("Expected members: 8 of 8");
+      });
+
+      it("can be repaired with the current rules", async () => {
+        await selectStale();
+        type(nameInput(), "Mezzo Sectional");
+        await pickEligibility("Part", "Alto");
+        fireEvent.click(button("Update template"));
+        await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+        expect(mockPut.mock.calls[0][1].eligibilityRules).toEqual([
+          { field: "part", values: ["alto"] },
+        ]);
+      });
+
+      it("can be deleted", async () => {
+        await selectStale();
+        fireEvent.click(button("Delete template"));
+        confirmDialog();
+        await waitFor(() =>
+          expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t-mezzo")
+        );
+      });
+
+      it("explains when both category and eligibility are stale", async () => {
+        templatesByOrg.orgA = [
+          template({
+            id: "t-mezzo",
+            name: "Mezzo Sectional",
+            categoryId: "archived",
+            subCategoryId: null,
+            eligibilityRules: [{ field: "part", values: ["mezzo"] }],
+          }),
+        ];
+        await selectStale();
+        expect(
+          screen.getByText(/no longer exists\. Part: Mezzo is no longer an option\./)
+        ).toBeInTheDocument();
+      });
     });
   });
 });
