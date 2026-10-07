@@ -1,17 +1,10 @@
 import { useMemo } from "react";
-import { format } from "date-fns";
 import { useQueryWrapper } from "services/api/apiHelper";
+import { localBusinessDate } from "helpers/birthday";
 import { queryKeys } from "services/api/queryKeys";
 import { welfareRequest } from "services/api/request";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { WelfareOverview } from "components/welfare/welfareTypes";
-
-/**
- * The current local business date. The backend's period logic anchors on this
- * calendar date, so the frontend sends the same YYYY-MM-DD the officer sees.
- */
-export const localBusinessDate = (date: Date = new Date()): string =>
-  format(date, "yyyy-MM-dd");
 
 /**
  * The Phase 7A Welfare overview for the selected organisation.

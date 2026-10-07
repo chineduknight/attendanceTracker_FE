@@ -124,22 +124,77 @@ describe("queryKeys tenant scoping", () => {
     expect(matches(queryKeys.welfare.root("orgB"), overviewA)).toBe(false);
   });
 
-  it("scopes the welfare birthday snapshot to the organisation", () => {
-    const snapshotA = queryKeys.birthday.snapshot(
+  it("scopes birthday keys to the organisation and nests them under the root", () => {
+    const root = queryKeys.birthday.root("orgA");
+    expect(root).toEqual(["birthday", "orgA"]);
+    expect(root).not.toEqual(queryKeys.birthday.root("orgB"));
+
+    const list = queryKeys.birthday.list(
+      "orgA",
+      "2026-10-07",
+      "2026-10-14",
+      "active",
+    );
+    expect(list).toEqual([
+      "birthday",
+      "orgA",
+      "list",
+      "2026-10-07",
+      "2026-10-14",
+      "active",
+    ]);
+    expect(list).not.toEqual(
+      queryKeys.birthday.list("orgB", "2026-10-07", "2026-10-14", "active"),
+    );
+    expect(list).not.toEqual(
+      queryKeys.birthday.list("orgA", "2026-10-07", "2026-10-14", ""),
+    );
+    expect(matches(root, list)).toBe(true);
+
+    const snapshot = queryKeys.birthday.snapshot(
       "orgA",
       "2026-10-07",
       "2026-10-14",
     );
-    expect(snapshotA).toEqual([
+    expect(snapshot).toEqual([
       "birthday",
       "orgA",
       "snapshot",
       "2026-10-07",
       "2026-10-14",
     ]);
-    expect(snapshotA).not.toEqual(
+    expect(snapshot).not.toEqual(
       queryKeys.birthday.snapshot("orgB", "2026-10-07", "2026-10-14"),
     );
+    expect(matches(root, snapshot)).toBe(true);
+
+    const exportPdf = queryKeys.birthday.export(
+      "orgA",
+      "pdf",
+      "2026-10-07",
+      "2026-10-14",
+      "active",
+    );
+    expect(exportPdf).toEqual([
+      "birthday",
+      "orgA",
+      "export",
+      "pdf",
+      "2026-10-07",
+      "2026-10-14",
+      "active",
+    ]);
+    expect(exportPdf).not.toEqual(
+      queryKeys.birthday.export(
+        "orgA",
+        "excel",
+        "2026-10-07",
+        "2026-10-14",
+        "active",
+      ),
+    );
+    expect(matches(root, exportPdf)).toBe(true);
+    expect(matches(queryKeys.birthday.root("orgB"), exportPdf)).toBe(false);
   });
 
   it("keeps the compliance export keys under the compliance prefix", () => {

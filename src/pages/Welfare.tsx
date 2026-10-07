@@ -25,6 +25,7 @@ import {
 } from "components/welfare/AvailabilitySection";
 import BirthdaySnapshot from "components/welfare/BirthdaySnapshot";
 import { lowerTerm } from "helpers/organisationPresentation";
+import { hasDobDateField } from "helpers/birthday";
 import {
   WelfareInsight,
   WelfareOverview,
@@ -122,12 +123,7 @@ const Welfare = () => {
   const { fields } = useMemberModel(organisationId, {
     enabled: birthdaysPermitted,
   });
-  const hasDobField = fields.some(
-    (field) =>
-      field.name.trim().toLowerCase() === "dob" &&
-      field.type.trim().toLowerCase() === "date",
-  );
-  const showBirthdays = birthdaysPermitted && hasDobField;
+  const showBirthdays = birthdaysPermitted && hasDobDateField(fields);
   const birthdays = useWelfareBirthdays(organisationId, {
     enabled: showBirthdays,
   });
@@ -212,6 +208,11 @@ const Welfare = () => {
               {showBirthdays && (
                 <BirthdaySnapshot
                   members={birthdays.members}
+                  range={{
+                    fromDate: birthdays.fromDate,
+                    toDate: birthdays.toDate,
+                  }}
+                  asOf={birthdays.asOf}
                   isFetching={birthdays.isFetching}
                   isError={birthdays.isError}
                 />
@@ -225,6 +226,11 @@ const Welfare = () => {
             <Box mt={6}>
               <BirthdaySnapshot
                 members={birthdays.members}
+                range={{
+                  fromDate: birthdays.fromDate,
+                  toDate: birthdays.toDate,
+                }}
+                asOf={birthdays.asOf}
                 isFetching={birthdays.isFetching}
                 isError={birthdays.isError}
               />

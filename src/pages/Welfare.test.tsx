@@ -26,6 +26,10 @@ const mockGet: jest.Mock = mockedAxios.get;
 
 const TODAY = format(new Date(), "yyyy-MM-dd");
 const SNAPSHOT_END = format(addDays(new Date(), 7), "yyyy-MM-dd");
+const dayOffset = (offset: number) =>
+  format(addDays(new Date(), offset), "yyyy-MM-dd");
+const expectedBirthdayText = (offset: number, name: string) =>
+  `${name} — ${format(addDays(new Date(), offset), "EEE, d MMM")} (In ${offset} days)`;
 
 const MEMBER_MODEL = {
   data: {
@@ -172,7 +176,20 @@ const EMPTY_OVERVIEW = {
 };
 
 const BIRTHDAY_RESPONSE = {
-  data: { count: 1, members: [{ name: "Ada Okeke", dob: "Mon, 13 October" }] },
+  data: {
+    count: 1,
+    members: [
+      {
+        name: "Ada Okeke",
+        dob: "Wed, 02 January",
+        birthdayOccurrence: {
+          month: 1,
+          day: 2,
+          occurrenceDate: dayOffset(2),
+        },
+      },
+    ],
+  },
 };
 
 const serve = (over: Record<string, unknown> = {}) => {
@@ -468,7 +485,7 @@ describe("<Welfare>", () => {
     it("queries today through the next 7 days and renders the result", async () => {
       renderPage();
       expect(
-        await screen.findByText("Ada Okeke — Mon, 13 October"),
+        await screen.findByText(expectedBirthdayText(2, "Ada Okeke")),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("heading", { name: "Upcoming Birthdays" }),
@@ -486,18 +503,32 @@ describe("<Welfare>", () => {
       ).toBeInTheDocument();
     });
 
-    it("renders a year-wrapped birthday from the existing backend contract", async () => {
+    it("prefers occurrence metadata and still renders legacy rows", async () => {
       serve({
         birthdays: {
           data: {
-            count: 1,
-            members: [{ name: "Ada Okeke", dob: "Wed, 02 January" }],
+            count: 2,
+            members: [
+              { name: "Legacy Member", dob: dayOffset(3) },
+              {
+                name: "Metadata Member",
+                dob: "Wed, 02 January",
+                birthdayOccurrence: {
+                  month: 1,
+                  day: 2,
+                  occurrenceDate: dayOffset(4),
+                },
+              },
+            ],
           },
         },
       });
       renderPage();
       expect(
-        await screen.findByText("Ada Okeke — Wed, 02 January"),
+        await screen.findByText(expectedBirthdayText(4, "Metadata Member")),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(expectedBirthdayText(3, "Legacy Member")),
       ).toBeInTheDocument();
     });
 
