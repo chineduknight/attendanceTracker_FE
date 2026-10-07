@@ -21,7 +21,7 @@ import {
   DrawerFooter,
   useDisclosure,
 } from "@chakra-ui/react";
-import { FaSearch, FaPencilAlt } from "react-icons/fa";
+import { FaSearch, FaPencilAlt, FaUserPlus } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -65,7 +65,11 @@ import { useMembers } from "hooks/useMembers";
 import { useMemberModel } from "hooks/useMemberModel";
 import { memberFieldLabeler } from "helpers/memberFields";
 import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
-import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
+import {
+  isManualEntry,
+  splitStoredRoster,
+  UnresolvedRosterEntry,
+} from "helpers/storedRoster";
 import {
   restoreStatuses,
   StatusSnapshot,
@@ -75,12 +79,32 @@ import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
 import { filterAvailableMembers } from "helpers/attendanceAvailability";
+import {
+  isActivePresentStatus,
+  manualCandidates,
+  ManualDraftMember,
+  nextPresentStatus,
+  reconcileManualDraft,
+  toManualAdditionPayload,
+} from "helpers/manualAttendance";
+import ManualMemberDialog from "components/attendance/ManualMemberDialog";
 
 export type MemberType = {
   /** A configured status key of the selected organisation. */
   attendanceStatus: string;
   name: string;
   id: string;
+};
+
+/** A saved draft, or null when there is none or it can't be read. */
+const readDraft = (storageKey: string): unknown => {
+  const saved = localStorage.getItem(storageKey);
+  if (!saved) return null;
+  try {
+    return JSON.parse(saved);
+  } catch {
+    return null;
+  }
 };
 
 const MarkAttendanceSession = () => {
@@ -99,9 +123,17 @@ const MarkAttendanceSession = () => {
         currentAttendance.name || "untitled"
       }`;
   const localStorageKey = `attendance-draft-${org.id}-${draftIdentity}`;
+  // Its own key, so drafts saved before manual additions existed stay valid.
+  const manualStorageKey = `attendance-manual-draft-${org.id}-${draftIdentity}`;
   // Every roster change goes through commitMembers so the draft never diverges.
+  // `allMembers` is only ever the expected roster.
   const [allMembers, commitMembers] =
     usePersistedRoster<MemberType>(localStorageKey);
+  // Members who were not expected but physically attended, added to this
+  // session only. Kept apart so they never count as (or become) expected.
+  const [manualMembers, commitManual] =
+    usePersistedRoster<ManualDraftMember>(manualStorageKey);
+  const [isAddingMember, setIsAddingMember] = useState(false);
   // Component-local: a remount (organisation/session change) resets to Cycle.
   const [quickMarkMode, setQuickMarkMode] = useState<QuickMarkMode>(null);
   // Previous statuses of the last bulk change; null when there is nothing to undo.
@@ -159,21 +191,35 @@ const MarkAttendanceSession = () => {
     });
   };
 
-  // filtered list + status counts are pure derivations of allMembers/searchQuery,
+  // The session roster: expected members, then manual additions. Both are
+  // ordinary rows for search and counts; only their status rules differ.
+  const sessionRoster = useMemo<MemberType[]>(
+    () => [...allMembers, ...manualMembers],
+    [allMembers, manualMembers]
+  );
+  const manualIds = useMemo(
+    () => new Set(manualMembers.map((member) => member.id)),
+    [manualMembers]
+  );
+
+  // filtered list + status counts are pure derivations of the roster/search,
   // so we compute them here instead of storing (and hand-syncing) extra state.
   const filteredMembers = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return allMembers.filter((member) =>
+    return sessionRoster.filter((member) =>
       member.name.toLowerCase().includes(query)
     );
-  }, [allMembers, searchQuery]);
+  }, [sessionRoster, searchQuery]);
   // Edit counts include any inactive historical status still on the record.
   const statusCounts = useMemo(
-    () => statuses.countStatuses(allMembers.map((m) => m.attendanceStatus)),
-    [allMembers, statuses]
+    () => statuses.countStatuses(sessionRoster.map((m) => m.attendanceStatus)),
+    [sessionRoster, statuses]
   );
 
-  const expectedRosterSize = allMembers.length + unresolvedEntries.length;
+  const unresolvedManualCount = unresolvedEntries.filter(isManualEntry).length;
+  const expectedRosterSize =
+    allMembers.length + unresolvedEntries.length - unresolvedManualCount;
+  const manualCount = manualMembers.length + unresolvedManualCount;
 
   // A new session's roster comes from the canonical members cache (cached data
   // included), so it is ready on mount and re-derived after every refetch.
@@ -202,17 +248,23 @@ const MarkAttendanceSession = () => {
       unavailableMemberIds
     ).sort((a, b) => a.name.localeCompare(b.name));
 
-    let draft: unknown = null;
-    const localAttendance = localStorage.getItem(localStorageKey);
-    if (localAttendance) {
-      try {
-        draft = JSON.parse(localAttendance);
-      } catch {
-        draft = null;
-      }
-    }
-
-    commitMembers(() => reconcileAttendanceDraft(draft, roster, statuses));
+    // A manual addition who has since become expected moves onto the expected
+    // roster with the status already chosen, so nobody is submitted twice.
+    const { manual, promoted } = reconcileManualDraft(
+      readDraft(manualStorageKey),
+      new Set(roster.map((member) => member.id)),
+      currentMembers,
+      statuses
+    );
+    commitMembers(() =>
+      reconcileAttendanceDraft(readDraft(localStorageKey), roster, statuses).map(
+        (member) => {
+          const status = promoted.get(member.id);
+          return status ? { ...member, attendanceStatus: status } : member;
+        }
+      )
+    );
+    commitManual(() => manual);
     setRosterReady(true);
   }, [
     isUpdate,
@@ -224,7 +276,9 @@ const MarkAttendanceSession = () => {
     unavailableMemberIds,
     statuses,
     localStorageKey,
+    manualStorageKey,
     commitMembers,
+    commitManual,
   ]);
 
   // Callback when updating attendance – load saved attendance data
@@ -240,15 +294,20 @@ const MarkAttendanceSession = () => {
     setRecordRules(normalizeEligibilityRules(res.data.eligibilityRules));
     // Only entries whose member still resolves are editable; the rest stay on
     // the frozen roster as read-only placeholders.
+    // The stored roster is historical truth: rules and availability are never
+    // re-run, and manual entries stay manual whatever the current rules say.
     const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
     setUnresolvedEntries(unresolved);
-    const updatedMembers = resolved.map((attend) => ({
+    const toRow = (attend: (typeof resolved)[number]): MemberType => ({
       id: attend.memberId,
       name: attend.member.name,
       // Kept verbatim, even when the status has since been deactivated.
       attendanceStatus: attend.attendanceStatus,
-    }));
-    commitMembers(() => updatedMembers);
+    });
+    commitMembers(() =>
+      resolved.filter((attend) => !isManualEntry(attend)).map(toRow)
+    );
+    commitManual(() => resolved.filter(isManualEntry).map(toRow));
   };
 
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -285,6 +344,7 @@ const MarkAttendanceSession = () => {
     setUndoSnapshot(null);
     if (isUpdate) {
       localStorage.removeItem(localStorageKey);
+      localStorage.removeItem(manualStorageKey);
       window.location.reload();
       return;
     }
@@ -302,40 +362,108 @@ const MarkAttendanceSession = () => {
       ? statuses.resolve(quickMarkMode)
       : null;
 
+  // A manually-added member records physical attendance, so they may only
+  // ever hold an active present-behavior status — never Excused or Absent.
+  const mayTakeStatus = useCallback(
+    (memberId: string, status: string) =>
+      !manualIds.has(memberId) || isActivePresentStatus(statuses, status),
+    [manualIds, statuses]
+  );
+  // Tapping a manual row does nothing while a non-present mode is selected.
+  const manualRowsLocked =
+    selectedStatus !== null && selectedStatus.behavior !== "present";
+
   // Tapping a member assigns the selected status, or in Cycle mode advances
-  // them through the organisation's active statuses. A manual edit makes any
-  // pending bulk Undo stale, so it is discarded.
+  // them through the organisation's active statuses (a manual member only
+  // through the present ones). A manual edit makes any pending bulk Undo
+  // stale, so it is discarded.
   const markMember = useCallback(
     (memberId: string) => {
+      const isManual = manualIds.has(memberId);
+      if (selectedStatus && !mayTakeStatus(memberId, selectedStatus.key)) {
+        return;
+      }
       const nextStatus = selectedStatus
         ? () => selectedStatus.key
+        : isManual
+        ? (key: string) => nextPresentStatus(statuses, key)
         : statuses.next;
-      commitMembers(
-        (current) =>
-          updateStatuses(current, new Set([memberId]), nextStatus).members
-      );
+      const mark = <T extends MemberType>(current: T[]) =>
+        updateStatuses(current, new Set([memberId]), nextStatus).members;
+      if (isManual) commitManual(mark);
+      else commitMembers(mark);
       setUndoSnapshot(null);
     },
-    [commitMembers, selectedStatus, statuses]
+    [commitManual, commitMembers, manualIds, mayTakeStatus, selectedStatus, statuses]
   );
 
-  // Bulk actions touch only the members the current search shows.
+  // Bulk actions touch only the visible members that may take the status, so
+  // e.g. Reset to the default absent status skips manual additions.
+  const bulkTargets = (status: string) =>
+    new Set(
+      filteredMembers
+        .filter((member) => mayTakeStatus(member.id, status))
+        .map((member) => member.id)
+    );
+
   const setVisibleStatus = (status: string) => {
-    const visibleIds = new Set(filteredMembers.map((member) => member.id));
-    let snapshot: StatusSnapshot = new Map();
-    commitMembers((current) => {
-      const update = updateStatuses(current, visibleIds, () => status);
-      snapshot = update.snapshot;
+    const targets = bulkTargets(status);
+    const snapshot = new Map<string, string>();
+    const apply = <T extends MemberType>(current: T[]) => {
+      const update = updateStatuses(current, targets, () => status);
+      update.snapshot.forEach((previous, id) => snapshot.set(id, previous));
       return update.members;
-    });
+    };
+    commitMembers(apply);
+    commitManual(apply);
     setUndoSnapshot(snapshot);
   };
 
   const undoBulkChange = () => {
     if (!undoSnapshot) return;
     commitMembers((current) => restoreStatuses(current, undoSnapshot));
+    commitManual((current) => restoreStatuses(current, undoSnapshot));
     setUndoSnapshot(null);
   };
+
+  // New session only: manual additions live in the draft until submit.
+  const manualCandidateList = useMemo(
+    () =>
+      manualCandidates(
+        currentMembers,
+        sessionRoster.map((member) => member.id)
+      ),
+    [currentMembers, sessionRoster]
+  );
+  const addManualMember = ({
+    memberId,
+    status,
+    reason,
+  }: {
+    memberId: string;
+    status: string;
+    reason: string;
+  }) => {
+    const member = manualCandidateList.find((m) => m.id === memberId);
+    if (!member || !isActivePresentStatus(statuses, status)) return;
+    const trimmed = reason.trim();
+    commitManual((current) => [
+      ...current.filter((m) => m.id !== memberId),
+      {
+        id: member.id,
+        name: member.name,
+        attendanceStatus: status,
+        ...(trimmed ? { reason: trimmed } : {}),
+      },
+    ]);
+    setUndoSnapshot(null);
+    setIsAddingMember(false);
+  };
+  const removeManualMember = (memberId: string) => {
+    commitManual((current) => current.filter((m) => m.id !== memberId));
+    setUndoSnapshot(null);
+  };
+  const session = lowerTerm(terms.attendanceSingular);
 
   const navigate = useNavigate();
   const isSubmittingRef = useRef(false);
@@ -343,6 +471,7 @@ const MarkAttendanceSession = () => {
     isSubmittingRef.current = false;
     setUndoSnapshot(null);
     localStorage.removeItem(localStorageKey);
+    localStorage.removeItem(manualStorageKey);
     toast.success(
       isUpdate
         ? `${terms.attendanceSingular} Updated`
@@ -365,6 +494,23 @@ const MarkAttendanceSession = () => {
   const sendAttandanceToAPI = useCallback(() => {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
+    const toStatus = (member: MemberType) => ({
+      memberId: member.id,
+      status: member.attendanceStatus,
+    });
+    // An update sends every stored entry's status only; the backend keeps the
+    // manual provenance. A new session sends manual additions separately, and
+    // never a member who is also on the expected roster.
+    const expectedIds = new Set(allMembers.map((member) => member.id));
+    const manualAdditions = manualMembers
+      .filter((member) => !expectedIds.has(member.id))
+      .map((member) =>
+        toManualAdditionPayload({
+          memberId: member.id,
+          status: member.attendanceStatus,
+          reason: member.reason ?? "",
+        })
+      );
     // Only the session fields the API accepts — never stray persisted state.
     // Rules only define a NEW session's roster; an update never re-resolves it.
     const data = {
@@ -376,10 +522,8 @@ const MarkAttendanceSession = () => {
       ]),
       organisationId: org.id,
       ...(isUpdate ? {} : { eligibilityRules: sessionRules }),
-      memberStatuses: allMembers.map((member) => ({
-        memberId: member.id,
-        status: member.attendanceStatus,
-      })),
+      memberStatuses: (isUpdate ? sessionRoster : allMembers).map(toStatus),
+      ...(!isUpdate && manualAdditions.length ? { manualAdditions } : {}),
     };
     const upateUrl = convertParamsToString(
       attendanceRequest.UPDATE_ATTENDANCE,
@@ -393,6 +537,8 @@ const MarkAttendanceSession = () => {
     });
   }, [
     allMembers,
+    manualMembers,
+    sessionRoster,
     currentAttendance,
     org.id,
     params.attendanceId,
@@ -470,7 +616,20 @@ const MarkAttendanceSession = () => {
               )}`}
               rules={displayedRules}
               labelFor={labelFor}
+              manualCount={manualCount}
+              rosterCount={expectedRosterSize + manualCount}
             />
+            {!isUpdate && (
+              <Button
+                mt="3"
+                size="sm"
+                variant="outline"
+                leftIcon={<FaUserPlus />}
+                onClick={() => setIsAddingMember(true)}
+              >
+                {`Add ${lowerTerm(terms.memberSingular)} to this ${session}`}
+              </Button>
+            )}
             <QuickMarkToolbar
               statuses={statuses.active}
               mode={selectedStatus?.key ?? null}
@@ -499,7 +658,10 @@ const MarkAttendanceSession = () => {
               )}
             </InputGroup>
             <VisibleBulkActions
-              visibleCount={filteredMembers.length}
+              applyCount={
+                selectedStatus ? bulkTargets(selectedStatus.key).size : 0
+              }
+              resetCount={bulkTargets(statuses.defaultStatus.key).size}
               selectedStatus={selectedStatus}
               defaultStatus={statuses.defaultStatus}
               canUndo={undoSnapshot !== null}
@@ -509,6 +671,13 @@ const MarkAttendanceSession = () => {
               onReset={() => setVisibleStatus(statuses.defaultStatus.key)}
               onUndo={undoBulkChange}
             />
+            {filteredMembers.some((member) => manualIds.has(member.id)) && (
+              <Text mt="2" fontSize="sm" color="gray.500">
+                {`${terms.memberPlural} added manually can only be marked with a present status${
+                  manualRowsLocked ? ", so tapping them does nothing in this mode" : ""
+                }. Bulk actions to other statuses skip them.`}
+              </Text>
+            )}
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
@@ -518,15 +687,34 @@ const MarkAttendanceSession = () => {
             )}
             <StatusCountSummary counts={statusCounts} />
             <Box mt="4" overflow="auto" maxHeight="300px">
-              {filteredMembers.map((item) => (
-                <AttendanceMemberRow
-                  key={item.id}
-                  memberId={item.id}
-                  name={item.name}
-                  status={statuses.resolve(item.attendanceStatus)}
-                  onToggle={markMember}
-                />
-              ))}
+              {filteredMembers.map((item) => {
+                const isManual = manualIds.has(item.id);
+                return (
+                  <AttendanceMemberRow
+                    key={item.id}
+                    memberId={item.id}
+                    name={item.name}
+                    status={statuses.resolve(item.attendanceStatus)}
+                    onToggle={
+                      isManual && manualRowsLocked ? undefined : markMember
+                    }
+                    isManual={isManual}
+                    accessory={
+                      isManual && !isUpdate ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          colorScheme="red"
+                          aria-label={`Remove ${item.name} from this ${session}`}
+                          onClick={() => removeManualMember(item.id)}
+                        >
+                          Remove
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
             </Box>
             <UnresolvedRosterEntries
               entries={unresolvedEntries}
@@ -538,7 +726,7 @@ const MarkAttendanceSession = () => {
               mt="8"
               isLoading={isLoading}
               isDisabled={
-                allMembers.length === 0 ||
+                sessionRoster.length === 0 ||
                 (isUpdate && (!details.name.trim() || !details.date))
               }
             >
@@ -556,6 +744,16 @@ const MarkAttendanceSession = () => {
           </>
         )}
       </Container>
+
+      {!isUpdate && (
+        <ManualMemberDialog
+          isOpen={isAddingMember}
+          candidates={manualCandidateList}
+          statuses={statuses}
+          onSubmit={addManualMember}
+          onClose={() => setIsAddingMember(false)}
+        />
+      )}
 
       {isUpdate && (
         <Drawer

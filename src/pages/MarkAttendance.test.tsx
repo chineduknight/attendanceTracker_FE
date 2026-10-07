@@ -1260,3 +1260,373 @@ describe("<MarkAttendance> with custom terminology", () => {
     );
   });
 });
+
+describe("<MarkAttendance> manual per-session additions", () => {
+  // no_show (default, absent), present, late, excused, remote (inactive).
+  const MEMBERS = [
+    { id: "m1", name: "Ada", part: "soprano" },
+    { id: "m2", name: "Bola", part: "soprano" },
+    { id: "m3", name: "Chidi", part: "tenor" },
+    { id: "m4", name: "Dayo", part: "soprano" },
+  ];
+  const SOPRANOS = [{ field: "part", values: ["soprano"] }];
+  const DRAFT_KEY = "attendance-draft-org1-2026-10-01-Rehearsal";
+  const MANUAL_KEY = "attendance-manual-draft-org1-2026-10-01-Rehearsal";
+  let unavailable: string[];
+
+  const leave = (memberId: string) => ({
+    memberId,
+    startDate: "2026-09-25",
+    endDate: "2026-10-05",
+  });
+  const dialog = () => within(screen.getByRole("dialog"));
+  // A manual row is rendered as a non-tappable div while a non-present
+  // quick-mark mode is selected, so rows are found by class, not by role.
+  const rowEl = (name: string) =>
+    screen.getByText(name).closest(".chakra-button") as HTMLElement;
+  const tapRow = (name: string) => fireEvent.click(rowEl(name));
+  const manualBadgeOn = (name: string) =>
+    within(rowEl(name)).queryByText("Added manually");
+  const statusOfRow = (name: string) =>
+    within(rowEl(name)).getAllByText(/.+/)[1].textContent;
+  const addManually = async (name: string, status: string, reason = "") => {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add member to this attendance" })
+    );
+    await screen.findByRole("dialog");
+    fireEvent.change(dialog().getByLabelText(/^Member/), {
+      target: { value: name.slice(0, 3) },
+    });
+    fireEvent.click(await screen.findByText(name));
+    fireEvent.change(dialog().getByLabelText(/^Attendance status/), {
+      target: { value: status },
+    });
+    if (reason) {
+      fireEvent.change(dialog().getByLabelText("Reason (optional)"), {
+        target: { value: reason },
+      });
+    }
+    fireEvent.click(dialog().getByRole("button", { name: "Add member" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    unavailable = ["m4"];
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES },
+      currentAttendance: {
+        name: "Rehearsal",
+        date: "2026-10-01",
+        eligibilityRules: SOPRANOS,
+      },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/availability")) {
+        return Promise.resolve({ data: { data: unavailable.map(leave) } });
+      }
+      if (url.includes("/members")) {
+        return Promise.resolve({
+          data: { data: MEMBERS.map((m) => ({ ...m })) },
+        });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+    mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  describe("new session", () => {
+    const start = async () => {
+      renderAt("/mark");
+      await screen.findByText("Ada");
+    };
+
+    it("adds an unavailable or non-eligible member to the draft, counted apart from the expected roster", async () => {
+      await start();
+      expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
+      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(screen.queryByText(/Added manually/)).not.toBeInTheDocument();
+
+      await addManually("Dayo", "late"); // on leave
+      await addManually("Chidi", "present"); // fails the session's rules
+
+      expect(manualBadgeOn("Dayo")).toBeInTheDocument();
+      expect(manualBadgeOn("Chidi")).toBeInTheDocument();
+      expect(manualBadgeOn("Ada")).toBeNull();
+      expect(statusOfRow("Dayo")).toBe("Late");
+      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(screen.getByText("Added manually: 2")).toBeInTheDocument();
+      expect(screen.getByText("Session roster: 4")).toBeInTheDocument();
+    });
+
+    it("offers only off-roster candidates and present-behavior statuses", async () => {
+      await start();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add member to this attendance" })
+      );
+      await screen.findByRole("dialog");
+      expect(
+        within(dialog().getByLabelText(/^Attendance status/))
+          .getAllByRole("option")
+          .map((o) => o.textContent)
+      ).toEqual(["Choose a status", "Present", "Late"]);
+      fireEvent.keyDown(dialog().getByLabelText(/^Member/), { key: "ArrowDown" });
+      await screen.findByText("Dayo");
+      const menu = document.querySelector(".manual-member__menu") as HTMLElement;
+      expect(within(menu).queryByText("Ada")).toBeNull();
+      expect(within(menu).getByText("Chidi")).toBeInTheDocument();
+    });
+
+    it("submits manual additions separately from memberStatuses", async () => {
+      await start();
+      await addManually("Dayo", "late", "  Came despite leave  ");
+      submitAndConfirm();
+
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      const body = mockPost.mock.calls[0][1];
+      expect(body.memberStatuses).toEqual([
+        { memberId: "m1", status: "no_show" },
+        { memberId: "m2", status: "no_show" },
+      ]);
+      expect(body.manualAdditions).toEqual([
+        { memberId: "m4", status: "late", reason: "Came despite leave" },
+      ]);
+      expect(Object.keys(body.manualAdditions[0]).sort()).toEqual([
+        "memberId",
+        "reason",
+        "status",
+      ]);
+    });
+
+    it("omits manualAdditions when none were added", async () => {
+      await start();
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1]).not.toHaveProperty("manualAdditions");
+    });
+
+    it("cycles a manual row through present statuses only", async () => {
+      await start();
+      await addManually("Dayo", "present");
+      tapRow("Dayo");
+      expect(statusOfRow("Dayo")).toBe("Late");
+      tapRow("Dayo");
+      expect(statusOfRow("Dayo")).toBe("Present");
+      // An ordinary row still cycles through every active status.
+      tapRow("Ada");
+      expect(statusOfRow("Ada")).toBe("Present");
+    });
+
+    it("never lets a non-present quick mark or Reset touch a manual row", async () => {
+      await start();
+      await addManually("Dayo", "late");
+      fireEvent.click(screen.getByRole("button", { name: "Excused" }));
+      expect(rowEl("Dayo").tagName).toBe("DIV");
+      tapRow("Dayo");
+      expect(statusOfRow("Dayo")).toBe("Late");
+      expect(
+        screen.getByText(
+          "Members added manually can only be marked with a present status, so tapping them does nothing in this mode. Bulk actions to other statuses skip them."
+        )
+      ).toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Excused to 2 visible" })
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 2 visible to No Show" })
+      );
+      expect(statusOfRow("Dayo")).toBe("Late");
+
+      // A present-behavior bulk status does reach the manual row.
+      fireEvent.click(screen.getByRole("button", { name: "Present" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Present to 3 visible" })
+      );
+      expect(statusOfRow("Dayo")).toBe("Present");
+      fireEvent.click(screen.getByRole("button", { name: "Undo bulk change" }));
+      expect(statusOfRow("Dayo")).toBe("Late");
+    });
+
+    it("removes a manual addition from the draft", async () => {
+      await start();
+      await addManually("Dayo", "late");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Dayo from this attendance" })
+      );
+      expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
+      expect(JSON.parse(localStorage.getItem(MANUAL_KEY) as string)).toEqual([]);
+      expect(
+        screen.queryByRole("button", { name: /Remove (Ada|Bola)/ })
+      ).not.toBeInTheDocument();
+    });
+
+    it("persists manual additions in their own draft and restores them", async () => {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "present" }])
+      );
+      const { unmount } = renderAt("/mark");
+      await screen.findByText("Ada");
+      await addManually("Dayo", "late", "Leave ended early");
+      expect(JSON.parse(localStorage.getItem(MANUAL_KEY) as string)).toEqual([
+        { id: "m4", name: "Dayo", attendanceStatus: "late", reason: "Leave ended early" },
+      ]);
+      // The expected draft never gains the manual member.
+      expect(
+        JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map(
+          (m: { id: string }) => m.id
+        )
+      ).toEqual(["m1", "m2"]);
+      unmount();
+
+      renderAt("/mark");
+      await screen.findByText("Dayo");
+      expect(manualBadgeOn("Dayo")).toBeInTheDocument();
+      expect(statusOfRow("Dayo")).toBe("Late");
+      expect(statusOfRow("Ada")).toBe("Present");
+      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+    });
+
+    it("moves a manual member who becomes expected onto the expected roster, keeping their status", async () => {
+      await start();
+      await addManually("Dayo", "late");
+      unavailable = [];
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(
+        await screen.findByText("Expected roster: 3 members")
+      ).toBeInTheDocument();
+      expect(manualBadgeOn("Dayo")).toBeNull();
+      expect(statusOfRow("Dayo")).toBe("Late");
+      expect(screen.queryByText(/Added manually/)).not.toBeInTheDocument();
+
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      const body = mockPost.mock.calls[0][1];
+      expect(body.memberStatuses).toContainEqual({ memberId: "m4", status: "late" });
+      expect(body).not.toHaveProperty("manualAdditions");
+    });
+
+    it("allows 0 expected + 1 manual, but never an empty session", async () => {
+      unavailable = ["m1", "m2", "m4"];
+      renderAt("/mark");
+      await screen.findByText("Expected roster: 0 members");
+      expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+
+      await addManually("Ada", "present");
+      expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+      submitAndConfirm();
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      expect(mockPost.mock.calls[0][1]).toMatchObject({
+        memberStatuses: [],
+        manualAdditions: [{ memberId: "m1", status: "present" }],
+      });
+    });
+
+    it("clears both drafts after a successful create", async () => {
+      await start();
+      await addManually("Dayo", "late");
+      submitAndConfirm();
+      await screen.findByText("all attendance");
+      expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+      expect(localStorage.getItem(MANUAL_KEY)).toBeNull();
+    });
+  });
+
+  describe("editing a stored session", () => {
+    const RECORD = {
+      name: "Rehearsal",
+      date: "2026-09-01T00:00:00.000Z",
+      organisationId: "org1",
+      eligibilityRules: SOPRANOS,
+      attendance: [
+        { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "no_show", manuallyAdded: false },
+        { memberId: "m2", member: { name: "Bola" }, attendanceStatus: "present" },
+        {
+          memberId: "m3",
+          member: { name: "Chidi" },
+          attendanceStatus: "late",
+          manuallyAdded: true,
+          manualAdditionReason: "Sang with the sopranos",
+          manuallyAddedAt: "2026-09-01T10:00:00.000Z",
+          manuallyAddedBy: "user-1",
+        },
+      ],
+    };
+
+    const start = async () => {
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: { data: url === "/attendance/org1/att5" ? RECORD : [] },
+        })
+      );
+      renderAt("/mark/att5");
+      await screen.findByText("Chidi");
+    };
+
+    it("keeps manual provenance and counts on load, without re-running rules", async () => {
+      await start();
+      expect(manualBadgeOn("Chidi")).toBeInTheDocument();
+      expect(manualBadgeOn("Ada")).toBeNull();
+      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Add member/ })
+      ).not.toBeInTheDocument();
+      expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(false);
+    });
+
+    it("moves a manual row between present statuses but never to Excused or No Show", async () => {
+      await start();
+      tapRow("Chidi");
+      expect(statusOfRow("Chidi")).toBe("Present");
+      tapRow("Chidi");
+      expect(statusOfRow("Chidi")).toBe("Late");
+
+      fireEvent.click(screen.getByRole("button", { name: "Excused" }));
+      tapRow("Chidi");
+      expect(statusOfRow("Chidi")).toBe("Late");
+      fireEvent.click(screen.getByRole("button", { name: "No Show" }));
+      tapRow("Chidi");
+      expect(statusOfRow("Chidi")).toBe("Late");
+      // Ordinary rows keep quick-mark behaviour.
+      tapRow("Bola");
+      expect(statusOfRow("Bola")).toBe("No Show");
+    });
+
+    it("skips manual rows in Reset and non-present bulk actions", async () => {
+      await start();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 2 visible to No Show" })
+      );
+      expect(statusOfRow("Chidi")).toBe("Late");
+      expect(statusOfRow("Bola")).toBe("No Show");
+      fireEvent.click(screen.getByRole("button", { name: "Excused" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Apply Excused to 2 visible" })
+      );
+      expect(statusOfRow("Chidi")).toBe("Late");
+    });
+
+    it("updates with statuses only, never manual metadata", async () => {
+      await start();
+      tapRow("Chidi"); // Late -> Present
+      submitAndConfirm();
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      const body = mockPut.mock.calls[0][1];
+      expect(body.memberStatuses).toEqual([
+        { memberId: "m1", status: "no_show" },
+        { memberId: "m2", status: "present" },
+        { memberId: "m3", status: "present" },
+      ]);
+      expect(JSON.stringify(body)).not.toMatch(
+        /manuallyAdded|manualAdditionReason|manualAdditions|editCount|eligibilityRules/
+      );
+    });
+  });
+});

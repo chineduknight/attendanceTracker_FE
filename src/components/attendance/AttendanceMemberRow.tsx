@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Badge, Button, Flex, Text } from "@chakra-ui/react";
+import { memo, ReactNode } from "react";
+import { Badge, Box, Button, Flex, Text } from "@chakra-ui/react";
 import {
   AttendanceStatusDefinition,
   solidColor,
@@ -11,7 +11,15 @@ interface AttendanceMemberRowProps {
   status: AttendanceStatusDefinition;
   /** Makes the row tappable (marking); omitted for read-only views. */
   onToggle?: (memberId: string) => void;
+  /** Added manually to this session only — provenance, not a status. */
+  isManual?: boolean;
+  /** Secondary detail under the row, e.g. a manual addition's reason. */
+  note?: string;
+  /** A control beside the row (never nested inside the tappable button). */
+  accessory?: ReactNode;
 }
+
+export const MANUAL_BADGE_LABEL = "Added manually";
 
 /**
  * One member's attendance row. The default status renders unfilled so the
@@ -23,9 +31,12 @@ const AttendanceMemberRow = ({
   name,
   status,
   onToggle,
+  isManual = false,
+  note,
+  accessory,
 }: AttendanceMemberRowProps) => {
   const isFilled = !status.isDefault;
-  return (
+  const row = (
     <Button
       as={onToggle ? "button" : "div"}
       variant="unstyled"
@@ -34,7 +45,6 @@ const AttendanceMemberRow = ({
       w="full"
       h="auto"
       minH="40px"
-      mt="3"
       px="3"
       border="1px solid"
       borderColor={isFilled ? solidColor(status.color) : "green"}
@@ -54,8 +64,36 @@ const AttendanceMemberRow = ({
         >
           {status.label}
         </Badge>
+        {isManual && (
+          <Badge
+            colorScheme="purple"
+            variant="outline"
+            bg={isFilled ? "white" : undefined}
+          >
+            {MANUAL_BADGE_LABEL}
+          </Badge>
+        )}
       </Flex>
     </Button>
+  );
+  return (
+    <Box mt="3">
+      {accessory ? (
+        <Flex align="center" gap={2}>
+          <Box flex="1" minW={0}>
+            {row}
+          </Box>
+          {accessory}
+        </Flex>
+      ) : (
+        row
+      )}
+      {note && (
+        <Text fontSize="xs" color="gray.500" mt={1} px={1}>
+          {note}
+        </Text>
+      )}
+    </Box>
   );
 };
 

@@ -631,7 +631,13 @@ describe("<CreateAttendance> eligibility", () => {
     expect(
       screen.getByText("No members are available for this attendance.")
     ).toBeInTheDocument();
-    expect(button("Continue")).toBeDisabled();
+    // Someone unavailable may still physically attend and be added manually.
+    expect(
+      screen.getByText(
+        "You can still continue and add a member who physically attended."
+      )
+    ).toBeInTheDocument();
+    expect(button("Continue")).toBeEnabled();
   });
 
   it("stores normalised rules with the unchanged details on Continue, without member ids", async () => {
@@ -1053,6 +1059,8 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     expect(
       screen.getByText("No members are available for this attendance.")
     ).toBeInTheDocument();
+    expect(screen.queryByText(/You can still continue/)).not.toBeInTheDocument();
+    expect(button("Continue")).toBeDisabled();
   });
 
   it("never shows the member-field load error", async () => {

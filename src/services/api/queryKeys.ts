@@ -25,6 +25,9 @@ export const queryKeys = {
     ["attendance", organisationId, attendanceId ?? ""] as const,
   attendances: (organisationId: string) =>
     ["attendances", organisationId] as const,
+  /** Prefix for one session's Excel export, across every filter. */
+  attendanceExport: (organisationId: string, attendanceId: string) =>
+    ["export-excel", organisationId, attendanceId] as const,
   attendanceTemplates: (organisationId: string) =>
     ["attendance-templates", organisationId] as const,
   attendanceAvailability: {
