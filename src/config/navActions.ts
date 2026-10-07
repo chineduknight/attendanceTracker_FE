@@ -7,6 +7,7 @@ import {
   FaChartBar,
   FaBirthdayCake,
   FaMoneyBillWave,
+  FaHandsHelping,
   FaUserShield,
   FaCog,
 } from "react-icons/fa";
@@ -32,6 +33,7 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: LABELS.createAttendance, icon: FaCalendarPlus, colorScheme: "yellow", path: PROTECTED_PATHS.CREATE_ATTENDANCE, perm: "attendance.manage" },
   { label: LABELS.allAttendance, icon: FaClipboardList, colorScheme: "purple", path: PROTECTED_PATHS.ALL_ATTENDANCE, perm: "attendance.view" },
   { label: "Analytics", icon: FaChartBar, colorScheme: "orange", path: PROTECTED_PATHS.ANALYTICS, perm: "attendance.view", feature: "analytics" },
+  { label: "Welfare & Engagement", icon: FaHandsHelping, colorScheme: "teal", path: PROTECTED_PATHS.WELFARE, perm: "attendance.view", feature: "welfare" },
   { label: "Birthday", icon: FaBirthdayCake, colorScheme: "pink", path: PROTECTED_PATHS.BIRTHDAY, perm: "members.view", feature: "birthdays" },
   { label: "Finance", icon: FaMoneyBillWave, colorScheme: "green", path: PROTECTED_PATHS.FINANCE, perm: "finance.view", feature: "finance" },
   { label: LABELS.officersAndRoles, icon: FaUserShield, colorScheme: "blue", path: PROTECTED_PATHS.OFFICERS_ROLES, perm: "officers.view" },

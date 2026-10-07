@@ -12,6 +12,10 @@ import {
   AttendanceStatusDefinition,
   DEFAULT_ATTENDANCE_STATUSES,
 } from "helpers/attendanceStatuses";
+import {
+  DEFAULT_WELFARE_REVIEW_WINDOW_DAYS,
+  WelfareSettings,
+} from "helpers/welfareSettings";
 
 export type currentAttendanceType = {
   name: string;
@@ -56,6 +60,11 @@ export type OrganisationType = {
    * reason — always read via isAttendanceEligibilityEnabled.
    */
   attendanceEligibilityEnabled?: boolean;
+  /**
+   * Welfare review settings. Optional for the same reason — always read via
+   * the welfareSettings helper.
+   */
+  welfareSettings?: WelfareSettings;
 };
 
 export const EMPTY_USER: UserType = {
@@ -81,8 +90,8 @@ export const EMPTY_ORG: OrganisationType = {
   terminology: { ...DEFAULT_TERMINOLOGY },
   featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
   attendanceEligibilityEnabled: false,
+  welfareSettings: { reviewWindowDays: DEFAULT_WELFARE_REVIEW_WINDOW_DAYS },
 };
-
 
 interface GlobalStoreState {
   user: UserType;

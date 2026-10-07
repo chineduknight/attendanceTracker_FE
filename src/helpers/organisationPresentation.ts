@@ -23,6 +23,7 @@ export interface OrganisationFeatureVisibility {
   finance: boolean;
   birthdays: boolean;
   analytics: boolean;
+  welfare: boolean;
 }
 
 export type TermKey = keyof OrganisationTerminology;
@@ -42,7 +43,7 @@ export const DEFAULT_TERMINOLOGY: Readonly<OrganisationTerminology> = Object.fre
 });
 
 export const DEFAULT_FEATURE_VISIBILITY: Readonly<OrganisationFeatureVisibility> =
-  Object.freeze({ finance: true, birthdays: true, analytics: true });
+  Object.freeze({ finance: true, birthdays: true, analytics: true, welfare: true });
 
 export const TERM_KEYS = Object.keys(DEFAULT_TERMINOLOGY) as TermKey[];
 export const OPTIONAL_FEATURES = Object.keys(DEFAULT_FEATURE_VISIBILITY) as OptionalFeature[];
@@ -126,4 +127,5 @@ export const FEATURE_LABELS: Record<OptionalFeature, string> = {
   finance: "Finance",
   birthdays: "Birthdays",
   analytics: "Analytics",
+  welfare: "Welfare & Engagement",
 };

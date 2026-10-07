@@ -68,6 +68,20 @@ export const queryKeys = {
       ["member-analytics", organisationId, memberId, fromDate, toDate] as const,
   },
 
+  welfare: {
+    /** Prefix covering every Welfare query for one organisation. */
+    root: (organisationId: string) => ["welfare", organisationId] as const,
+    /** Overview for one business date; a new day is a new comparison horizon. */
+    overview: (organisationId: string, asOf: string) =>
+      ["welfare", organisationId, "overview", asOf] as const,
+  },
+
+  birthday: {
+    /** Welfare's next-7-days snapshot; tenant scoped like every org key. */
+    snapshot: (organisationId: string, startDate: string, endDate: string) =>
+      ["birthday", organisationId, "snapshot", startDate, endDate] as const,
+  },
+
   finance: {
     obligations: (organisationId: string) =>
       ["finance", organisationId, "obligations"] as const,

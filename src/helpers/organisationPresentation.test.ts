@@ -23,7 +23,7 @@ describe("organisation presentation", () => {
       officerSingular: "Officer",
       officerPlural: "Officers",
     });
-    expect(effectiveFeatureVisibility(null)).toEqual({ finance: true, birthdays: true, analytics: true });
+    expect(effectiveFeatureVisibility(null)).toEqual({ finance: true, birthdays: true, analytics: true, welfare: true });
   });
 
   it("merges a partial legacy config over the defaults, ignoring blank or invalid values", () => {
@@ -37,7 +37,7 @@ describe("organisation presentation", () => {
       officerPlural: "Coordinators",
       attendanceSingular: "Attendance",
     });
-    expect(effectiveFeatureVisibility(org)).toEqual({ finance: false, birthdays: true, analytics: true });
+    expect(effectiveFeatureVisibility(org)).toEqual({ finance: false, birthdays: true, analytics: true, welfare: true });
     expect(isFeatureVisible(org, "finance")).toBe(false);
     expect(isFeatureVisible(org, "analytics")).toBe(true);
   });

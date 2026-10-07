@@ -107,6 +107,41 @@ describe("queryKeys tenant scoping", () => {
     expect(rbacHits).toHaveLength(1);
   });
 
+  it("scopes welfare to the organisation and nests the overview under its root", () => {
+    expect(queryKeys.welfare.root("orgA")).toEqual(["welfare", "orgA"]);
+    expect(queryKeys.welfare.root("orgA")).not.toEqual(
+      queryKeys.welfare.root("orgB"),
+    );
+    const overviewA = queryKeys.welfare.overview("orgA", "2026-10-07");
+    expect(overviewA).toEqual(["welfare", "orgA", "overview", "2026-10-07"]);
+    expect(overviewA).not.toEqual(
+      queryKeys.welfare.overview("orgB", "2026-10-07"),
+    );
+    expect(overviewA).not.toEqual(
+      queryKeys.welfare.overview("orgA", "2026-10-08"),
+    );
+    expect(matches(queryKeys.welfare.root("orgA"), overviewA)).toBe(true);
+    expect(matches(queryKeys.welfare.root("orgB"), overviewA)).toBe(false);
+  });
+
+  it("scopes the welfare birthday snapshot to the organisation", () => {
+    const snapshotA = queryKeys.birthday.snapshot(
+      "orgA",
+      "2026-10-07",
+      "2026-10-14",
+    );
+    expect(snapshotA).toEqual([
+      "birthday",
+      "orgA",
+      "snapshot",
+      "2026-10-07",
+      "2026-10-14",
+    ]);
+    expect(snapshotA).not.toEqual(
+      queryKeys.birthday.snapshot("orgB", "2026-10-07", "2026-10-14"),
+    );
+  });
+
   it("keeps the compliance export keys under the compliance prefix", () => {
     expect(
       matches(

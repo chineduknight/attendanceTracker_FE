@@ -43,6 +43,7 @@ describe("PAGE_ROUTES", () => {
     expect(titleFor(PROTECTED_PATHS.MEMBER_ANALYTICS)).toBe("Member Analytics");
     expect(titleFor(PROTECTED_PATHS.MARK_ATTENANCE)).toBe("Mark Attendance");
     expect(titleFor(PROTECTED_PATHS.USER_MODEL)).toBe("Member Model");
+    expect(titleFor(PROTECTED_PATHS.WELFARE)).toBe("Welfare & Engagement");
     // The one default wording change: the contract's "Sub-category" term.
     expect(titleFor(PROTECTED_PATHS.SUB_CATEGORY)).toBe("Create Sub-category");
   });
@@ -69,8 +70,9 @@ describe("PAGE_ROUTES", () => {
     expect(featureFor(PROTECTED_PATHS.BIRTHDAY)).toBe("birthdays");
     expect(featureFor(PROTECTED_PATHS.ANALYTICS)).toBe("analytics");
     expect(featureFor(PROTECTED_PATHS.MEMBER_ANALYTICS)).toBe("analytics");
+    expect(featureFor(PROTECTED_PATHS.WELFARE)).toBe("welfare");
     const gated = PAGE_ROUTES.filter((r) => r.feature).map((r) => r.path);
-    expect(gated).toHaveLength(4);
+    expect(gated).toHaveLength(5);
   });
 
   it("only hides the back button on Dashboard and Organisations", () => {
@@ -109,6 +111,7 @@ describe("PAGE_ROUTES permissions", () => {
     expect(permFor(PROTECTED_PATHS.ALL_ATTENDANCE)).toBe("attendance.view");
     expect(permFor(PROTECTED_PATHS.ANALYTICS)).toBe("attendance.view");
     expect(permFor(PROTECTED_PATHS.MEMBER_ANALYTICS)).toBe("attendance.view");
+    expect(permFor(PROTECTED_PATHS.WELFARE)).toBe("attendance.view");
     expect(permFor(PROTECTED_PATHS.FINANCE)).toBe("finance.view");
     expect(permFor(PROTECTED_PATHS.OFFICERS_ROLES)).toBe("officers.view");
     expect(permFor(PROTECTED_PATHS.SETTINGS)).toBe("settings.view");
@@ -121,7 +124,7 @@ describe("PAGE_ROUTES permissions", () => {
 
   it("only declares valid permission keys", () => {
     PAGE_ROUTES.forEach((route) => {
-      if (route.perm) expect(isPermissionKey(route.perm)).toBe(true);
+      expect(route.perm == null || isPermissionKey(route.perm)).toBe(true);
     });
   });
 });

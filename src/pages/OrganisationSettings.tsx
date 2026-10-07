@@ -13,6 +13,7 @@ import {
   Avatar,
   Divider,
   Heading,
+  Text,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useForm } from "react-hook-form";
@@ -50,6 +51,11 @@ import {
   toStatusRows,
   validateStatusRows,
 } from "helpers/attendanceStatusSettings";
+import {
+  DEFAULT_WELFARE_REVIEW_WINDOW_DAYS,
+  effectiveWelfareSettings,
+  welfareReviewWindowError,
+} from "helpers/welfareSettings";
 
 const DEFAULT_MAX_EDITS = 1;
 
@@ -90,6 +96,9 @@ const OrganisationSettings = () => {
       collapseAttendanceByDay: false,
       maxAttendanceEdits: "",
       attendanceEligibilityEnabled: isAttendanceEligibilityEnabled(org),
+      welfareReviewWindowDays: String(
+        effectiveWelfareSettings(org).reviewWindowDays,
+      ),
       terminology: effectiveTerminology(org),
       featureVisibility: effectiveFeatureVisibility(org),
     },
@@ -100,10 +109,15 @@ const OrganisationSettings = () => {
   // Likewise, only a backend that returns the eligibility switch accepts it.
   const [eligibilitySettingSupported, setEligibilitySettingSupported] =
     useState(false);
+  // And only a backend that serialises welfare settings accepts them back.
+  const [welfareSettingsSupported, setWelfareSettingsSupported] =
+    useState(false);
   // The organisation a save was submitted for; its reply may land after a switch.
   const savingOrgId = useRef<string | null>(null);
   // The eligibility switch as submitted, when the backend supports it.
   const savingEligibility = useRef<boolean | undefined>(undefined);
+  // The review window as submitted, when the backend supports it.
+  const savingWelfareWindow = useRef<number | undefined>(undefined);
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
@@ -121,6 +135,9 @@ const OrganisationSettings = () => {
             ? ""
             : String(data.maxAttendanceEdits),
         attendanceEligibilityEnabled: isAttendanceEligibilityEnabled(data),
+        welfareReviewWindowDays: String(
+          effectiveWelfareSettings(data).reviewWindowDays,
+        ),
         terminology: effectiveTerminology(data),
         featureVisibility: effectiveFeatureVisibility(data),
       });
@@ -129,6 +146,9 @@ const OrganisationSettings = () => {
       );
       setEligibilitySettingSupported(
         typeof data.attendanceEligibilityEnabled === "boolean",
+      );
+      setWelfareSettingsSupported(
+        typeof data.welfareSettings?.reviewWindowDays === "number",
       );
       setStatusRows(toStatusRows(data.attendanceStatuses));
       setStatusErrors([]);
@@ -152,12 +172,17 @@ const OrganisationSettings = () => {
         ...(savingEligibility.current !== undefined && {
           attendanceEligibilityEnabled: savingEligibility.current,
         }),
+        ...(savingWelfareWindow.current !== undefined && {
+          welfareSettings: { reviewWindowDays: savingWelfareWindow.current },
+        }),
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
       // Refresh this organisation's detail only — never another tenant's.
       queryClient.invalidateQueries({ queryKey: queryKeys.organisation(org.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
+      // A new review window changes this organisation's Welfare overview.
+      queryClient.invalidateQueries({ queryKey: queryKeys.welfare.root(org.id) });
       toast.success("Settings saved");
     },
   );
@@ -174,9 +199,11 @@ const OrganisationSettings = () => {
     const data = buildOrgUpdatePayload(form, statusRows, {
       includePresentation: presentationSupported,
       includeEligibilitySetting: eligibilitySettingSupported,
+      includeWelfareSettings: welfareSettingsSupported,
     });
     savingOrgId.current = org.id;
     savingEligibility.current = data.attendanceEligibilityEnabled;
+    savingWelfareWindow.current = data.welfareSettings?.reviewWindowDays;
     mutate({ url, data });
   };
 
@@ -307,6 +334,48 @@ const OrganisationSettings = () => {
                   errors={statusErrors}
                   isReadOnly={!canManage}
                 />
+
+                {welfareSettingsSupported && (
+                  <>
+                    <Divider />
+                    <Box>
+                      <Heading size="sm">Welfare &amp; Engagement</Heading>
+                      <Text fontSize="sm" color="gray.500">
+                        How Presence Pro compares the recent and previous
+                        periods when it looks for people who may need a check-in
+                        or deserve encouragement.
+                      </Text>
+                    </Box>
+
+                    <FormControl
+                      isInvalid={Boolean(errors.welfareReviewWindowDays)}
+                    >
+                      <FormLabel>Review window (days)</FormLabel>
+                      <Input
+                        type="number"
+                        isReadOnly={!canManage}
+                        placeholder={`${DEFAULT_WELFARE_REVIEW_WINDOW_DAYS} (default)`}
+                        {...register("welfareReviewWindowDays", {
+                          validate: (v) => welfareReviewWindowError(v) ?? true,
+                        })}
+                      />
+                      <FormHelperText>
+                        Presence Pro compares the most recent period with the
+                        immediately preceding period of the same length.
+                        <br />
+                        Choose a shorter window for organisations that meet
+                        several times a week and a longer window for
+                        organisations that meet less often.
+                        <br />
+                        Frequent meetings: 7–14 days. Monthly meetings: around
+                        30 days.
+                      </FormHelperText>
+                      <FormErrorMessage>
+                        {errors.welfareReviewWindowDays?.message}
+                      </FormErrorMessage>
+                    </FormControl>
+                  </>
+                )}
 
                 {presentationSupported && (
                   <>
