@@ -53,6 +53,23 @@ const ORG2_MODEL = {
 const MODEL_WITHOUT_DOB = {
   data: { fields: [{ name: "name", type: "text" }] },
 };
+const MODEL_WITHOUT_STATUS = {
+  data: {
+    fields: [
+      { name: "name", type: "text" },
+      { name: "dob", type: "date" },
+    ],
+  },
+};
+const MODEL_EMPTY_STATUS_OPTIONS = {
+  data: {
+    fields: [
+      { name: "name", type: "text" },
+      { name: "status", type: "option", options: [] },
+      { name: "dob", type: "date" },
+    ],
+  },
+};
 
 const withMetadata = (name: string, offset: number, status = "active") => {
   const date = addDays(new Date(), offset);
@@ -352,6 +369,36 @@ describe("<Birthday> proactive experience", () => {
     );
     expect(org2Calls.length).toBeGreaterThan(0);
     org2Calls.forEach(([url]) => expect(String(url)).not.toContain("status="));
+  });
+
+  it("never invents status options when the model has no status field", async () => {
+    serve({ model: MODEL_WITHOUT_STATUS });
+    renderPage();
+
+    // The page still auto-loads and fetches birthdays...
+    expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
+    expect(birthdayCalls().length).toBeGreaterThan(0);
+    // ...without ever sending a status parameter.
+    birthdayCalls().forEach(([url]) =>
+      expect(String(url)).not.toContain("status="),
+    );
+    // No selector is exposed, so Active/Inactive are never offered.
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
+  });
+
+  it("hides the status filter when the configured options are empty", async () => {
+    serve({ model: MODEL_EMPTY_STATUS_OPTIONS });
+    renderPage();
+
+    expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
+    birthdayCalls().forEach(([url]) =>
+      expect(String(url)).not.toContain("status="),
+    );
   });
 
   it("does not call the Birthday API and explains when dob is not configured", async () => {

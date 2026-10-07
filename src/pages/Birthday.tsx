@@ -53,7 +53,6 @@ import BirthdayList from "components/birthday/BirthdayList";
 type StatusOption = { value: string; label: string };
 type ActivePreset = BirthdayPreset | "custom";
 
-const FALLBACK_STATUSES = ["active", "inactive"];
 const PRESET_BUTTONS: Array<{ preset: BirthdayPreset; label: string }> = [
   { preset: "thisMonth", label: "This Month" },
   { preset: "nextMonth", label: "Next Month" },
@@ -124,12 +123,15 @@ const Birthday: React.FC = () => {
   } = useMemberModel(org.id);
   const dobConfigured = hasDobDateField(fields);
 
+  // Status options come ONLY from the configured member model: organisations
+  // are not required to have a `status` field, and invented values would make
+  // the backend reject a filtered request (422). No field or no options means
+  // no status filter is exposed at all.
   const statusOptions = useMemo(() => {
     const statusField = fields.find(
       (field) => field.name.trim().toLowerCase() === "status",
     );
-    const options = statusField?.options?.filter(Boolean) ?? [];
-    return options.length ? options : FALLBACK_STATUSES;
+    return statusField?.options?.filter(Boolean) ?? [];
   }, [fields]);
 
   // When the new model no longer offers a selected status, fall back to All
@@ -442,16 +444,18 @@ const Birthday: React.FC = () => {
                   </Button>
                 </WrapItem>
               </Wrap>
-              <Box w={{ base: "100%", md: "260px" }}>
-                <ReactSelect
-                  isMulti
-                  placeholder="Filter by status"
-                  options={statusSelectOptions}
-                  value={selectedStatusOptions}
-                  closeMenuOnSelect={false}
-                  onChange={handleStatusChange}
-                />
-              </Box>
+              {statusOptions.length > 0 && (
+                <Box w={{ base: "100%", md: "260px" }}>
+                  <ReactSelect
+                    isMulti
+                    placeholder="Filter by status"
+                    options={statusSelectOptions}
+                    value={selectedStatusOptions}
+                    closeMenuOnSelect={false}
+                    onChange={handleStatusChange}
+                  />
+                </Box>
+              )}
             </Flex>
 
             {activePreset === "custom" && (
