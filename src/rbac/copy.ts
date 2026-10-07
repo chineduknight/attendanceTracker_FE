@@ -13,6 +13,7 @@ export const AREA_LABEL: Record<PermissionArea, PresentationText> = {
   settings: "Org settings",
   finance: "Finance",
   officers: (t) => `${t.officerPlural} & roles`,
+  welfare: "Welfare",
 };
 
 export const PERMISSION_COPY: Record<
@@ -45,8 +46,14 @@ export const PERMISSION_COPY: Record<
     description: (t) => `Create / edit / delete ${lowerTerm(t.categoryPlural)}`,
   },
   "settings.view": { label: "View", description: "Read org settings" },
-  "settings.manage": { label: "Manage", description: "Rename org, change settings" },
-  "finance.view": { label: "View", description: "Read obligations & compliance" },
+  "settings.manage": {
+    label: "Manage",
+    description: "Rename org, change settings",
+  },
+  "finance.view": {
+    label: "View",
+    description: "Read obligations & compliance",
+  },
   "finance.manage": {
     label: "Manage",
     description: "Manage obligations, record payments",
@@ -57,6 +64,15 @@ export const PERMISSION_COPY: Record<
   },
   "officers.manage": {
     label: "Manage",
-    description: (t) => `Invite/remove ${lowerTerm(t.officerPlural)}, edit roles`,
+    description: (t) =>
+      `Invite/remove ${lowerTerm(t.officerPlural)}, edit roles`,
+  },
+  "welfare.view": {
+    label: "View",
+    description: "Read private Welfare follow-up records",
+  },
+  "welfare.manage": {
+    label: "Manage",
+    description: "Create, edit, close and archive welfare follow-ups",
   },
 };

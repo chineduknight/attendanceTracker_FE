@@ -46,7 +46,7 @@ export const queryKeys = {
       organisationId: string,
       fromDate: string,
       toDate: string,
-      statuses: string
+      statuses: string,
     ) =>
       [
         "attendance-analytics",
@@ -63,7 +63,7 @@ export const queryKeys = {
       organisationId: string,
       memberId: string,
       fromDate: string,
-      toDate: string
+      toDate: string,
     ) =>
       ["member-analytics", organisationId, memberId, fromDate, toDate] as const,
   },
@@ -74,6 +74,32 @@ export const queryKeys = {
     /** Overview for one business date; a new day is a new comparison horizon. */
     overview: (organisationId: string, asOf: string) =>
       ["welfare", organisationId, "overview", asOf] as const,
+    followUps: {
+      /** Prefix covering every follow-up query for one organisation. */
+      root: (organisationId: string) =>
+        ["welfare", organisationId, "follow-ups"] as const,
+      /**
+       * Follow-up list for one business date and optional filters. Empty
+       * string stands in for an absent filter so the key stays stable.
+       */
+      list: (
+        organisationId: string,
+        asOf: string,
+        workflowStatus?: "open" | "closed",
+        memberId?: string,
+        assignedToUserId?: string,
+      ) =>
+        [
+          "welfare",
+          organisationId,
+          "follow-ups",
+          "list",
+          asOf,
+          workflowStatus ?? "",
+          memberId ?? "",
+          assignedToUserId ?? "",
+        ] as const,
+    },
   },
 
   birthday: {
@@ -127,7 +153,7 @@ export const queryKeys = {
     complianceExport: (
       organisationId: string,
       obligationId: string,
-      format: "excel" | "pdf"
+      format: "excel" | "pdf",
     ) =>
       [
         "finance",

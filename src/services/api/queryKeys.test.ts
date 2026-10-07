@@ -7,28 +7,28 @@ const matches = (prefix: readonly unknown[], key: readonly unknown[]) =>
 describe("queryKeys tenant scoping", () => {
   it("scopes finance obligations to the organisation", () => {
     expect(queryKeys.finance.obligations("orgA")).not.toEqual(
-      queryKeys.finance.obligations("orgB")
+      queryKeys.finance.obligations("orgB"),
     );
   });
 
   it("scopes finance compliance by organisation and obligation", () => {
     expect(queryKeys.finance.compliance("orgA", "ob1")).not.toEqual(
-      queryKeys.finance.compliance("orgB", "ob1")
+      queryKeys.finance.compliance("orgB", "ob1"),
     );
     expect(queryKeys.finance.compliance("orgA", "ob1")).not.toEqual(
-      queryKeys.finance.compliance("orgA", "ob2")
+      queryKeys.finance.compliance("orgA", "ob2"),
     );
   });
 
   it("scopes officers, roles and invites to the organisation", () => {
     expect(queryKeys.rbac.officers("orgA")).not.toEqual(
-      queryKeys.rbac.officers("orgB")
+      queryKeys.rbac.officers("orgB"),
     );
     expect(queryKeys.rbac.roles("orgA")).not.toEqual(
-      queryKeys.rbac.roles("orgB")
+      queryKeys.rbac.roles("orgB"),
     );
     expect(queryKeys.rbac.invites("orgA")).not.toEqual(
-      queryKeys.rbac.invites("orgB")
+      queryKeys.rbac.invites("orgB"),
     );
   });
 
@@ -38,25 +38,25 @@ describe("queryKeys tenant scoping", () => {
       "orgA",
     ]);
     expect(queryKeys.attendanceTemplates("orgA")).not.toEqual(
-      queryKeys.attendanceTemplates("orgB")
+      queryKeys.attendanceTemplates("orgB"),
     );
   });
 
   it("scopes attendance availability by organisation, member and date", () => {
     expect(queryKeys.attendanceAvailability.root("orgA")).not.toEqual(
-      queryKeys.attendanceAvailability.root("orgB")
+      queryKeys.attendanceAvailability.root("orgB"),
     );
     expect(
-      queryKeys.attendanceAvailability.member("orgA", "member-1")
+      queryKeys.attendanceAvailability.member("orgA", "member-1"),
     ).not.toEqual(queryKeys.attendanceAvailability.member("orgA", "member-2"));
     expect(
-      queryKeys.attendanceAvailability.date("orgA", "2026-10-10")
+      queryKeys.attendanceAvailability.date("orgA", "2026-10-10"),
     ).not.toEqual(queryKeys.attendanceAvailability.date("orgA", "2026-10-11"));
     expect(
       matches(
         queryKeys.attendanceAvailability.root("orgA"),
-        queryKeys.attendanceAvailability.member("orgA", "member-1")
-      )
+        queryKeys.attendanceAvailability.member("orgA", "member-1"),
+      ),
     ).toBe(true);
   });
 
@@ -64,18 +64,18 @@ describe("queryKeys tenant scoping", () => {
     const orgKey = queryKeys.analytics.organisation("orgA", "f", "t", "");
     const memberKey = queryKeys.analytics.member("orgA", "m1", "f", "t");
     expect(orgKey).not.toEqual(
-      queryKeys.analytics.organisation("orgB", "f", "t", "")
+      queryKeys.analytics.organisation("orgB", "f", "t", ""),
     );
     expect(memberKey).not.toEqual(
-      queryKeys.analytics.member("orgB", "m1", "f", "t")
+      queryKeys.analytics.member("orgB", "m1", "f", "t"),
     );
     expect(matches(queryKeys.analytics.root("orgA"), orgKey)).toBe(true);
     expect(matches(queryKeys.analytics.root("orgB"), orgKey)).toBe(false);
     expect(matches(queryKeys.analytics.memberRoot("orgA"), memberKey)).toBe(
-      true
+      true,
     );
     expect(matches(queryKeys.analytics.memberRoot("orgB"), memberKey)).toBe(
-      false
+      false,
     );
   });
 
@@ -122,6 +122,56 @@ describe("queryKeys tenant scoping", () => {
     );
     expect(matches(queryKeys.welfare.root("orgA"), overviewA)).toBe(true);
     expect(matches(queryKeys.welfare.root("orgB"), overviewA)).toBe(false);
+  });
+
+  it("scopes welfare follow-ups to the organisation and nests lists under the root", () => {
+    const rootA = queryKeys.welfare.followUps.root("orgA");
+    expect(rootA).toEqual(["welfare", "orgA", "follow-ups"]);
+    expect(rootA).not.toEqual(queryKeys.welfare.followUps.root("orgB"));
+    expect(matches(queryKeys.welfare.root("orgA"), rootA)).toBe(true);
+
+    const listA = queryKeys.welfare.followUps.list("orgA", "2026-10-07");
+    expect(listA).toEqual([
+      "welfare",
+      "orgA",
+      "follow-ups",
+      "list",
+      "2026-10-07",
+      "",
+      "",
+      "",
+    ]);
+    expect(listA).not.toEqual(
+      queryKeys.welfare.followUps.list("orgB", "2026-10-07"),
+    );
+    expect(listA).not.toEqual(
+      queryKeys.welfare.followUps.list("orgA", "2026-10-08"),
+    );
+    // Filters are part of the key, never shared across selections.
+    expect(
+      queryKeys.welfare.followUps.list("orgA", "2026-10-07", "open"),
+    ).not.toEqual(queryKeys.welfare.followUps.list("orgA", "2026-10-07"));
+    expect(
+      queryKeys.welfare.followUps.list("orgA", "2026-10-07", undefined, "m1"),
+    ).not.toEqual(
+      queryKeys.welfare.followUps.list("orgA", "2026-10-07", undefined, "m2"),
+    );
+    expect(matches(rootA, listA)).toBe(true);
+    expect(matches(queryKeys.welfare.followUps.root("orgB"), listA)).toBe(
+      false,
+    );
+    // Never matches another org's cache.
+    const client = new QueryClient();
+    client.setQueryData(listA, { org: "A" });
+    client.setQueryData(
+      queryKeys.welfare.followUps.list("orgB", "2026-10-07"),
+      { org: "B" },
+    );
+    const hits = client
+      .getQueryCache()
+      .findAll({ queryKey: queryKeys.welfare.followUps.root("orgA") });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].state.data).toEqual({ org: "A" });
   });
 
   it("scopes birthday keys to the organisation and nests them under the root", () => {
@@ -201,14 +251,14 @@ describe("queryKeys tenant scoping", () => {
     expect(
       matches(
         queryKeys.finance.complianceRoot("orgA"),
-        queryKeys.finance.complianceExport("orgA", "ob1", "pdf")
-      )
+        queryKeys.finance.complianceExport("orgA", "ob1", "pdf"),
+      ),
     ).toBe(true);
     expect(
       matches(
         queryKeys.finance.complianceRoot("orgA"),
-        queryKeys.finance.complianceExport("orgB", "ob1", "pdf")
-      )
+        queryKeys.finance.complianceExport("orgB", "ob1", "pdf"),
+      ),
     ).toBe(false);
   });
 });

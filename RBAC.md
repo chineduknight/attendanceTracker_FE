@@ -15,32 +15,33 @@ Success responses are `{ "data": ... }`; errors are `{ "error": "..." }`.
 - **Permission** — a `<area>.<view|manage>` key. A user's effective permissions come from their role, plus per-user **overrides**.
 - **Chairman / owner** — always has every permission, can never be demoted or removed. The "Chairman" role itself cannot be edited.
 
-### Permission catalog (12 keys, 6 areas)
+### Permission catalog (14 keys, 7 areas)
 
-| Area         | `.view` lets you…              | `.manage` lets you…                                          |
-| ------------ | ------------------------------ | ------------------------------------------------------------ |
-| `attendance` | read sessions & analytics      | mark / edit / delete sessions                                |
-| `members`    | read member list               | create / edit / delete members, configure the member model   |
-| `categories` | read categories                | create / edit / delete categories                            |
-| `settings`   | read org settings              | rename org, change settings                                  |
-| `finance`    | read obligations & compliance  | create/edit/delete obligations, record payments              |
-| `officers`   | read officers, roles & invites | invite/remove officers, change roles, edit roles & overrides |
+| Area         | `.view` lets you…                      | `.manage` lets you…                                          |
+| ------------ | -------------------------------------- | ------------------------------------------------------------ |
+| `attendance` | read sessions & analytics              | mark / edit / delete sessions                                |
+| `members`    | read member list                       | create / edit / delete members, configure the member model   |
+| `categories` | read categories                        | create / edit / delete categories                            |
+| `settings`   | read org settings                      | rename org, change settings                                  |
+| `finance`    | read obligations & compliance          | create/edit/delete obligations, record payments              |
+| `officers`   | read officers, roles & invites         | invite/remove officers, change roles, edit roles & overrides |
+| `welfare`    | read private Welfare follow-up records | create / edit / close / archive Welfare follow-ups           |
 
 Fetch the canonical list at runtime (don't hardcode):
 
 ```
 GET /api/permissions
-→ { "data": { "areas": ["attendance","members","categories","settings","finance","officers"],
-              "permissions": ["attendance.view","attendance.manage", ...12 total ] } }
+→ { "data": { "areas": ["attendance","members","categories","settings","finance","officers","welfare"],
+              "permissions": ["attendance.view","attendance.manage", ...14 total ] } }
 ```
 
 ### Default seeded roles
 
-| Role                    | Permissions                                    |
-| ----------------------- | ---------------------------------------------- |
-| **Chairman**            | all (owner's role — not editable/deletable)    |
-| **General Secretary**   | everything except `finance.*` and `officers.*` |
-| **Financial Secretary** | `finance.view`, `finance.manage` only          |
+| Role                    | Permissions                                                 |
+| ----------------------- | ----------------------------------------------------------- |
+| **Chairman**            | all (owner's role — not editable/deletable)                 |
+| **General Secretary**   | everything except `finance.*`, `officers.*` and `welfare.*` |
+| **Financial Secretary** | `finance.view`, `finance.manage` only                       |
 
 ---
 
@@ -80,7 +81,7 @@ GET /api/permissions
 // GET /api/organisations → 200
 { "data": [
   { "id": "org1", "name": "VOB Choir", "image": "...", "owner": "66...", "status": "active",
-    "isOwner": true,  "roleName": "Chairman",            "permissions": ["attendance.view","attendance.manage", ... all 12 ] },
+    "isOwner": true,  "roleName": "Chairman",            "permissions": ["attendance.view","attendance.manage", ... all 14 ] },
   { "id": "org2", "name": "Diocese Mass", "owner": "77...","status": "active",
     "isOwner": false, "roleName": "Financial Secretary", "permissions": ["finance.view","finance.manage"] }
 ] }
@@ -88,15 +89,18 @@ GET /api/permissions
 
 **Use the `permissions` array of the currently-selected org to gate navigation and buttons.** Suggested mapping:
 
-| Show this UI when permissions include…                                               |
-| ------------------------------------------------------------------------------------ |
-| Attendance tab → `attendance.view`; mark/edit/delete buttons → `attendance.manage`   |
-| Members tab → `members.view`; add/edit/delete + model config → `members.manage`      |
-| Categories management → `categories.view` / `categories.manage`                      |
-| Org settings (rename, etc.) → `settings.view` / `settings.manage`                    |
-| Finance tab → `finance.view`; record payment / manage obligations → `finance.manage` |
-| Officers & Roles admin → `officers.view` / `officers.manage`                         |
-| Delete organisation → **owner only** (`isOwner === true`)                            |
+| Show this UI when permissions include…                                                 |
+| -------------------------------------------------------------------------------------- |
+| Attendance tab → `attendance.view`; mark/edit/delete buttons → `attendance.manage`     |
+| Members tab → `members.view`; add/edit/delete + model config → `members.manage`        |
+| Categories management → `categories.view` / `categories.manage`                        |
+| Org settings (rename, etc.) → `settings.view` / `settings.manage`                      |
+| Finance tab → `finance.view`; record payment / manage obligations → `finance.manage`   |
+| Officers & Roles admin → `officers.view` / `officers.manage`                           |
+| Welfare follow-ups section → `welfare.view`; add/edit/close/archive → `welfare.manage` |
+| Delete organisation → **owner only** (`isOwner === true`)                              |
+
+**Welfare privacy boundary:** the Welfare & Engagement _page_ and its Phase 7A insights stay under `attendance.view`; the private follow-up log inside the page is separately gated — `welfare.view` to read records, `welfare.manage` to write. An attendance viewer without `welfare.view` never fetches follow-up records and never sees private notes.
 
 The server enforces this regardless of the UI, so gating is purely UX. See error semantics below.
 

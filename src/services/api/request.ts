@@ -53,6 +53,8 @@ export const attendanceRequest = {
 
 export const welfareRequest = {
   OVERVIEW: "/welfare/:organisationId/overview",
+  FOLLOW_UPS: "/welfare/:organisationId/follow-ups",
+  FOLLOW_UP_ONE: "/welfare/:organisationId/follow-ups/:id",
 };
 
 export const financeRequest = {
