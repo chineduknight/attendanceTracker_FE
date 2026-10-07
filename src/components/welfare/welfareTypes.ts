@@ -61,9 +61,3 @@ export interface WelfareOverview {
   currentlyAway: WelfareAwayInsight[];
   returningSoon: WelfareAwayInsight[];
 }
-
-/** One future birthday from the existing Birthday API, as Welfare needs it. */
-export interface WelfareBirthdayMember {
-  name?: string | null;
-  dob?: string | null;
-}

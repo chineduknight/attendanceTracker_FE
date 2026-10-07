@@ -6,35 +6,37 @@ import {
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { format, isValid, parseISO } from "date-fns";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
-import { WelfareBirthdayMember } from "components/welfare/welfareTypes";
+import {
+  birthdayDisplayDate,
+  birthdayOccurrenceInRange,
+  birthdayRelativeLabel,
+  BirthdayMember,
+  BirthdayRange,
+} from "helpers/birthday";
 import { WELFARE_BIRTHDAY_SNAPSHOT_DAYS } from "hooks/useWelfareBirthdays";
 
 interface BirthdaySnapshotProps {
-  members: WelfareBirthdayMember[];
+  members: BirthdayMember[];
+  range: BirthdayRange;
+  /** Local business date for Today/Tomorrow labels. */
+  asOf: string;
   isFetching: boolean;
   isError: boolean;
 }
 
 /**
- * The backend already formats `dob` for display ("Mon, 07 October"); a raw
- * ISO value from an older deployment still renders readably. Phase 7B owns
- * the fuller date handling.
- */
-const formatDob = (value?: string | null): string => {
-  if (!value) return "";
-  const parsed = parseISO(value);
-  return isValid(parsed) ? format(parsed, "EEE, dd MMMM") : value;
-};
-
-/**
- * Reuses the existing Birthday API for today through the next 7 days. A
- * failure here is shown locally and never breaks the rest of Welfare.
+ * Reuses the existing Birthday API for today through the next 7 days. When
+ * Phase 7B `birthdayOccurrence` metadata is present it is calendar truth;
+ * otherwise the shared legacy parser anchors the member's dob to this range —
+ * no duplicate DOB parsing lives here. A failure is shown locally and never
+ * breaks the rest of Welfare.
  */
 const BirthdaySnapshot = ({
   members,
+  range,
+  asOf,
   isFetching,
   isError,
 }: BirthdaySnapshotProps) => {
@@ -59,21 +61,30 @@ const BirthdaySnapshot = ({
         </Text>
       ) : (
         <List spacing={2}>
-          {members.map((member, index) => (
-            <ListItem
-              key={`${member.name ?? "member"}-${index}`}
-              borderWidth="1px"
-              borderRadius="lg"
-              p={3}
-              bg={cardBg}
-            >
-              <Text>
-                {`${member.name ?? `Unknown ${lowerTerm(terms.memberSingular)}`} — ${formatDob(
-                  member.dob,
-                )}`}
-              </Text>
-            </ListItem>
-          ))}
+          {members.map((member, index) => {
+            const occurrence = birthdayOccurrenceInRange(member, range);
+            const display = occurrence
+              ? birthdayDisplayDate(occurrence)
+              : member.dob ?? "";
+            const relative = occurrence
+              ? birthdayRelativeLabel(occurrence, asOf)
+              : null;
+            return (
+              <ListItem
+                key={member._id ?? `${member.name ?? "member"}-${index}`}
+                borderWidth="1px"
+                borderRadius="lg"
+                p={3}
+                bg={cardBg}
+              >
+                <Text>
+                  {`${member.name ?? `Unknown ${lowerTerm(terms.memberSingular)}`} — ${display}${
+                    relative ? ` (${relative})` : ""
+                  }`}
+                </Text>
+              </ListItem>
+            );
+          })}
         </List>
       )}
     </Box>

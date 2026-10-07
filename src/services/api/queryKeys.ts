@@ -77,9 +77,43 @@ export const queryKeys = {
   },
 
   birthday: {
+    /** Prefix covering every Birthday query for one organisation. */
+    root: (organisationId: string) => ["birthday", organisationId] as const,
+    /** Birthday list for one full-date range and status selection. */
+    list: (
+      organisationId: string,
+      startDate: string,
+      endDate: string,
+      statuses: string,
+    ) =>
+      [
+        "birthday",
+        organisationId,
+        "list",
+        startDate,
+        endDate,
+        statuses,
+      ] as const,
     /** Welfare's next-7-days snapshot; tenant scoped like every org key. */
     snapshot: (organisationId: string, startDate: string, endDate: string) =>
       ["birthday", organisationId, "snapshot", startDate, endDate] as const,
+    /** URL-returning export for the active range and status filter. */
+    export: (
+      organisationId: string,
+      format: "excel" | "pdf",
+      startDate: string,
+      endDate: string,
+      statuses: string,
+    ) =>
+      [
+        "birthday",
+        organisationId,
+        "export",
+        format,
+        startDate,
+        endDate,
+        statuses,
+      ] as const,
   },
 
   finance: {
