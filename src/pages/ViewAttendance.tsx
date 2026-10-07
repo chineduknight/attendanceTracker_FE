@@ -25,7 +25,7 @@ import {
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
-import { FaFileExcel, FaShareAlt, FaTrash } from "react-icons/fa";
+import { FaFileExcel, FaShareAlt, FaTrash, FaUserPlus } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
@@ -42,7 +42,12 @@ import { useMemberModel } from "hooks/useMemberModel";
 import { memberFieldLabeler } from "helpers/memberFields";
 import ExpectedRosterSummary from "components/attendance/ExpectedRosterSummary";
 import UnresolvedRosterEntries from "components/attendance/UnresolvedRosterEntries";
-import { splitStoredRoster, UnresolvedRosterEntry } from "helpers/storedRoster";
+import {
+  isManualEntry,
+  splitStoredRoster,
+  StoredRosterEntry,
+  UnresolvedRosterEntry,
+} from "helpers/storedRoster";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
 import AnalyticsInclusionPanel from "components/attendance/AnalyticsInclusionPanel";
@@ -50,16 +55,22 @@ import {
   AnalyticsInclusion,
   toAnalyticsInclusion,
 } from "helpers/attendanceAnalyticsInclusion";
+import { Can } from "rbac/Can";
+import ConfirmModal from "components/finance/ConfirmModal";
+import ManualMemberDialog from "components/attendance/ManualMemberDialog";
+import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
+import { useMembers } from "hooks/useMembers";
+import { manualCandidates } from "helpers/manualAttendance";
+import { canChangeStoredRoster } from "helpers/attendanceEdits";
 
 type StatusOption = {
   value: string;
   label: string;
 };
 
-type MemberType = {
+type MemberType = StoredRosterEntry & {
   /** Configured status key; may be inactive or unknown on historical records. */
   attendanceStatus: string;
-  memberId: string;
   _id: string;
   member: {
     name: string;
@@ -69,14 +80,33 @@ type MemberType = {
   };
 };
 
+/** Reason and date of a manual addition, for anyone who can view the session. */
+const manualAdditionNote = (entry: MemberType): string | undefined => {
+  if (!isManualEntry(entry)) return undefined;
+  const parts = [
+    entry.manualAdditionReason ? `Reason: ${entry.manualAdditionReason}` : "",
+    entry.manuallyAddedAt
+      ? `Added ${format(new Date(entry.manuallyAddedAt), "dd MMM yyyy")}`
+      : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+};
+
 type AttendanceInfoType = {
   name: string;
   date: Date;
   /**
-   * Size of the stored roster snapshot, including entries whose member profile
-   * no longer resolves — never recomputed from current members.
+   * Expected entries of the stored roster snapshot, including those whose
+   * member profile no longer resolves — never recomputed from current members
+   * and never counting manual additions.
    */
   expectedCount: number;
+  manualCount: number;
+  rosterCount: number;
+  /** Every stored member id, resolvable or not — never a manual candidate. */
+  rosterMemberIds: string[];
+  /** Display hint only; the backend decides whether an edit is still allowed. */
+  canChangeRoster: boolean;
   unresolved: UnresolvedRosterEntry[];
   eligibilityRules: AttendanceEligibilityRule[];
   analyticsInclusion: AnalyticsInclusion;
@@ -102,9 +132,13 @@ const Attendance = () => {
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
   const onSuccess = (data) => {
-    const { resolved: unsorted, unresolved, expectedCount } = splitStoredRoster<MemberType>(
-      data.data.attendance,
-    );
+    const {
+      resolved: unsorted,
+      unresolved,
+      expectedCount,
+      manualCount,
+      rosterCount,
+    } = splitStoredRoster<MemberType>(data.data.attendance);
     // Configured status order first; unknown historical statuses sort last.
     const members = unsorted.sort(
       (a, b) =>
@@ -116,6 +150,12 @@ const Attendance = () => {
       name: data.data.name,
       date: data.data.date,
       expectedCount,
+      manualCount,
+      rosterCount,
+      rosterMemberIds: data.data.attendance.map(
+        (entry: MemberType) => entry.memberId,
+      ),
+      canChangeRoster: canChangeStoredRoster(data.data),
       unresolved,
       eligibilityRules: normalizeEligibilityRules(data.data.eligibilityRules),
       analyticsInclusion: toAnalyticsInclusion(data.data),
@@ -245,9 +285,7 @@ const Attendance = () => {
 
   const { refetch, isFetching } = useQueryWrapper(
     [
-      "export-excel",
-      org.id,
-      param.id,
+      ...queryKeys.attendanceExport(org.id, param.id as string),
       statusFilter.join(","),
       attendanceFilter.join(","),
     ],
@@ -289,6 +327,25 @@ const Attendance = () => {
         toast.error(message);
       },
     );
+
+  // Manual one-session exceptions. The roster on screen only changes once the
+  // backend confirms and the session is refetched.
+  const session = lowerTerm(terms.attendanceSingular);
+  const memberTerm = lowerTerm(terms.memberSingular);
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [removing, setRemoving] = useState<MemberType | null>(null);
+  const { addMember, removeMember, isAdding, isRemoving } =
+    useManualAttendanceMember(org.id, param.id as string);
+  const {
+    members: currentMembers,
+    isLoading: membersLoading,
+    isError: membersFailed,
+  } = useMembers(org.id, { enabled: isAddingMember });
+  const candidates = useMemo(
+    () => manualCandidates(currentMembers, attendanceInfo?.rosterMemberIds ?? []),
+    [currentMembers, attendanceInfo?.rosterMemberIds],
+  );
+  const canChangeRoster = attendanceInfo?.canChangeRoster ?? false;
 
   const handleDelete = () => {
     confirmAlert({
@@ -350,7 +407,28 @@ const Attendance = () => {
                 rules={storedRules}
                 isOutdated={rulesOutdated}
                 labelFor={labelFor}
+                manualCount={attendanceInfo.manualCount}
+                rosterCount={attendanceInfo.rosterCount}
               />
+            )}
+            {attendanceInfo && (
+              <Can perm="attendance.manage">
+                <Button
+                  mt="3"
+                  size="sm"
+                  variant="outline"
+                  leftIcon={<FaUserPlus />}
+                  isDisabled={!canChangeRoster}
+                  onClick={() => setIsAddingMember(true)}
+                >
+                  {`Add ${memberTerm} to this ${session}`}
+                </Button>
+                {!canChangeRoster && (
+                  <Text fontSize="sm" color="gray.500" mt={1}>
+                    {`No edits remain for this ${session}.`}
+                  </Text>
+                )}
+              </Can>
             )}
             {attendanceInfo && (
               <AnalyticsInclusionPanel
@@ -420,6 +498,24 @@ const Attendance = () => {
                   memberId={item.memberId}
                   name={item.member.name}
                   status={statuses.resolve(item.attendanceStatus)}
+                  isManual={isManualEntry(item)}
+                  note={manualAdditionNote(item)}
+                  accessory={
+                    isManualEntry(item) ? (
+                      <Can perm="attendance.manage">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          colorScheme="red"
+                          aria-label={`Remove ${item.member.name} from this ${session}`}
+                          isDisabled={!canChangeRoster}
+                          onClick={() => setRemoving(item)}
+                        >
+                          Remove
+                        </Button>
+                      </Can>
+                    ) : undefined
+                  }
                 />
               ))}
             </Box>
@@ -445,6 +541,39 @@ const Attendance = () => {
           </>
         )}
       </Container>
+
+      <ManualMemberDialog
+        isOpen={isAddingMember}
+        candidates={candidates}
+        statuses={statuses}
+        isLoadingCandidates={membersLoading}
+        candidatesFailed={membersFailed}
+        isSaving={isAdding}
+        onSubmit={(input) =>
+          addMember(input, () => {
+            toast.success(`${terms.memberSingular} added to this ${session}.`);
+            setIsAddingMember(false);
+          })
+        }
+        onClose={() => setIsAddingMember(false)}
+      />
+      <ConfirmModal
+        isOpen={removing !== null}
+        title={`Remove ${removing?.member.name ?? ""} from this ${session}?`}
+        body={`${removing?.member.name ?? ""} was manually added to this ${session}. Removing them deletes this historical attendance entry from this ${session} only.`}
+        cancelLabel="Cancel"
+        confirmLabel={`Remove from this ${session}`}
+        confirmColorScheme="red"
+        isLoading={isRemoving}
+        onConfirm={() =>
+          removing &&
+          removeMember(removing.memberId, () => {
+            toast.success(`${terms.memberSingular} removed from this ${session}.`);
+            setRemoving(null);
+          })
+        }
+        onClose={() => !isRemoving && setRemoving(null)}
+      />
     </Box>
   );
 };

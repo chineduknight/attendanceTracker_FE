@@ -31,6 +31,7 @@ const UnresolvedRosterEntries = ({ entries, statuses }: UnresolvedRosterEntriesP
           memberId={entry.memberId}
           name={`Former ${member} (profile unavailable)`}
           status={statuses.resolve(entry.attendanceStatus)}
+          isManual={entry.manuallyAdded}
         />
       ))}
     </Box>

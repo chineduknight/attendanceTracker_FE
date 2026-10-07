@@ -3,8 +3,12 @@ import { FaUndo } from "react-icons/fa";
 import { AttendanceStatusDefinition } from "helpers/attendanceStatuses";
 
 interface VisibleBulkActionsProps {
-  /** Members the current search shows — the only ones a bulk action touches. */
-  visibleCount: number;
+  /**
+   * Visible (search-filtered) members each action would change — the only
+   * ones it touches. Members who may not take a status are not counted.
+   */
+  applyCount: number;
+  resetCount: number;
   /** The quick-mark status, or null in Cycle mode (Apply is then hidden). */
   selectedStatus: AttendanceStatusDefinition | null;
   defaultStatus: AttendanceStatusDefinition;
@@ -19,7 +23,8 @@ interface VisibleBulkActionsProps {
  * how many members it affects so the blast radius is obvious before tapping.
  */
 const VisibleBulkActions = ({
-  visibleCount,
+  applyCount,
+  resetCount,
   selectedStatus,
   defaultStatus,
   canUndo,
@@ -33,20 +38,20 @@ const VisibleBulkActions = ({
         size="sm"
         minH="44px"
         colorScheme={selectedStatus.color}
-        isDisabled={visibleCount === 0}
+        isDisabled={applyCount === 0}
         onClick={onApply}
       >
-        {`Apply ${selectedStatus.label} to ${visibleCount} visible`}
+        {`Apply ${selectedStatus.label} to ${applyCount} visible`}
       </Button>
     )}
     <Button
       size="sm"
       minH="44px"
       variant="outline"
-      isDisabled={visibleCount === 0}
+      isDisabled={resetCount === 0}
       onClick={onReset}
     >
-      {`Reset ${visibleCount} visible to ${defaultStatus.label}`}
+      {`Reset ${resetCount} visible to ${defaultStatus.label}`}
     </Button>
     {canUndo && (
       <Button

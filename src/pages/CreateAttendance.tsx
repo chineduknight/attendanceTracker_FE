@@ -37,7 +37,7 @@ import {
   filterAvailableMembers,
   isValidAvailabilityDate,
 } from "helpers/attendanceAvailability";
-import { lowerTerm } from "helpers/organisationPresentation";
+import { lowerTerm, withArticle } from "helpers/organisationPresentation";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -117,6 +117,10 @@ const CreateAttendanceForm = ({
   const unavailableExpectedCount = availabilityReady
     ? rawEligibleMembers.length - finalExpectedMembers.length
     : 0;
+  // Availability emptying the expected roster still allows the session: a
+  // member who physically attended can be added manually on the next step.
+  // Nobody matching at all (no members, or rules matching nobody) does not.
+  const noEligibleMembers = membersLoaded && rawEligibleMembers.length === 0;
 
   // A template fills everything but the date, which belongs to this session.
   const applyTemplate = (applied: AppliedTemplate) => {
@@ -234,10 +238,19 @@ const CreateAttendanceForm = ({
             </Box>
           )}
           {validDate && availabilityReady && finalExpectedCount === 0 && (
-            <Text color="red.500">
-              No {lowerTerm(terms.memberPlural)} are available for this{" "}
-              {lowerTerm(terms.attendanceSingular)}.
-            </Text>
+            <Box>
+              <Text color="red.500">
+                No {lowerTerm(terms.memberPlural)} are available for this{" "}
+                {lowerTerm(terms.attendanceSingular)}.
+              </Text>
+              {!noEligibleMembers && (
+                <Text fontSize="sm" color="gray.500">
+                  {`You can still continue and add ${withArticle(
+                    lowerTerm(terms.memberSingular)
+                  )} who physically attended.`}
+                </Text>
+              )}
+            </Box>
           )}
           {eligibilityEnabled && (
             <AttendanceEligibilityEditor
@@ -270,7 +283,7 @@ const CreateAttendanceForm = ({
               availabilityLoading ||
               availabilityFetching ||
               availabilityFailed ||
-              finalExpectedCount === 0
+              noEligibleMembers
             }
             onClick={onContinue}
           >
