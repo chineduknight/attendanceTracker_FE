@@ -102,6 +102,8 @@ GET /api/permissions
 
 **Welfare privacy boundary:** the Welfare & Engagement _page_ and its Phase 7A insights stay under `attendance.view`; the private follow-up log inside the page is separately gated — `welfare.view` to read records, `welfare.manage` to write. An attendance viewer without `welfare.view` never fetches follow-up records and never sees private notes.
 
+**Manual follow-up picker:** the general "+ Add welfare follow-up" (member picker) additionally needs `members.view`, because it reads the canonical member list. Logging a follow-up from a Welfare insight does **not** need `members.view` — the insight already carries its member.
+
 The server enforces this regardless of the UI, so gating is purely UX. See error semantics below.
 
 ---

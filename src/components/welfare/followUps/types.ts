@@ -44,7 +44,10 @@ export interface WelfareFollowUp {
   updatedAt: string;
 }
 
-/** Backend summary for the filtered, non-archived set — never recomputed. */
+/**
+ * Backend summary of the organisation's active (non-archived) follow-ups —
+ * never recomputed in the browser. List filters do not narrow it.
+ */
 export interface WelfareFollowUpSummary {
   open: number;
   dueToday: number;

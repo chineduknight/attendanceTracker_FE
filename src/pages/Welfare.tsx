@@ -155,6 +155,10 @@ const Welfare = () => {
   // welfare.view no follow-up request is made and no note text can render.
   const canViewFollowUps = has("welfare.view");
   const canManageFollowUps = canViewFollowUps && has("welfare.manage");
+  // The manual picker reads the canonical member list, which requires
+  // members.view. Insight-based follow-ups already know their member and stay
+  // available to a Welfare manager without members.view.
+  const canCreateManualFollowUp = canManageFollowUps && has("members.view");
 
   const followUps = useWelfareFollowUps(organisationId, {
     enabled: canViewFollowUps,
@@ -246,6 +250,7 @@ const Welfare = () => {
                   isLoading={followUps.isLoading}
                   isError={followUps.isError}
                   canManage={canManageFollowUps}
+                  canCreateManualFollowUp={canCreateManualFollowUp}
                   isSaving={followUps.isSaving}
                   onAdd={() =>
                     setFollowUpDialog({

@@ -17,7 +17,14 @@ interface WelfareFollowUpSectionProps {
   asOf: string;
   isLoading: boolean;
   isError: boolean;
+  /** Edit / close / reopen — welfare.view + welfare.manage. */
   canManage: boolean;
+  /**
+   * Manual "+ Add welfare follow-up" — also needs members.view because the
+   * member picker reads the canonical member list. Insight-based follow-ups
+   * know their member already and do not depend on this.
+   */
+  canCreateManualFollowUp: boolean;
   isSaving?: boolean;
   onAdd: () => void;
   onEdit: (record: WelfareFollowUp) => void;
@@ -56,6 +63,7 @@ const WelfareFollowUpSection = ({
   isLoading,
   isError,
   canManage,
+  canCreateManualFollowUp,
   isSaving = false,
   onAdd,
   onEdit,
@@ -92,7 +100,7 @@ const WelfareFollowUpSection = ({
             <FollowUpStat label="Overdue" value={summary.overdue} />
           </Flex>
 
-          {canManage && (
+          {canCreateManualFollowUp && (
             <Button
               size="sm"
               leftIcon={<FaPlus aria-hidden="true" />}

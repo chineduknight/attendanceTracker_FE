@@ -323,9 +323,6 @@ describe("<Welfare> follow-ups — access & privacy", () => {
     renderPage();
     await screen.findByRole("heading", { name: "Follow-ups" });
 
-    expect(
-      screen.getByRole("button", { name: "Add welfare follow-up" }),
-    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Close follow-up" }),
@@ -336,7 +333,90 @@ describe("<Welfare> follow-ups — access & privacy", () => {
     expect(
       screen.getByRole("button", { name: "Add follow-up" }),
     ).toBeInTheDocument();
+    // The general manual add needs the member list (members.view), which this
+    // officer does not hold — only the insight-based add is offered.
+    expect(
+      screen.queryByRole("button", { name: "Add welfare follow-up" }),
+    ).not.toBeInTheDocument();
   });
+
+  it("works for a Welfare manager without members.view and never calls the member list", async () => {
+    setOrg({
+      permissions: ["attendance.view", "welfare.view", "welfare.manage"],
+    });
+    serve({ list: listFor([openRecord({ id: "f-open" }), closedRecord()]) });
+    mockPatch.mockResolvedValue({
+      data: { data: openRecord({ id: "f-open", workflowStatus: "closed" }) },
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Follow-ups" });
+
+    // Manage actions on existing records keep working.
+    fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
+    await waitFor(() =>
+      expect(mockPatch).toHaveBeenCalledWith(
+        "/welfare/org1/follow-ups/f-open",
+        { expectedRevision: 1, workflowStatus: "closed" },
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: "Reopen follow-up" }),
+    ).toBeInTheDocument();
+
+    // Insight-based add stays available: the insight already knows its member.
+    fireEvent.click(screen.getByRole("button", { name: "Add follow-up" }));
+    const member = screen.getByLabelText(/^Member/);
+    expect(member).toHaveValue("Ada Okafor");
+    expect(member).toBeDisabled();
+    expect(
+      screen.getByText("2 consecutive unexplained absences"),
+    ).toBeInTheDocument();
+
+    // The general manual add is not offered and the member list is untouched.
+    expect(
+      screen.queryByRole("button", { name: "Add welfare follow-up" }),
+    ).not.toBeInTheDocument();
+    expect(callsTo("/organisations/org1/members")).toHaveLength(0);
+  }, 15000);
+
+  it("offers the manual add and fetches the member list when members.view is present", async () => {
+    setOrg({
+      permissions: [
+        "attendance.view",
+        "welfare.view",
+        "welfare.manage",
+        "members.view",
+      ],
+    });
+    serve({ list: listFor([]) });
+    mockPost.mockResolvedValue({ data: { data: openRecord() } });
+    renderPage();
+    await screen.findByRole("heading", { name: "Follow-ups" });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add welfare follow-up" }),
+    );
+    await screen.findByRole("option", { name: "Ada Okafor" });
+    expect(callsTo("/organisations/org1/members").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText(/^Member/), {
+      target: { value: "m1" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Reason/), {
+      target: { value: "Bereavement" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith(
+        "/welfare/org1/follow-ups",
+        expect.objectContaining({
+          memberId: "m1",
+          sourceType: "manual",
+          reason: "Bereavement",
+        }),
+      ),
+    );
+  }, 15000);
 });
 
 describe("<Welfare> follow-ups — summary & list", () => {
@@ -604,7 +684,12 @@ describe("<Welfare> follow-ups — tenancy", () => {
 
   it("cannot submit an Org A dialog after switching to Org B", async () => {
     setOrg({
-      permissions: ["attendance.view", "welfare.view", "welfare.manage"],
+      permissions: [
+        "attendance.view",
+        "welfare.view",
+        "welfare.manage",
+        "members.view",
+      ],
     });
     serve({ list: listFor([]), org2List: EMPTY_LIST });
     renderPage();
@@ -631,7 +716,12 @@ describe("<Welfare> follow-ups — tenancy", () => {
 
   it("starts Org B's dialog with no carried member or reason", async () => {
     setOrg({
-      permissions: ["attendance.view", "welfare.view", "welfare.manage"],
+      permissions: [
+        "attendance.view",
+        "welfare.view",
+        "welfare.manage",
+        "members.view",
+      ],
     });
     serve({ list: listFor([]), org2List: EMPTY_LIST });
     renderPage();
@@ -650,7 +740,12 @@ describe("<Welfare> follow-ups — tenancy", () => {
     act(() =>
       setOrg({
         id: "org2",
-        permissions: ["attendance.view", "welfare.view", "welfare.manage"],
+        permissions: [
+          "attendance.view",
+          "welfare.view",
+          "welfare.manage",
+          "members.view",
+        ],
       }),
     );
     await waitFor(() =>
@@ -669,7 +764,12 @@ describe("<Welfare> follow-ups — tenancy", () => {
 describe("<Welfare> follow-ups — no side effects", () => {
   it("creating a follow-up refetches only the follow-up list", async () => {
     setOrg({
-      permissions: ["attendance.view", "welfare.view", "welfare.manage"],
+      permissions: [
+        "attendance.view",
+        "welfare.view",
+        "welfare.manage",
+        "members.view",
+      ],
     });
     serve({ list: listFor([]) });
     mockPost.mockResolvedValue({ data: { data: openRecord() } });
