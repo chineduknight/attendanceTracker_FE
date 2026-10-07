@@ -1,6 +1,7 @@
 import {
   Badge,
   Box,
+  Button,
   Flex,
   Heading,
   Link,
@@ -26,6 +27,13 @@ interface AttendanceInsightCardProps {
   /** Comparison horizon, so member analytics opens on the same periods. */
   previousFromDate: string;
   recentToDate: string;
+  /**
+   * Open follow-ups for this member (visible with welfare.view only).
+   * Presentation hint — it never suppresses the insight. Undefined hides it.
+   */
+  openFollowUpCount?: number;
+  /** Manage-only quick action; absent for view-only officers. */
+  onAddFollowUp?: () => void;
 }
 
 const VARIANT_META: Record<
@@ -81,6 +89,8 @@ const AttendanceInsightCard = ({
   variant,
   previousFromDate,
   recentToDate,
+  openFollowUpCount,
+  onAddFollowUp,
 }: AttendanceInsightCardProps) => {
   const terms = useTerms();
   const cardBg = useColorModeValue("white", "gray.700");
@@ -89,6 +99,12 @@ const AttendanceInsightCard = ({
   const memberName =
     insight.name ?? `Unknown ${lowerTerm(terms.memberSingular)}`;
   const change = insight.presenceChangePoints;
+  const followUpBadge =
+    openFollowUpCount && openFollowUpCount > 0
+      ? openFollowUpCount === 1
+        ? "Open follow-up"
+        : `${openFollowUpCount} open follow-ups`
+      : null;
 
   const analyticsPath = convertParamsToString(
     PROTECTED_PATHS.MEMBER_ANALYTICS,
@@ -110,6 +126,12 @@ const AttendanceInsightCard = ({
         <Heading size="sm">{memberName}</Heading>
         <Badge colorScheme={colorScheme}>{label}</Badge>
       </Flex>
+
+      {followUpBadge && (
+        <Badge colorScheme="purple" mb={2}>
+          {followUpBadge}
+        </Badge>
+      )}
 
       {reasons.length > 0 && (
         <List spacing={1} mb={3}>
@@ -181,14 +203,21 @@ const AttendanceInsightCard = ({
         </Box>
       )}
 
-      <Link
-        as={RouterLink}
-        to={`${analyticsPath}?${analyticsQuery}`}
-        color="blue.500"
-        fontWeight="medium"
-      >
-        {`View ${lowerTerm(terms.attendanceSingular)} history`}
-      </Link>
+      <Flex justify="space-between" align="center" gap={2} wrap="wrap">
+        <Link
+          as={RouterLink}
+          to={`${analyticsPath}?${analyticsQuery}`}
+          color="blue.500"
+          fontWeight="medium"
+        >
+          {`View ${lowerTerm(terms.attendanceSingular)} history`}
+        </Link>
+        {onAddFollowUp && (
+          <Button size="xs" variant="outline" onClick={onAddFollowUp}>
+            Add follow-up
+          </Button>
+        )}
+      </Flex>
     </Box>
   );
 };

@@ -5,16 +5,18 @@ export const PERMISSION_AREAS = [
   "settings",
   "finance",
   "officers",
+  "welfare",
 ] as const;
 
-export type PermissionArea = (typeof PERMISSION_AREAS)[number];
+export type PermissionArea = typeof PERMISSION_AREAS[number];
 export type PermissionAction = "view" | "manage";
 export type PermissionKey = `${PermissionArea}.${PermissionAction}`;
 
 const PERMISSION_ACTIONS: readonly PermissionAction[] = ["view", "manage"];
 
 export const ALL_PERMISSIONS: PermissionKey[] = PERMISSION_AREAS.flatMap(
-  (area) => PERMISSION_ACTIONS.map((action): PermissionKey => `${area}.${action}`)
+  (area) =>
+    PERMISSION_ACTIONS.map((action): PermissionKey => `${area}.${action}`),
 );
 
 const PERMISSION_SET = new Set<string>(ALL_PERMISSIONS);

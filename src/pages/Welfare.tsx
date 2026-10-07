@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Heading,
@@ -7,6 +7,7 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { format, isValid, parseISO } from "date-fns";
+import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import { usePermissions } from "rbac/usePermissions";
@@ -14,6 +15,7 @@ import { useOrgPresentation, useTerms } from "hooks/useOrgPresentation";
 import { useMemberModel } from "hooks/useMemberModel";
 import { useWelfareOverview } from "hooks/useWelfareOverview";
 import { useWelfareBirthdays } from "hooks/useWelfareBirthdays";
+import { useWelfareFollowUps } from "hooks/useWelfareFollowUps";
 import LoadingSpinner from "components/LoadingSpinner";
 import WelfareSummaryCards from "components/welfare/WelfareSummaryCards";
 import AttendanceInsightCard, {
@@ -24,6 +26,15 @@ import {
   ReturningSoonSection,
 } from "components/welfare/AvailabilitySection";
 import BirthdaySnapshot from "components/welfare/BirthdaySnapshot";
+import WelfareFollowUpSection from "components/welfare/followUps/WelfareFollowUpSection";
+import WelfareFollowUpDialog, {
+  WelfareFollowUpDialogRequest,
+} from "components/welfare/followUps/WelfareFollowUpDialog";
+import WelfareFollowUpMemberHistory, {
+  WelfareFollowUpMemberHistoryRequest,
+} from "components/welfare/followUps/WelfareFollowUpMemberHistory";
+import { followUpPrefillReason } from "components/welfare/followUps/followUpPresentation";
+import { WelfareFollowUp } from "components/welfare/followUps/types";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { hasDobDateField } from "helpers/birthday";
 import {
@@ -66,9 +77,9 @@ const ReviewWindowPanel = ({ overview }: { overview: WelfareOverview }) => {
         {`Last ${days} days vs previous ${days} days`}
       </Text>
       <Text fontSize="sm">
-        {`Recent: ${periodLabel(overview.periods.recent.fromDate)} – ${periodLabel(
-          overview.periods.recent.toDate,
-        )}`}
+        {`Recent: ${periodLabel(
+          overview.periods.recent.fromDate,
+        )} – ${periodLabel(overview.periods.recent.toDate)}`}
       </Text>
       <Text fontSize="sm">
         {`Previous: ${periodLabel(
@@ -83,10 +94,15 @@ const InsightGrid = ({
   insights,
   variant,
   periods,
+  followUpCounts,
+  onAddFollowUp,
 }: {
   insights: WelfareInsight[];
   variant: InsightVariant;
   periods: WelfareOverview["periods"];
+  /** Open follow-up counts by memberId (welfare.view only). */
+  followUpCounts?: Map<string, number>;
+  onAddFollowUp?: (insight: WelfareInsight, variant: InsightVariant) => void;
 }) => (
   <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
     {insights.map((insight) => (
@@ -96,6 +112,10 @@ const InsightGrid = ({
         variant={variant}
         previousFromDate={periods.previous.fromDate}
         recentToDate={periods.recent.toDate}
+        openFollowUpCount={followUpCounts?.get(insight.memberId)}
+        onAddFollowUp={
+          onAddFollowUp ? () => onAddFollowUp(insight, variant) : undefined
+        }
       />
     ))}
   </SimpleGrid>
@@ -131,6 +151,74 @@ const Welfare = () => {
   const birthdayCount =
     showBirthdays && birthdays.isSuccess ? birthdays.members.length : null;
 
+  // Phase 7C: private follow-ups are separately permissioned. Without
+  // welfare.view no follow-up request is made and no note text can render.
+  const canViewFollowUps = has("welfare.view");
+  const canManageFollowUps = canViewFollowUps && has("welfare.manage");
+  // The manual picker reads the canonical member list, which requires
+  // members.view. Insight-based follow-ups already know their member and stay
+  // available to a Welfare manager without members.view.
+  const canCreateManualFollowUp = canManageFollowUps && has("members.view");
+
+  const followUps = useWelfareFollowUps(organisationId, {
+    enabled: canViewFollowUps,
+  });
+
+  // Dialog/history requests capture the organisation they were opened under,
+  // so an organisation switch can never show Org A notes under Org B or let a
+  // stale draft submit into the wrong tenant.
+  const [followUpDialog, setFollowUpDialog] =
+    useState<WelfareFollowUpDialogRequest | null>(null);
+  const [memberHistory, setMemberHistory] =
+    useState<WelfareFollowUpMemberHistoryRequest | null>(null);
+
+  useEffect(() => {
+    setFollowUpDialog(null);
+    setMemberHistory(null);
+  }, [organisationId]);
+
+  const openFollowUpCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!canViewFollowUps) return counts;
+    followUps.followUps.forEach((record) => {
+      if (record.workflowStatus !== "open") return;
+      counts.set(record.memberId, (counts.get(record.memberId) ?? 0) + 1);
+    });
+    return counts;
+  }, [followUps.followUps, canViewFollowUps]);
+
+  const openInsightFollowUp = (
+    insight: WelfareInsight,
+    variant: InsightVariant,
+  ) => {
+    if (!overview) return;
+    setFollowUpDialog({
+      mode: "create",
+      organisationId,
+      manual: false,
+      source: variant,
+      memberId: insight.memberId,
+      memberName: insight.name,
+      sourceSignals: insight.signals,
+      sourceAsOf: overview.asOf,
+      reason: followUpPrefillReason(variant, insight),
+    });
+  };
+
+  const closeFollowUp = (record: WelfareFollowUp) =>
+    followUps.update(
+      record.id,
+      { expectedRevision: record.revision, workflowStatus: "closed" },
+      { onSuccess: () => toast.success("Follow-up closed") },
+    );
+
+  const reopenFollowUp = (record: WelfareFollowUp) =>
+    followUps.update(
+      record.id,
+      { expectedRevision: record.revision, workflowStatus: "open" },
+      { onSuccess: () => toast.success("Follow-up reopened") },
+    );
+
   return (
     <RequirePermission perm="attendance.view">
       <Box minH="100vh" bg={pageBg}>
@@ -153,6 +241,39 @@ const Welfare = () => {
               />
               <ReviewWindowPanel overview={overview} />
 
+              {canViewFollowUps && (
+                <WelfareFollowUpSection
+                  key={organisationId}
+                  summary={followUps.summary}
+                  records={followUps.followUps}
+                  asOf={followUps.asOf}
+                  isLoading={followUps.isLoading}
+                  isError={followUps.isError}
+                  canManage={canManageFollowUps}
+                  canCreateManualFollowUp={canCreateManualFollowUp}
+                  isSaving={followUps.isSaving}
+                  onAdd={() =>
+                    setFollowUpDialog({
+                      mode: "create",
+                      organisationId,
+                      manual: true,
+                    })
+                  }
+                  onEdit={(record) =>
+                    setFollowUpDialog({ mode: "edit", organisationId, record })
+                  }
+                  onCloseRecord={closeFollowUp}
+                  onReopen={reopenFollowUp}
+                  onViewHistory={(record) =>
+                    setMemberHistory({
+                      organisationId,
+                      memberId: record.memberId,
+                      memberName: record.member?.name ?? null,
+                    })
+                  }
+                />
+              )}
+
               <Section title="Needs Check-in">
                 {overview.attention.length === 0 ? (
                   <EmptyState>
@@ -165,6 +286,12 @@ const Welfare = () => {
                     insights={overview.attention}
                     variant="attention"
                     periods={overview.periods}
+                    followUpCounts={
+                      canViewFollowUps ? openFollowUpCounts : undefined
+                    }
+                    onAddFollowUp={
+                      canManageFollowUps ? openInsightFollowUp : undefined
+                    }
                   />
                 )}
               </Section>
@@ -181,6 +308,12 @@ const Welfare = () => {
                     insights={overview.communicated}
                     variant="communicated"
                     periods={overview.periods}
+                    followUpCounts={
+                      canViewFollowUps ? openFollowUpCounts : undefined
+                    }
+                    onAddFollowUp={
+                      canManageFollowUps ? openInsightFollowUp : undefined
+                    }
                   />
                 )}
               </Section>
@@ -195,6 +328,12 @@ const Welfare = () => {
                     insights={overview.encouragement}
                     variant="encouragement"
                     periods={overview.periods}
+                    followUpCounts={
+                      canViewFollowUps ? openFollowUpCounts : undefined
+                    }
+                    onAddFollowUp={
+                      canManageFollowUps ? openInsightFollowUp : undefined
+                    }
                   />
                 )}
               </Section>
@@ -235,6 +374,36 @@ const Welfare = () => {
                 isError={birthdays.isError}
               />
             </Box>
+          )}
+
+          {/* The private follow-up editor only ever renders for the exact
+              organisation it was opened under — a switch unmounts it. */}
+          {followUpDialog &&
+            followUpDialog.organisationId === organisationId && (
+              <WelfareFollowUpDialog
+                key={
+                  followUpDialog.mode === "edit"
+                    ? `edit-${followUpDialog.record.id}`
+                    : `create-${
+                        followUpDialog.manual ? "manual" : followUpDialog.source
+                      }`
+                }
+                request={followUpDialog}
+                asOf={followUps.asOf}
+                canManageAssignedOfficers={has("officers.view")}
+                onClose={() => setFollowUpDialog(null)}
+                create={followUps.create}
+                update={followUps.update}
+                archive={followUps.archive}
+                isSaving={followUps.isSaving}
+              />
+            )}
+
+          {memberHistory && memberHistory.organisationId === organisationId && (
+            <WelfareFollowUpMemberHistory
+              request={memberHistory}
+              onClose={() => setMemberHistory(null)}
+            />
           )}
         </Box>
       </Box>
