@@ -51,6 +51,10 @@ export const attendanceRequest = {
   MANUAL_MEMBER: "/attendance/:organisationId/:id/manual-members/:memberId",
 };
 
+export const welfareRequest = {
+  OVERVIEW: "/welfare/:organisationId/overview",
+};
+
 export const financeRequest = {
   OBLIGATIONS: "/finance/obligations",
   LIST_OBLIGATIONS: "/finance/:organisationId/obligations",

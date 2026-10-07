@@ -15,6 +15,7 @@ describe("buildOrgUpdatePayload", () => {
     image: "https://cdn.example.com/logo.png",
     collapseAttendanceByDay: true,
     attendanceEligibilityEnabled: false,
+    welfareReviewWindowDays: "",
     terminology: { ...DEFAULT_TERMINOLOGY },
     featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
   };
@@ -24,9 +25,15 @@ describe("buildOrgUpdatePayload", () => {
     expect(
       buildOrgUpdatePayload({ ...base, maxAttendanceEdits: "3" }, rows),
     ).toEqual({
-      ...base,
+      name: "VOB Choir",
+      image: "https://cdn.example.com/logo.png",
+      collapseAttendanceByDay: true,
       maxAttendanceEdits: 3,
       attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
+      attendanceEligibilityEnabled: false,
+      welfareSettings: { reviewWindowDays: 14 },
+      terminology: { ...DEFAULT_TERMINOLOGY },
+      featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
     });
   });
 
@@ -60,6 +67,7 @@ describe("buildOrgUpdatePayload", () => {
         collapseAttendanceByDay: false,
         maxAttendanceEdits: "",
         attendanceEligibilityEnabled: false,
+        welfareReviewWindowDays: "",
         terminology: { ...DEFAULT_TERMINOLOGY },
         featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
       },
@@ -76,7 +84,16 @@ describe("buildOrgUpdatePayload", () => {
       withLate,
     );
 
-    expect(result).toMatchObject({ ...base, maxAttendanceEdits: 2 });
+    expect(result).toMatchObject({
+      name: "VOB Choir",
+      image: "https://cdn.example.com/logo.png",
+      collapseAttendanceByDay: true,
+      maxAttendanceEdits: 2,
+      attendanceEligibilityEnabled: false,
+      welfareSettings: { reviewWindowDays: 14 },
+      terminology: { ...DEFAULT_TERMINOLOGY },
+      featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+    });
     expect(result.attendanceStatuses.map((s) => s.key)).toEqual([
       "present",
       "apology",
@@ -97,7 +114,7 @@ describe("buildOrgUpdatePayload", () => {
         memberPlural: "Students",
         officerPlural: " Coordinators",
       },
-      featureVisibility: { finance: false, birthdays: false, analytics: true },
+      featureVisibility: { finance: false, birthdays: false, analytics: true, welfare: false },
       // Fields a stale caller might spread in must never reach the backend.
       permissions: ["finance.view"],
       isOwner: true,
@@ -119,7 +136,8 @@ describe("buildOrgUpdatePayload", () => {
         memberPlural: "Students",
         officerPlural: "Coordinators",
       },
-      featureVisibility: { finance: false, birthdays: false, analytics: true },
+      featureVisibility: { finance: false, birthdays: false, analytics: true, welfare: false },
+      welfareSettings: { reviewWindowDays: 14 },
     });
   });
 
@@ -137,6 +155,7 @@ describe("buildOrgUpdatePayload", () => {
         maxAttendanceEdits: 2,
         attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
         attendanceEligibilityEnabled: enabled,
+        welfareSettings: { reviewWindowDays: 14 },
         terminology: { ...DEFAULT_TERMINOLOGY },
         featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
       });
@@ -161,6 +180,34 @@ describe("buildOrgUpdatePayload", () => {
       expect(result.attendanceEligibilityEnabled).toBe(true);
       expect(result).not.toHaveProperty("terminology");
       expect(result).not.toHaveProperty("featureVisibility");
+    });
+  });
+
+  describe("welfare settings", () => {
+    it("sends the review window with every other setting by default", () => {
+      const result = buildOrgUpdatePayload(
+        { ...base, maxAttendanceEdits: "", welfareReviewWindowDays: "30" },
+        rows,
+      );
+      expect(result.welfareSettings).toEqual({ reviewWindowDays: 30 });
+    });
+
+    it("maps a blank review window to the effective default", () => {
+      const result = buildOrgUpdatePayload(
+        { ...base, maxAttendanceEdits: "", welfareReviewWindowDays: "  " },
+        rows,
+      );
+      expect(result.welfareSettings).toEqual({ reviewWindowDays: 14 });
+    });
+
+    it("omits welfareSettings for a backend that does not support it", () => {
+      const result = buildOrgUpdatePayload(
+        { ...base, maxAttendanceEdits: "" },
+        rows,
+        { includeWelfareSettings: false },
+      );
+      expect(result).not.toHaveProperty("welfareSettings");
+      expect(result.terminology).toEqual(DEFAULT_TERMINOLOGY);
     });
   });
 });

@@ -1,0 +1,83 @@
+import {
+  Box,
+  Heading,
+  List,
+  ListItem,
+  Text,
+  useColorModeValue,
+} from "@chakra-ui/react";
+import { format, isValid, parseISO } from "date-fns";
+import { lowerTerm } from "helpers/organisationPresentation";
+import { useTerms } from "hooks/useOrgPresentation";
+import { WelfareBirthdayMember } from "components/welfare/welfareTypes";
+import { WELFARE_BIRTHDAY_SNAPSHOT_DAYS } from "hooks/useWelfareBirthdays";
+
+interface BirthdaySnapshotProps {
+  members: WelfareBirthdayMember[];
+  isFetching: boolean;
+  isError: boolean;
+}
+
+/**
+ * The backend already formats `dob` for display ("Mon, 07 October"); a raw
+ * ISO value from an older deployment still renders readably. Phase 7B owns
+ * the fuller date handling.
+ */
+const formatDob = (value?: string | null): string => {
+  if (!value) return "";
+  const parsed = parseISO(value);
+  return isValid(parsed) ? format(parsed, "EEE, dd MMMM") : value;
+};
+
+/**
+ * Reuses the existing Birthday API for today through the next 7 days. A
+ * failure here is shown locally and never breaks the rest of Welfare.
+ */
+const BirthdaySnapshot = ({
+  members,
+  isFetching,
+  isError,
+}: BirthdaySnapshotProps) => {
+  const terms = useTerms();
+  const cardBg = useColorModeValue("white", "gray.700");
+
+  return (
+    <Box as="section" aria-label="Upcoming Birthdays" mt={8}>
+      <Heading size="md" mb={1}>
+        Upcoming Birthdays
+      </Heading>
+      <Text fontSize="sm" color="gray.500" mb={3}>
+        {`Today through the next ${WELFARE_BIRTHDAY_SNAPSHOT_DAYS} days`}
+      </Text>
+      {isError && members.length === 0 ? (
+        <Text color="gray.500">Birthday data is unavailable right now.</Text>
+      ) : isFetching && members.length === 0 ? (
+        <Text color="gray.500">Loading birthdays...</Text>
+      ) : members.length === 0 ? (
+        <Text color="gray.500">
+          {`No birthdays in the next ${WELFARE_BIRTHDAY_SNAPSHOT_DAYS} days.`}
+        </Text>
+      ) : (
+        <List spacing={2}>
+          {members.map((member, index) => (
+            <ListItem
+              key={`${member.name ?? "member"}-${index}`}
+              borderWidth="1px"
+              borderRadius="lg"
+              p={3}
+              bg={cardBg}
+            >
+              <Text>
+                {`${member.name ?? `Unknown ${lowerTerm(terms.memberSingular)}`} — ${formatDob(
+                  member.dob,
+                )}`}
+              </Text>
+            </ListItem>
+          ))}
+        </List>
+      )}
+    </Box>
+  );
+};
+
+export default BirthdaySnapshot;

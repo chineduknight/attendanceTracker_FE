@@ -24,6 +24,7 @@ const MemberAnalytics = WithSuspense(
 );
 const Birthday = WithSuspense(lazy(() => import("pages/Birthday")));
 const Finance = WithSuspense(lazy(() => import("pages/Finance")));
+const Welfare = WithSuspense(lazy(() => import("pages/Welfare")));
 const OfficersRoles = WithSuspense(lazy(() => import("pages/OfficersRoles")));
 const AddOrganisation = WithSuspense(
   lazy(() => import("pages/AddOrganisation"))
@@ -55,6 +56,7 @@ const {
   MEMBER_ANALYTICS,
   BIRTHDAY,
   FINANCE,
+  WELFARE,
   OFFICERS_ROLES,
   SETTINGS,
 } = PROTECTED_PATHS;
@@ -187,6 +189,13 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
     title: "Finance",
     perm: "finance.view",
     feature: "finance",
+  },
+  {
+    path: WELFARE,
+    element: <Welfare />,
+    title: "Welfare & Engagement",
+    perm: "attendance.view",
+    feature: "welfare",
   },
   {
     path: OFFICERS_ROLES,

@@ -36,6 +36,7 @@ const TODAY = [
   "Create Attendance",
   "All Attendance",
   "Analytics",
+  "Welfare & Engagement",
   "Birthday",
   "Finance",
   "Officers & Roles",
@@ -59,7 +60,7 @@ describe("presentation-aware navigation", () => {
     selectOrg({
       id: "orgA",
       terminology: SCHOOL_TERMS,
-      featureVisibility: { finance: false, birthdays: false, analytics: true },
+      featureVisibility: { finance: false, birthdays: false, analytics: true, welfare: true },
     });
     renderDashboard();
     expect(actionLabels()).toEqual([
@@ -68,6 +69,7 @@ describe("presentation-aware navigation", () => {
       "Create Session",
       "All Sessions",
       "Analytics",
+      "Welfare & Engagement",
       "Coordinators & Roles",
       "Settings",
     ]);
@@ -75,17 +77,17 @@ describe("presentation-aware navigation", () => {
 
   it("still hides actions the officer isn't permitted to use, independently of visibility", () => {
     const permissions: PermissionKey[] = ["members.view", "attendance.view"];
-    selectOrg({ isOwner: false, permissions, featureVisibility: { finance: true, birthdays: false, analytics: true } });
+    selectOrg({ isOwner: false, permissions, featureVisibility: { finance: true, birthdays: false, analytics: true, welfare: true } });
     renderDashboard();
     // Finance is visible but not permitted; Birthday is permitted but hidden.
-    expect(actionLabels()).toEqual(["View Members", "All Attendance", "Analytics"]);
+    expect(actionLabels()).toEqual(["View Members", "All Attendance", "Analytics", "Welfare & Engagement"]);
   });
 
   it("swaps labels and modules immediately when switching A → B → A", () => {
     const orgA = {
       id: "orgA",
       terminology: SCHOOL_TERMS,
-      featureVisibility: { finance: false, birthdays: false, analytics: true },
+      featureVisibility: { finance: false, birthdays: false, analytics: true, welfare: true },
     };
     selectOrg(orgA);
     renderDashboard();

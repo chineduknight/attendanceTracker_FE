@@ -2,6 +2,7 @@ import { act, render, screen, fireEvent, waitFor, within } from "@testing-librar
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import OrganisationSettings from "pages/OrganisationSettings";
 import {
@@ -118,11 +119,12 @@ describe("<OrganisationSettings>", () => {
     const saveBtn = await screen.findByRole("button", { name: /Save/ });
     fireEvent.click(saveBtn);
     await waitFor(() => expect(axiosInstance.put).toHaveBeenCalled());
-    await waitFor(() => {
-      const org = useGlobalStore.getState().organisation;
-      expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
-      expect(org.name).toBe("VOB Choir");
-    });
+    await waitFor(() =>
+      expect(useGlobalStore.getState().organisation).toMatchObject({
+        name: "VOB Choir",
+        permissions: ["settings.view", "settings.manage"],
+      }),
+    );
   });
 
   describe("attendance statuses", () => {
@@ -232,7 +234,7 @@ describe("<OrganisationSettings>", () => {
               collapseAttendanceByDay: false,
               maxAttendanceEdits: 3,
               terminology: { memberSingular: "Chorister", memberPlural: "Choristers" },
-              featureVisibility: { finance: true, birthdays: false, analytics: true },
+              featureVisibility: { finance: true, birthdays: false, analytics: true, welfare: true },
             },
           },
         }),
@@ -245,6 +247,7 @@ describe("<OrganisationSettings>", () => {
       // Stored visibility loads into the switches.
       expect(screen.getByLabelText("Birthdays")).not.toBeChecked();
       expect(screen.getByLabelText("Finance")).toBeChecked();
+      expect(screen.getByLabelText("Welfare & Engagement")).toBeChecked();
       mockPut.mockImplementation((_url: string, sent: Record<string, unknown>) =>
         Promise.resolve({ data: { data: { id: "org1", name: "VOB Choir", ...sent } } })
       );
@@ -267,7 +270,7 @@ describe("<OrganisationSettings>", () => {
         officerSingular: "Officer",
         officerPlural: "Coordinators",
       });
-      expect(body.featureVisibility).toEqual({ finance: false, birthdays: false, analytics: true });
+      expect(body.featureVisibility).toEqual({ finance: false, birthdays: false, analytics: true, welfare: true });
       expect(body).toMatchObject({ name: "VOB Choir", maxAttendanceEdits: 3 });
       ["permissions", "isOwner", "roleName"].forEach((key) => expect(body).not.toHaveProperty(key));
 
@@ -308,6 +311,7 @@ describe("<OrganisationSettings>", () => {
       const body = mockPut.mock.calls[0][1];
       expect(body).not.toHaveProperty("terminology");
       expect(body).not.toHaveProperty("featureVisibility");
+      expect(body).not.toHaveProperty("welfareSettings");
     });
 
     it("ignores a save reply for an organisation the officer has switched away from", async () => {
@@ -324,6 +328,204 @@ describe("<OrganisationSettings>", () => {
       });
 
       expect(useGlobalStore.getState().organisation.id).toBe("org2");
+    });
+  });
+
+  describe("welfare settings", () => {
+    const LABEL = "Review window (days)";
+    const detail = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      name: `Org ${id}`,
+      image: "",
+      collapseAttendanceByDay: false,
+      maxAttendanceEdits: 3,
+      terminology: { ...DEFAULT_TERMINOLOGY },
+      featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+      welfareSettings: { reviewWindowDays: 14 },
+      ...over,
+    });
+    const serve = (byId: Record<string, Record<string, unknown>>) =>
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: { data: byId[url.split("/").pop() as string] },
+        }),
+      );
+    const manager = (id = "org1") =>
+      setOrg({ id, permissions: ["settings.view", "settings.manage"] });
+
+    it.each([7, 30])(
+      "renders the stored review window %s for a supporting backend",
+      async (days) => {
+        serve({
+          org1: detail("org1", { welfareSettings: { reviewWindowDays: days } }),
+        });
+        manager();
+        renderPage();
+        expect(
+          await screen.findByRole("heading", { name: "Welfare & Engagement" }),
+        ).toBeInTheDocument();
+        expect(screen.getByLabelText(LABEL)).toHaveValue(days);
+      },
+    );
+
+    it("saves the review window, updates the selected organisation at once and keeps RBAC", async () => {
+      serve({
+        org1: detail("org1", { welfareSettings: { reviewWindowDays: 7 } }),
+      });
+      setOrg({
+        id: "org1",
+        roleName: "Owner",
+        isOwner: true,
+        permissions: ["settings.view", "settings.manage"],
+      });
+      // The PUT reply omits welfareSettings; the submitted value still applies.
+      mockPut.mockResolvedValue({
+        data: { data: { id: "org1", name: "Org org1" } },
+      });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText(LABEL), {
+        target: { value: "30" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0][1].welfareSettings).toEqual({
+        reviewWindowDays: 30,
+      });
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.welfareSettings).toEqual({
+          reviewWindowDays: 30,
+        }),
+      );
+      const org = useGlobalStore.getState().organisation;
+      expect(org.roleName).toBe("Owner");
+      expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
+    });
+
+    it("maps a blank window to the effective default", async () => {
+      serve({ org1: detail("org1") });
+      manager();
+      renderPage();
+      fireEvent.change(await screen.findByLabelText(LABEL), {
+        target: { value: "  " },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      expect(mockPut.mock.calls[0][1].welfareSettings).toEqual({
+        reviewWindowDays: 14,
+      });
+    });
+
+    it.each([
+      ["6", "Must be between 7 and 90"],
+      ["91", "Must be between 7 and 90"],
+      ["13.5", "Must be a whole number"],
+    ])("rejects %s", async (value, message) => {
+      serve({ org1: detail("org1") });
+      manager();
+      renderPage();
+      fireEvent.change(await screen.findByLabelText(LABEL), {
+        target: { value },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(mockPut).not.toHaveBeenCalled();
+    });
+
+    it("is read-only without settings.manage", async () => {
+      serve({ org1: detail("org1") });
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderPage();
+      expect(await screen.findByLabelText(LABEL)).toHaveAttribute("readonly");
+      expect(
+        screen.queryByRole("button", { name: /Save/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("neither shows nor sends the section to an older backend that omits it", async () => {
+      serve({ org1: detail("org1", { welfareSettings: undefined }) });
+      manager();
+      renderPage();
+      await screen.findByLabelText(/Organisation Name/);
+      expect(
+        screen.queryByRole("heading", { name: "Welfare & Engagement" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      expect(mockPut.mock.calls[0][1]).not.toHaveProperty("welfareSettings");
+    });
+
+    it("invalidates only the current organisation's welfare cache on save", async () => {
+      serve({ org1: detail("org1") });
+      manager();
+      queryClient.setQueryData(
+        queryKeys.welfare.overview("org1", "2026-10-07"),
+        {},
+      );
+      queryClient.setQueryData(
+        queryKeys.welfare.overview("org2", "2026-10-07"),
+        {},
+      );
+      queryClient.setQueryData(queryKeys.allOrganisations, []);
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+
+      expect(
+        queryClient.getQueryState(
+          queryKeys.welfare.overview("org1", "2026-10-07"),
+        )?.isInvalidated,
+      ).toBe(true);
+      expect(
+        queryClient.getQueryState(
+          queryKeys.welfare.overview("org2", "2026-10-07"),
+        )?.isInvalidated,
+      ).toBe(false);
+      expect(
+        queryClient.getQueryState(queryKeys.allOrganisations)?.isInvalidated,
+      ).toBe(true);
+    });
+
+    it("ignores a save reply for an organisation the officer has switched away from", async () => {
+      let reply: (value: unknown) => void = () => undefined;
+      mockPut.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            reply = resolve;
+          }),
+      );
+      serve({
+        org1: detail("org1", { welfareSettings: { reviewWindowDays: 7 } }),
+        org2: detail("org2"),
+      });
+      manager();
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+
+      act(() =>
+        setOrg({
+          id: "org2",
+          name: "Band",
+          permissions: ["settings.view"],
+          welfareSettings: { reviewWindowDays: 30 },
+        }),
+      );
+      await act(async () => {
+        reply({
+          data: {
+            data: {
+              id: "org1",
+              name: "VOB Choir",
+              welfareSettings: { reviewWindowDays: 60 },
+            },
+          },
+        });
+      });
+
+      const org = useGlobalStore.getState().organisation;
+      expect(org.id).toBe("org2");
+      expect(org.welfareSettings).toEqual({ reviewWindowDays: 30 });
     });
   });
 
@@ -355,15 +557,17 @@ describe("<OrganisationSettings>", () => {
       expect(isAttendanceEligibilityEnabled({ attendanceEligibilityEnabled: true })).toBe(true);
     });
 
-    it.each([false, true])("loads %s into the switch under the attendance settings heading", async (enabled) => {
+    it.each([
+      [false, false],
+      [true, true],
+    ])("loads %s into the switch under the attendance settings heading", async (enabled, checked) => {
       serve({ org1: detail("org1", { attendanceEligibilityEnabled: enabled }) });
       manager();
       renderPage();
       const toggle = await screen.findByLabelText(LABEL);
       expect(screen.getByText("Attendance settings")).toBeInTheDocument();
       expect(toggle).not.toBeDisabled();
-      if (enabled) expect(toggle).toBeChecked();
-      else expect(toggle).not.toBeChecked();
+      expect((toggle as HTMLInputElement).checked).toBe(checked);
       expect(
         screen.getByText(/Allow officers to choose which members are expected for an attendance\./),
       ).toBeInTheDocument();

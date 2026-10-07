@@ -5,6 +5,7 @@ import {
   OrganisationTerminology,
   TERM_KEYS,
 } from "helpers/organisationPresentation";
+import { parseWelfareReviewWindow, WelfareSettings } from "helpers/welfareSettings";
 
 export interface OrgSettingsForm {
   name: string;
@@ -13,6 +14,8 @@ export interface OrgSettingsForm {
   /** Raw input value; "" (or whitespace) means "use the deployment default". */
   maxAttendanceEdits: string;
   attendanceEligibilityEnabled: boolean;
+  /** Raw input value; "" (or whitespace) means the effective default (14). */
+  welfareReviewWindowDays: string;
   terminology: OrganisationTerminology;
   featureVisibility: OrganisationFeatureVisibility;
 }
@@ -25,6 +28,8 @@ export interface OrgUpdatePayload {
   attendanceStatuses: AttendanceStatusDefinition[];
   /** Sent only to a backend that supports the eligibility setting. */
   attendanceEligibilityEnabled?: boolean;
+  /** Sent only to a backend that supports welfare settings. */
+  welfareSettings?: WelfareSettings;
   /** Sent only to a backend that supports presentation settings. */
   terminology?: OrganisationTerminology;
   featureVisibility?: OrganisationFeatureVisibility;
@@ -47,7 +52,8 @@ export const buildOrgUpdatePayload = (
   {
     includePresentation = true,
     includeEligibilitySetting = true,
-  }: { includePresentation?: boolean; includeEligibilitySetting?: boolean } = {},
+    includeWelfareSettings = true,
+  }: { includePresentation?: boolean; includeEligibilitySetting?: boolean; includeWelfareSettings?: boolean } = {},
 ): OrgUpdatePayload => {
   const trimmedMax = form.maxAttendanceEdits.trim();
   return {
@@ -59,6 +65,11 @@ export const buildOrgUpdatePayload = (
     ...(includeEligibilitySetting && {
       attendanceEligibilityEnabled: form.attendanceEligibilityEnabled,
     }),
+    ...(includeWelfareSettings && {
+      welfareSettings: {
+        reviewWindowDays: parseWelfareReviewWindow(form.welfareReviewWindowDays),
+      },
+    }),
     ...(includePresentation && {
 
       terminology: TERM_KEYS.reduce((terms, key) => {
@@ -69,6 +80,7 @@ export const buildOrgUpdatePayload = (
         finance: form.featureVisibility.finance,
         birthdays: form.featureVisibility.birthdays,
         analytics: form.featureVisibility.analytics,
+        welfare: form.featureVisibility.welfare,
       },
     }),
   };
