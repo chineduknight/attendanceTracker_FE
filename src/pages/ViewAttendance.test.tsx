@@ -100,6 +100,44 @@ describe("<ViewAttendance> with configured statuses", () => {
   });
 });
 
+describe("<ViewAttendance> load failure", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+    });
+  });
+
+  it("explains a failed load with the backend's reason and retries in place", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Server busy" } } }),
+    );
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load this attendance");
+    expect(alert).toHaveTextContent("Server busy");
+
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: SESSION } }));
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Zara")).toBeInTheDocument();
+  });
+
+  it("offers to clear a search that matches no one", async () => {
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: SESSION } }));
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "nobody" } });
+    expect(screen.getByText("No member found")).toBeInTheDocument();
+    expect(screen.getByText('Nothing matches "nobody".')).toBeInTheDocument();
+
+    const clears = screen.getAllByRole("button", { name: "Clear search" });
+    fireEvent.click(clears[clears.length - 1]);
+    expect(screen.getByText("Zara")).toBeInTheDocument();
+  });
+});
+
 describe("<ViewAttendance> expected roster", () => {
   const OUTDATED_NOTICE = /Eligibility rule has changed since this session was created/;
 

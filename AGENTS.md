@@ -1790,6 +1790,14 @@ Shared wrappers in `src/components/ui` (use them instead of the raw parts):
   must show a loading state. Name the action on the button (not "Yes"); no
   `window.confirm`. Tests answer it with `confirmInDialog("Delete")`
   (`role="alertdialog"`).
+- `PageContainer` (`layout/PageContainer`): a page's outer frame (page
+  background `bg.subtle`, `100dvh`, standard padding, home-bar inset) with
+  `width="form" | "content" | "wide"`. Pages move to it in their batch.
+- `PinnedSearchBar`: the roster search bar (with `usePinnedSearch`); 44px
+  clear button, search keyboard, no autofill. Only this bar is pinned.
+- `EmptyState` / `ErrorState` (`ui/states`): say why a list is empty and
+  offer the next step; a load error shows the backend's text
+  (`errorMessage(error)`) and a Try again button wired to `refetch`.
 - `AmountInput` (`ui/amount-input`): money entry. Shows `6,000`, hands the
   form `"6000"`, so payloads are unchanged. Not for counts or limits.
 
