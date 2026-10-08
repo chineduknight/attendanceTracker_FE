@@ -26,12 +26,16 @@ export const render = (
  * Click a v3 checkbox/switch and wait until the component itself has flipped.
  * Ark applies the change asynchronously, and the native input flips at once
  * regardless, so wait on the root's data-state (which, when controlled, only
- * changes once the parent has applied the new value).
+ * changes once the parent has applied the new value). Pending effects are
+ * flushed first, as a real tap never lands in the same tick as the mount: a
+ * react-hook-form controller subscribes in an effect and would miss a change
+ * made before it.
  */
 export const toggle = async (input: HTMLElement) => {
   const root = input.closest<HTMLElement>('[data-part="root"][data-state]');
   if (!root) throw new Error("toggle(): not inside a checkbox/switch root");
   const before = root.getAttribute("data-state");
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
   fireEvent.click(input);
   await waitFor(() => expect(root.getAttribute("data-state")).not.toBe(before));
 };

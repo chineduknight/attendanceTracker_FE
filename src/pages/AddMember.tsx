@@ -1,5 +1,6 @@
-import { Box, Flex, Checkbox, Button, Input, Stack, Heading, NativeSelect, Field } from "@chakra-ui/react";
+import { Box, Flex, Button, Input, Stack, Heading, NativeSelect, Field } from "@chakra-ui/react";
 import { useColorModeValue } from "components/ui/color-mode";
+import { FormCheckbox } from "components/ui/checkbox";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
@@ -26,7 +27,7 @@ import { lowerTerm } from "helpers/organisationPresentation";
 import { LABELS } from "config/presentationLabels";
 
 interface FormData {
-  [fieldName: string]: string;
+  [fieldName: string]: string | boolean;
 }
 
 const AddOrUpdateMember = () => {
@@ -55,7 +56,7 @@ const AddOrUpdateMember = () => {
     }
   }, [params.memberId]);
 
-  const { register, handleSubmit, reset } = useForm<FormData>();
+  const { register, control, handleSubmit, reset } = useForm<FormData>();
   useEffect(() => {
     if (currentMember && isUpdating) {
       reset(currentMember);
@@ -171,15 +172,16 @@ const AddOrUpdateMember = () => {
     // Labels are display-only; every input stays registered under its storage key.
     return membersModel.map((field) => {
       if (field.type === "checkbox") {
-        const fieldValue = isUpdating ? currentMember[field.name] : false; // Get the current member field value when updating
+        // Controlled: the async reset(currentMember) must reach the visible box.
         return (
           <Field.Root key={field._id ?? field.name} id={field.name}>
             <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
-            <Checkbox.Root
-              {...register(field.name)}
+            <FormCheckbox
+              control={control}
+              name={field.name}
+              label={displayMemberFieldLabel(field)}
               colorPalette="blue"
-              // Set the default checked value for the checkbox
-              defaultChecked={fieldValue}><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Root>
+            />
           </Field.Root>
         );
       } else if (field.type === "option") {

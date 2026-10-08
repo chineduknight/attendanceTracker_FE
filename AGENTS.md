@@ -1768,6 +1768,9 @@ Shared wrappers in `src/components/ui` (use them instead of the raw parts):
 - `Switch` / `FormSwitch`: controlled; `FormSwitch` binds react-hook-form via
   `useController`. Never `register` a switch: v3 does not follow `reset()`.
   Put switches in a `Field.Root` beside a `Field.Label` with no id/htmlFor.
+- `FormCheckbox`: a checkbox bound to react-hook-form via `useController`
+  (always a boolean). Never `register` a checkbox root: it never reaches the
+  hidden input, and `defaultChecked` ignores a later `reset()`.
 - `NameAvatar`: initials on a name-derived colour, image when present.
 
 v3 traps that type-check but misbehave:
@@ -1781,6 +1784,9 @@ v3 traps that type-check but misbehave:
 - `aria-label` for a checkbox goes on `Checkbox.HiddenInput`, not the root.
 - Native inputs, textareas and `NativeSelect.Field` keep `onChange`;
   `onValueChange`/`onCheckedChange` belong to Ark components only.
+- `onCheckedChange`/`onValueChange` receive a details object
+  (`({ checked })`, `({ value })`), not a DOM event: `e.target.checked`
+  type-checks loosely but throws at runtime.
 
 Do not introduce a second component framework for one feature.
 

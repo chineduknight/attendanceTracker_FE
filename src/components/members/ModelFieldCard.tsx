@@ -110,7 +110,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
       <Box>
         <Checkbox.Root
           disabled={isPinned}
-          onCheckedChange={(e) => onChange({ required: e.target.checked })}
+          onCheckedChange={({ checked }) => onChange({ required: checked === true })}
           checked={field.required}
         ><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>Required
                     </Checkbox.Label></Checkbox.Root>
