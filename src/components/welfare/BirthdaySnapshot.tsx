@@ -1,28 +1,35 @@
 import { Box, Heading, Text } from "@chakra-ui/react";
 import BirthdayList from "components/birthday/BirthdayList";
-import { BirthdayMember, BirthdayRange } from "helpers/birthday";
-import { WELFARE_BIRTHDAY_SNAPSHOT_DAYS } from "hooks/useWelfareBirthdays";
+import {
+  BirthdayMember,
+  BirthdayRange,
+  formatBirthdayRangeDate,
+} from "helpers/birthday";
 import { sectionTargetProps } from "components/welfare/welfareSections";
 
 interface BirthdaySnapshotProps {
   members: BirthdayMember[];
+  /** The review range: selected review date through review date + 7. */
   range: BirthdayRange;
-  /** Local business date for Today/Tomorrow labels. */
-  asOf: string;
+  /**
+   * Local business today for Today/Tomorrow labels. Deliberately not the
+   * review date: a past review must never call an old birthday "Today".
+   */
+  today: string;
   isFetching: boolean;
   isError: boolean;
 }
 
 /**
- * Reuses the existing Birthday API for today through the next 7 days, and
- * the Birthday page's own list so occurrence dates (Phase 7B metadata, or
- * the shared legacy parser) are rendered one way everywhere. A failure is
- * shown locally and never breaks the rest of Welfare.
+ * Reuses the existing Birthday API for the selected review range, and the
+ * Birthday page's own list so occurrence dates (Phase 7B metadata, or the
+ * shared legacy parser) are rendered one way everywhere. A failure is shown
+ * locally and never breaks the rest of Welfare.
  */
 const BirthdaySnapshot = ({
   members,
   range,
-  asOf,
+  today,
   isFetching,
   isError,
 }: BirthdaySnapshotProps) => (
@@ -36,7 +43,9 @@ const BirthdaySnapshot = ({
       Upcoming Birthdays
     </Heading>
     <Text fontSize="sm" color="gray.500" mb={3}>
-      {`Today through the next ${WELFARE_BIRTHDAY_SNAPSHOT_DAYS} days`}
+      {`${formatBirthdayRangeDate(range.fromDate)} – ${formatBirthdayRangeDate(
+        range.toDate
+      )}`}
     </Text>
     {isError && members.length === 0 ? (
       <Text color="gray.500">Birthday data is unavailable right now.</Text>
@@ -46,8 +55,8 @@ const BirthdaySnapshot = ({
       <BirthdayList
         members={members}
         range={range}
-        asOf={asOf}
-        emptyState={`No birthdays in the next ${WELFARE_BIRTHDAY_SNAPSHOT_DAYS} days.`}
+        asOf={today}
+        emptyState="No birthdays in this review range."
       />
     )}
   </Box>

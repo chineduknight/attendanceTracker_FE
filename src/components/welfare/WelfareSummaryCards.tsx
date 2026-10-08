@@ -73,7 +73,7 @@ const WelfareSummaryCards = ({
   if (birthdayCount != null) {
     tiles.push({
       section: "birthdays",
-      label: "Birthdays This Week",
+      label: "Upcoming Birthdays",
       value: birthdayCount,
       icon: FaBirthdayCake,
       accent: "pink.500",

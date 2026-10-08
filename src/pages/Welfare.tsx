@@ -147,12 +147,14 @@ const Welfare = () => {
 
   // Birthdays are an optional, independent snapshot: they need members.view,
   // the birthdays module and a configured `dob` date field, and the Birthday
-  // API is never called without all three.
+  // API is never called without all three. The snapshot follows the review
+  // date (review date through +7), not the browser's today.
   const birthdaysPermitted =
     canReadMemberModel && isFeatureVisible("birthdays");
   const showBirthdays = birthdaysPermitted && hasDobDateField(fields);
   const birthdays = useWelfareBirthdays(organisationId, {
     enabled: showBirthdays,
+    asOf,
   });
   // A failed birthday query hides its card rather than showing a fake zero.
   const birthdayCount =
@@ -392,7 +394,7 @@ const Welfare = () => {
                     fromDate: birthdays.fromDate,
                     toDate: birthdays.toDate,
                   }}
-                  asOf={birthdays.asOf}
+                  today={today}
                   isFetching={birthdays.isFetching}
                   isError={birthdays.isError}
                 />
@@ -410,7 +412,7 @@ const Welfare = () => {
                   fromDate: birthdays.fromDate,
                   toDate: birthdays.toDate,
                 }}
-                asOf={birthdays.asOf}
+                today={today}
                 isFetching={birthdays.isFetching}
                 isError={birthdays.isError}
               />

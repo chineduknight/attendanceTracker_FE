@@ -446,7 +446,7 @@ describe("<Welfare>", () => {
       screen.getByText("No members are returning in the next 7 days."),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("No birthdays in the next 7 days."),
+      await screen.findByText("No birthdays in this review range."),
     ).toBeInTheDocument();
   });
 
@@ -523,7 +523,7 @@ describe("<Welfare>", () => {
   });
 
   describe("birthday snapshot", () => {
-    it("queries today through the next 7 days and renders the result", async () => {
+    it("queries the review date through +7 days and renders the result", async () => {
       renderPage();
       await expectBirthdayRow(2, "Ada Okeke");
       expect(
@@ -537,9 +537,19 @@ describe("<Welfare>", () => {
       expect(url).toContain(`endDate=${SNAPSHOT_END}`);
       expect(
         within(
-          summaryTile("Birthdays This Week"),
+          summaryTile("Upcoming Birthdays"),
         ).getByText("1"),
       ).toBeInTheDocument();
+      // The actual review range, never "Today through ..." copy.
+      expect(
+        screen.getByText(
+          `${format(new Date(), "d MMM")} – ${format(
+            addDays(new Date(), 7),
+            "d MMM",
+          )}`,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Today through/)).not.toBeInTheDocument();
     });
 
     it("prefers occurrence metadata and still renders legacy rows", async () => {
@@ -626,7 +636,7 @@ describe("<Welfare>", () => {
         await screen.findByText("Birthday data is unavailable right now."),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /^Birthdays This Week/ }),
+        screen.queryByRole("button", { name: /^Upcoming Birthdays/ }),
       ).not.toBeInTheDocument();
     });
   });

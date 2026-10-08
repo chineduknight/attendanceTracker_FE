@@ -9,7 +9,7 @@ import {
 import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { addDays, format } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import theme from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -147,6 +147,8 @@ interface Org {
   attention?: ReturnType<typeof insight>[];
   followUps?: WelfareFollowUp[];
   members?: unknown[];
+  /** Birthday rows keyed by the requested startDate. */
+  birthdays?: Record<string, { name: string; occurrenceDate: string }[]>;
 }
 
 let orgs: Record<string, Org>;
@@ -167,6 +169,22 @@ const serve = () =>
     }
     if (value.includes("/model")) {
       return Promise.resolve({ data: org.model ?? statusModel(null) });
+    }
+    if (value.includes("/members/birthday")) {
+      const from =
+        new URL(value, "http://x").searchParams.get("startDate") ?? "";
+      const rows = org.birthdays?.[from] ?? [];
+      return Promise.resolve({
+        data: {
+          data: {
+            count: rows.length,
+            members: rows.map(({ name, occurrenceDate }) => ({
+              name,
+              birthdayOccurrence: { month: 0, day: 0, occurrenceDate },
+            })),
+          },
+        },
+      });
     }
     if (value.includes("/members")) {
       return Promise.resolve({ data: { data: org.members ?? MANY_MEMBERS } });
@@ -719,5 +737,92 @@ describe("<Welfare> review tenancy", () => {
       ).not.toBeInTheDocument()
     );
     expect(mockPost).not.toHaveBeenCalled();
+  });
+});
+
+describe("<Welfare> birthday snapshot follows the review date", () => {
+  const DOB_MODEL = {
+    data: {
+      fields: [
+        { name: "name", type: "text" },
+        { name: "dob", type: "date" },
+      ],
+    },
+  };
+  const plus7 = (value: string) =>
+    format(addDays(parseISO(value), 7), "yyyy-MM-dd");
+  const birthdayRanges = () =>
+    callsTo("/members/birthday").map(([url]) => {
+      const params = new URL(String(url), "http://x").searchParams;
+      return `${params.get("startDate")}→${params.get("endDate")}`;
+    });
+  const birthdayRegion = () =>
+    within(screen.getByRole("region", { name: "Upcoming Birthdays" }));
+
+  beforeEach(() => {
+    orgs.org1.model = DOB_MODEL;
+    orgs.org2.model = DOB_MODEL;
+    orgs.org1.birthdays = {
+      [TODAY]: [{ name: "Today Person", occurrenceDate: plus7(TODAY) }],
+      [PAST_REVIEW]: [
+        { name: "Past One", occurrenceDate: "2026-10-01" },
+        { name: "Past Two", occurrenceDate: "2026-10-03" },
+      ],
+    };
+  });
+
+  it("loads a pinned historical asOf's range on page load", async () => {
+    renderPage(`/welfare?asOf=${PAST_REVIEW}`);
+    expect(await screen.findByText("Past One")).toBeInTheDocument();
+    expect(birthdayRanges()).toEqual(["2026-09-30→2026-10-07"]);
+    expect(birthdayRegion().getByText("30 Sep – 7 Oct")).toBeInTheDocument();
+    expect(
+      within(summaryTile("Upcoming Birthdays")).getByText("2")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Today Person")).toBeNull();
+    // Relative labels stay anchored on the real today: a past review never
+    // calls an old birthday "Today".
+    expect(birthdayRegion().queryByText("Today")).toBeNull();
+  });
+
+  it("requests the new range when the review date changes, and Today restores it", async () => {
+    renderPage();
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+    expect(
+      within(summaryTile("Upcoming Birthdays")).getByText("1")
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Review as of"), {
+      target: { value: PAST_REVIEW },
+    });
+    expect(await screen.findByText("Past Two")).toBeInTheDocument();
+    expect(screen.queryByText("Today Person")).toBeNull();
+    expect(
+      within(summaryTile("Upcoming Birthdays")).getByText("2")
+    ).toBeInTheDocument();
+    expect(birthdayRanges()).toContain("2026-09-30→2026-10-07");
+
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+    expect(screen.queryByText("Past Two")).toBeNull();
+    expect(
+      within(summaryTile("Upcoming Birthdays")).getByText("1")
+    ).toBeInTheDocument();
+    expect(birthdayRanges()[0]).toBe(`${TODAY}→${plus7(TODAY)}`);
+  });
+
+  it("never shows another organisation's birthdays after a switch", async () => {
+    orgs.org2.birthdays = {
+      [TODAY]: [{ name: "Org B Birthday", occurrenceDate: TODAY }],
+    };
+    renderPage();
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+
+    act(() => setOrg({ id: "org2" }));
+    expect(await screen.findByText("Org B Birthday")).toBeInTheDocument();
+    expect(screen.queryByText("Today Person")).toBeNull();
+    expect(
+      callsTo("/organisations/org2/members/birthday").length
+    ).toBeGreaterThan(0);
   });
 });
