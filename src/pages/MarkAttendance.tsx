@@ -77,6 +77,7 @@ import {
 } from "helpers/attendanceBulk";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
+import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { useAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
 import { filterAvailableMembers } from "helpers/attendanceAvailability";
 import {
@@ -112,7 +113,7 @@ const MarkAttendanceSession = () => {
   const [searchQuery, setSearchQuery] = useState("");
   // While the search box has focus the phone keyboard covers half the screen,
   // so the sticky action bar steps aside to leave that room for results.
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const pinnedSearch = usePinnedSearch(searchQuery);
   const [org, currentAttendance, setAttendance] = useGlobalStore((state) => [
     state.organisation,
     state.currentAttendance,
@@ -666,6 +667,7 @@ const MarkAttendanceSession = () => {
                 with the keyboard open, so only the search bar stays pinned —
                 anything taller would squeeze the results it is filtering. */}
             <Box
+              ref={pinnedSearch.barRef}
               position="sticky"
               top={0}
               zIndex="sticky"
@@ -684,8 +686,7 @@ const MarkAttendanceSession = () => {
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
                   value={searchQuery}
                   onChange={handleSearch}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setIsSearchFocused(false)}
+                  {...pinnedSearch.inputProps}
                 />
                 {searchQuery && (
                   <InputRightElement>
@@ -700,43 +701,45 @@ const MarkAttendanceSession = () => {
                 )}
               </InputGroup>
             </Box>
-            {filteredMembers.length === 0 && (
-              <Box mt="4">
-                <Text ml="4" fontWeight="bold">
-                  {`No ${lowerTerm(terms.memberSingular)} found`}
-                </Text>
-              </Box>
-            )}
-            {/* The roster scrolls with the page: a nested scroll box left a
-                few rows visible and fought the page for every swipe. */}
-            {filteredMembers.map((item) => {
-              const isManual = manualIds.has(item.id);
-              return (
-                <AttendanceMemberRow
-                  key={item.id}
-                  memberId={item.id}
-                  name={item.name}
-                  status={statuses.resolve(item.attendanceStatus)}
-                  onToggle={
-                    isManual && manualRowsLocked ? undefined : markMember
-                  }
-                  isManual={isManual}
-                  accessory={
-                    isManual && !isUpdate ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        colorScheme="red"
-                        aria-label={`Remove ${item.name} from this ${session}`}
-                        onClick={() => removeManualMember(item.id)}
-                      >
-                        Remove
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              );
-            })}
+            <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
+              {filteredMembers.length === 0 && (
+                <Box mt="4">
+                  <Text ml="4" fontWeight="bold">
+                    {`No ${lowerTerm(terms.memberSingular)} found`}
+                  </Text>
+                </Box>
+              )}
+              {/* The roster scrolls with the page: a nested scroll box left a
+                  few rows visible and fought the page for every swipe. */}
+              {filteredMembers.map((item) => {
+                const isManual = manualIds.has(item.id);
+                return (
+                  <AttendanceMemberRow
+                    key={item.id}
+                    memberId={item.id}
+                    name={item.name}
+                    status={statuses.resolve(item.attendanceStatus)}
+                    onToggle={
+                      isManual && manualRowsLocked ? undefined : markMember
+                    }
+                    isManual={isManual}
+                    accessory={
+                      isManual && !isUpdate ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          colorScheme="red"
+                          aria-label={`Remove ${item.name} from this ${session}`}
+                          onClick={() => removeManualMember(item.id)}
+                        >
+                          Remove
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
+            </Box>
             <UnresolvedRosterEntries
               entries={unresolvedEntries}
               statuses={statuses}
@@ -745,7 +748,7 @@ const MarkAttendanceSession = () => {
               position="sticky"
               bottom={0}
               zIndex="sticky"
-              display={isSearchFocused ? "none" : "flex"}
+              display={pinnedSearch.isFocused ? "none" : "flex"}
               gap={3}
               mt="6"
               mx={-4}
