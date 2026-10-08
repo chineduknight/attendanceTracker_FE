@@ -7,6 +7,7 @@ import { authRequest } from "services";
 import { patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { MeResponse } from "rbac/types";
+import { queryKeys } from "services/api/queryKeys";
 
 interface EmailInput { email: string; }
 
@@ -16,7 +17,7 @@ const SetEmailModal = () => {
 
   const onSuccess = (res: { data: MeResponse }) => {
     setUser({ ...user, email: res.data.email, needsEmail: false });
-    queryClient.invalidateQueries({ queryKey: ["all-organisations"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
   };
   const { mutate, isLoading } = useMutationWrapper(patchRequest, onSuccess);
 

@@ -1,24 +1,31 @@
-import { AttendanceStatus } from "components/analytics/statusMeta";
+import {
+  AttendanceBehavior,
+  AttendanceStatusDefinition,
+} from "helpers/attendanceStatuses";
 
 export interface MemberVerdict {
   date: string;
-  status: AttendanceStatus;
+  /** Configured status key; may be inactive or unknown on historical records. */
+  status: string;
+  behavior: AttendanceBehavior;
 }
 
 export interface MemberRecord {
   attendanceId: string;
   date: string;
-  status: AttendanceStatus;
+  /** Configured status key; may be inactive or unknown on historical records. */
+  status: string;
+  behavior: AttendanceBehavior;
   sessionName: string;
   hasBeenUpdated: boolean;
   editCount?: number;
 }
 
+export type BehaviorCounts = Record<AttendanceBehavior, number>;
+
 export interface MemberAnalyticsSummary {
   totalSessions: number;
-  present: number;
-  absent: number;
-  apology: number;
+  behaviorCounts: BehaviorCounts;
   attendanceRate: number;
   currentStreak: number;
   longestStreak: number;
@@ -30,4 +37,6 @@ export interface MemberAnalytics {
   summary: MemberAnalyticsSummary;
   verdicts: MemberVerdict[];
   records: MemberRecord[];
+  /** The organisation's effective status config at query time. */
+  attendanceStatuses?: AttendanceStatusDefinition[];
 }

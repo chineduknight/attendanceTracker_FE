@@ -12,14 +12,19 @@ import {
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { orgRequest } from "services";
-import { postRequest, useMutationWrapper } from "services/api/apiHelper";
+import { postRequest, queryClient, useMutationWrapper } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toast } from "react-toastify";
+import { useTerms } from "hooks/useOrgPresentation";
 
 const Category = () => {
   const [category] = useGlobalStore((state) => [state.organisation]);
-  const onSuccess = (data) => {
-    toast.success("category added successfully");
+  const terms = useTerms();
+  const onSuccess = () => {
+    toast.success(`${terms.categorySingular} added successfully`);
+    // Only the current organisation's categories are stale.
+    queryClient.invalidateQueries({ queryKey: queryKeys.categories(category.id) });
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
@@ -62,7 +67,7 @@ const Category = () => {
         >
           <form onSubmit={handleSubmit(onSubmit)}>
             <FormControl id="category" isRequired>
-              <FormLabel>Category name</FormLabel>
+              <FormLabel>{`${terms.categorySingular} name`}</FormLabel>
               <Input
                 type="category"
                 {...register("categoryId", { required: true })}

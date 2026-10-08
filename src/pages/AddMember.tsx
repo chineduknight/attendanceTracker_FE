@@ -20,7 +20,7 @@ import {
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
-import { capitalize, convertParamsToString } from "helpers/stringManipulations";
+import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import { useForm } from "react-hook-form";
@@ -28,10 +28,13 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
-import { Q_KEY } from "utils/constant";
-import { FieldType } from "./UserModel";
+import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
+import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
+import { LABELS } from "config/presentationLabels";
 
 interface FormData {
   [fieldName: string]: string;
@@ -39,30 +42,29 @@ interface FormData {
 
 const AddOrUpdateMember = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const [membersModel, setMembersModel] = useState<FieldType[]>([]);
+  const terms = useTerms();
+  const [membersModel, setMembersModel] = useState<MemberModelField[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
   const [currentMember, setcurrentMember] = useState({});
   const navigate = useNavigate();
   const params = useParams();
-  const allMembersURL = convertParamsToString(orgRequest.MEMBERS, {
+  const memberURL = convertParamsToString(orgRequest.MEMBER_ONE, {
     organisationId: org.id,
+    id: params.memberId as string,
   });
-  const { refetch } = useQueryWrapper(["get-member-by-id"], allMembersURL, {
+  useQueryWrapper(queryKeys.member(org.id, params.memberId), memberURL, {
     onSuccess: (data) => {
-      const allMembers = data.data;
-      const member = allMembers.find((member) => member.id === params.memberId);
-      setcurrentMember(member);
+      setcurrentMember(data.data);
+      setIsUpdating(true);
     },
-    enabled: false,
+    enabled: Boolean(org.id && params.memberId),
   });
   useEffect(() => {
-    if (params.memberId) {
-      setIsUpdating(true);
-      refetch();
-    } else {
+    if (!params.memberId) {
       setIsUpdating(false);
+      setcurrentMember({});
     }
-  }, [params.memberId, refetch]);
+  }, [params.memberId]);
 
   const { register, handleSubmit, reset } = useForm<FormData>();
   useEffect(() => {
@@ -73,9 +75,11 @@ const AddOrUpdateMember = () => {
 
   const onSuccess = () => {
     toast.success(
-      isUpdating ? "Member updated successfully" : "Member added successfully",
+      isUpdating
+        ? `${terms.memberSingular} updated successfully`
+        : `${terms.memberSingular} added successfully`,
     );
-    queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
   };
 
@@ -84,7 +88,7 @@ const AddOrUpdateMember = () => {
   });
 
   const { isFetching: isGettingMembers } = useQueryWrapper(
-    ["get-member-model"],
+    queryKeys.memberModel(org.id),
     modelURL,
     {
       onSuccess: (data) => {
@@ -118,13 +122,14 @@ const AddOrUpdateMember = () => {
   const { mutate: deleteMember, isLoading: isDeleting } = useMutationWrapper(
     deleteRequest,
     () => {
-      toast.success("Member deleted successfully");
-      queryClient.invalidateQueries({ queryKey: [Q_KEY.GET_MEMBERS] });
+      toast.success(`${terms.memberSingular} deleted successfully`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
       const message =
-        error?.response?.data?.error ?? "Failed to delete member.";
+        error?.response?.data?.error ??
+        `Failed to delete ${lowerTerm(terms.memberSingular)}.`;
       toast.error(message);
     },
   );
@@ -135,9 +140,10 @@ const AddOrUpdateMember = () => {
       id: params.memberId as string,
     });
     confirmAlert({
-      title: "Delete Member",
-      message:
-        "Are you sure you want to delete this member? This cannot be undone.",
+      title: `Delete ${terms.memberSingular}`,
+      message: `Are you sure you want to delete this ${lowerTerm(
+        terms.memberSingular,
+      )}? This cannot be undone.`,
       buttons: [
         {
           label: "Yes",
@@ -153,12 +159,11 @@ const AddOrUpdateMember = () => {
   };
 
   const onSubmit = handleSubmit((data) => {
-    console.log("data:", data);
     confirmAlert({
       title: "Confirmation",
       message: `Are you sure you want to ${
         isUpdating ? "update" : "submit"
-      } the member?`,
+      } the ${lowerTerm(terms.memberSingular)}?`,
       buttons: [
         {
           label: "Yes",
@@ -166,7 +171,7 @@ const AddOrUpdateMember = () => {
         },
         {
           label: "No",
-          onClick: () => console.log("Member update canceled"),
+          className: "confirm-alert-button confirm-alert-button-no",
         },
       ],
     });
@@ -174,12 +179,13 @@ const AddOrUpdateMember = () => {
 
   // Render the form fields based on the members' model
   const renderFormFields = () => {
+    // Labels are display-only; every input stays registered under its storage key.
     return membersModel.map((field) => {
       if (field.type === "checkbox") {
         const fieldValue = isUpdating ? currentMember[field.name] : false; // Get the current member field value when updating
         return (
-          <FormControl key={field._id} id={field.name}>
-            <FormLabel>{capitalize(field.name)}</FormLabel>
+          <FormControl key={field._id ?? field.name} id={field.name}>
+            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
             <Checkbox
               {...register(field.name)}
               colorScheme="blue"
@@ -191,11 +197,11 @@ const AddOrUpdateMember = () => {
         const fieldValue = isUpdating ? currentMember[field.name] : "";
         return (
           <FormControl
-            key={field._id}
+            key={field._id ?? field.name}
             id={field.name}
             isRequired={field.required}
           >
-            <FormLabel>{capitalize(field.name)}</FormLabel>
+            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
             <Select
               defaultValue={fieldValue}
               {...register(field.name, { required: field.required })}
@@ -213,11 +219,11 @@ const AddOrUpdateMember = () => {
         const fieldValue = isUpdating ? currentMember[field.name] : ""; // Get the current member field value when updating
         return (
           <FormControl
-            key={field._id}
+            key={field._id ?? field.name}
             id={field.name}
             isRequired={field.required}
           >
-            <FormLabel>{capitalize(field.name)}</FormLabel>
+            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
             <Input
               type={field.type}
               defaultValue={fieldValue}
@@ -233,14 +239,16 @@ const AddOrUpdateMember = () => {
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Flex justify="flex-end" alignItems="center" mx="6" mt="4">
         {!isGettingMembers && membersModel.length !== 0 && (
-          <Button
-            leftIcon={<FaPlusSquare />}
-            colorScheme="blue"
-            variant="outline"
-            onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-          >
-            Update Model
-          </Button>
+          <Can perm="members.manage">
+            <Button
+              leftIcon={<FaPlusSquare />}
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+            >
+              {`Update ${LABELS.memberModel(terms)}`}
+            </Button>
+          </Can>
         )}
       </Flex>
       <>
@@ -257,16 +265,18 @@ const AddOrUpdateMember = () => {
                   rounded={"xl"}
                   boxShadow={"lg"}
                 >
-                  <Heading>You don't have a model yet</Heading>
-                  <Button
-                    mt="4"
-                    leftIcon={<FaPlusSquare />}
-                    colorScheme="blue"
-                    variant="outline"
-                    onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-                  >
-                    Create Model
-                  </Button>
+                  <Heading>{`You don't have a ${lowerTerm(LABELS.memberModel(terms))} yet`}</Heading>
+                  <Can perm="members.manage">
+                    <Button
+                      mt="4"
+                      leftIcon={<FaPlusSquare />}
+                      colorScheme="blue"
+                      variant="outline"
+                      onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+                    >
+                      {`Create ${LABELS.memberModel(terms)}`}
+                    </Button>
+                  </Can>
                 </Flex>
               ) : (
                 <div style={{ width: "90%" }}>
@@ -316,7 +326,7 @@ const AddOrUpdateMember = () => {
                             isLoading={isDeleting}
                             onClick={handleDeleteMember}
                           >
-                            Delete Member
+                            {`Delete ${terms.memberSingular}`}
                           </Button>
                         </Can>
                       )}

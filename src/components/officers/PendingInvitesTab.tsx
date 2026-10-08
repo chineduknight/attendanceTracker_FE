@@ -5,19 +5,23 @@ import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { queryKeys } from "services/api/queryKeys";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
 import { Invite } from "rbac/types";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm, withArticle } from "helpers/organisationPresentation";
 
 interface Props { organisationId: string; }
 
 const PendingInvitesTab = ({ organisationId }: Props) => {
+  const terms = useTerms();
   const url = convertParamsToString(rbacRequest.INVITES, { organisationId });
-  const { data, isLoading } = useQueryWrapper(["officer-invites", organisationId], url);
+  const { data, isLoading } = useQueryWrapper(queryKeys.rbac.invites(organisationId), url);
   const invites: Invite[] = data?.data ?? [];
 
   const { mutate } = useMutationWrapper(deleteRequest, () =>
-    queryClient.invalidateQueries(["officer-invites", organisationId])
+    queryClient.invalidateQueries({ queryKey: queryKeys.rbac.invites(organisationId) })
   );
 
   const revoke = (inv: Invite) =>
@@ -36,7 +40,7 @@ const PendingInvitesTab = ({ organisationId }: Props) => {
   return (
     <Box>
       <Text mb={3} fontSize="sm" color="gray.600">
-        No emails are sent yet. Share the org name with the person and ask them to sign up (or set their email) with this exact address — they'll appear as an officer automatically.
+        No emails are sent yet. Share the org name with the person and ask them to sign up (or set their email) with this exact address — they'll appear as {withArticle(lowerTerm(terms.officerSingular))} automatically.
       </Text>
       <Box overflowX="auto">
         <Table size="sm">

@@ -1,98 +1,296 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Flex,
-  Text,
   Button,
-  Input,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Spinner,
-  useColorModeValue,
   Drawer,
   DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
   DrawerHeader,
   DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
-  useDisclosure,
+  Flex,
+  Input,
+  Menu,
+  MenuButton,
+  MenuDivider,
+  MenuItem,
+  MenuList,
+  Spinner,
+  Text,
   VStack,
-  Wrap,
-  WrapItem,
+  useColorModeValue,
+  useDisclosure,
 } from "@chakra-ui/react";
 import {
+  FaCheck,
+  FaChevronDown,
+  FaCopy,
   FaFileExcel,
   FaFilePdf,
   FaShareAlt,
   FaWhatsapp,
-  FaCopy,
 } from "react-icons/fa";
-import { useQueryWrapper } from "services/api/apiHelper";
-import useGlobalStore from "zStore";
-import { convertParamsToString } from "helpers/stringManipulations";
-import { orgRequest } from "services";
-import {
-  addMonths,
-  differenceInCalendarDays,
-  endOfMonth,
-  format,
-  isExists,
-  startOfMonth,
-  startOfDay,
-} from "date-fns";
 import ReactSelect, { MultiValue } from "react-select";
 import { toast } from "react-toastify";
+import useGlobalStore from "zStore";
+import { useMemberModel } from "hooks/useMemberModel";
+import { buildBirthdayQueryString, useBirthdays } from "hooks/useBirthdays";
+import { useQueryWrapper } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
+import { orgRequest } from "services/api/request";
+import { convertParamsToString } from "helpers/stringManipulations";
 import {
-  formatBirthdayForRange,
+  birthdayDisplayDate,
+  birthdayOccurrenceInRange,
+  birthdayRangeForPreset,
+  birthdayRelativeLabel,
+  birthdayShareHeader,
   formatBirthdayRangeDate,
-  parseBirthdayValue,
-} from "helpers/birthdayDates";
+  hasDobDateField,
+  localBusinessDate,
+  BirthdayPreset,
+  BirthdayRange,
+} from "helpers/birthday";
+import BirthdaySummaryCards, {
+  BirthdaySummary,
+} from "components/birthday/BirthdaySummaryCards";
+import BirthdayList from "components/birthday/BirthdayList";
 
-type StatusOption = {
-  value: string;
-  label: string;
+type StatusOption = { value: string; label: string };
+type ActivePreset = BirthdayPreset | "custom";
+
+// Secondary ranges live behind "More" so the three count tiles own the
+// first row on mobile.
+const MORE_PRESETS: Array<{ preset: BirthdayPreset; label: string }> = [
+  { preset: "thisMonth", label: "This Month" },
+  { preset: "nextMonth", label: "Next Month" },
+  { preset: "threeMonths", label: "3 Months" },
+];
+const EMPTY_SUMMARY: BirthdaySummary = {
+  today: null,
+  next7: null,
+  next30: null,
 };
 
+const getErrorMessage = (err: any, fallback: string): string => {
+  const statusCode = err?.response?.status;
+  if (statusCode === 401) {
+    return "";
+  }
+
+  const apiError = err?.response?.data?.error;
+  if (Array.isArray(apiError)) {
+    return apiError.filter(Boolean).join(", ");
+  }
+  if (typeof apiError === "string" && apiError.trim()) {
+    return apiError;
+  }
+  return fallback;
+};
+
+/**
+ * Phase 7B Birthday experience: proactive today / next 7 / next 30 overview
+ * that auto-loads on open, with the deeper presets, custom range, dynamic
+ * status filter, share and exports kept intact. Occurrence dates prefer the
+ * backend's `birthdayOccurrence` metadata and never derive age or birth year.
+ */
 const Birthday: React.FC = () => {
-  const [org] = useGlobalStore((state) => [state.organisation]);
+  const org = useGlobalStore((state) => state.organisation);
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const pageBg: string = useColorModeValue("gray.50", "gray.800");
+  const today = localBusinessDate();
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
-  const [statusOptions, setStatusOptions] = useState<string[]>([
-    "active",
-    "inactive",
-  ]);
-  const [hasSearched, setHasSearched] = useState(false);
+  // Proactive default: today → today + 30, no Find click required.
+  const [activePreset, setActivePreset] = useState<ActivePreset>("next30");
+  const [range, setRange] = useState<BirthdayRange>(() =>
+    birthdayRangeForPreset("next30", localBusinessDate())
+  );
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  // Statuses are stored with the organisation they belong to: after a switch
+  // this immediately reads as All instead of briefly sending A-only values
+  // that B's backend would reject.
+  const [statusSelection, setStatusSelection] = useState<{
+    organisationId: string;
+    values: string[];
+  }>({ organisationId: org.id, values: ["all"] });
+  const statusFilter = useMemo(
+    () =>
+      statusSelection.organisationId === org.id
+        ? statusSelection.values
+        : ["all"],
+    [statusSelection, org.id]
+  );
+  const setStatusFilter = (values: string[]) =>
+    setStatusSelection({ organisationId: org.id, values });
 
-  const formatDateInput = (date: Date) => format(date, "yyyy-MM-dd");
+  const {
+    fields,
+    hasData: modelLoaded,
+    isError: modelError,
+  } = useMemberModel(org.id);
+  const dobConfigured = hasDobDateField(fields);
 
-  const applyPresetRange = (start: Date, end: Date) => {
-    setFromDate(formatDateInput(start));
-    setToDate(formatDateInput(end));
-    setHasSearched(false);
+  // Status options come ONLY from the configured member model: organisations
+  // are not required to have a `status` field, and invented values would make
+  // the backend reject a filtered request (422). No field or no options means
+  // no status filter is exposed at all.
+  const statusOptions = useMemo(() => {
+    const statusField = fields.find(
+      (field) => field.name.trim().toLowerCase() === "status"
+    );
+    return statusField?.options?.filter(Boolean) ?? [];
+  }, [fields]);
+
+  // When the new model no longer offers a selected status, fall back to All
+  // instead of sending stale options the backend would reject.
+  useEffect(() => {
+    setStatusSelection((current) => {
+      if (current.organisationId !== org.id) return current;
+      const selected = current.values.filter((status) => status !== "all");
+      if (!selected.length) return current;
+      const valid = selected.filter((status) =>
+        statusOptions.some(
+          (option) => option.toLowerCase() === status.toLowerCase()
+        )
+      );
+      if (valid.length === selected.length) return current;
+      return {
+        organisationId: org.id,
+        values: valid.length ? valid : ["all"],
+      };
+    });
+  }, [org.id, statusOptions]);
+
+  const selectedStatuses = useMemo(
+    () => statusFilter.filter((status) => status !== "all"),
+    [statusFilter]
+  );
+  const statusesParam = selectedStatuses.join(",");
+
+  // ONE next-30-days snapshot backs all three proactive counts, independent of
+  // whichever range the active list below is showing.
+  const summaryRange = useMemo(
+    () => birthdayRangeForPreset("next30", today),
+    [today]
+  );
+  const summary = useBirthdays(org.id, {
+    fromDate: summaryRange.fromDate,
+    toDate: summaryRange.toDate,
+    statuses: selectedStatuses,
+    enabled: dobConfigured,
+  });
+  const list = useBirthdays(org.id, {
+    fromDate: range.fromDate,
+    toDate: range.toDate,
+    statuses: selectedStatuses,
+    enabled: dobConfigured,
+  });
+
+  const counts = useMemo<BirthdaySummary>(() => {
+    if (!summary.isSuccess) return EMPTY_SUMMARY;
+    const next7End = birthdayRangeForPreset("next7", today).toDate;
+    const occurrences = summary.members
+      .map((member) => birthdayOccurrenceInRange(member, summaryRange))
+      .filter((value): value is string => value != null);
+    return {
+      today: occurrences.filter((value) => value === today).length,
+      next7: occurrences.filter((value) => value <= next7End).length,
+      next30: occurrences.length,
+    };
+  }, [summary.isSuccess, summary.members, summaryRange, today]);
+
+  const applyPreset = (preset: BirthdayPreset) => {
+    setActivePreset(preset);
+    setRange(birthdayRangeForPreset(preset, localBusinessDate()));
   };
 
-  const getErrorMessage = (err: any, fallback: string): string => {
-    const statusCode = err?.response?.status;
-    if (statusCode === 401) {
-      return "";
-    }
-
-    const apiError = err?.response?.data?.error;
-    if (Array.isArray(apiError)) {
-      return apiError.filter(Boolean).join(", ");
-    }
-    if (typeof apiError === "string" && apiError.trim()) {
-      return apiError;
-    }
-    return fallback;
+  const startCustom = () => {
+    setActivePreset("custom");
+    setCustomFrom(range.fromDate);
+    setCustomTo(range.toDate);
   };
+
+  const customValid =
+    Boolean(customFrom) && Boolean(customTo) && customFrom <= customTo;
+
+  const applyCustom = () => {
+    if (!customValid) return;
+    setActivePreset("custom");
+    setRange({ fromDate: customFrom, toDate: customTo });
+  };
+
+  const activeMoreLabel =
+    activePreset === "custom"
+      ? "Custom"
+      : MORE_PRESETS.find(({ preset }) => preset === activePreset)?.label;
+
+  const emptyState =
+    activePreset === "today"
+      ? "No birthdays today."
+      : activePreset === "next7"
+      ? "No birthdays in the next 7 days."
+      : activePreset === "next30"
+      ? "No birthdays in the next 30 days."
+      : "No birthdays found for this date range.";
+
+  const statusSelectOptions = useMemo<StatusOption[]>(
+    () => [
+      { value: "all", label: "All" },
+      ...statusOptions.map((option) => ({
+        value: option,
+        label: option.charAt(0).toUpperCase() + option.slice(1),
+      })),
+    ],
+    [statusOptions]
+  );
+
+  const selectedStatusOptions = useMemo(
+    () =>
+      statusSelectOptions.filter((option) =>
+        statusFilter.includes(option.value)
+      ),
+    [statusFilter, statusSelectOptions]
+  );
+
+  const handleStatusChange = (selected: MultiValue<StatusOption>) => {
+    const values = selected.map((item) => item.value);
+    if (
+      values.length === 0 ||
+      (values.includes("all") && values.length === 1)
+    ) {
+      setStatusFilter(["all"]);
+      return;
+    }
+    if (values.includes("all") && values.length > 1) {
+      setStatusFilter(values.filter((value) => value !== "all"));
+      return;
+    }
+    setStatusFilter(values);
+  };
+
+  // Exports follow the ACTIVE range and status filter — never a backing 30-day
+  // dataset when the officer selected something else.
+  const exportQueryString = useMemo(
+    () => buildBirthdayQueryString(range.fromDate, range.toDate, statusesParam),
+    [range.fromDate, range.toDate, statusesParam]
+  );
+
+  const exportPdfUrl = useMemo(() => {
+    if (!dobConfigured) return "";
+    const base = convertParamsToString(orgRequest.BIRTHDAY_EXPORT_PDF, {
+      organisationId: org.id,
+    });
+    return `${base}?${exportQueryString}`;
+  }, [dobConfigured, org.id, exportQueryString]);
+
+  const exportExcelUrl = useMemo(() => {
+    if (!dobConfigured) return "";
+    const base = convertParamsToString(orgRequest.BIRTHDAY_EXPORT_EXCEL, {
+      organisationId: org.id,
+    });
+    return `${base}?${exportQueryString}`;
+  }, [dobConfigured, org.id, exportQueryString]);
 
   const handleExportSuccess = (response: any, format: "PDF" | "Excel") => {
     const exportUrl =
@@ -113,211 +311,61 @@ const Birthday: React.FC = () => {
   const handleExportError = (err: any, format: "PDF" | "Excel") => {
     const message = getErrorMessage(
       err,
-      `Failed to export ${format}. Please try again.`,
+      `Failed to export ${format}. Please try again.`
     );
     if (message) {
       toast.error(message);
     }
   };
 
-  const canSearch = Boolean(fromDate && toDate && org.id);
-
-  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
-    organisationId: org.id,
-  });
-
-  useQueryWrapper(["get-member-model-birthday", org.id], modelURL, {
-    enabled: Boolean(org.id),
-    onSuccess: (data: any) => {
-      const fields = data?.data?.fields;
-      const statusField = fields?.find((f: any) => f.name === "status");
-      if (statusField && Array.isArray(statusField.options)) {
-        setStatusOptions(statusField.options);
-      }
-    },
-  });
-
-  const selectedStatuses = useMemo(
-    () => statusFilter.filter((s) => s !== "all"),
-    [statusFilter],
-  );
-
-  const queryString = useMemo(() => {
-    if (!canSearch) return "";
-    const params = new URLSearchParams({
-      field: "dob",
-      startDate: fromDate,
-      endDate: toDate,
-      displayedFields: "name,dob",
-    });
-    if (selectedStatuses.length) {
-      params.set("status", selectedStatuses.join(","));
-    }
-    return params.toString();
-  }, [canSearch, fromDate, toDate, selectedStatuses]);
-
-  const dataUrl = useMemo(() => {
-    if (!canSearch) return "";
-    const base = convertParamsToString(orgRequest.BIRTHDAY, {
-      organisationId: org.id,
-    });
-    return `${base}?${queryString}`;
-  }, [canSearch, org.id, queryString]);
-
-  const exportPdfUrl = useMemo(() => {
-    if (!canSearch) return "";
-    const base = convertParamsToString(orgRequest.BIRTHDAY_EXPORT_PDF, {
-      organisationId: org.id,
-    });
-    return `${base}?${queryString}`;
-  }, [canSearch, org.id, queryString]);
-
-  const exportExcelUrl = useMemo(() => {
-    if (!canSearch) return "";
-    const base = convertParamsToString(orgRequest.BIRTHDAY_EXPORT_EXCEL, {
-      organisationId: org.id,
-    });
-    return `${base}?${queryString}`;
-  }, [canSearch, org.id, queryString]);
-
-  const {
-    data: birthdayResponse,
-    isFetching,
-    error,
-    refetch,
-  } = useQueryWrapper(
-    ["birthday", fromDate, toDate, org.id, selectedStatuses.join(",")],
-    dataUrl,
-    { enabled: false },
-  );
-
   const { refetch: refetchPdf, isFetching: isExportingPdf } = useQueryWrapper(
-    [
-      "birthday-export-pdf",
-      fromDate,
-      toDate,
+    queryKeys.birthday.export(
       org.id,
-      selectedStatuses.join(","),
-    ],
+      "pdf",
+      range.fromDate,
+      range.toDate,
+      statusesParam
+    ),
     exportPdfUrl,
     {
       enabled: false,
-      onSuccess: (response: any) => {
-        handleExportSuccess(response, "PDF");
-      },
-      onError: (err: any) => {
-        handleExportError(err, "PDF");
-      },
-    },
+      onSuccess: (response: any) => handleExportSuccess(response, "PDF"),
+      onError: (err: any) => handleExportError(err, "PDF"),
+    }
   );
 
   const { refetch: refetchExcel, isFetching: isExportingExcel } =
     useQueryWrapper(
-      [
-        "birthday-export-excel",
-        fromDate,
-        toDate,
+      queryKeys.birthday.export(
         org.id,
-        selectedStatuses.join(","),
-      ],
+        "excel",
+        range.fromDate,
+        range.toDate,
+        statusesParam
+      ),
       exportExcelUrl,
       {
         enabled: false,
-        onSuccess: (response: any) => {
-          handleExportSuccess(response, "Excel");
-        },
-        onError: (err: any) => {
-          handleExportError(err, "Excel");
-        },
-      },
+        onSuccess: (response: any) => handleExportSuccess(response, "Excel"),
+        onError: (err: any) => handleExportError(err, "Excel"),
+      }
     );
 
-  const handleSearch = () => {
-    if (canSearch) {
-      setHasSearched(true);
-      refetch();
-    }
-  };
-
-  const getBirthdayInsights = (dob: string) => {
-    const parsedDob = parseBirthdayValue(dob);
-    if (!parsedDob) {
-      return {
-        todayLabel: "-",
-        upcomingLabel: "-",
-      };
-    }
-
-    const today = startOfDay(new Date());
-    const birthMonth = parsedDob.getMonth();
-    const birthDate = parsedDob.getDate();
-    let year = today.getFullYear();
-    let nextBirthday: Date | null = null;
-
-    while (!nextBirthday && year <= today.getFullYear() + 8) {
-      if (isExists(year, birthMonth, birthDate)) {
-        const candidate = new Date(year, birthMonth, birthDate);
-        if (differenceInCalendarDays(candidate, today) >= 0) {
-          nextBirthday = candidate;
-        }
-      }
-      year += 1;
-    }
-
-    if (!nextBirthday) {
-      return {
-        todayLabel: "-",
-        upcomingLabel: "-",
-      };
-    }
-
-    const daysLeft = differenceInCalendarDays(nextBirthday, today);
-
-    if (daysLeft === 0) {
-      return {
-        todayLabel: "Today",
-        upcomingLabel: "Today",
-      };
-    }
-
-    if (daysLeft === 1) {
-      return {
-        todayLabel: "Not today",
-        upcomingLabel: "Tomorrow",
-      };
-    }
-
-    if (daysLeft <= 7) {
-      return {
-        todayLabel: "Not today",
-        upcomingLabel: format(nextBirthday, "EEEE"),
-      };
-    }
-
-    return {
-      todayLabel: "Not today",
-      upcomingLabel: `${daysLeft} days`,
-    };
-  };
-
-  const members: any[] =
-    birthdayResponse?.data?.members || birthdayResponse?.data || [];
-
   const buildShareText = () => {
-    const header = `🎂 Birthdays (${formatBirthdayRangeDate(
-      fromDate,
-    )} to ${formatBirthdayRangeDate(toDate)})\n\n`;
-    const list = members
-      .map(
-        (m: any, i: number) =>
-          `${i + 1}. ${m.name} - ${formatBirthdayForRange(
-            m.dob,
-            fromDate,
-            toDate,
-          )}`,
-      )
-      .join("\n");
-    return header + list;
+    const header = `${birthdayShareHeader(range)}\n\n`;
+    const lines = list.members.map((member, index) => {
+      const occurrence = birthdayOccurrenceInRange(member, range);
+      const display = occurrence
+        ? birthdayDisplayDate(occurrence)
+        : member.dob ?? "";
+      const relative = occurrence
+        ? birthdayRelativeLabel(occurrence, today)
+        : null;
+      return `${index + 1}. ${member.name ?? ""} — ${display}${
+        relative ? ` (${relative})` : ""
+      }`;
+    });
+    return header + lines.join("\n");
   };
 
   const handleWhatsApp = () => {
@@ -332,193 +380,169 @@ const Birthday: React.FC = () => {
       .catch(() => toast.error("Failed to copy. Please try again."));
   };
 
-  const statusSelectOptions = useMemo<StatusOption[]>(
-    () => [
-      { value: "all", label: "All" },
-      ...statusOptions.map((o) => ({
-        value: o,
-        label: o.charAt(0).toUpperCase() + o.slice(1),
-      })),
-    ],
-    [statusOptions],
-  );
-
-  const selectedStatusOptions = useMemo(
-    () => statusSelectOptions.filter((o) => statusFilter.includes(o.value)),
-    [statusFilter, statusSelectOptions],
-  );
-  const pageBg: string = useColorModeValue("gray.50", "gray.800");
-
   return (
     <Box minH="100vh" bg={pageBg}>
-      <Box p={4}>
-        {/* Share button */}
-        <Flex mb={3} justifyContent="flex-end">
-          <Button
-            leftIcon={<FaShareAlt />}
-            onClick={onOpen}
-            isDisabled={!hasSearched || members.length === 0}
-            colorScheme="gray"
-          >
-            Share
-          </Button>
-        </Flex>
-
-        {/* Filters */}
-        <Wrap mb={3} spacing={2}>
-          <WrapItem>
-            <Button
-              size="sm"
-              variant="outline"
-              colorScheme="pink"
-              onClick={() => {
-                const today = new Date();
-                applyPresetRange(startOfMonth(today), endOfMonth(today));
-              }}
-            >
-              This Month
-            </Button>
-          </WrapItem>
-          <WrapItem>
-            <Button
-              size="sm"
-              variant="outline"
-              colorScheme="pink"
-              onClick={() => {
-                const nextMonth = addMonths(new Date(), 1);
-                applyPresetRange(
-                  startOfMonth(nextMonth),
-                  endOfMonth(nextMonth),
-                );
-              }}
-            >
-              Next Month
-            </Button>
-          </WrapItem>
-          <WrapItem>
-            <Button
-              size="sm"
-              variant="outline"
-              colorScheme="pink"
-              onClick={() => {
-                const today = new Date();
-                applyPresetRange(
-                  startOfMonth(today),
-                  endOfMonth(addMonths(today, 3)),
-                );
-              }}
-            >
-              3 Months
-            </Button>
-          </WrapItem>
-        </Wrap>
-
-        <Flex
-          mb={6}
-          gap={2}
-          align="center"
-          direction={{ base: "column", md: "row" }}
-        >
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => {
-              setFromDate(e.target.value);
-              setHasSearched(false);
-              if (!toDate) setToDate(e.target.value);
-            }}
-            placeholder="From date"
-            w={{ base: "100%", md: "auto" }}
-            max={toDate || undefined}
-          />
-          <Input
-            type="date"
-            value={toDate}
-            onChange={(e) => {
-              setToDate(e.target.value);
-              setHasSearched(false);
-            }}
-            placeholder="To date"
-            w={{ base: "100%", md: "auto" }}
-            min={fromDate || undefined}
-          />
-          <Box w={{ base: "100%", md: "260px" }}>
-            <ReactSelect
-              isMulti
-              placeholder="Filter by status"
-              options={statusSelectOptions}
-              value={selectedStatusOptions}
-              closeMenuOnSelect={false}
-              onChange={(selected: MultiValue<StatusOption>) => {
-                const values = selected.map((item) => item.value);
-                setHasSearched(false);
-                if (
-                  values.length === 0 ||
-                  (values.includes("all") && values.length === 1)
-                ) {
-                  setStatusFilter(["all"]);
-                  return;
-                }
-                if (values.includes("all") && values.length > 1) {
-                  setStatusFilter(values.filter((v) => v !== "all"));
-                  return;
-                }
-                setStatusFilter(values);
-              }}
-            />
-          </Box>
-          <Button
-            colorScheme="pink"
-            onClick={handleSearch}
-            isDisabled={!canSearch}
-            w={{ base: "100%", md: "auto" }}
-          >
-            Find
-          </Button>
-        </Flex>
-
-        {isFetching && <Spinner />}
-        {Boolean(error) && (
-          <Text color="red.500" mb={4}>
-            Error fetching birthday data.
+      <Box maxW="5xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
+        {!modelLoaded && !modelError && <Spinner />}
+        {modelError && (
+          <Text color="red.500">Error loading the member model.</Text>
+        )}
+        {modelLoaded && !dobConfigured && (
+          <Text>
+            Birthdays are unavailable because this organisation does not have a
+            date-of-birth field configured.
           </Text>
         )}
 
-        {!isFetching && !error && hasSearched && members.length > 0 && (
-          <Box overflowX="auto">
-            <Table variant="striped" size="sm">
-              <Thead>
-                <Tr>
-                  <Th isNumeric>SN</Th>
-                  <Th>Name</Th>
-                  <Th>Date of Birth</Th>
-                  <Th>Birthday Status</Th>
-                  <Th>Coming Up</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {members.map((member: any, index: number) => {
-                  const { todayLabel, upcomingLabel } = getBirthdayInsights(
-                    member.dob,
-                  );
+        {modelLoaded && dobConfigured && (
+          <>
+            <Flex mb={3} align="center" justify="space-between" gap={3}>
+              <Box minW={0}>
+                <Text fontWeight="semibold" fontSize={{ base: "md", md: "xl" }}>
+                  Upcoming birthdays
+                </Text>
+                {/* The ACTIVE list range, not the backing 30-day snapshot. */}
+                <Text fontSize={{ base: "sm", md: "md" }} color="gray.500">
+                  {range.fromDate === range.toDate
+                    ? formatBirthdayRangeDate(range.fromDate)
+                    : `${formatBirthdayRangeDate(
+                        range.fromDate
+                      )} → ${formatBirthdayRangeDate(range.toDate)}`}
+                </Text>
+              </Box>
+              <Button
+                size={{ base: "sm", md: "md" }}
+                flexShrink={0}
+                leftIcon={<FaShareAlt />}
+                onClick={onOpen}
+                isDisabled={list.members.length === 0 || list.isFetching}
+                colorScheme="gray"
+              >
+                Share
+              </Button>
+            </Flex>
 
-                  return (
-                    <Tr key={member._id || index}>
-                      <Td isNumeric>{index + 1}</Td>
-                      <Td>{member.name}</Td>
-                      <Td>{member.dob}</Td>
-                      <Td>{todayLabel}</Td>
-                      <Td>{upcomingLabel}</Td>
-                    </Tr>
-                  );
-                })}
-              </Tbody>
-            </Table>
-          </Box>
-        )}
+            <BirthdaySummaryCards
+              summary={counts}
+              activePreset={activePreset}
+              onSelect={applyPreset}
+            />
+            {summary.isError && (
+              <Text fontSize="sm" color="gray.500" mt={2}>
+                Upcoming counts are unavailable right now.
+              </Text>
+            )}
 
-        {!isFetching && !error && hasSearched && members.length === 0 && (
-          <Text>No birthdays found for this date range.</Text>
+            <Flex
+              mt={{ base: 3, md: 4 }}
+              mb={{ base: 3, md: 4 }}
+              gap={2}
+              align="center"
+            >
+              <Menu placement="bottom-start">
+                <MenuButton
+                  as={Button}
+                  size={{ base: "sm", md: "md" }}
+                  flexShrink={0}
+                  colorScheme="pink"
+                  variant={activeMoreLabel ? "solid" : "outline"}
+                  rightIcon={<FaChevronDown />}
+                  aria-label={`More ranges${
+                    activeMoreLabel ? `, ${activeMoreLabel} selected` : ""
+                  }`}
+                >
+                  {activeMoreLabel ?? "More"}
+                </MenuButton>
+                <MenuList zIndex="dropdown">
+                  {MORE_PRESETS.map(({ preset, label }) => (
+                    <MenuItem
+                      key={preset}
+                      onClick={() => applyPreset(preset)}
+                      icon={
+                        activePreset === preset ? <FaCheck /> : <Box w="1em" />
+                      }
+                    >
+                      {label}
+                    </MenuItem>
+                  ))}
+                  <MenuDivider />
+                  <MenuItem
+                    onClick={startCustom}
+                    icon={
+                      activePreset === "custom" ? <FaCheck /> : <Box w="1em" />
+                    }
+                  >
+                    Custom
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+              {statusOptions.length > 0 && (
+                <Box flex={1} minW={0} maxW={{ md: "320px" }}>
+                  <ReactSelect
+                    isMulti
+                    placeholder="Filter by status"
+                    options={statusSelectOptions}
+                    value={selectedStatusOptions}
+                    closeMenuOnSelect={false}
+                    onChange={handleStatusChange}
+                  />
+                </Box>
+              )}
+            </Flex>
+
+            {activePreset === "custom" && (
+              <Flex mb={3} gap={2} align="center">
+                <Input
+                  type="date"
+                  size={{ base: "sm", md: "md" }}
+                  flex={1}
+                  minW={0}
+                  maxW={{ md: "180px" }}
+                  value={customFrom}
+                  onChange={(event) => setCustomFrom(event.target.value)}
+                  placeholder="From date"
+                  aria-label="From date"
+                  max={customTo || undefined}
+                />
+                <Input
+                  type="date"
+                  size={{ base: "sm", md: "md" }}
+                  flex={1}
+                  minW={0}
+                  maxW={{ md: "180px" }}
+                  value={customTo}
+                  onChange={(event) => setCustomTo(event.target.value)}
+                  placeholder="To date"
+                  aria-label="To date"
+                  min={customFrom || undefined}
+                />
+                <Button
+                  size={{ base: "sm", md: "md" }}
+                  flexShrink={0}
+                  colorScheme="pink"
+                  onClick={applyCustom}
+                  isDisabled={!customValid}
+                >
+                  Apply
+                </Button>
+              </Flex>
+            )}
+
+            {list.isFetching && <Spinner />}
+            {!list.isFetching && list.isError && (
+              <Text color="red.500" mb={4}>
+                Error fetching birthday data.
+              </Text>
+            )}
+            {!list.isFetching && !list.isError && list.isSuccess && (
+              <BirthdayList
+                members={list.members}
+                range={range}
+                asOf={today}
+                emptyState={emptyState}
+              />
+            )}
+          </>
         )}
       </Box>
 

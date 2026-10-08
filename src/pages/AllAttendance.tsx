@@ -6,11 +6,12 @@ import {
   Stack,
   Button,
   Badge,
+  Select,
 } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useQueryWrapper } from "services/api/apiHelper";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { attendanceRequest } from "services";
 import useGlobalStore from "zStore";
 import {
@@ -25,10 +26,19 @@ import {
 import { FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
+import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
+import {
+  AnalyticsInclusionFields,
+  AnalyticsInclusionFilter,
+  isAnalyticsIncluded,
+  matchesInclusionFilter,
+} from "helpers/attendanceAnalyticsInclusion";
 
 type PersonRef = { id: string; name: string };
 
-type AttendanceType = {
+type AttendanceType = AnalyticsInclusionFields & {
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -47,6 +57,7 @@ type AttendanceType = {
 const AllAttendance = () => {
   const navigate = useNavigate();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
   const pageBg = useColorModeValue("gray.50", "gray.800");
   const cardBg = useColorModeValue("white", "gray.700");
 
@@ -59,10 +70,29 @@ const AllAttendance = () => {
     organisationId: org.id,
   });
 
-  const { isFetching } = useQueryWrapper(["all-attendance-12"], url, {
+  const { isFetching } = useQueryWrapper(queryKeys.attendances(org.id), url, {
     onSuccess: handleGetOrgSuccess,
   });
   const isLoading = isFetching && allAttend.length === 0;
+
+  const [inclusionFilter, setInclusionFilter] =
+    useState<AnalyticsInclusionFilter>("all");
+  const visibleAttendance = useMemo(
+    () =>
+      allAttend
+        .filter((attendance) =>
+          matchesInclusionFilter(attendance, inclusionFilter)
+        )
+        .sort((a, b) => {
+          const dateDiff = b.dateFormated - a.dateFormated;
+          if (dateDiff !== 0) return dateDiff;
+          // Same date: newest created first
+          return (
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        }),
+    [allAttend, inclusionFilter]
+  );
 
   function handleNavigate(attendanceInfo) {
     const url = convertParamsToString(PROTECTED_PATHS.ATTENDANCE, {
@@ -86,20 +116,29 @@ const AllAttendance = () => {
         mx="auto"
       >
         {isLoading ? (
-          <LoadingSpinner h="30vh" text="Loading attendance..." />
+          <LoadingSpinner
+            h="30vh"
+            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+          />
         ) : allAttend.length ? (
           <>
-            {[...allAttend]
-              .sort((a, b) => {
-                const dateDiff = b.dateFormated - a.dateFormated;
-                if (dateDiff !== 0) return dateDiff;
-                // Same date: newest created first
-                return (
-                  new Date(b.createdAt).getTime() -
-                  new Date(a.createdAt).getTime()
-                );
-              })
-              .map((attendance) => {
+            <Select
+              aria-label="Filter by analytics inclusion"
+              value={inclusionFilter}
+              onChange={(e) =>
+                setInclusionFilter(e.target.value as AnalyticsInclusionFilter)
+              }
+            >
+              <option value="all">All</option>
+              <option value="included">Included in analytics</option>
+              <option value="excluded">Excluded from analytics</option>
+            </Select>
+            {visibleAttendance.length === 0 && (
+              <Text ml="4">
+                {`No ${lowerTerm(terms.attendanceSingular)} matches this filter.`}
+              </Text>
+            )}
+            {visibleAttendance.map((attendance) => {
                 const editsRemaining = resolveEditsRemaining(attendance);
                 const editCount = resolveEditCount(attendance);
                 const canEdit = canEditAttendance(attendance);
@@ -128,6 +167,15 @@ const AllAttendance = () => {
                         {editCount > 0 && (
                           <Badge colorScheme="orange" fontSize="0.65rem">
                             edited {editCount}×
+                          </Badge>
+                        )}
+                        {!isAnalyticsIncluded(attendance) && (
+                          <Badge
+                            variant="outline"
+                            colorScheme="gray"
+                            fontSize="0.65rem"
+                          >
+                            Excluded from analytics
                           </Badge>
                         )}
                       </Flex>
@@ -180,11 +228,11 @@ const AllAttendance = () => {
                   </Flex>
                 </Flex>
                 );
-              })}
+            })}
           </>
         ) : (
           <Text ml="4" fontWeight="bold">
-            No Attendance here, Kindly Create attendance
+            {`No ${terms.attendanceSingular} here, Kindly Create ${lowerTerm(terms.attendanceSingular)}`}
           </Text>
         )}
       </Stack>

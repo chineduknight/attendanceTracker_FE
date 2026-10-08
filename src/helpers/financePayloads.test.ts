@@ -3,7 +3,7 @@ import {
   buildDuesCorrectionPayload,
   buildLevyCorrectionPayload,
 } from "helpers/financePayloads";
-import { monthStatusColor } from "helpers/financeConstants";
+import { formatMoney, statusMeta } from "helpers/financeConstants";
 import type { MonthStatus } from "components/finance/financeTypes";
 
 describe("finance payload builders", () => {
@@ -39,12 +39,20 @@ describe("finance payload builders", () => {
   });
 });
 
-describe("monthStatusColor", () => {
-  it("maps each status to a distinct color and falls back for unknown", () => {
-    expect(monthStatusColor("paid")).toBe("green.100");
-    expect(monthStatusColor("partial")).toBe("yellow.100");
-    expect(monthStatusColor("unpaid")).toBe("red.100");
-    expect(monthStatusColor("not-due")).toBe("gray.100");
-    expect(monthStatusColor("unknown" as MonthStatus)).toBe("gray.100");
+describe("statusMeta", () => {
+  it("labels and colours each status, falling back to not-due", () => {
+    expect(statusMeta("paid")).toEqual({ label: "Paid", scheme: "green" });
+    expect(statusMeta("partial")).toEqual({ label: "Part paid", scheme: "orange" });
+    expect(statusMeta("unpaid")).toEqual({ label: "Unpaid", scheme: "red" });
+    expect(statusMeta("not-due")).toEqual({ label: "Not due", scheme: "gray" });
+    expect(statusMeta("unknown" as MonthStatus)).toEqual({ label: "Not due", scheme: "gray" });
+  });
+});
+
+describe("formatMoney", () => {
+  it("drops kobo on whole amounts but keeps it when present", () => {
+    expect(formatMoney(751000)).toMatch(/751,000$/);
+    expect(formatMoney(1250.5)).toMatch(/1,250\.50$/);
+    expect(formatMoney(0)).toMatch(/0$/);
   });
 });

@@ -1,6 +1,21 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { PermissionKey } from "rbac/permissions";
+import { AttendanceEligibilityRule } from "helpers/attendanceEligibility";
+import {
+  DEFAULT_FEATURE_VISIBILITY,
+  DEFAULT_TERMINOLOGY,
+  OrganisationFeatureVisibility,
+  OrganisationTerminology,
+} from "helpers/organisationPresentation";
+import {
+  AttendanceStatusDefinition,
+  DEFAULT_ATTENDANCE_STATUSES,
+} from "helpers/attendanceStatuses";
+import {
+  DEFAULT_WELFARE_REVIEW_WINDOW_DAYS,
+  WelfareSettings,
+} from "helpers/welfareSettings";
 
 export type currentAttendanceType = {
   name: string;
@@ -10,6 +25,8 @@ export type currentAttendanceType = {
   subCategoryId?: string | null;
   date: string;
   members?: Array<any>;
+  /** New sessions only; `[]` means everyone is expected. */
+  eligibilityRules?: AttendanceEligibilityRule[];
 };
 
 export type UserType = {
@@ -31,6 +48,23 @@ export type OrganisationType = {
   permissions: PermissionKey[];
   collapseAttendanceByDay?: boolean;
   maxAttendanceEdits?: number | null;
+  attendanceStatuses: AttendanceStatusDefinition[];
+  /**
+   * Display-only presentation config. Optional because a persisted org from
+   * an older build may lack it — always read via organisationPresentation.
+   */
+  terminology?: OrganisationTerminology;
+  featureVisibility?: OrganisationFeatureVisibility;
+  /**
+   * Whether Create Attendance offers eligibility rules. Optional for the same
+   * reason — always read via isAttendanceEligibilityEnabled.
+   */
+  attendanceEligibilityEnabled?: boolean;
+  /**
+   * Welfare review settings. Optional for the same reason — always read via
+   * the welfareSettings helper.
+   */
+  welfareSettings?: WelfareSettings;
 };
 
 export const EMPTY_USER: UserType = {
@@ -52,6 +86,11 @@ export const EMPTY_ORG: OrganisationType = {
   permissions: [],
   collapseAttendanceByDay: false,
   maxAttendanceEdits: null,
+  attendanceStatuses: [...DEFAULT_ATTENDANCE_STATUSES],
+  terminology: { ...DEFAULT_TERMINOLOGY },
+  featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+  attendanceEligibilityEnabled: false,
+  welfareSettings: { reviewWindowDays: DEFAULT_WELFARE_REVIEW_WINDOW_DAYS },
 };
 
 interface GlobalStoreState {

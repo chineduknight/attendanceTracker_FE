@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { useCategories } from "hooks/useCategories";
+import { queryKeys } from "services/api/queryKeys";
 
 function Probe({ orgId }: { orgId: string }) {
   const { categories } = useCategories(orgId);
@@ -17,7 +18,7 @@ const renderProbe = (orgId: string) =>
 
 it("derives the category list from the cached query payload", () => {
   // The API wraps payloads as { data: ... }; the hook should read data.data.
-  queryClient.setQueryData(["get-all-category"], {
+  queryClient.setQueryData(queryKeys.categories("org1"), {
     data: [
       { id: "c1", name: "Sunday Service", status: "active", subCategories: [] },
     ],
@@ -27,7 +28,7 @@ it("derives the category list from the cached query payload", () => {
 });
 
 it("returns an empty list before any data has loaded", () => {
-  queryClient.removeQueries({ queryKey: ["get-all-category"] });
+  queryClient.removeQueries({ queryKey: queryKeys.categories("org1") });
   // orgId "" keeps the query disabled, so no data is ever present.
   renderProbe("");
   expect(screen.getByText("count:0")).toBeInTheDocument();

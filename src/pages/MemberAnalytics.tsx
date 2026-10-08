@@ -15,6 +15,10 @@ import AttendanceTimeline from "components/analytics/AttendanceTimeline";
 import MemberRecordsTable from "components/analytics/MemberRecordsTable";
 import { openExportUrl, handleExportError } from "components/analytics/analyticsExport";
 import { MemberAnalytics as MemberAnalyticsData } from "components/analytics/memberAnalyticsTypes";
+import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
+import { useTerms } from "hooks/useOrgPresentation";
+import { lowerTerm } from "helpers/organisationPresentation";
+import { queryKeys } from "services/api/queryKeys";
 
 const buildQuery = (fromDate: string, toDate: string) => {
   const params = new URLSearchParams();
@@ -30,6 +34,7 @@ const MemberAnalyticsPage: React.FC = () => {
   const { memberId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
 
   const {
     fromDate, toDate, setFromDate, setToDate,
@@ -52,12 +57,13 @@ const MemberAnalyticsPage: React.FC = () => {
   }, [canQuery, org.id, memberId, queryString]);
 
   const { data: response, isFetching, error } = useQueryWrapper(
-    ["memberAnalytics", org.id, memberId, fromDate, toDate],
+    queryKeys.analytics.member(org.id, memberId, fromDate, toDate),
     url,
     { enabled: canQuery },
   );
 
   const analytics: MemberAnalyticsData | undefined = response?.data;
+  const statuses = useAttendanceStatuses(analytics?.attendanceStatuses);
   const statusCode = (error as any)?.response?.status;
   const hasData = Boolean(analytics && analytics.summary.totalSessions > 0);
 
@@ -132,13 +138,19 @@ const MemberAnalyticsPage: React.FC = () => {
 
         {isFetching && <Spinner />}
         {!isFetching && statusCode === 404 && (
-          <Text color="red.500" mt={4}>Member not found in this organisation.</Text>
+          <Text color="red.500" mt={4}>
+            {`${terms.memberSingular} not found in this organisation.`}
+          </Text>
         )}
         {!isFetching && error && statusCode !== 404 && (
-          <Text color="red.500" mt={4}>Error loading member analytics.</Text>
+          <Text color="red.500" mt={4}>
+            {`Error loading ${lowerTerm(terms.memberSingular)} analytics.`}
+          </Text>
         )}
         {!isFetching && !error && analytics && !hasData && (
-          <Text mt={4}>No attendance records for this range.</Text>
+          <Text mt={4}>
+            {`No included ${lowerTerm(terms.attendanceSingular)} records for this range.`}
+          </Text>
         )}
         {!isFetching && !error && hasData && analytics && (
           <Flex direction="column" gap={4} mt={2}>
@@ -149,13 +161,11 @@ const MemberAnalyticsPage: React.FC = () => {
               attendanceRate={analytics.summary.attendanceRate}
             />
             <StatTiles
-              present={analytics.summary.present}
-              absent={analytics.summary.absent}
-              apology={analytics.summary.apology}
+              behaviorCounts={analytics.summary.behaviorCounts}
               totalSessions={analytics.summary.totalSessions}
             />
-            <AttendanceTimeline verdicts={analytics.verdicts} />
-            <MemberRecordsTable records={analytics.records} />
+            <AttendanceTimeline verdicts={analytics.verdicts} statuses={statuses} />
+            <MemberRecordsTable records={analytics.records} statuses={statuses} />
           </Flex>
         )}
         </>

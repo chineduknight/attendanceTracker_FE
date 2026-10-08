@@ -44,10 +44,15 @@ import {
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import { Q_KEY } from "utils/constant";
 import ReactSelect, { MultiValue } from "react-select";
+import { useMemberModel } from "hooks/useMemberModel";
+import { memberFieldLabeler } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
+import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
+import { LABELS } from "config/presentationLabels";
+import { lowerTerm } from "helpers/organisationPresentation";
 
 type SelectOption = {
   value: string;
@@ -60,15 +65,14 @@ type FilterableField = {
 const REQUIRED_EXPORT_FIELDS = ["name"];
 
 const ViewMembers: React.FC = () => {
+  const terms = useTerms();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [searchQuery, setSearchQuery] = useState("");
+  const selectedFieldsStorageKey = `selectedFields-${org.id}`;
   const [selectedFields, setSelectedFields] = useState<string[]>(() => {
-    const stored = localStorage.getItem("selectedFields");
+    const stored = localStorage.getItem(selectedFieldsStorageKey);
     return stored ? JSON.parse(stored) : [];
   });
-  const [filterableFields, setFilterableFields] = useState<FilterableField[]>(
-    [],
-  );
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const navigate = useNavigate();
   const isCompactActions = useBreakpointValue({ base: true, sm: false });
@@ -76,23 +80,23 @@ const ViewMembers: React.FC = () => {
   // The keys you always want to exclude
   const filteredKeys = useMemo(
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
-    [],
+    []
   );
-  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
-    organisationId: org.id,
-  });
-
-  useQueryWrapper(["get-member-model"], modelURL, {
-    onSuccess: (data) => {
-      const fields = data?.data.fields ?? [];
-      const optionFields = fields
+  // Display labels only; filters, query params and saved columns keep storage keys.
+  const { fields: modelFields } = useMemberModel(org.id);
+  const labelFor = useMemo(
+    () => memberFieldLabeler(modelFields),
+    [modelFields]
+  );
+  const filterableFields = useMemo<FilterableField[]>(
+    () =>
+      modelFields
         .filter(
-          (field: any) => field.type === "option" && Array.isArray(field.options),
+          (field) => field.type === "option" && Array.isArray(field.options)
         )
-        .map((field: any) => ({ name: field.name, options: field.options }));
-      setFilterableFields(optionFields);
-    },
-  });
+        .map((field) => ({ name: field.name, options: field.options ?? [] })),
+    [modelFields]
+  );
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
@@ -104,7 +108,7 @@ const ViewMembers: React.FC = () => {
   }, [members, filteredKeys]);
   const activeExportFilters = useMemo(
     () => Object.entries(filters).filter(([, values]) => values.length > 0),
-    [filters],
+    [filters]
   );
   const exportFields = useMemo(
     () =>
@@ -112,9 +116,9 @@ const ViewMembers: React.FC = () => {
         new Set([
           ...REQUIRED_EXPORT_FIELDS,
           ...selectedFields.filter((field) => Boolean(field)),
-        ]),
+        ])
       ),
-    [selectedFields],
+    [selectedFields]
   );
   const exportQueryString = useMemo(() => {
     const queryParams = new URLSearchParams();
@@ -122,10 +126,6 @@ const ViewMembers: React.FC = () => {
     activeExportFilters.forEach(([field, values]) => {
       queryParams.set(field, values.join(","));
     });
-    if (activeExportFilters.length) {
-      queryParams.set("sort", "part:asc");
-    }
-
     if (exportFields.length) {
       queryParams.set("fields", exportFields.join(","));
     }
@@ -135,23 +135,26 @@ const ViewMembers: React.FC = () => {
   }, [exportFields, activeExportFilters]);
   const exportMembersUrl = useMemo(
     () => `${url}/export${exportQueryString}`,
-    [exportQueryString, url],
+    [exportQueryString, url]
   );
   const exportMembersPdfUrl = useMemo(
     () => `${url}/export/pdf${exportQueryString}`,
-    [exportQueryString, url],
+    [exportQueryString, url]
   );
 
   useEffect(() => {
-    localStorage.setItem("selectedFields", JSON.stringify(selectedFields));
-  }, [selectedFields]);
+    localStorage.setItem(
+      selectedFieldsStorageKey,
+      JSON.stringify(selectedFields)
+    );
+  }, [selectedFields, selectedFieldsStorageKey]);
   useEffect(() => {
     if (members.length > 0 && selectedFields.length === 0) {
       setSelectedFields(allExtraFields);
     }
   }, [members, allExtraFields, selectedFields]);
 
-  const { isLoading, error } = useQueryWrapper([Q_KEY.GET_MEMBERS], url, {
+  const { isLoading, error } = useQueryWrapper(queryKeys.members(org.id), url, {
     onSuccess: (res) => {
       setMembers(res.data);
     },
@@ -172,7 +175,7 @@ const ViewMembers: React.FC = () => {
             window.open(response.data, "_blank");
           }
         },
-      },
+      }
     );
   const { refetch: exportMembersPdf, isFetching: isExportingMembersPdf } =
     useQueryWrapper(
@@ -190,12 +193,12 @@ const ViewMembers: React.FC = () => {
             window.open(response.data, "_blank");
           }
         },
-      },
+      }
     );
 
   const activeFilterCount = useMemo(
     () => Object.values(filters).filter((values) => values.length > 0).length,
-    [filters],
+    [filters]
   );
 
   const filteredMembers = members.filter((member) => {
@@ -239,10 +242,10 @@ const ViewMembers: React.FC = () => {
                 colorScheme="blue"
                 onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
                 leftIcon={<FaUserPlus />}
-                aria-label="Add Member"
+                aria-label={LABELS.addMember(terms)}
                 px={isCompactActions ? 3 : 4}
               >
-                {!isCompactActions && "Add Member"}
+                {!isCompactActions && LABELS.addMember(terms)}
               </Button>
             </Can>
             <Menu>
@@ -265,7 +268,9 @@ const ViewMembers: React.FC = () => {
                     !org.id || isLoading || Boolean(error) || isExportingMembers
                   }
                 >
-                  {isExportingMembers ? "Exporting..." : "Export Member List"}
+                  {isExportingMembers
+                    ? "Exporting..."
+                    : `Export ${terms.memberSingular} List`}
                 </MenuItem>
                 <MenuItem
                   icon={<Icon as={FaFilePdf} color="red.500" />}
@@ -278,14 +283,19 @@ const ViewMembers: React.FC = () => {
                     isExportingMembersPdf
                   }
                 >
-                  {isExportingMembersPdf ? "Exporting..." : "Export Member PDF"}
+                  {isExportingMembersPdf
+                    ? "Exporting..."
+                    : `Export ${terms.memberSingular} PDF`}
                 </MenuItem>
               </MenuList>
             </Menu>
           </Flex>
         </Flex>
         {isLoading ? (
-          <LoadingSpinner h="45vh" text="Loading members..." />
+          <LoadingSpinner
+            h="45vh"
+            text={`Loading ${lowerTerm(terms.memberPlural)}...`}
+          />
         ) : error ? (
           <Box
             bg="#fff"
@@ -295,7 +305,9 @@ const ViewMembers: React.FC = () => {
             textAlign="center"
           >
             <Text color="red.500" fontWeight="bold">
-              Error occurred while fetching members.
+              {`Error occurred while fetching ${lowerTerm(
+                terms.memberPlural
+              )}.`}
             </Text>
           </Box>
         ) : (
@@ -348,25 +360,27 @@ const ViewMembers: React.FC = () => {
                           (option) => ({
                             value: option,
                             label: capitalize(option),
-                          }),
+                          })
                         );
                         const selected = options.filter((option) =>
-                          (filters[field.name] ?? []).includes(option.value),
+                          (filters[field.name] ?? []).includes(option.value)
                         );
                         return (
                           <Box key={field.name} mb={3}>
                             <Text fontSize="sm" fontWeight="bold" mb={1}>
-                              {capitalize(field.name)}
+                              {labelFor(field.name)}
                             </Text>
                             <ReactSelect
                               isMulti
-                              placeholder={`Filter by ${capitalize(field.name)}`}
+                              placeholder={`Filter by ${labelFor(field.name)}`}
                               options={options}
                               value={selected}
                               closeMenuOnSelect={false}
-                              onChange={(selected: MultiValue<SelectOption>) => {
+                              onChange={(
+                                selected: MultiValue<SelectOption>
+                              ) => {
                                 const values = selected.map(
-                                  (item) => item.value,
+                                  (item) => item.value
                                 );
                                 setFilters((prev) => ({
                                   ...prev,
@@ -383,7 +397,7 @@ const ViewMembers: React.FC = () => {
               )}
             </Flex>
             <Text mb={4} fontWeight="bold">
-              Total Members: {filteredMembers.length}
+              {`Total ${terms.memberPlural}: ${filteredMembers.length}`}
             </Text>
             <Box mb={8}>
               <Flex
@@ -413,7 +427,7 @@ const ViewMembers: React.FC = () => {
                   <Flex gap={4} wrap="wrap" pt={2}>
                     {allExtraFields.map((field) => (
                       <Checkbox key={field} value={field}>
-                        {capitalize(field)}
+                        {labelFor(field)}
                       </Checkbox>
                     ))}
                   </Flex>
@@ -429,7 +443,7 @@ const ViewMembers: React.FC = () => {
                 textAlign="center"
               >
                 <Heading as="h2" size="lg">
-                  No members found
+                  {`No ${lowerTerm(terms.memberPlural)} found`}
                 </Heading>
               </Box>
             ) : (
@@ -460,7 +474,7 @@ const ViewMembers: React.FC = () => {
                             onClick={() => {
                               const pagePath = convertParamsToString(
                                 PROTECTED_PATHS.UPDATE_MEMBER,
-                                { memberId: member.id },
+                                { memberId: member.id }
                               );
                               navigate(pagePath);
                             }}
@@ -468,12 +482,29 @@ const ViewMembers: React.FC = () => {
                             <FaPencilAlt />
                           </Button>
                         </Can>
+                        <Can perm="attendance.view">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            colorScheme="teal"
+                            onClick={() =>
+                              navigate(
+                                convertParamsToString(
+                                  PROTECTED_PATHS.MEMBER_ATTENDANCE_AVAILABILITY,
+                                  { memberId: member.id }
+                                )
+                              )
+                            }
+                          >
+                            Availability
+                          </Button>
+                        </Can>
                       </Flex>
                       {/* Render only the additional fields that the user has selected */}
                       {getDisplayFields(member).map(([key, value]) => (
                         <Flex key={key} align="center">
                           <Text fontWeight="bold" flexShrink={0} mr={2}>
-                            {capitalize(key)}:
+                            {labelFor(key)}:
                           </Text>
                           <Text>{formatFieldValue(value)}</Text>
                         </Flex>

@@ -13,6 +13,7 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import {
   postRequest,
+  queryClient,
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
@@ -22,13 +23,18 @@ import { useState } from "react";
 import { CategoryType } from "hooks/useCategories";
 import { toast } from "react-toastify";
 import Loader from "components/Loader";
+import { queryKeys } from "services/api/queryKeys";
+import { useTerms } from "hooks/useOrgPresentation";
 const SubCategory = () => {
-  const onSuccess = (data) => {
-    toast.success("Sub Category added successfully");
+  const [org] = useGlobalStore((state) => [state.organisation]);
+  const terms = useTerms();
+  const onSuccess = () => {
+    toast.success(`${terms.subCategorySingular} added successfully`);
+    // Only the current organisation's categories are stale.
+    queryClient.invalidateQueries({ queryKey: queryKeys.categories(org.id) });
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
-  const [org] = useGlobalStore((state) => [state.organisation]);
   const handleAddSubCategory = (details) => {
     const data = {
       name: details.subCategoryId,
@@ -52,7 +58,7 @@ const SubCategory = () => {
     setAllCategory(res.data);
   };
   const { isLoading: isGettingCat } = useQueryWrapper(
-    ["get-all-category"],
+    queryKeys.categories(org.id),
     catUrl,
     {
       onSuccess: onCatSuccess,
@@ -80,7 +86,7 @@ const SubCategory = () => {
         >
           <form onSubmit={handleSubmit(onSubmit)}>
             <FormControl id="category" mt="4" isRequired>
-              <FormLabel mb="0">Category</FormLabel>
+              <FormLabel mb="0">{terms.categorySingular}</FormLabel>
               <Select
                 placeholder="Select option"
                 {...register("categoryId", { required: true })}
@@ -93,7 +99,7 @@ const SubCategory = () => {
               </Select>
             </FormControl>
             <FormControl mt="4" id="subCategory" isRequired>
-              <FormLabel mb="0">Sub Category Name</FormLabel>
+              <FormLabel mb="0">{`${terms.subCategorySingular} name`}</FormLabel>
               <Input
                 type="sub_category"
                 {...register("subCategoryId", { required: true })}

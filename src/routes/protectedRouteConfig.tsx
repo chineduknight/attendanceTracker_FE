@@ -1,6 +1,9 @@
 import WithSuspense from "components/HOC/WithSuspense";
 import { lazy } from "react";
+import { PermissionKey } from "rbac/permissions";
 import { PROTECTED_PATHS } from "./pagePath";
+import { OptionalFeature } from "helpers/organisationPresentation";
+import { LABELS, PresentationText } from "config/presentationLabels";
 
 const Dashboard = WithSuspense(lazy(() => import("pages/Dashboard")));
 const UserModel = WithSuspense(lazy(() => import("pages/UserModel")));
@@ -16,15 +19,21 @@ const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
 const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
 const ViewMembers = WithSuspense(lazy(() => import("pages/ViewMembers")));
 const Analytics = WithSuspense(lazy(() => import("pages/Analytics")));
-const MemberAnalytics = WithSuspense(lazy(() => import("pages/MemberAnalytics")));
+const MemberAnalytics = WithSuspense(
+  lazy(() => import("pages/MemberAnalytics"))
+);
 const Birthday = WithSuspense(lazy(() => import("pages/Birthday")));
 const Finance = WithSuspense(lazy(() => import("pages/Finance")));
+const Welfare = WithSuspense(lazy(() => import("pages/Welfare")));
 const OfficersRoles = WithSuspense(lazy(() => import("pages/OfficersRoles")));
 const AddOrganisation = WithSuspense(
   lazy(() => import("pages/AddOrganisation"))
 );
 const OrganisationSettings = WithSuspense(
   lazy(() => import("pages/OrganisationSettings"))
+);
+const MemberAttendanceAvailability = WithSuspense(
+  lazy(() => import("pages/MemberAttendanceAvailability"))
 );
 
 const {
@@ -36,6 +45,7 @@ const {
   SUB_CATEGORY,
   ADD_MEMBER,
   UPDATE_MEMBER,
+  MEMBER_ATTENDANCE_AVAILABILITY,
   CREATE_ATTENDANCE,
   MARK_ATTENANCE,
   ATTENDANCE,
@@ -46,6 +56,7 @@ const {
   MEMBER_ANALYTICS,
   BIRTHDAY,
   FINANCE,
+  WELFARE,
   OFFICERS_ROLES,
   SETTINGS,
 } = PROTECTED_PATHS;
@@ -53,29 +64,149 @@ const {
 export type PageRouteConfig = {
   path: string;
   element: JSX.Element;
-  title: string;
+  /** Static, or derived from the selected organisation's terminology. */
+  title: PresentationText;
   showBack?: boolean;
+  /**
+   * Permission required to view this route. Routes without a `perm` (the org
+   * picker, dashboard, etc.) are always allowed.
+   */
+  perm?: PermissionKey;
+  /** Optional module; a direct visit redirects when the org hides it. */
+  feature?: OptionalFeature;
 };
 
 export const PAGE_ROUTES: PageRouteConfig[] = [
-  { path: ALL_ORG, element: <OrgList />, title: "Organisations", showBack: false },
-  { path: DASHBOARD, element: <Dashboard />, title: "Dashboard", showBack: false },
+  {
+    path: ALL_ORG,
+    element: <OrgList />,
+    title: "Organisations",
+    showBack: false,
+  },
+  {
+    path: DASHBOARD,
+    element: <Dashboard />,
+    title: "Dashboard",
+    showBack: false,
+  },
   { path: ADD_ORG, element: <AddOrganisation />, title: "New Organisation" },
-  { path: USER_MODEL, element: <UserModel />, title: "User Model" },
-  { path: CATEGORY, element: <Category />, title: "Create Category" },
-  { path: SUB_CATEGORY, element: <SubCategory />, title: "Create Sub-Category" },
-  { path: ADD_MEMBER, element: <AddMember />, title: "Add Member" },
-  { path: UPDATE_MEMBER, element: <AddMember />, title: "Update Member" },
-  { path: MARK_ATTENANCE, element: <MarkAttendance />, title: "Mark Attendance" },
-  { path: UPDATE_ATTENANCE, element: <MarkAttendance />, title: "Mark Attendance" },
-  { path: CREATE_ATTENDANCE, element: <CreateAttendance />, title: "Create Attendance" },
-  { path: ATTENDANCE, element: <Attendance />, title: "View Attendance" },
-  { path: ALL_ATTENDANCE, element: <AllAttendance />, title: "All Attendance" },
-  { path: VIEW_MEMBER, element: <ViewMembers />, title: "View Members" },
-  { path: ANALYTICS, element: <Analytics />, title: "Attendance Analytics" },
-  { path: MEMBER_ANALYTICS, element: <MemberAnalytics />, title: "Member Analytics" },
-  { path: BIRTHDAY, element: <Birthday />, title: "Birthdays" },
-  { path: FINANCE, element: <Finance />, title: "Finance" },
-  { path: OFFICERS_ROLES, element: <OfficersRoles />, title: "Officers & Roles" },
-  { path: SETTINGS, element: <OrganisationSettings />, title: "Organisation Settings" },
+  {
+    path: USER_MODEL,
+    element: <UserModel />,
+    title: LABELS.memberModel,
+    perm: "members.manage",
+  },
+  {
+    path: CATEGORY,
+    element: <Category />,
+    title: LABELS.createCategory,
+    perm: "categories.manage",
+  },
+  {
+    path: SUB_CATEGORY,
+    element: <SubCategory />,
+    title: LABELS.createSubCategory,
+    perm: "categories.manage",
+  },
+  {
+    path: ADD_MEMBER,
+    element: <AddMember />,
+    title: LABELS.addMember,
+    perm: "members.manage",
+  },
+  {
+    path: UPDATE_MEMBER,
+    element: <AddMember />,
+    title: LABELS.updateMember,
+    perm: "members.manage",
+  },
+  {
+    path: MEMBER_ATTENDANCE_AVAILABILITY,
+    element: <MemberAttendanceAvailability />,
+    title: LABELS.memberAvailability,
+    perm: "attendance.view",
+  },
+  {
+    path: MARK_ATTENANCE,
+    element: <MarkAttendance />,
+    title: LABELS.markAttendance,
+    perm: "attendance.manage",
+  },
+  {
+    path: UPDATE_ATTENANCE,
+    element: <MarkAttendance />,
+    title: LABELS.markAttendance,
+    perm: "attendance.manage",
+  },
+  {
+    path: CREATE_ATTENDANCE,
+    element: <CreateAttendance />,
+    title: LABELS.createAttendance,
+    perm: "attendance.manage",
+  },
+  {
+    path: ATTENDANCE,
+    element: <Attendance />,
+    title: LABELS.viewAttendance,
+    perm: "attendance.view",
+  },
+  {
+    path: ALL_ATTENDANCE,
+    element: <AllAttendance />,
+    title: LABELS.allAttendance,
+    perm: "attendance.view",
+  },
+  {
+    path: VIEW_MEMBER,
+    element: <ViewMembers />,
+    title: LABELS.viewMembers,
+    perm: "members.view",
+  },
+  {
+    path: ANALYTICS,
+    element: <Analytics />,
+    title: LABELS.attendanceAnalytics,
+    perm: "attendance.view",
+    feature: "analytics",
+  },
+  {
+    path: MEMBER_ANALYTICS,
+    element: <MemberAnalytics />,
+    title: LABELS.memberAnalytics,
+    perm: "attendance.view",
+    feature: "analytics",
+  },
+  {
+    path: BIRTHDAY,
+    element: <Birthday />,
+    title: "Birthdays",
+    perm: "members.view",
+    feature: "birthdays",
+  },
+  {
+    path: FINANCE,
+    element: <Finance />,
+    title: "Finance",
+    perm: "finance.view",
+    feature: "finance",
+  },
+  {
+    path: WELFARE,
+    element: <Welfare />,
+    title: "Welfare & Engagement",
+    perm: "attendance.view",
+    feature: "welfare",
+  },
+  {
+    path: OFFICERS_ROLES,
+    element: <OfficersRoles />,
+    title: LABELS.officersAndRoles,
+    perm: "officers.view",
+  },
+  {
+    path: SETTINGS,
+    element: <OrganisationSettings />,
+    title: "Organisation Settings",
+    perm: "settings.view",
+  },
 ];
