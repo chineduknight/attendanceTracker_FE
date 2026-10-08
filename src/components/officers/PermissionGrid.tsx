@@ -35,11 +35,10 @@ const PermissionGrid = ({ areas, value, onChange, disabled }: PermissionGridProp
               return (
                 <Checkbox.Root
                   key={key}
-                  aria-label={key}
                   disabled={disabled}
                   onCheckedChange={() => toggle(key)}
                   checked={selected.has(key)}
-                ><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
+                ><Checkbox.HiddenInput aria-label={key} /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
                     {PERMISSION_COPY[key].label}— {resolveText(PERMISSION_COPY[key].description, terms)}
                   </Checkbox.Label></Checkbox.Root>
               );

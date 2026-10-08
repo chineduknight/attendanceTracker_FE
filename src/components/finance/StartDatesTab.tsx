@@ -171,8 +171,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
                       pl={{ base: 3, md: 5 }}
                       py={3}
                       onCheckedChange={() => toggle(m.id)}
-                      aria-label={`Select ${m.name}`}
-                      checked={selected.has(m.id)}><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Root>
+                      checked={selected.has(m.id)}><Checkbox.HiddenInput aria-label={`Select ${m.name}`} /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Root>
                   )}
                   {canManage ? (
                     <Flex
