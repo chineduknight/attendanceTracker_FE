@@ -1,11 +1,7 @@
-import {
-  Box,
-  Flex,
-  List,
-  ListItem,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Box, Flex, Text, useColorModeValue } from "@chakra-ui/react";
+import { GroupedList, GroupedListItem } from "components/GroupedList";
+import { lowerTerm } from "helpers/organisationPresentation";
+import { useTerms } from "hooks/useOrgPresentation";
 import {
   birthdayDisplayDate,
   birthdayOccurrenceInRange,
@@ -35,16 +31,15 @@ const BirthdayList = ({
   asOf,
   emptyState,
 }: BirthdayListProps) => {
-  const cardBg = useColorModeValue("white", "gray.700");
+  const terms = useTerms();
   const todayBg = useColorModeValue("pink.50", "whiteAlpha.100");
-  const dividerColor = useColorModeValue("gray.100", "gray.600");
 
   if (members.length === 0) {
     return <Text color="gray.500">{emptyState}</Text>;
   }
 
   return (
-    <List borderWidth="1px" borderRadius="lg" bg={cardBg} overflow="hidden">
+    <GroupedList>
       {members.map((member, index) => {
         const occurrence = birthdayOccurrenceInRange(member, range);
         const display = occurrence
@@ -55,15 +50,11 @@ const BirthdayList = ({
           : null;
         const isToday = occurrence === asOf;
         return (
-          <ListItem
+          <GroupedListItem
             key={member._id ?? `${member.name ?? "member"}-${index}`}
-            px={{ base: 3, md: 5 }}
-            py={{ base: 2, md: 3 }}
             bg={isToday ? todayBg : undefined}
             borderLeftWidth="3px"
             borderLeftColor={isToday ? "pink.400" : "transparent"}
-            borderTopWidth={index === 0 ? 0 : "1px"}
-            borderTopColor={dividerColor}
           >
             <Flex align="center" justify="space-between" gap={3}>
               <Text
@@ -77,7 +68,8 @@ const BirthdayList = ({
                     🎂
                   </Box>
                 )}
-                {member.name ?? ""}
+                {member.name ??
+                  `Unknown ${lowerTerm(terms.memberSingular)}`}
               </Text>
               <Flex
                 direction={{ base: "column", md: "row" }}
@@ -97,10 +89,10 @@ const BirthdayList = ({
                 )}
               </Flex>
             </Flex>
-          </ListItem>
+          </GroupedListItem>
         );
       })}
-    </List>
+    </GroupedList>
   );
 };
 

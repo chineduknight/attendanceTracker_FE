@@ -1,15 +1,10 @@
-import {
-  Box,
-  Heading,
-  List,
-  ListItem,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Box, Flex, Heading, Text } from "@chakra-ui/react";
 import { format, isValid, parseISO } from "date-fns";
+import { GroupedList, GroupedListItem } from "components/GroupedList";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
 import { WelfareAwayInsight } from "components/welfare/welfareTypes";
+import { sectionTargetProps } from "components/welfare/welfareSections";
 
 const dateLabel = (value: string): string => {
   const parsed = parseISO(value);
@@ -29,10 +24,14 @@ export const CurrentlyAwaySection = ({
   items: WelfareAwayInsight[];
 }) => {
   const terms = useTerms();
-  const cardBg = useColorModeValue("white", "gray.700");
 
   return (
-    <Box as="section" aria-label="Currently Away" mt={8}>
+    <Box
+      as="section"
+      aria-label="Currently Away"
+      mt={8}
+      {...sectionTargetProps("currentlyAway")}
+    >
       <Heading size="md" mb={3}>
         Currently Away
       </Heading>
@@ -43,32 +42,30 @@ export const CurrentlyAwaySection = ({
           )} are currently recorded as away.`}
         </Text>
       ) : (
-        <List spacing={3}>
+        <GroupedList>
           {items.map((item) => (
-            <ListItem
-              key={item.memberId}
-              borderWidth="1px"
-              borderRadius="lg"
-              p={4}
-              bg={cardBg}
-            >
-              <Text fontWeight="semibold">
-                {memberName(item, lowerTerm(terms.memberSingular))}
-              </Text>
-              <Text fontSize="sm">
+            <GroupedListItem key={item.memberId}>
+              <Flex align="flex-start" justify="space-between" gap={3}>
+                <Text fontWeight="semibold" minW={0} overflowWrap="anywhere">
+                  {memberName(item, lowerTerm(terms.memberSingular))}
+                </Text>
+                <Text fontSize="sm" flexShrink={0}>
+                  {`Returns: ${dateLabel(item.returnDate)}`}
+                </Text>
+              </Flex>
+              <Text fontSize="sm" color="gray.500">
                 {`Away: ${dateLabel(item.startDate)} – ${dateLabel(
                   item.endDate,
                 )}`}
               </Text>
-              <Text fontSize="sm">
-                {`Returns: ${dateLabel(item.returnDate)}`}
-              </Text>
               {item.reason && item.reason.trim() !== "" && (
-                <Text fontSize="sm">{`Reason: ${item.reason.trim()}`}</Text>
+                <Text fontSize="sm" color="gray.500">
+                  {`Reason: ${item.reason.trim()}`}
+                </Text>
               )}
-            </ListItem>
+            </GroupedListItem>
           ))}
-        </List>
+        </GroupedList>
       )}
     </Box>
   );
@@ -85,7 +82,12 @@ export const ReturningSoonSection = ({
   const terms = useTerms();
 
   return (
-    <Box as="section" aria-label="Returning Soon" mt={8}>
+    <Box
+      as="section"
+      aria-label="Returning Soon"
+      mt={8}
+      {...sectionTargetProps("returningSoon")}
+    >
       <Heading size="md" mb={1}>
         Returning Soon
       </Heading>
@@ -97,18 +99,18 @@ export const ReturningSoonSection = ({
           {`No ${lowerTerm(terms.memberPlural)} are returning in the next ${days} days.`}
         </Text>
       ) : (
-        <List spacing={2}>
+        <GroupedList>
           {items.map((item) => (
-            <ListItem key={`${item.memberId}-${item.returnDate}`}>
+            <GroupedListItem key={`${item.memberId}-${item.returnDate}`}>
               <Text>
                 {`${dateLabel(item.returnDate)} — ${memberName(
                   item,
                   lowerTerm(terms.memberSingular),
                 )}`}
               </Text>
-            </ListItem>
+            </GroupedListItem>
           ))}
-        </List>
+        </GroupedList>
       )}
     </Box>
   );

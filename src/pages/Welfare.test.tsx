@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
@@ -28,8 +35,21 @@ const TODAY = format(new Date(), "yyyy-MM-dd");
 const SNAPSHOT_END = format(addDays(new Date(), 7), "yyyy-MM-dd");
 const dayOffset = (offset: number) =>
   format(addDays(new Date(), offset), "yyyy-MM-dd");
-const expectedBirthdayText = (offset: number, name: string) =>
-  `${name} — ${format(addDays(new Date(), offset), "EEE, d MMM")} (In ${offset} days)`;
+/** Birthday rows render name, date and relative label as separate text. */
+const expectBirthdayRow = async (offset: number, name: string) => {
+  await screen.findByText(name);
+  const row = screen
+    .getAllByRole("listitem")
+    .find((item) => within(item).queryByText(name) !== null);
+  expect(row).toHaveTextContent(
+    format(addDays(new Date(), offset), "EEE, d MMM"),
+  );
+  expect(row).toHaveTextContent(`In ${offset} days`);
+};
+
+/** Summary tiles are buttons named by their label, then their count. */
+const summaryTile = (label: string) =>
+  screen.getByRole("button", { name: new RegExp(`^${label}`) });
 
 const MEMBER_MODEL = {
   data: {
@@ -249,12 +269,11 @@ describe("<Welfare>", () => {
   it("loads useful data immediately with the exact review periods", async () => {
     renderPage();
     expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
-    expect(screen.getByText("Review window: 14 days")).toBeInTheDocument();
     expect(
-      screen.getByText("Last 14 days vs previous 14 days"),
+      screen.getByText(
+        "Review window: last 14 days (24 Sep – 7 Oct) vs previous 14 days (10 Sep – 23 Sep)",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Recent: 24 Sep – 7 Oct")).toBeInTheDocument();
-    expect(screen.getByText("Previous: 10 Sep – 23 Sep")).toBeInTheDocument();
     const overviewCall = mockGet.mock.calls.find(([url]) =>
       String(url).startsWith("/welfare/"),
     );
@@ -267,19 +286,37 @@ describe("<Welfare>", () => {
     renderPage();
     await screen.findByText("Ada Okafor");
     expect(
-      within(screen.getByRole("group", { name: "Needs Check-in" })).getByText(
+      within(summaryTile("Needs Check-in")).getByText(
         "1",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Encouragement" }),
+      summaryTile("Encouragement"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Currently Away" }),
+      summaryTile("Currently Away"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Returning Soon" }),
+      summaryTile("Returning Soon"),
     ).toBeInTheDocument();
+  });
+
+  it("jumps from a summary tile to its section and moves focus there", async () => {
+    const scrollIntoView = jest.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPage();
+    await screen.findByText("Ada Okafor");
+
+    fireEvent.click(summaryTile("Currently Away"));
+    const away = screen.getByRole("region", { name: "Currently Away" });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(away);
+    expect(away).toHaveFocus();
+
+    fireEvent.click(summaryTile("Needs Check-in"));
+    expect(
+      screen.getByRole("region", { name: "Needs Check-in" }),
+    ).toHaveFocus();
   });
 
   it("explains every attention reason with exact rates, change and last present", async () => {
@@ -291,11 +328,13 @@ describe("<Welfare>", () => {
     expect(
       screen.getByText("2 consecutive unexplained absences"),
     ).toBeInTheDocument();
+    const ada = within(screen.getByRole("group", { name: "Ada Okafor" }));
     expect(
-      screen.getByText(
-        "Physical presence: previous 100% → recent 50% (↓ 50 pts)",
-      ),
+      ada.getByText("Physical presence: previous 100% → recent 50%", {
+        exact: false,
+      }),
     ).toBeInTheDocument();
+    expect(ada.getByText("↓ 50 pts")).toBeInTheDocument();
     expect(
       screen.getByText("Recent: 3 Present · 1 Excused · 2 Absent"),
     ).toBeInTheDocument();
@@ -332,7 +371,7 @@ describe("<Welfare>", () => {
       within(encouragement).getByText("Physical presence improved"),
     ).toBeInTheDocument();
     expect(
-      within(encouragement).getByText(/\(↑ 50 pts\)$/),
+      within(encouragement).getByText("↑ 50 pts"),
     ).toBeInTheDocument();
     expect(within(encouragement).queryByText(/score/i)).not.toBeInTheDocument();
   });
@@ -365,7 +404,7 @@ describe("<Welfare>", () => {
     ).toBeInTheDocument();
     expect(within(attention).queryByText("Chika Obi")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Needs Check-in" }),
+      summaryTile("Needs Check-in"),
     ).toHaveTextContent("0");
   });
 
@@ -486,9 +525,7 @@ describe("<Welfare>", () => {
   describe("birthday snapshot", () => {
     it("queries today through the next 7 days and renders the result", async () => {
       renderPage();
-      expect(
-        await screen.findByText(expectedBirthdayText(2, "Ada Okeke")),
-      ).toBeInTheDocument();
+      await expectBirthdayRow(2, "Ada Okeke");
       expect(
         screen.getByRole("heading", { name: "Upcoming Birthdays" }),
       ).toBeInTheDocument();
@@ -500,7 +537,7 @@ describe("<Welfare>", () => {
       expect(url).toContain(`endDate=${SNAPSHOT_END}`);
       expect(
         within(
-          screen.getByRole("group", { name: "Birthdays This Week" }),
+          summaryTile("Birthdays This Week"),
         ).getByText("1"),
       ).toBeInTheDocument();
     });
@@ -526,12 +563,8 @@ describe("<Welfare>", () => {
         },
       });
       renderPage();
-      expect(
-        await screen.findByText(expectedBirthdayText(4, "Metadata Member")),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(expectedBirthdayText(3, "Legacy Member")),
-      ).toBeInTheDocument();
+      await expectBirthdayRow(4, "Metadata Member");
+      await expectBirthdayRow(3, "Legacy Member");
     });
 
     it("hides the section and never calls the API without members.view", async () => {
@@ -593,7 +626,7 @@ describe("<Welfare>", () => {
         await screen.findByText("Birthday data is unavailable right now."),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("group", { name: "Birthdays This Week" }),
+        screen.queryByRole("button", { name: /^Birthdays This Week/ }),
       ).not.toBeInTheDocument();
     });
   });

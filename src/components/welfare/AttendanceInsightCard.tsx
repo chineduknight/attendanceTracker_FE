@@ -59,17 +59,26 @@ const dateLabel = (value: string): string => {
 const percent = (value: number): string => `${value}%`;
 
 /** Both periods on one line; the words keep it readable without the arrow. */
-const presenceSummary = (
-  insight: WelfareInsight,
-  withChange: boolean,
-): string => {
-  const base = `Physical presence: previous ${percent(
+const presenceSummary = (insight: WelfareInsight): string =>
+  `Physical presence: previous ${percent(
     insight.previous.presenceRate,
   )} → recent ${percent(insight.recent.presenceRate)}`;
-  const change = insight.presenceChangePoints;
-  if (!withChange || change == null) return base;
-  return `${base} (${change < 0 ? "↓" : "↑"} ${Math.abs(change)} pts)`;
-};
+
+/**
+ * The change badge: red for a drop, green for a rise. The arrow and the
+ * "pts" text carry the direction, so meaning never relies on colour alone.
+ */
+const ChangeBadge = ({ points }: { points: number }) => (
+  <Badge
+    colorScheme={points < 0 ? "red" : points > 0 ? "green" : "gray"}
+    textTransform="none"
+    fontSize="xs"
+    ml={1}
+    verticalAlign="middle"
+  >
+    {`${points < 0 ? "↓" : "↑"} ${Math.abs(points)} pts`}
+  </Badge>
+);
 
 const recentCounts = (insight: WelfareInsight): string =>
   `Recent: ${(["present", "excused", "absent"] as const)
@@ -188,7 +197,13 @@ const AttendanceInsightCard = ({
       )}
 
       <Stack spacing={1} fontSize="sm" mb={3}>
-        <Text>{presenceSummary(insight, variant !== "communicated")}</Text>
+        <Text>
+          {presenceSummary(insight)}
+          {variant !== "communicated" &&
+            insight.presenceChangePoints != null && (
+              <ChangeBadge points={insight.presenceChangePoints} />
+            )}
+        </Text>
         <Text>{recentCounts(insight)}</Text>
         {variant === "attention" && insight.lastPresentDate && (
           <Text>{`Last present: ${dateLabel(insight.lastPresentDate)}`}</Text>

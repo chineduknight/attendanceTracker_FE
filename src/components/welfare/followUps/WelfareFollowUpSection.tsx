@@ -7,6 +7,7 @@ import {
 } from "components/welfare/followUps/types";
 import WelfareFollowUpCard from "components/welfare/followUps/WelfareFollowUpCard";
 import WelfareFollowUpHistory from "components/welfare/followUps/WelfareFollowUpHistory";
+import StatTile from "components/StatTile";
 
 /** Purely presentational cap: the newest closed records stay visible. */
 const RECENT_HISTORY_LIMIT = 5;
@@ -35,24 +36,6 @@ interface WelfareFollowUpSectionProps {
 }
 
 const LIST_ID = "welfare-follow-up-list";
-
-const FollowUpStat = ({ label, value }: { label: string; value: number }) => (
-  <Box
-    borderWidth="1px"
-    borderRadius="md"
-    px={{ base: 3, md: 4 }}
-    py={2}
-    role="group"
-    aria-label={label}
-  >
-    <Text fontSize="sm" color="gray.500">
-      {label}
-    </Text>
-    <Text fontSize="xl" fontWeight="bold">
-      {value}
-    </Text>
-  </Box>
-);
 
 /**
  * Phase 7C follow-up log (§8). Additive to the 7A insights below it, and
@@ -104,9 +87,9 @@ const WelfareFollowUpSection = ({
       {!isLoading && summary && (
         <>
           <SimpleGrid columns={3} spacing={{ base: 2, md: 3 }} mb={3} maxW="md">
-            <FollowUpStat label="Open" value={summary.open} />
-            <FollowUpStat label="Due Today" value={summary.dueToday} />
-            <FollowUpStat label="Overdue" value={summary.overdue} />
+            <StatTile label="Open" value={summary.open} />
+            <StatTile label="Due Today" value={summary.dueToday} />
+            <StatTile label="Overdue" value={summary.overdue} />
           </SimpleGrid>
 
           <Flex gap={2} wrap="wrap" mb={isListOpen ? 5 : 0}>

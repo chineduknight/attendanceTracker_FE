@@ -42,6 +42,10 @@ import {
   WelfareInsight,
   WelfareOverview,
 } from "components/welfare/welfareTypes";
+import {
+  sectionTargetProps,
+  WelfareSectionKey,
+} from "components/welfare/welfareSections";
 
 const periodLabel = (value: string): string => {
   const parsed = parseISO(value);
@@ -50,12 +54,20 @@ const periodLabel = (value: string): string => {
 
 const Section = ({
   title,
+  target,
   children,
 }: {
   title: string;
+  /** Set when a summary tile jumps here. */
+  target?: WelfareSectionKey;
   children: ReactNode;
 }) => (
-  <Box as="section" aria-label={title} mt={8}>
+  <Box
+    as="section"
+    aria-label={title}
+    mt={8}
+    {...(target ? sectionTargetProps(target) : {})}
+  >
     <Heading size="md" mb={3}>
       {title}
     </Heading>
@@ -67,27 +79,21 @@ const EmptyState = ({ children }: { children: ReactNode }) => (
   <Text color="gray.500">{children}</Text>
 );
 
-/** Exact periods, never a bare percentage change without its context. */
-const ReviewWindowPanel = ({ overview }: { overview: WelfareOverview }) => {
-  const cardBg = useColorModeValue("white", "gray.700");
+/**
+ * Exact periods, never a bare percentage change without its context — on one
+ * line so the tiles and Needs Check-in stay near the top on a phone.
+ */
+const ReviewWindowCaption = ({ overview }: { overview: WelfareOverview }) => {
   const days = overview.settings.reviewWindowDays;
+  const { recent, previous } = overview.periods;
   return (
-    <Box mt={6} p={4} borderWidth="1px" borderRadius="lg" bg={cardBg}>
-      <Heading size="sm">{`Review window: ${days} days`}</Heading>
-      <Text fontSize="sm" color="gray.500" mb={2}>
-        {`Last ${days} days vs previous ${days} days`}
-      </Text>
-      <Text fontSize="sm">
-        {`Recent: ${periodLabel(
-          overview.periods.recent.fromDate,
-        )} – ${periodLabel(overview.periods.recent.toDate)}`}
-      </Text>
-      <Text fontSize="sm">
-        {`Previous: ${periodLabel(
-          overview.periods.previous.fromDate,
-        )} – ${periodLabel(overview.periods.previous.toDate)}`}
-      </Text>
-    </Box>
+    <Text fontSize="sm" color="gray.500" mb={3}>
+      {`Review window: last ${days} days (${periodLabel(
+        recent.fromDate,
+      )} – ${periodLabel(recent.toDate)}) vs previous ${days} days (${periodLabel(
+        previous.fromDate,
+      )} – ${periodLabel(previous.toDate)})`}
+    </Text>
   );
 };
 
@@ -103,7 +109,8 @@ const Welfare = () => {
   const { isFeatureVisible } = useOrgPresentation();
   const pageBg = useColorModeValue("gray.50", "gray.800");
 
-  const { asOf, isToday, setAsOf, resetToToday } = useWelfareReviewDate();
+  const { asOf, today, isToday, setAsOf, resetToToday } =
+    useWelfareReviewDate();
 
   // The member model (members.view) supplies both the member-status scope and
   // the birthday `dob` check. Without members.view no model request is made
@@ -229,6 +236,7 @@ const Welfare = () => {
         <Box p={4} maxW="6xl" mx="auto">
           <WelfareReviewControls
             asOf={asOf}
+            maxDate={today}
             isToday={isToday}
             onAsOfChange={setAsOf}
             onToday={resetToToday}
@@ -251,11 +259,11 @@ const Welfare = () => {
 
           {!isLoading && !isError && overview && (
             <>
+              <ReviewWindowCaption overview={overview} />
               <WelfareSummaryCards
                 summary={overview.summary}
                 birthdayCount={birthdayCount}
               />
-              <ReviewWindowPanel overview={overview} />
 
               {canViewFollowUps && (
                 <WelfareFollowUpSection
@@ -290,7 +298,7 @@ const Welfare = () => {
                 />
               )}
 
-              <Section title="Needs Check-in">
+              <Section title="Needs Check-in" target="attention">
                 {overview.attention.length === 0 ? (
                   <EmptyState>
                     {`No ${lowerTerm(
@@ -351,7 +359,7 @@ const Welfare = () => {
                 )}
               </Section>
 
-              <Section title="Encouragement">
+              <Section title="Encouragement" target="encouragement">
                 {overview.encouragement.length === 0 ? (
                   <EmptyState>
                     No major improvement signal yet for this comparison period.
