@@ -110,6 +110,9 @@ const readDraft = (storageKey: string): unknown => {
 const MarkAttendanceSession = () => {
   const terms = useTerms();
   const [searchQuery, setSearchQuery] = useState("");
+  // While the search box has focus the phone keyboard covers half the screen,
+  // so the sticky action bar steps aside to leave that room for results.
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [org, currentAttendance, setAttendance] = useGlobalStore((state) => [
     state.organisation,
     state.currentAttendance,
@@ -567,8 +570,10 @@ const MarkAttendanceSession = () => {
     });
   };
 
+  const pageBg = useColorModeValue("gray.50", "gray.800");
+
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+    <Box minH={"100vh"} bg={pageBg}>
       <Container>
         <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
           <Heading fontSize="22px" noOfLines={1}>
@@ -586,7 +591,7 @@ const MarkAttendanceSession = () => {
                 onClick={detailsDrawer.onOpen}
               />
             )}
-            <Button variant="logout" onClick={onRefresh}>
+            <Button variant="outline" colorScheme="blue" onClick={onRefresh}>
               Refresh
             </Button>
           </Flex>
@@ -635,28 +640,6 @@ const MarkAttendanceSession = () => {
               mode={selectedStatus?.key ?? null}
               onModeChange={setQuickMarkMode}
             />
-            <InputGroup mt="4">
-              <InputLeftElement pointerEvents="none">
-                <Icon as={FaSearch} color="gray.400" />
-              </InputLeftElement>
-              <Input
-                type="text"
-                placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-                value={searchQuery}
-                onChange={handleSearch}
-              />
-              {searchQuery && (
-                <InputRightElement>
-                  <IconButton
-                    aria-label="Clear search"
-                    icon={<FiX />}
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setSearchQuery("")}
-                  />
-                </InputRightElement>
-              )}
-            </InputGroup>
             <VisibleBulkActions
               applyCount={
                 selectedStatus ? bulkTargets(selectedStatus.key).size : 0
@@ -678,6 +661,45 @@ const MarkAttendanceSession = () => {
                 }. Bulk actions to other statuses skip them.`}
               </Text>
             )}
+            <StatusCountSummary counts={statusCounts} />
+            {/* Searching is how officers find people on a long roster, often
+                with the keyboard open, so only the search bar stays pinned —
+                anything taller would squeeze the results it is filtering. */}
+            <Box
+              position="sticky"
+              top={0}
+              zIndex="sticky"
+              bg={pageBg}
+              mx={-4}
+              px={4}
+              py={2}
+              mt="2"
+            >
+              <InputGroup>
+                <InputLeftElement pointerEvents="none">
+                  <Icon as={FaSearch} color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  type="text"
+                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+                  value={searchQuery}
+                  onChange={handleSearch}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
+                />
+                {searchQuery && (
+                  <InputRightElement>
+                    <IconButton
+                      aria-label="Clear search"
+                      icon={<FiX />}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSearchQuery("")}
+                    />
+                  </InputRightElement>
+                )}
+              </InputGroup>
+            </Box>
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
@@ -685,62 +707,75 @@ const MarkAttendanceSession = () => {
                 </Text>
               </Box>
             )}
-            <StatusCountSummary counts={statusCounts} />
-            <Box mt="4" overflow="auto" maxHeight="300px">
-              {filteredMembers.map((item) => {
-                const isManual = manualIds.has(item.id);
-                return (
-                  <AttendanceMemberRow
-                    key={item.id}
-                    memberId={item.id}
-                    name={item.name}
-                    status={statuses.resolve(item.attendanceStatus)}
-                    onToggle={
-                      isManual && manualRowsLocked ? undefined : markMember
-                    }
-                    isManual={isManual}
-                    accessory={
-                      isManual && !isUpdate ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          colorScheme="red"
-                          aria-label={`Remove ${item.name} from this ${session}`}
-                          onClick={() => removeManualMember(item.id)}
-                        >
-                          Remove
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                );
-              })}
-            </Box>
+            {/* The roster scrolls with the page: a nested scroll box left a
+                few rows visible and fought the page for every swipe. */}
+            {filteredMembers.map((item) => {
+              const isManual = manualIds.has(item.id);
+              return (
+                <AttendanceMemberRow
+                  key={item.id}
+                  memberId={item.id}
+                  name={item.name}
+                  status={statuses.resolve(item.attendanceStatus)}
+                  onToggle={
+                    isManual && manualRowsLocked ? undefined : markMember
+                  }
+                  isManual={isManual}
+                  accessory={
+                    isManual && !isUpdate ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        colorScheme="red"
+                        aria-label={`Remove ${item.name} from this ${session}`}
+                        onClick={() => removeManualMember(item.id)}
+                      >
+                        Remove
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
             <UnresolvedRosterEntries
               entries={unresolvedEntries}
               statuses={statuses}
             />
-            <Button
-              onClick={onSubmit}
-              w="full"
-              mt="8"
-              isLoading={isLoading}
-              isDisabled={
-                sessionRoster.length === 0 ||
-                (isUpdate && (!details.name.trim() || !details.date))
-              }
+            <Flex
+              position="sticky"
+              bottom={0}
+              zIndex="sticky"
+              display={isSearchFocused ? "none" : "flex"}
+              gap={3}
+              mt="6"
+              mx={-4}
+              px={4}
+              pt={3}
+              pb="calc(12px + env(safe-area-inset-bottom))"
+              bg={pageBg}
+              borderTopWidth="1px"
             >
-              {isUpdate ? "Update" : "Submit"}
-            </Button>
-            <Button
-              onClick={() => navigate(-1)}
-              w="full"
-              variant="logout"
-              mt="4"
-              isDisabled={isLoading}
-            >
-              Cancel
-            </Button>
+              <Button
+                onClick={() => navigate(-1)}
+                flex="1"
+                variant="outline"
+                colorScheme="gray"
+                isDisabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onSubmit}
+                flex="2"
+                isLoading={isLoading}
+                isDisabled={
+                  sessionRoster.length === 0 ||
+                  (isUpdate && (!details.name.trim() || !details.date))
+                }
+              >
+                {isUpdate ? "Update" : "Submit"}
+              </Button>
+            </Flex>
           </>
         )}
       </Container>

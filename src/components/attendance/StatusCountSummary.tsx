@@ -1,16 +1,26 @@
-import { Badge, Flex, Text } from "@chakra-ui/react";
+import { Badge, Flex } from "@chakra-ui/react";
 import { StatusCount } from "helpers/attendanceStatuses";
 
-/** Per-status tally, e.g. `Present 12 · Late 3 · Absent 4`. */
+/**
+ * Per-status tally as compact pills, e.g. `Present: 12` `Late: 3`. Full labels
+ * stay visible because custom statuses' short codes are not self-explanatory.
+ */
 const StatusCountSummary = ({ counts }: { counts: StatusCount[] }) => (
-  <Flex mt="2" gap={3} flexWrap="wrap" justifyContent="space-between">
+  <Flex mt="3" gap={2} flexWrap="wrap">
     {counts.map(({ status, count }) => (
-      <Flex key={status.key || status.label} align="center" gap={1}>
-        <Badge colorScheme={status.color}>{status.shortLabel}</Badge>
-        <Text>
-          {status.label}: <strong>{count}</strong>
-        </Text>
-      </Flex>
+      <Badge
+        key={status.key || status.label}
+        colorScheme={status.color}
+        variant="subtle"
+        textTransform="none"
+        fontWeight="normal"
+        fontSize="sm"
+        px={2}
+        py={0.5}
+        borderRadius="full"
+      >
+        {status.label}: <strong>{count}</strong>
+      </Badge>
     ))}
   </Flex>
 );
