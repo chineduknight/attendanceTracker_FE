@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Flex, Input, Stack, Field } from "@chakra-ui/react";
 import { CLEAR_WARNING, formatBusinessDate, REALLOCATION_WARNING } from "helpers/financeCompliance";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 
 interface StartDateFormProps {
   memberName: string;
@@ -63,12 +63,12 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
         </Button>
       </Flex>
 
-      <ConfirmModal
-        isOpen={!!pending}
+      <ConfirmDialog
+        open={!!pending}
         title={pending?.date ? "Set financial start date" : "Clear financial start date"}
         body={pending ? confirmBody(pending) : ""}
         confirmLabel={pending?.date ? "Yes, set date" : "Yes, clear"}
-        confirmColorScheme={pending?.date ? "purple" : "red"}
+        confirmPalette={pending?.date ? "purple" : "red"}
         onConfirm={() => {
           if (pending) void onSave(pending.date);
           setPending(null);

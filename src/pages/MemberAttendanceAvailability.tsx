@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConfirm } from "components/ui/confirm-dialog";
 import {
   Alert,
   Box,
@@ -32,6 +33,7 @@ const EMPTY_FORM: FormValue = { startDate: "", endDate: "", reason: "" };
 const displayDate = (value: string) => format(parseISO(value), "dd MMM yyyy");
 
 const MemberAttendanceAvailability = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const organisationId = useGlobalStore((state) => state.organisation.id);
   const terms = useTerms();
   const memberId = useParams<{ memberId: string }>().memberId ?? "";
@@ -114,19 +116,20 @@ const MemberAttendanceAvailability = () => {
     });
   };
 
-  const remove = (period: AttendanceAvailability) => {
-    if (
-      !window.confirm(
-        `Remove this ${lowerTerm(
-          terms.attendanceSingular
-        )} availability period? This will affect only ${lowerTerm(
-          terms.attendancePlural
-        )} created after the change. Existing ${lowerTerm(
-          terms.attendancePlural
-        )} will stay unchanged.`
-      )
-    )
-      return;
+  const remove = async (period: AttendanceAvailability) => {
+    const confirmed = await confirm({
+      title: "Remove availability period",
+      body: `Remove this ${lowerTerm(
+        terms.attendanceSingular
+      )} availability period? This will affect only ${lowerTerm(
+        terms.attendancePlural
+      )} created after the change. Existing ${lowerTerm(
+        terms.attendancePlural
+      )} will stay unchanged.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!confirmed) return;
     archive(period.id, () => toast.success("Availability period removed"));
   };
 
@@ -273,6 +276,7 @@ const MemberAttendanceAvailability = () => {
           )}
         </Stack>
       )}
+      {confirmDialog}
     </Box>
   );
 };

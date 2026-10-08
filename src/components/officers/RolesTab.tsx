@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   Box, Button, Flex, HStack, Table,      Badge, Wrap, WrapItem,
 } from "@chakra-ui/react";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -15,6 +15,7 @@ import RoleFormModal from "components/officers/RoleFormModal";
 interface Props { organisationId: string; }
 
 const RolesTab = ({ organisationId }: Props) => {
+  const { confirm, confirmDialog } = useConfirm();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
 
@@ -30,16 +31,17 @@ const RolesTab = ({ organisationId }: Props) => {
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (r: Role) => { setEditing(r); setFormOpen(true); };
 
-  const handleDelete = (r: Role) =>
-    confirmAlert({
+  const handleDelete = async (r: Role) => {
+    const confirmed = await confirm({
       title: "Delete role",
-      message: `Delete the "${r.name}" role?`,
-      buttons: [
-        { label: "Yes", className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => remove({ url: convertParamsToString(rbacRequest.ROLE_ONE, { organisationId, roleId: r.id }) }) },
-        { label: "No", className: "confirm-alert-button confirm-alert-button-no" },
-      ],
+      body: `Delete the "${r.name}" role?`,
+      confirmLabel: "Delete",
+      destructive: true,
     });
+    if (confirmed) {
+      remove({ url: convertParamsToString(rbacRequest.ROLE_ONE, { organisationId, roleId: r.id }) });
+    }
+  };
 
   if (isLoading) return <PageLoader />;
 
@@ -78,6 +80,7 @@ const RolesTab = ({ organisationId }: Props) => {
         </Table.Root>
       </Box>
       <RoleFormModal organisationId={organisationId} role={editing} isOpen={formOpen} onClose={() => setFormOpen(false)} />
+      {confirmDialog}
     </Box>
   );
 };

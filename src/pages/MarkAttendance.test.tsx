@@ -1,8 +1,7 @@
 import { act, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { render } from "test-utils/render";
+import { render, confirmInDialog } from "test-utils/render";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { confirmAlert } from "react-confirm-alert";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -15,7 +14,6 @@ import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 // Keep the real endpoint constants; only the axios instance is faked.
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -28,7 +26,6 @@ const mockedAxios = require("services/api").default;
 const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
 const mockPut: jest.Mock = mockedAxios.put;
-const mockConfirm = confirmAlert as jest.Mock;
 
 // Configured order is the tap-cycle order.
 const STATUSES = [
@@ -104,11 +101,11 @@ const tap = (name: string, times = 1) => {
 };
 const countText = (label: string) => screen.getByText(`${label}:`).textContent;
 
-const submitAndConfirm = () => {
-  fireEvent.click(screen.getByRole("button", { name: /Submit|Update/ }));
-  const options = mockConfirm.mock.calls[0][0];
-  options.buttons[0].onClick();
-  return options.message as string;
+// Submit, then confirm the "Please verify count" dialog; returns its message.
+const submitAndConfirm = async () => {
+  fireEvent.click(screen.getByRole("button", { name: /^(Submit|Update)$/ }));
+  const dialog = await confirmInDialog(/^(Submit|Update)$/);
+  return within(dialog).getByText(/Are you sure you want to submit\?/).textContent ?? "";
 };
 
 describe("<MarkAttendance> with configured statuses", () => {
@@ -177,7 +174,7 @@ describe("<MarkAttendance> with configured statuses", () => {
     await screen.findByText("Ada");
     tap("Ada", 2); // Late
 
-    const message = submitAndConfirm();
+    const message = await submitAndConfirm();
     expect(message).toContain("Late: 1");
     expect(message).toContain("No Show: 1");
 
@@ -205,7 +202,7 @@ describe("<MarkAttendance> with configured statuses", () => {
 
     const submit = screen.getByRole("button", { name: "Submit" });
     expect(submit).toBeEnabled();
-    submitAndConfirm();
+    await submitAndConfirm();
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
       { memberId: "m1", status: "excused" },
@@ -299,7 +296,6 @@ describe("<MarkAttendance> quick marking", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
-    mockConfirm.mockClear();
     mockPost.mockClear();
     useGlobalStore.setState({
       organisation: {
@@ -619,7 +615,7 @@ describe("<MarkAttendance> quick marking", () => {
     );
     search("");
 
-    const message = submitAndConfirm();
+    const message = await submitAndConfirm();
     expect(message).toContain("Present: 2");
     expect(message).toContain("Absent: 3");
 
@@ -773,7 +769,7 @@ describe("<MarkAttendance> eligibility", () => {
       await screen.findByText("Bea");
       expect(screen.queryByText("Ada")).not.toBeInTheDocument();
       tap("Bea");
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
         { memberId: "m2", status: "present" },
@@ -828,7 +824,7 @@ describe("<MarkAttendance> eligibility", () => {
       await screen.findByText("Bea");
       expect(screen.queryByText("Ada")).not.toBeInTheDocument();
       expect(statusOf("Bea")).toBe("Present");
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
         { memberId: "m2", status: "present" },
@@ -923,7 +919,7 @@ describe("<MarkAttendance> eligibility", () => {
     it("creates with the rules and only the expected members' statuses", async () => {
       await start();
       tap("Chioma"); // Present
-      submitAndConfirm();
+      await submitAndConfirm();
 
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0]).toEqual([
@@ -985,7 +981,7 @@ describe("<MarkAttendance> eligibility", () => {
       );
       await start();
       tap("Ada");
-      submitAndConfirm();
+      await submitAndConfirm();
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(
@@ -1087,7 +1083,7 @@ describe("<MarkAttendance> eligibility", () => {
 
     it("updates without eligibility rules", async () => {
       await open();
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
       expect(mockPut.mock.calls[0]).toEqual([
         "/attendance/att9",
@@ -1181,7 +1177,7 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
     expect(screen.queryByText("Newbie")).not.toBeInTheDocument();
 
     tap("Chioma"); // Absent -> Present
-    submitAndConfirm();
+    await submitAndConfirm();
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     expect(mockPut.mock.calls[0][1].memberStatuses).toEqual([
@@ -1250,7 +1246,7 @@ describe("<MarkAttendance> with custom terminology", () => {
   it("uses the session term in created success copy", async () => {
     renderAt("/mark");
     await screen.findByText("Ada");
-    submitAndConfirm();
+    await submitAndConfirm();
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("Session Created successfully")
@@ -1260,7 +1256,7 @@ describe("<MarkAttendance> with custom terminology", () => {
   it("uses the session term in updated success copy", async () => {
     renderAt("/mark/att1");
     await screen.findByText("Ada");
-    submitAndConfirm();
+    await submitAndConfirm();
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("Session Updated")
@@ -1392,7 +1388,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("submits manual additions separately from memberStatuses", async () => {
       await start();
       await addManually("Dayo", "late", "  Came despite leave  ");
-      submitAndConfirm();
+      await submitAndConfirm();
 
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       const body = mockPost.mock.calls[0][1];
@@ -1412,7 +1408,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
 
     it("omits manualAdditions when none were added", async () => {
       await start();
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1]).not.toHaveProperty("manualAdditions");
     });
@@ -1512,7 +1508,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(statusOfRow("Dayo")).toBe("Late");
       expect(screen.queryByText(/Added manually/)).not.toBeInTheDocument();
 
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       const body = mockPost.mock.calls[0][1];
       expect(body.memberStatuses).toContainEqual({ memberId: "m4", status: "late" });
@@ -1527,7 +1523,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
 
       await addManually("Ada", "present");
       expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1]).toMatchObject({
         memberStatuses: [],
@@ -1538,7 +1534,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("clears both drafts after a successful create", async () => {
       await start();
       await addManually("Dayo", "late");
-      submitAndConfirm();
+      await submitAndConfirm();
       await screen.findByText("all attendance");
       expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
       expect(localStorage.getItem(MANUAL_KEY)).toBeNull();
@@ -1623,7 +1619,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("updates with statuses only, never manual metadata", async () => {
       await start();
       tapRow("Chidi"); // Late -> Present
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
       const body = mockPut.mock.calls[0][1];
       expect(body.memberStatuses).toEqual([

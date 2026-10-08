@@ -364,7 +364,7 @@ describe("Start dates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit start date for Ada" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clear" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Clear financial start date" });
+    const dialog = await screen.findByRole("alertdialog", { name: "Clear financial start date" });
     expect(dialog).toHaveTextContent(CLEAR_WARNING);
     fireEvent.click(within(dialog).getByRole("button", { name: "Yes, clear" }));
     await waitFor(() =>

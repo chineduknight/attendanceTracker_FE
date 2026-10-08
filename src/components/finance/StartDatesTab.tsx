@@ -27,7 +27,7 @@ import { useFinanceMembers, useFinancialStartDate } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import { FinanceMember } from "components/finance/financeTypes";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import FilterChips from "components/finance/FilterChips";
 import FinanceSheet from "components/finance/FinanceSheet";
 import StartDateForm from "components/finance/StartDateForm";
@@ -263,8 +263,8 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
         </FinanceSheet>
       )}
 
-      <ConfirmModal
-        isOpen={confirmBulk}
+      <ConfirmDialog
+        open={confirmBulk}
         title="Set start date for selected"
         body={
           bulkDate
@@ -276,7 +276,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
             : ""
         }
         confirmLabel={`Yes, set ${selected.size}`}
-        confirmColorScheme="purple"
+        confirmPalette="purple"
         onConfirm={() => {
           setConfirmBulk(false);
           void applyBulk();

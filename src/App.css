@@ -4,16 +4,6 @@ body {
   font-family: 'Palanquin', sans-serif;
 }
 
-/* Add higher specificity to the button styles */
-.confirm-alert-button.confirm-alert-button-yes {
-  background-color: green;
-  /* Add other styles as needed */
-}
-
-.confirm-alert-button.confirm-alert-button-no {
-  background-color: red;
-  /* Add other styles as needed */
-}
 /* Chakra v3 hides a loading button's label with visibility:hidden, which
    drops it from the accessibility tree, so a saving button has no name.
    Keep the label in the tree but transparent, as v2 did; the spinner sits

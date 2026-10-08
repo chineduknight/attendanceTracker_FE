@@ -3,7 +3,7 @@ import { Button, Flex, Input, SimpleGrid, Stack, Text, Field } from "@chakra-ui/
 import { MONTHS, formatMoney } from "helpers/financeConstants";
 import { firstLiableMonth, paidOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 
 interface CorrectPaymentFormProps {
   obligation: Obligation;
@@ -18,7 +18,7 @@ interface CorrectPaymentFormProps {
 interface PendingCorrection {
   body: string;
   confirmLabel: string;
-  confirmColorScheme: string;
+  confirmPalette: string;
   run: () => void;
 }
 
@@ -102,7 +102,7 @@ const CorrectPaymentForm = ({
             ? `This clears all recorded payments for ${memberName} on ${obligation.name}.`
             : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.`,
         confirmLabel: count === 0 ? "Yes, clear" : "Yes, update",
-        confirmColorScheme: count === 0 ? "red" : "purple",
+        confirmPalette: count === 0 ? "red" : "purple",
         run: () => onCorrectDues(monthlyPaid),
       });
       return;
@@ -111,7 +111,7 @@ const CorrectPaymentForm = ({
     setPending({
       body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.`,
       confirmLabel: "Yes, update",
-      confirmColorScheme: "purple",
+      confirmPalette: "purple",
       run: () => onCorrectLevy(Number(amountPaid)),
     });
   };
@@ -174,12 +174,12 @@ const CorrectPaymentForm = ({
         Save correction
       </Button>
 
-      <ConfirmModal
-        isOpen={!!pending}
+      <ConfirmDialog
+        open={!!pending}
         title="Confirm correction"
         body={pending?.body ?? ""}
         confirmLabel={pending?.confirmLabel}
-        confirmColorScheme={pending?.confirmColorScheme}
+        confirmPalette={pending?.confirmPalette}
         onConfirm={() => {
           pending?.run();
           setPending(null);

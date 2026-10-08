@@ -1,7 +1,7 @@
 import {
   Box, Button, Table,      Text, Badge,
 } from "@chakra-ui/react";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -15,6 +15,7 @@ import { lowerTerm, withArticle } from "helpers/organisationPresentation";
 interface Props { organisationId: string; }
 
 const PendingInvitesTab = ({ organisationId }: Props) => {
+  const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
   const url = convertParamsToString(rbacRequest.INVITES, { organisationId });
   const { data, isLoading } = useQueryWrapper(queryKeys.rbac.invites(organisationId), url);
@@ -24,16 +25,17 @@ const PendingInvitesTab = ({ organisationId }: Props) => {
     queryClient.invalidateQueries({ queryKey: queryKeys.rbac.invites(organisationId) })
   );
 
-  const revoke = (inv: Invite) =>
-    confirmAlert({
+  const revoke = async (inv: Invite) => {
+    const confirmed = await confirm({
       title: "Revoke invite",
-      message: `Revoke the invite for ${inv.email}?`,
-      buttons: [
-        { label: "Yes", className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => mutate({ url: convertParamsToString(rbacRequest.INVITE_ONE, { organisationId, inviteId: inv.id }) }) },
-        { label: "No", className: "confirm-alert-button confirm-alert-button-no" },
-      ],
+      body: `Revoke the invite for ${inv.email}?`,
+      confirmLabel: "Revoke",
+      destructive: true,
     });
+    if (confirmed) {
+      mutate({ url: convertParamsToString(rbacRequest.INVITE_ONE, { organisationId, inviteId: inv.id }) });
+    }
+  };
 
   if (isLoading) return <PageLoader />;
 
@@ -63,6 +65,7 @@ const PendingInvitesTab = ({ organisationId }: Props) => {
           </Table.Body>
         </Table.Root>
       </Box>
+      {confirmDialog}
     </Box>
   );
 };

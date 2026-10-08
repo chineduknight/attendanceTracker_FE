@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Flex, NativeSelect, Stack, Text, Field } from "@chakra-ui/react";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { toast } from "react-toastify";
 import { CategoryType } from "hooks/useCategories";
 import { useAttendanceTemplates } from "hooks/useAttendanceTemplates";
@@ -97,6 +97,7 @@ const AttendanceTemplatePicker = ({
   setupFailed,
   onApply,
 }: AttendanceTemplatePickerProps) => {
+  const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
   const { templates, isLoading, isError, create, update, remove, isSaving } =
     useAttendanceTemplates(organisationId);
@@ -169,31 +170,21 @@ const AttendanceTemplatePicker = ({
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (!selected) return;
     const deletedId = selected.id;
-    confirmAlert({
+    const confirmed = await confirm({
       title: "Delete template",
-      message: `Delete the "${selected.name}" template? The details you have entered stay as they are.`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () =>
-            remove(deletedId, {
-              onSuccess: () => {
-                toast.success("Template deleted");
-                setSelectedId((current) =>
-                  current === deletedId ? "" : current
-                );
-              },
-            }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      body: `Delete the "${selected.name}" template? The details you have entered stay as they are.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    remove(deletedId, {
+      onSuccess: () => {
+        toast.success("Template deleted");
+        setSelectedId((current) => (current === deletedId ? "" : current));
+      },
     });
   };
 
@@ -308,6 +299,7 @@ const AttendanceTemplatePicker = ({
           Save as template
         </Button>
       </Flex>
+      {confirmDialog}
     </Stack>
   );
 };

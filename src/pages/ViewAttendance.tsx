@@ -17,7 +17,7 @@ import { useColorModeValue } from "components/ui/color-mode";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest } from "services";
 import {
@@ -68,7 +68,7 @@ import {
   toAnalyticsInclusion,
 } from "helpers/attendanceAnalyticsInclusion";
 import { Can } from "rbac/Can";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
 import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
 import { useMembers } from "hooks/useMembers";
@@ -134,6 +134,7 @@ const nextMultiFilter = (values: string[]): string[] => {
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
 const Attendance = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -360,24 +361,16 @@ const Attendance = () => {
   );
   const canChangeRoster = attendanceInfo?.canChangeRoster ?? false;
 
-  const handleDelete = () => {
-    confirmAlert({
+  const handleDelete = async () => {
+    const confirmed = await confirm({
       title: `Delete ${terms.attendanceSingular}`,
-      message: `Are you sure you want to delete this ${lowerTerm(
+      body: `Are you sure you want to delete this ${lowerTerm(
         terms.attendanceSingular,
       )} record? This cannot be undone.`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => deleteAttendance({ url: deleteUrl }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: "Delete",
+      destructive: true,
     });
+    if (confirmed) deleteAttendance({ url: deleteUrl });
   };
   const pageBg = useColorModeValue("gray.50", "gray.800");
 
@@ -592,14 +585,14 @@ const Attendance = () => {
         }
         onClose={() => setIsAddingMember(false)}
       />
-      <ConfirmModal
-        isOpen={removing !== null}
+      <ConfirmDialog
+        open={removing !== null}
         title={`Remove ${removing?.member.name ?? ""} from this ${session}?`}
         body={`${removing?.member.name ?? ""} was manually added to this ${session}. Removing them deletes this historical attendance entry from this ${session} only.`}
         cancelLabel="Cancel"
         confirmLabel={`Remove from this ${session}`}
-        confirmColorScheme="red"
-        isLoading={isRemoving}
+        confirmPalette="red"
+        loading={isRemoving}
         onConfirm={() =>
           removing &&
           removeMember(removing.memberId, () => {
@@ -609,6 +602,7 @@ const Attendance = () => {
         }
         onClose={() => !isRemoving && setRemoving(null)}
       />
+      {confirmDialog}
     </Box>
   );
 };

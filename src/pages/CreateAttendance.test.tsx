@@ -1,3 +1,4 @@
+import { confirmInDialog } from "test-utils/render";
 import {
   act,
   fireEvent,
@@ -9,7 +10,6 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { system } from "styles/theme";
-import { confirmAlert } from "react-confirm-alert";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
@@ -24,7 +24,6 @@ import { format } from "date-fns";
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 // Keep the real endpoint constants; only the axios instance is faked.
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -43,7 +42,6 @@ const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
 const mockPut: jest.Mock = mockedAxios.put;
 const mockDelete: jest.Mock = mockedAxios.delete;
-const mockConfirm = confirmAlert as jest.Mock;
 
 const CATEGORIES: CategoryType[] = [
   {
@@ -129,10 +127,7 @@ const orgBInvalidated = () =>
   queryClient.getQueryState(queryKeys.attendanceTemplates("orgB"))
     ?.isInvalidated;
 
-const confirmDialog = () => {
-  const options = mockConfirm.mock.calls[mockConfirm.mock.calls.length - 1][0];
-  act(() => options.buttons[0].onClick());
-};
+const confirmDialog = () => confirmInDialog("Delete");
 
 const mockApi = () => {
   mockGet.mockImplementation((url: string) => {
@@ -338,7 +333,7 @@ describe("<CreateAttendance> session templates", () => {
     queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
       data: [],
     });
-    confirmDialog();
+    await confirmDialog();
 
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
     expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t1");
@@ -451,7 +446,7 @@ describe("<CreateAttendance> session templates", () => {
     it("can be deleted", async () => {
       await selectStale();
       fireEvent.click(button("Delete template"));
-      confirmDialog();
+      await confirmDialog();
       await waitFor(() =>
         expect(mockDelete.mock.calls[0][0]).toBe(
           "/attendance/orgA/templates/t-stale"
@@ -822,7 +817,7 @@ describe("<CreateAttendance> eligibility", () => {
       it("can be deleted", async () => {
         await selectStale();
         fireEvent.click(button("Delete template"));
-        confirmDialog();
+        await confirmDialog();
         await waitFor(() =>
           expect(mockDelete.mock.calls[0][0]).toBe(
             "/attendance/orgA/templates/t-mezzo"
@@ -1130,7 +1125,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     // Deleting stays allowed.
     expect(button("Delete template")).toBeEnabled();
     fireEvent.click(button("Delete template"));
-    confirmDialog();
+    await confirmDialog();
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
     expect(mockDelete.mock.calls[0][0]).toBe(
       "/attendance/orgA/templates/t-sop"

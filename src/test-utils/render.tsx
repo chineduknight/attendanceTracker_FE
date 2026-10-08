@@ -4,7 +4,9 @@ import {
   fireEvent,
   render as rtlRender,
   RenderOptions,
+  screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { system } from "styles/theme";
@@ -56,4 +58,15 @@ export const chooseMenuItem = async (item: HTMLElement) => {
 export const selectTab = async (tab: HTMLElement) => {
   fireEvent.click(tab);
   await waitFor(() => expect(tab).toHaveAttribute("aria-selected", "true"));
+};
+
+/**
+ * Answer the open ConfirmDialog (useConfirm) by clicking one of its buttons,
+ * e.g. "Delete" or "Cancel". Returns the dialog so callers can check its
+ * title and body; it opens asynchronously, so this waits for it.
+ */
+export const confirmInDialog = async (button: string | RegExp) => {
+  const dialog = await screen.findByRole("alertdialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: button }));
+  return dialog;
 };
