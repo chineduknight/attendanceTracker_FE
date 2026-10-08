@@ -39,6 +39,7 @@ import { FiX } from "react-icons/fi";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
+import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
@@ -135,6 +136,7 @@ const Attendance = () => {
   const terms = useTerms();
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const pinnedSearch = usePinnedSearch(searchQuery);
   const [statusFilter, setStatusFilter] = useState<string[]>([ALL]);
   const [attendanceFilter, setAttendanceFilter] = useState<string[]>([ALL]);
   const statuses = useAttendanceStatuses();
@@ -498,6 +500,7 @@ const Attendance = () => {
             {/* Only the search bar is pinned: with the phone keyboard open,
                 anything taller would squeeze the results it is filtering. */}
             <Box
+              ref={pinnedSearch.barRef}
               position="sticky"
               top={0}
               zIndex="sticky"
@@ -516,6 +519,7 @@ const Attendance = () => {
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
                   value={searchQuery}
                   onChange={handleSearch}
+                  {...pinnedSearch.inputProps}
                 />
                 {searchQuery && (
                   <InputRightElement>
@@ -530,15 +534,15 @@ const Attendance = () => {
                 )}
               </InputGroup>
             </Box>
-            {filteredMembers.length === 0 && (
-              <Box mt="4">
-                <Text ml="4" fontWeight="bold">
-                  {`No ${lowerTerm(terms.memberSingular)} found`}
-                </Text>
-              </Box>
-            )}
             {/* The roster scrolls with the page rather than in a nested box. */}
-            <Box>
+            <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
+              {filteredMembers.length === 0 && (
+                <Box mt="4">
+                  <Text ml="4" fontWeight="bold">
+                    {`No ${lowerTerm(terms.memberSingular)} found`}
+                  </Text>
+                </Box>
+              )}
               {filteredMembers.map((item) => (
                 <AttendanceMemberRow
                   key={item.memberId}
