@@ -2,10 +2,13 @@ import { defineRecipe, defineSlotRecipe } from "@chakra-ui/react";
 
 /*
  * Chakra v3 shrank several defaults. These restore the v2 values the app was
- * designed against, so the upgrade does not change how pages look. Medium
- * fields keep 16px text in particular: below that, iOS zooms the page on
- * focus.
+ * designed against, so the upgrade does not change how pages look. Field
+ * text is never below 16px on phones: below that, iOS zooms the page on
+ * focus. Small fields drop to their compact size from the md breakpoint.
  */
+
+/** 16px on phones (no iOS focus zoom), the compact size from md up. */
+const compactField = (size: "xs" | "sm") => ({ base: "md", md: size });
 
 export const headingRecipe = defineRecipe({
   base: { fontWeight: "bold" },
@@ -43,8 +46,8 @@ export const buttonSizes = {
 export const inputRecipe = defineRecipe({
   variants: {
     size: {
-      xs: { fontSize: "xs", "--input-height": "sizes.6" },
-      sm: { fontSize: "sm", "--input-height": "sizes.8" },
+      xs: { fontSize: compactField("xs"), "--input-height": "sizes.6" },
+      sm: { fontSize: compactField("sm"), "--input-height": "sizes.8" },
       md: { fontSize: "md", px: "4", "--input-height": "sizes.10" },
       lg: { fontSize: "lg", "--input-height": "sizes.12" },
     },
@@ -54,7 +57,7 @@ export const inputRecipe = defineRecipe({
 export const textareaRecipe = defineRecipe({
   variants: {
     size: {
-      sm: { fontSize: "sm" },
+      sm: { fontSize: compactField("sm") },
       md: { fontSize: "md", px: "4" },
       lg: { fontSize: "lg" },
     },
@@ -65,7 +68,7 @@ export const nativeSelectSlotRecipe = defineSlotRecipe({
   slots: ["root", "field", "indicator"],
   variants: {
     size: {
-      sm: { root: { "--select-field-height": "sizes.8" }, field: { fontSize: "sm" } },
+      sm: { root: { "--select-field-height": "sizes.8" }, field: { fontSize: compactField("sm") } },
       md: { root: { "--select-field-height": "sizes.10" }, field: { fontSize: "md" } },
       lg: { root: { "--select-field-height": "sizes.12" }, field: { fontSize: "lg" } },
     },

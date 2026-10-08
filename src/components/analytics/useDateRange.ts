@@ -44,9 +44,10 @@ export const useDateRange = (options: UseDateRangeOptions = {}) => {
     options.onChange?.();
   };
 
+  /** Takes DateField's value: "" or YYYY-MM-DD. */
   const handleDateChange =
-    (setter: (value: string) => void) => (date: Date | null) => {
-      setter(date ? format(date, DATE_INPUT_FORMAT) : "");
+    (setter: (value: string) => void) => (value: string) => {
+      setter(value);
       setActivePreset(null);
       options.onChange?.();
     };

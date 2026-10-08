@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import NavDrawer from "components/NavDrawer";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore from "zStore";
+import { withSafeInset } from "styles/safeArea";
 
 interface AppHeaderProps {
   title: string;
@@ -26,7 +27,18 @@ const AppHeader = ({ title, showBack = true }: AppHeaderProps) => {
   };
 
   return (
-    <Flex bg="primary" alignItems="center" justifyContent="space-between" p="4">
+    <Flex
+      as="header"
+      bg="primary"
+      alignItems="center"
+      justifyContent="space-between"
+      // The blue runs edge to edge; the controls stay clear of the notch and
+      // status bar (installed app, landscape). 16px where there is no inset.
+      pt={withSafeInset("top", "1rem")}
+      pb="4"
+      pl={withSafeInset("left", "1rem")}
+      pr={withSafeInset("right", "1rem")}
+    >
       <Flex alignItems="center" gap={2}>
         {showBack && (
           <IconButton

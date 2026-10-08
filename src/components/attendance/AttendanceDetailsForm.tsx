@@ -1,7 +1,5 @@
-import { Box, Input, NativeSelect, Stack, Field } from "@chakra-ui/react";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { format, isValid, parseISO } from "date-fns";
+import { Input, NativeSelect, Stack, Field } from "@chakra-ui/react";
+import { DateField, todayValue } from "components/ui/date-field";
 import { CategoryType } from "hooks/useCategories";
 import { useTerms } from "hooks/useOrgPresentation";
 
@@ -27,10 +25,7 @@ const AttendanceDetailsForm = ({
   const subCategories =
     categories.find((c) => c.id === value.categoryId)?.subCategories ?? [];
   // Sessions are recorded for today or the past, never the future. The cap is
-  // the user's LOCAL calendar day; the picker enforces it for typed dates too,
-  // which a native <input type="date" max> does not (and iOS ignores max).
-  const today = new Date();
-  const selectedDate = value.date ? parseISO(value.date) : null;
+  // the user's LOCAL calendar day; DateField enforces it for typed dates too.
 
   return (
     <Stack gap={4}>
@@ -83,20 +78,11 @@ const AttendanceDetailsForm = ({
 
       <Field.Root id="date" required>
         <Field.Label mb="0">Date</Field.Label>
-        <Box css={{
-          '& .react-datepicker-wrapper': { width: "100%" }
-        }}>
-          <DatePicker
-            selected={selectedDate && isValid(selectedDate) ? selectedDate : null}
-            onChange={(date: Date | null) =>
-              onChange({ ...value, date: date ? format(date, "yyyy-MM-dd") : "" })
-            }
-            maxDate={today}
-            dateFormat="MMM d, yyyy"
-            placeholderText="Select date"
-            customInput={<Input />}
-          />
-        </Box>
+        <DateField
+          value={value.date}
+          onChange={(date) => onChange({ ...value, date })}
+          max={todayValue()}
+        />
       </Field.Root>
     </Stack>
   );

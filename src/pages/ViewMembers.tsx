@@ -1,3 +1,4 @@
+import { SAFE_TOP } from "styles/safeArea";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
@@ -504,7 +505,8 @@ const ViewMembers: React.FC = () => {
             <Box
               ref={pinnedSearch.barRef}
               position="sticky"
-              top={0}
+              // Pins below the status bar in the installed app (0 elsewhere).
+              top={SAFE_TOP}
               zIndex="sticky"
               bg={pageBg}
               mx={-4}

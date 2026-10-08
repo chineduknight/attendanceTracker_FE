@@ -1,3 +1,4 @@
+import { SAFE_TOP } from "styles/safeArea";
 import {
   Box,
   Flex,
@@ -490,7 +491,8 @@ const Attendance = () => {
             <Box
               ref={pinnedSearch.barRef}
               position="sticky"
-              top={0}
+              // Pins below the status bar in the installed app (0 elsewhere).
+              top={SAFE_TOP}
               zIndex="sticky"
               bg={pageBg}
               mx={-4}
