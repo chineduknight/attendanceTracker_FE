@@ -22,6 +22,8 @@ interface ModeChipProps {
   idleIcon?: ReactElement;
   isSelected: boolean;
   onClick: () => void;
+  /** Overrides the scheme's solid fill when it cannot carry white text. */
+  selectedBg?: string;
 }
 
 /** The selected chip is solid, ticked and `aria-pressed` — never color alone. */
@@ -31,6 +33,7 @@ const ModeChip = ({
   idleIcon,
   isSelected,
   onClick,
+  selectedBg,
 }: ModeChipProps) => (
   <Button
     size="sm"
@@ -42,6 +45,14 @@ const ModeChip = ({
     leftIcon={isSelected ? <FaCheck aria-hidden /> : idleIcon}
     aria-pressed={isSelected}
     onClick={onClick}
+    {...(isSelected && selectedBg
+      ? {
+          bg: selectedBg,
+          color: "white",
+          _hover: { bg: selectedBg, opacity: 0.9 },
+          _active: { bg: selectedBg },
+        }
+      : {})}
   >
     {label}
   </Button>
@@ -62,11 +73,17 @@ const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProp
         role="group"
         aria-labelledby="quick-mark-label"
         gap={2}
-        overflowX="auto"
-        pb={1}
+        // Wrap rather than scroll sideways: a clipped chip row hides
+        // statuses most markers never discover.
+        flexWrap="wrap"
       >
+        {/* Cycle is not a status, so it stays neutral rather than borrowing a
+            status color. Chakra's gray solid is too pale for the white text
+            the app theme forces on buttons, so it fills dark instead. */}
         <ModeChip
           label="Cycle"
+          colorScheme="gray"
+          selectedBg="gray.700"
           idleIcon={<FaSyncAlt aria-hidden />}
           isSelected={mode === null}
           onClick={() => onModeChange(null)}
