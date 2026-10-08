@@ -1,4 +1,5 @@
 import { defineRecipe } from "@chakra-ui/react";
+import { buttonSizes } from "./v2Parity";
 
 // Extends Chakra's built-in button recipe (merged by createSystem): the
 // app's own variants, with "primary" still the default as it was in v2.
@@ -14,6 +15,7 @@ export const buttonRecipe = defineRecipe({
     outline: "none",
   },
   variants: {
+    size: buttonSizes,
     variant: {
       primary: {
         ...filled,

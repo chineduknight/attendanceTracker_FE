@@ -1,5 +1,12 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 import { buttonRecipe } from "./components/buttonStyles";
+import {
+  containerRecipe,
+  headingRecipe,
+  inputRecipe,
+  nativeSelectSlotRecipe,
+  textareaRecipe,
+} from "./components/v2Parity";
 
 // https://chakra-ui.com/docs/theming/overview
 const config = defineConfig({
@@ -17,6 +24,13 @@ const config = defineConfig({
     },
     recipes: {
       button: buttonRecipe,
+      heading: headingRecipe,
+      input: inputRecipe,
+      textarea: textareaRecipe,
+      container: containerRecipe,
+    },
+    slotRecipes: {
+      nativeSelect: nativeSelectSlotRecipe,
     },
   },
 });
