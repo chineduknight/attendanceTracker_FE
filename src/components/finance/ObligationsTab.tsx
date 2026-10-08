@@ -58,7 +58,12 @@ const describe = (o: Obligation) =>
     ? `${o.year ?? ""} · ${formatMoney(o.amountPerMonth ?? 0)} per month`
     : `${o.date ? formatBusinessDate(o.date) : "No date"} · ${formatMoney(o.amount ?? 0)}`;
 
-/** Progress only renders when the backend sends the obligation's summary. */
+/**
+ * Progress only renders when the backend sends the obligation's summary.
+ * Amount-based on purpose: `totalExpected` already excludes members not
+ * liable for a levy, but `accountableMembers` does not, so a member count
+ * ("1 of 3 paid") would overstate who owes. Collect shows member states.
+ */
 const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
   const muted = useColorModeValue("gray.600", "gray.300");
   const summary = obligation.summary;
@@ -67,10 +72,9 @@ const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
   return (
     <Stack spacing={1}>
       <Progress value={pct} size="xs" colorScheme="green" borderRadius="full" aria-label="Share collected" />
-      <Flex justify="space-between" fontSize="xs" color={muted} gap={2} wrap="wrap">
-        <Text>{`${formatMoney(summary.totalCollected)} of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}</Text>
-        <Text>{`${summary.paidMembers} of ${summary.accountableMembers} paid in full`}</Text>
-      </Flex>
+      <Text fontSize="xs" color={muted}>
+        {`${formatMoney(summary.totalCollected)} of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}
+      </Text>
     </Stack>
   );
 };

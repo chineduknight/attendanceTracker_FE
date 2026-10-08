@@ -230,6 +230,29 @@ describe("Obligations", () => {
     expect(screen.getAllByLabelText("Share collected")).toHaveLength(1);
   });
 
+  it("shows amounts, not a member count that would include people not liable", async () => {
+    // 3 accountable, but one joined after the levy date (liable: false,
+    // expected 0): totalExpected excludes them, accountableMembers does not.
+    serve([
+      duesNow,
+      {
+        ...levy,
+        summary: {
+          totalMembers: 3, accountableMembers: 3, paidMembers: 1,
+          totalExpected: 2000, totalCollected: 1400, totalOutstanding: 600,
+        },
+      },
+    ]);
+    setOrg("org1", "owner");
+    renderFinance();
+    fireEvent.click(await screen.findByRole("tab", { name: "Obligations" }));
+
+    expect(await screen.findByText(/1,400 of .*2,000 · 70%$/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Share collected")).toBeInTheDocument();
+    expect(screen.queryByText(/1 of 3/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/paid in full/)).not.toBeInTheDocument();
+  });
+
   it("opens an obligation in Collect when tapped", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
