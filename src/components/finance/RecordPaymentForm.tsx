@@ -38,8 +38,9 @@ const RecordPaymentForm = ({ obligation, row, isSaving, onRecord }: RecordPaymen
     <Stack gap={3} asChild><form onSubmit={submit}>
         <Field.Root invalid={overBalance}>
           <Field.Label htmlFor="record-amount">Amount received</Field.Label>
-          <InputGroup size="lg" startAddon="₦">
+          <InputGroup startAddon="₦" startAddonProps={{ fontSize: "lg" }}>
             <Input
+              size="lg"
               id="record-amount"
               type="number"
               inputMode="decimal"

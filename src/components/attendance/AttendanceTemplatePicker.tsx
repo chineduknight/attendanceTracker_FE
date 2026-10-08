@@ -213,15 +213,14 @@ const AttendanceTemplatePicker = ({
         ) : (
           <>
             <Field.Label mb="0">Template</Field.Label>
-            <NativeSelect.Root>
+            <NativeSelect.Root disabled={isLoading || isSaving}>
               <NativeSelect.Field
                 placeholder={
                   isLoading ? "Loading templates…" : "Choose a template"
                 }
                 // A template deleted elsewhere drops out of the list; show no selection.
                 value={selected?.id ?? ""}
-                disabled={isLoading || isSaving}
-                onValueChange={(e) => onSelect(e.target.value)}>
+                onChange={(e) => onSelect(e.target.value)}>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {needsEligibility(template)

@@ -174,23 +174,22 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
         }}>
           <Menu.Trigger asChild><IconButton
               aria-label="Export"
-              icon={<FaEllipsisV />}
               variant="outline"
               bg={cardBg}
-              disabled={!compliance}></IconButton></Menu.Trigger>
+              disabled={!compliance}><FaEllipsisV /></IconButton></Menu.Trigger>
           <Portal><Menu.Positioner><Menu.Content>
                 <Menu.Item
-                  icon={<FaFileExcel />}
                   onSelect={excel.run}
                   disabled={excel.isExporting}
                   value='item-0'>
+                  <FaFileExcel />
                   {excel.isExporting ? "Exporting Excel…" : "Export Excel"}
                 </Menu.Item>
                 <Menu.Item
-                  icon={<FaFilePdf />}
                   onSelect={pdf.run}
                   disabled={pdf.isExporting}
                   value='item-1'>
+                  <FaFilePdf />
                   {pdf.isExporting ? "Exporting PDF…" : "Export PDF"}
                 </Menu.Item>
               </Menu.Content></Menu.Positioner></Portal>

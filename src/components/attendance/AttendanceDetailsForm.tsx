@@ -66,12 +66,11 @@ const AttendanceDetailsForm = ({
 
       <Field.Root id="subCategory">
         <Field.Label mb="0">{terms.subCategorySingular}</Field.Label>
-        <NativeSelect.Root>
+        <NativeSelect.Root disabled={subCategories.length === 0}>
           <NativeSelect.Field
             placeholder="Select option"
             value={value.subCategoryId}
-            disabled={subCategories.length === 0}
-            onValueChange={(e) => onChange({ ...value, subCategoryId: e.target.value })}>
+            onChange={(e) => onChange({ ...value, subCategoryId: e.target.value })}>
             {subCategories.map((sub) => (
               <option key={sub.id} value={sub.id}>
                 {sub.name}

@@ -6,7 +6,6 @@ import {
   Button,
   Stack,
   Input,
-  Switch,
   Avatar,
   Heading,
   Text,
@@ -14,6 +13,7 @@ import {
   Field,
 } from "@chakra-ui/react";
 import { useForm } from "react-hook-form";
+import { FormSwitch } from "components/ui/switch";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
@@ -82,6 +82,7 @@ const OrganisationSettings = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     watch,
@@ -263,7 +264,7 @@ const OrganisationSettings = () => {
                   <Field.Label mb="0">{`Collapse ${lowerTerm(
                     terms.attendanceSingular,
                   )} by day`}</Field.Label>
-                  <Switch {...register("collapseAttendanceByDay")} />
+                  <FormSwitch control={control} name="collapseAttendanceByDay" />
                 </Field.Root>
 
                 <Field.Root invalid={Boolean(errors.maxAttendanceEdits)}>
@@ -300,10 +301,11 @@ const OrganisationSettings = () => {
                           terms.attendanceSingular,
                         )} eligibility rules`}
                       </Field.Label>
-                      <Switch
+                      <FormSwitch
                         id="attendanceEligibilityEnabled"
                         disabled={!canManage}
-                        {...register("attendanceEligibilityEnabled")}
+                        control={control}
+                        name="attendanceEligibilityEnabled"
                       />
                     </Flex>
                     <Field.HelperText>
@@ -382,8 +384,7 @@ const OrganisationSettings = () => {
 
                     <Separator />
                     <FeatureVisibilitySettings
-                      register={register}
-                      errors={errors}
+                      control={control}
                       isReadOnly={!canManage}
                     />
                   </>

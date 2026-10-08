@@ -7,14 +7,14 @@ import {
   Heading,
   IconButton,
   Input,
-  Radio,
+  RadioGroup,
   NativeSelect,
   Stack,
-  Switch,
   Text,
   Field,
   List,
 } from "@chakra-ui/react";
+import { Switch } from "components/ui/switch";
 import { FaArrowDown, FaArrowUp, FaTrash } from "react-icons/fa";
 import {
   ATTENDANCE_BEHAVIORS,
@@ -77,6 +77,16 @@ const AttendanceStatusesEditor = ({
         ))}
       </List.Root>
 
+      {/* One radio group across the rows: exactly one status is the default. */}
+      <RadioGroup.Root
+        name="default-attendance-status"
+        value={rows.find((row) => row.isDefault)?.key ?? null}
+        disabled={isReadOnly}
+        onValueChange={({ value }) => value && onChange(setDefaultStatus(rows, value))}
+        display="flex"
+        flexDirection="column"
+        gap={3}
+      >
       {rows.map((row, index) => (
         <Box
           key={row.key}
@@ -148,12 +158,10 @@ const AttendanceStatusesEditor = ({
               <Field.Label fontSize="xs" mb={1}>
                 Color
               </Field.Label>
-              <NativeSelect.Root>
+              <NativeSelect.Root size="sm" disabled={isReadOnly}>
                 <NativeSelect.Field
-                  size="sm"
                   value={row.color}
-                  disabled={isReadOnly}
-                  onValueChange={(e) =>
+                  onChange={(e) =>
                     updateRow(row.key, {
                       color: e.target.value as AttendanceStatusColor,
                     })
@@ -171,12 +179,10 @@ const AttendanceStatusesEditor = ({
               <Field.Label fontSize="xs" mb={1}>
                 Behavior
               </Field.Label>
-              <NativeSelect.Root>
+              <NativeSelect.Root size="sm" disabled={isReadOnly || row.persisted}>
                 <NativeSelect.Field
-                  size="sm"
                   value={row.behavior}
-                  disabled={isReadOnly || row.persisted}
-                  onValueChange={(e) =>
+                  onChange={(e) =>
                     updateRow(row.key, {
                       behavior: e.target.value as AttendanceBehavior,
                     })
@@ -201,23 +207,18 @@ const AttendanceStatusesEditor = ({
                 id={`active-${row.key}`}
                 checked={row.active}
                 disabled={isReadOnly}
-                onValueChange={(e) =>
-                  updateRow(row.key, { active: e.target.checked })
-                }
+                onCheckedChange={(active) => updateRow(row.key, { active })}
               />
             </Field.Root>
-            <Radio
-              name="default-attendance-status"
-              value={row.key}
-              checked={row.isDefault}
-              disabled={isReadOnly}
-              onValueChange={() => onChange(setDefaultStatus(rows, row.key))}
-            >
-              <Text fontSize="sm">Default</Text>
-            </Radio>
+            <RadioGroup.Item value={row.key}>
+              <RadioGroup.ItemHiddenInput />
+              <RadioGroup.ItemIndicator />
+              <RadioGroup.ItemText fontSize="sm">Default</RadioGroup.ItemText>
+            </RadioGroup.Item>
           </Flex>
         </Box>
       ))}
+      </RadioGroup.Root>
 
       {!isReadOnly && (
         <Flex gap={2}>

@@ -72,11 +72,10 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
 
       <Field.Root id={`${id}-type`}>
         <Field.Label mb="1">Field type</Field.Label>
-        <NativeSelect.Root>
+        <NativeSelect.Root disabled={keyLocked}>
           <NativeSelect.Field
             value={field.type}
-            disabled={keyLocked}
-            onValueChange={(e) => onChange({ type: e.target.value })}>
+            onChange={(e) => onChange({ type: e.target.value })}>
             {MEMBER_FIELD_TYPES.map((type) => (
               <option key={type} value={type}>
                 {type}

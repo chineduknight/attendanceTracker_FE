@@ -22,7 +22,7 @@ const LoadingSpinner = ({ h = "100vh", text = "Loading..." }: LoadingSpinnerProp
             h="56px"
             borderWidth="4px"
             animationDuration="0.85s"
-            emptyColor="blue.100"
+            css={{ "--spinner-track-color": "colors.blue.100" }}
             color="blue.500"
           />
           <Spinner
@@ -33,7 +33,7 @@ const LoadingSpinner = ({ h = "100vh", text = "Loading..." }: LoadingSpinnerProp
             h="36px"
             borderWidth="3px"
             animationDuration="0.65s"
-            emptyColor="teal.100"
+            css={{ "--spinner-track-color": "colors.teal.100" }}
             color="teal.400"
           />
         </Box>

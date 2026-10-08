@@ -10,7 +10,7 @@ import {
 import { WelfareFollowUp } from "components/welfare/followUps/types";
 
 /** Phone-sized tap targets; compact on wider screens. */
-const ACTION_SIZE = { base: "sm", md: "xs" };
+const ACTION_SIZE = { base: "sm", md: "xs" } as const;
 
 interface WelfareFollowUpCardProps {
   record: WelfareFollowUp;

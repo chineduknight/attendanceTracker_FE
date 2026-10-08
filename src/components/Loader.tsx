@@ -10,7 +10,7 @@ const Loader = (props: LoaderType) => {
       <Spinner
         borderWidth="4px"
         animationDuration="0.65s"
-        emptyColor="gray.200"
+        css={{ "--spinner-track-color": "colors.gray.200" }}
         color="black"
         size="xl"
       />

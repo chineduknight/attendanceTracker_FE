@@ -247,19 +247,18 @@ const ViewMembers: React.FC = () => {
                 </Button></Menu.Trigger>
               <Portal><Menu.Positioner><Menu.Content>
                     <Menu.Item
-                      icon={<Icon color="green.500" asChild><FaFileExcel /></Icon>}
                       color="green.600"
                       onSelect={() => exportMembers()}
                       disabled={
                         !org.id || isLoading || Boolean(error) || isExportingMembers
                       }
                       value='item-0'>
+                      <Icon color="green.500" asChild><FaFileExcel /></Icon>
                       {isExportingMembers
                         ? "Exporting..."
                         : `Export ${terms.memberSingular} List`}
                     </Menu.Item>
                     <Menu.Item
-                      icon={<Icon color="red.500" asChild><FaFilePdf /></Icon>}
                       color="red.600"
                       onSelect={() => exportMembersPdf()}
                       disabled={
@@ -269,6 +268,7 @@ const ViewMembers: React.FC = () => {
                         isExportingMembersPdf
                       }
                       value='item-1'>
+<Icon color="red.500" asChild><FaFilePdf /></Icon>
                       {isExportingMembersPdf
                         ? "Exporting..."
                         : `Export ${terms.memberSingular} PDF`}

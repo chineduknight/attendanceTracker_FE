@@ -293,21 +293,20 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
                   }}>
                     <Menu.Trigger asChild><IconButton
                         aria-label={`More actions for ${o.name}`}
-                        icon={<FaEllipsisV />}
                         variant="ghost"
-                        mr={1}></IconButton></Menu.Trigger>
+                        mr={1}><FaEllipsisV /></IconButton></Menu.Trigger>
                     <Portal><Menu.Positioner><Menu.Content>
                           <Menu.Item
-                            icon={<FaPen />}
                             onSelect={() => setForm({ mode: "rename", obligation: o })}
                             value='item-0'>
+                            <FaPen />
                             Rename
                           </Menu.Item>
                           <Menu.Item
-                            icon={<FaTrash />}
                             color="red.500"
                             onSelect={() => setToDelete(o)}
                             value='item-1'>
+                            <FaTrash />
                             Delete
                           </Menu.Item>
                         </Menu.Content></Menu.Positioner></Portal>

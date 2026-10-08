@@ -446,20 +446,16 @@ const Birthday: React.FC = () => {
                         <Menu.Item
                           key={preset}
                           onSelect={() => applyPreset(preset)}
-                          icon={
-                            activePreset === preset ? <FaCheck /> : <Box w="1em" />
-                          }
-                          value='item-0'>
+                          value={preset}>
+                          activePreset === preset ? <FaCheck /> : <Box w="1em" />
                           {label}
                         </Menu.Item>
                       ))}
                       <Menu.Separator />
                       <Menu.Item
                         onSelect={startCustom}
-                        icon={
-                          activePreset === "custom" ? <FaCheck /> : <Box w="1em" />
-                        }
-                        value='item-1'>
+                        value="custom">
+                        activePreset === "custom" ? <FaCheck /> : <Box w="1em" />
                         Custom
                       </Menu.Item>
                     </Menu.Content></Menu.Positioner></Portal>
@@ -535,7 +531,7 @@ const Birthday: React.FC = () => {
       </Box>
 
       {/* Share drawer */}
-      <Drawer.Root open={isOpen} placement='bottom' onOpenChange={e => {
+      <Drawer.Root open={open} placement='bottom' onOpenChange={e => {
         if (!e.open) {
           onClose();
         }

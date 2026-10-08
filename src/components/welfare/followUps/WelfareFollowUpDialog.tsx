@@ -5,13 +5,13 @@ import {
   Input,
   NativeSelect,
   Stack,
-  Switch,
   Text,
   Textarea,
   Field,
   Dialog,
   Portal,
 } from "@chakra-ui/react";
+import { Switch } from "components/ui/switch";
 import ReactSelect, { SingleValue } from "react-select";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
@@ -360,15 +360,14 @@ const WelfareFollowUpDialog = ({
                           }}
                         />
                         {memberStatusOptions.length > 0 && (
-                          <NativeSelect.Root>
+                          <NativeSelect.Root size="sm">
                             <NativeSelect.Field
                               aria-label={`Filter ${lowerTerm(
                                 terms.memberPlural,
                               )} by status`}
-                              size="sm"
                               mt={2}
                               value={memberStatus}
-                              onValueChange={(event) =>
+                              onChange={(event) =>
                                 setMemberStatus(event.target.value)
                               }>
                               <option value={ALL_STATUSES}>All statuses</option>
@@ -449,7 +448,7 @@ const WelfareFollowUpDialog = ({
                     <Switch
                       id="follow-up-open"
                       checked={keepOpen}
-                      onValueChange={(event) => setKeepOpen(event.target.checked)}
+                      onCheckedChange={setKeepOpen}
                     />
                   </Field.Root>
 

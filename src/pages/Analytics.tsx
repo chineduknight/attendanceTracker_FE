@@ -406,14 +406,14 @@ const AttendanceAnalyticsPage: React.FC = () => {
                           textAlign="center"
                           verticalAlign="bottom"
                         >
-                          <Box as="span" sx={VERTICAL_LABEL_SX}>
+                          <Box as="span" css={VERTICAL_LABEL_SX}>
                             {BEHAVIOR_META[behavior].label}
                           </Box>
                         </Table.ColumnHeader>
                       ))}
                       {dateKeys.map((d) => (
                         <Table.ColumnHeader key={d} textAlign="center" verticalAlign="bottom">
-                          <Box as="span" sx={VERTICAL_LABEL_SX}>
+                          <Box as="span" css={VERTICAL_LABEL_SX}>
                             {formatDayHeader(d)}
                           </Box>
                         </Table.ColumnHeader>

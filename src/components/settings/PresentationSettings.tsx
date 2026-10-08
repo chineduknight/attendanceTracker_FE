@@ -1,5 +1,6 @@
-import { Box, Heading, Input, SimpleGrid, Stack, Switch, Text, Field } from "@chakra-ui/react";
-import { FieldErrors, UseFormRegister } from "react-hook-form";
+import { Box, Heading, Input, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
+import { Control, FieldErrors, UseFormRegister } from "react-hook-form";
+import { FormSwitch } from "components/ui/switch";
 import { OrgSettingsForm } from "helpers/orgPayloads";
 import {
   FEATURE_LABELS,
@@ -47,7 +48,13 @@ export const TerminologySettings = ({ register, errors, isReadOnly }: Presentati
 );
 
 /** Optional modules shown in this organisation's navigation. */
-export const FeatureVisibilitySettings = ({ register, isReadOnly }: PresentationSettingsProps) => (
+interface FeatureVisibilitySettingsProps {
+  control: Control<OrgSettingsForm>;
+  /** `settings.view` without `settings.manage`. */
+  isReadOnly: boolean;
+}
+
+export const FeatureVisibilitySettings = ({ control, isReadOnly }: FeatureVisibilitySettingsProps) => (
   <Stack gap={3}>
     <Box>
       <Heading size="sm">Visible modules</Heading>
@@ -60,10 +67,11 @@ export const FeatureVisibilitySettings = ({ register, isReadOnly }: Presentation
         <Field.Label htmlFor={`feature-${feature}`} mb="0">
           {FEATURE_LABELS[feature]}
         </Field.Label>
-        <Switch
+        <FormSwitch
           id={`feature-${feature}`}
           disabled={isReadOnly}
-          {...register(`featureVisibility.${feature}`)}
+          control={control}
+          name={`featureVisibility.${feature}`}
         />
       </Field.Root>
     ))}

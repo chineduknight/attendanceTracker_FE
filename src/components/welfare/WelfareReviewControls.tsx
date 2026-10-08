@@ -83,12 +83,11 @@ const WelfareReviewControls = ({
           <Field.Label htmlFor="welfare-status" fontSize="sm" mb={1}>
             {`${terms.memberSingular} status`}
           </Field.Label>
-          <NativeSelect.Root>
+          <NativeSelect.Root size={{ base: "md", md: "sm" }}>
             <NativeSelect.Field
               id="welfare-status"
-              size={{ base: "md", md: "sm" }}
               value={status}
-              onValueChange={(event) => onStatusChange(event.target.value)}>
+              onChange={(event) => onStatusChange(event.target.value)}>
               <option value={ALL_STATUSES}>All</option>
               {statusOptions.map((option) => (
                 <option key={option} value={option}>
