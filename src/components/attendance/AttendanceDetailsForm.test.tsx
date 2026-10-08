@@ -108,3 +108,57 @@ it("labels category fields with the organisation's terms but keeps category ids"
   expect(onChange).toHaveBeenCalledWith({ ...base, categoryId: "c1", subCategoryId: "" });
 });
 
+
+describe("date", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 9, 8, 21, 30));
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it("emits the picked day as a local YYYY-MM-DD business date", () => {
+    const onChange = jest.fn();
+    render(<AttendanceDetailsForm value={base} onChange={onChange} categories={categories} />);
+    fireEvent.change(screen.getByLabelText(/Date/), { target: { value: "Oct 7, 2026" } });
+    expect(onChange).toHaveBeenCalledWith({ ...base, date: "2026-10-07" });
+  });
+
+  it("accepts today", () => {
+    const onChange = jest.fn();
+    render(<AttendanceDetailsForm value={base} onChange={onChange} categories={categories} />);
+    fireEvent.change(screen.getByLabelText(/Date/), { target: { value: "Oct 8, 2026" } });
+    expect(onChange).toHaveBeenCalledWith({ ...base, date: "2026-10-08" });
+  });
+
+  it("rejects a typed future date", () => {
+    const onChange = jest.fn();
+    render(<AttendanceDetailsForm value={base} onChange={onChange} categories={categories} />);
+    fireEvent.change(screen.getByLabelText(/Date/), { target: { value: "Oct 9, 2026" } });
+    expect(onChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ date: "2026-10-09" }),
+    );
+  });
+
+  it("disables future days in the calendar", async () => {
+    render(
+      <AttendanceDetailsForm
+        value={{ ...base, date: "2026-10-08" }}
+        onChange={() => {}}
+        categories={categories}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/Date/));
+    // Let the calendar popper finish positioning inside act.
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+    expect(screen.getByRole("option", { name: /October 9th, 2026/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("option", { name: /October 8th, 2026/ })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+  });
+});

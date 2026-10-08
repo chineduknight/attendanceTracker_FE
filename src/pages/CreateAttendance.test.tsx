@@ -19,6 +19,7 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { AttendanceTemplate } from "helpers/attendanceTemplates";
 import { CategoryType } from "hooks/useCategories";
 import { MEMBER_MODEL, ROSTER } from "test-utils/eligibilityFixtures";
+import { format } from "date-fns";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -191,6 +192,12 @@ describe("<CreateAttendance> session templates", () => {
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgA/templates");
   });
 
+  it("defaults the session date to today's local business date", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    expect(dateInput().value).toBe(format(new Date(), "MMM d, yyyy"));
+  });
+
   it("keeps the normal create flow when there are no templates", async () => {
     templatesByOrg.orgA = [];
     renderPage();
@@ -219,7 +226,7 @@ describe("<CreateAttendance> session templates", () => {
     expect(nameInput().value).toBe("Thursday Rehearsal");
     expect(categorySelect().value).toBe("c1");
     expect(subCategorySelect().value).toBe("s1");
-    expect(dateInput().value).toBe("2026-10-01");
+    expect(dateInput().value).toBe("Oct 1, 2026");
   });
 
   it("saves the current details as a new, selected template without date, status or member data", async () => {
@@ -263,7 +270,7 @@ describe("<CreateAttendance> session templates", () => {
     });
     expect(orgBInvalidated()).toBe(false);
     // Saving does not navigate or clear what was typed.
-    expect(dateInput().value).toBe("2026-10-02");
+    expect(dateInput().value).toBe("Oct 2, 2026");
     invalidate.mockRestore();
   });
 
@@ -340,7 +347,7 @@ describe("<CreateAttendance> session templates", () => {
     expect(nameInput().value).toBe("Thursday Rehearsal");
     expect(categorySelect().value).toBe("c1");
     expect(subCategorySelect().value).toBe("s1");
-    expect(dateInput().value).toBe("2026-10-01");
+    expect(dateInput().value).toBe("Oct 1, 2026");
   });
 
   it("resets the selected template and details on organisation switch and never shows A's templates in B", async () => {
@@ -734,7 +741,7 @@ describe("<CreateAttendance> eligibility", () => {
 
       expect(nameInput().value).toBe("Soprano Rehearsal");
       expect(expectedText()).toBe("Expected members: 2 of 8");
-      expect(dateInput().value).toBe("2026-10-01");
+      expect(dateInput().value).toBe("Oct 1, 2026");
     });
 
     it("saves the current rules with the template", async () => {
@@ -1069,6 +1076,8 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
         ? Promise.reject(new Error("boom"))
         : url.endsWith("/category")
         ? Promise.resolve({ data: { data: CATEGORIES } })
+        : url.includes("/availability")
+        ? Promise.resolve({ data: { data: [] } })
         : Promise.resolve({
             data: {
               data: url.endsWith("/templates") ? [template({})] : ROSTER,
