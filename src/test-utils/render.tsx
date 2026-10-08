@@ -1,5 +1,6 @@
 import { ReactElement, ReactNode } from "react";
 import {
+  act,
   fireEvent,
   render as rtlRender,
   RenderOptions,
@@ -33,4 +34,16 @@ export const toggle = async (input: HTMLElement) => {
   const before = root.getAttribute("data-state");
   fireEvent.click(input);
   await waitFor(() => expect(root.getAttribute("data-state")).not.toBe(before));
+};
+
+/**
+ * Choose a v3 menu item the way a tap or mouse press does: pointerdown
+ * highlights it and, once that has been applied (a real press always comes
+ * before the lift), the click selects the highlighted item. A bare click,
+ * or one in the same tick as the press, selects nothing.
+ */
+export const chooseMenuItem = async (item: HTMLElement) => {
+  fireEvent.pointerDown(item);
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  fireEvent.click(item);
 };
