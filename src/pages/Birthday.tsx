@@ -448,7 +448,7 @@ const Birthday: React.FC = () => {
                           key={preset}
                           onSelect={() => applyPreset(preset)}
                           value={preset}>
-                          activePreset === preset ? <FaCheck /> : <Box w="1em" />
+                          {activePreset === preset ? <FaCheck /> : <Box w="1em" />}
                           {label}
                         </Menu.Item>
                       ))}
@@ -456,7 +456,7 @@ const Birthday: React.FC = () => {
                       <Menu.Item
                         onSelect={startCustom}
                         value="custom">
-                        activePreset === "custom" ? <FaCheck /> : <Box w="1em" />
+                        {activePreset === "custom" ? <FaCheck /> : <Box w="1em" />}
                         Custom
                       </Menu.Item>
                     </Menu.Content></Menu.Positioner></Portal>
