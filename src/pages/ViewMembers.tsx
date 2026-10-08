@@ -308,10 +308,11 @@ const ViewMembers: React.FC = () => {
         >
           Export
         </MenuButton>
-        {/* Portaled: in place, the pinned search bar (a higher layer)
-            covers the open menu. */}
+        {/* Menus default to the dropdown layer (1000), below the pinned
+            search bar (sticky, 1100), which would cover the lower items.
+            Portaled and raised to the popover layer so it opens on top. */}
         <Portal>
-          <MenuList>
+          <MenuList zIndex="popover">
             <MenuItem
               icon={<Icon as={FaFileExcel} color="green.500" />}
               onClick={() => exportMembers()}
