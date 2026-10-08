@@ -69,7 +69,7 @@ const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
       <Progress value={pct} size="xs" colorScheme="green" borderRadius="full" aria-label="Share collected" />
       <Flex justify="space-between" fontSize="xs" color={muted} gap={2} wrap="wrap">
         <Text>{`${formatMoney(summary.totalCollected)} of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}</Text>
-        <Text>{`${summary.paidMembers} of ${summary.accountableMembers} paid up`}</Text>
+        <Text>{`${summary.paidMembers} of ${summary.accountableMembers} paid in full`}</Text>
       </Flex>
     </Stack>
   );

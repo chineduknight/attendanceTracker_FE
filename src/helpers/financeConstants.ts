@@ -35,6 +35,19 @@ export function statusMeta(status: MonthStatus) {
   return STATUS_META[status] ?? STATUS_META["not-due"];
 }
 
+/**
+ * Naira with kobo only when there are any: "₦751,000" rather than
+ * "₦751,000.00", so long figures fit a phone-width row.
+ */
 export function formatMoney(value: number): string {
-  return String(formatAmount(value ?? 0, DEFAULT_COUNTRY, DEFAULT_CURRENCY));
+  const amount = value ?? 0;
+  if (!Number.isInteger(amount)) {
+    return String(formatAmount(amount, DEFAULT_COUNTRY, DEFAULT_CURRENCY));
+  }
+  return new Intl.NumberFormat(`en-${DEFAULT_COUNTRY}`, {
+    style: "currency",
+    currency: DEFAULT_CURRENCY,
+    currencyDisplay: "symbol",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }

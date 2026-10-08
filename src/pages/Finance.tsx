@@ -31,6 +31,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   const [chosenId, setChosenId] = useState("");
   const { obligations, isLoading } = useObligations(organisationId);
   const tabBg = useColorModeValue("white", "gray.700");
+  const tabColor = useColorModeValue("gray.600", "gray.200");
 
   // A chosen obligation that has since been deleted falls back to the default.
   const obligationId = obligations.some((o) => o.id === chosenId)
@@ -76,7 +77,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
         <Tabs index={tabIndex} onChange={setTabIndex} variant="soft-rounded" colorScheme="teal" isFitted isLazy>
           <TabList bg={tabBg} borderWidth="1px" borderRadius="full" p={1} mb={4}>
             {TABS.map((label) => (
-              <Tab key={label} fontSize="sm" px={2} py={1.5}>
+              <Tab key={label} fontSize="sm" px={2} py={1.5} color={tabColor}>
                 {label}
               </Tab>
             ))}

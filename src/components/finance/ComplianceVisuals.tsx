@@ -8,7 +8,7 @@ const monthStatus = (row: ComplianceRow, month: number): MonthStatus =>
 
 /** Tinted cell colours that stay readable in light and dark mode. */
 const useStatusTint = () => {
-  const shade = useColorModeValue("100", "700");
+  const shade = useColorModeValue("100", "600");
   const text = useColorModeValue("gray.800", "whiteAlpha.900");
   return { tint: (status: MonthStatus) => `${statusMeta(status).scheme}.${shade}`, text };
 };

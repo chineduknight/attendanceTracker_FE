@@ -86,7 +86,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
             </>
           )}
         </SimpleGrid>
-        {isDuesObligation(obligation) && <MonthGrid row={row} />}
+        {isDuesObligation(obligation) && mode === "record" && <MonthGrid row={row} />}
         {!isLiable(row) && (
           <Text fontSize="sm" color="gray.500">
             Their financial start date is after this levy's date, so they don't owe it.

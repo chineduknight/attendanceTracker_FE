@@ -3,7 +3,7 @@ import {
   buildDuesCorrectionPayload,
   buildLevyCorrectionPayload,
 } from "helpers/financePayloads";
-import { statusMeta } from "helpers/financeConstants";
+import { formatMoney, statusMeta } from "helpers/financeConstants";
 import type { MonthStatus } from "components/finance/financeTypes";
 
 describe("finance payload builders", () => {
@@ -46,5 +46,13 @@ describe("statusMeta", () => {
     expect(statusMeta("unpaid")).toEqual({ label: "Unpaid", scheme: "red" });
     expect(statusMeta("not-due")).toEqual({ label: "Not due", scheme: "gray" });
     expect(statusMeta("unknown" as MonthStatus)).toEqual({ label: "Not due", scheme: "gray" });
+  });
+});
+
+describe("formatMoney", () => {
+  it("drops kobo on whole amounts but keeps it when present", () => {
+    expect(formatMoney(751000)).toMatch(/751,000$/);
+    expect(formatMoney(1250.5)).toMatch(/1,250\.50$/);
+    expect(formatMoney(0)).toMatch(/0$/);
   });
 });
