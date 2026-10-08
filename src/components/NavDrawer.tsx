@@ -19,6 +19,7 @@ import useGlobalStore, { EMPTY_USER, EMPTY_ORG } from "zStore";
 import { useNavActions } from "hooks/useNavActions";
 import ChangePasswordModal from "components/auth/ChangePasswordModal";
 import ColorModeSwitcher from "components/ColorModeSwitcher";
+import { withSafeInset } from "styles/safeArea";
 
 interface NavDrawerProps {
   isOpen: boolean;
@@ -73,9 +74,18 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
           <Drawer.Backdrop />
           <Drawer.Positioner>
             <Drawer.Content>
-              <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
-              <Drawer.Body p={0}>
-                <Box bg="primary" color="#fff" p={4} pt={10}>
+              {/* Below the status bar/notch in the installed app. */}
+              <Drawer.CloseTrigger asChild top={withSafeInset("top", "0.5rem")}><CloseButton size="sm" /></Drawer.CloseTrigger>
+              {/* Opens from the left: in landscape the notch can sit on that
+                  side, so content is inset while the banner stays full bleed. */}
+              <Drawer.Body p={0} pb={withSafeInset("bottom")}>
+                <Box
+                  bg="primary"
+                  color="#fff"
+                  p={4}
+                  pt={withSafeInset("top", "2.5rem")}
+                  pl={withSafeInset("left", "1rem")}
+                >
                   <NameAvatar size="md" mb={2} name={user.username} />
                   <Text fontWeight="bold" lineClamp={1}>
                     {user.username || "Account"}
@@ -92,33 +102,35 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
                   )}
                 </Box>
 
-                <VStack align="stretch" gap={0} py={2}>
-                  {navActions.map(({ label, icon, path, palette }) => (
-                    <Button
-                      key={path}
-                      variant="ghost"
-                      justifyContent="flex-start"
-                      color={`${palette}.fg`}
-                      borderRadius={0}
-                      onClick={() => goTo(path)}><Icon as={icon} color={`${palette}.fg`} />{label}</Button>
-                  ))}
-                </VStack>
+                <Box pl={withSafeInset("left")}>
+                  <VStack align="stretch" gap={0} py={2}>
+                    {navActions.map(({ label, icon, path, palette }) => (
+                      <Button
+                        key={path}
+                        variant="ghost"
+                        justifyContent="flex-start"
+                        color={`${palette}.fg`}
+                        borderRadius={0}
+                        onClick={() => goTo(path)}><Icon as={icon} color={`${palette}.fg`} />{label}</Button>
+                    ))}
+                  </VStack>
 
-                <Separator />
+                  <Separator />
 
-                <ColorModeSwitcher />
+                  <ColorModeSwitcher />
 
-                <VStack align="stretch" gap={0} py={2}>
-                  {ACCOUNT_ACTIONS.map(({ label, icon, palette, onClick }) => (
-                    <Button
-                      key={label}
-                      variant="ghost"
-                      justifyContent="flex-start"
-                      color={`${palette}.fg`}
-                      borderRadius={0}
-                      onClick={onClick}><Icon as={icon} color={`${palette}.fg`} />{label}</Button>
-                  ))}
-                </VStack>
+                  <VStack align="stretch" gap={0} py={2}>
+                    {ACCOUNT_ACTIONS.map(({ label, icon, palette, onClick }) => (
+                      <Button
+                        key={label}
+                        variant="ghost"
+                        justifyContent="flex-start"
+                        color={`${palette}.fg`}
+                        borderRadius={0}
+                        onClick={onClick}><Icon as={icon} color={`${palette}.fg`} />{label}</Button>
+                    ))}
+                  </VStack>
+                </Box>
               </Drawer.Body>
             </Drawer.Content>
           </Drawer.Positioner>

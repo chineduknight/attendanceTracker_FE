@@ -94,4 +94,27 @@ describe("<AppHeader>", () => {
     fireEvent.click(screen.getByLabelText("Account menu"));
     expect(screen.getByText("Change password")).toBeInTheDocument();
   });
+
+  it("keeps its controls clear of the iOS safe areas", () => {
+    render(
+      <MemoryRouter>
+        <AppHeader title="Finance" />
+      </MemoryRouter>,
+    );
+    // jsdom cannot resolve env(), so check the header's generated rules
+    // rather than faking a device inset.
+    const header = screen.getByRole("banner");
+    const headerRules = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules) as CSSStyleRule[])
+      // Match on the header's own classes (jsdom can't parse every selector).
+      .filter((rule) =>
+        Array.from(header.classList).some((cls) => rule.selectorText === `.${cls}`),
+      )
+      .map((rule) => rule.cssText)
+      .join(" ");
+    for (const side of ["top", "left", "right"]) {
+      expect(headerRules).toContain(`calc(1rem + env(safe-area-inset-${side}))`);
+    }
+  });
 });
+

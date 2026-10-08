@@ -14,6 +14,13 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * blank screens to scroll through — and each keystroke lines the results
  * up directly under the bar.
  */
+/**
+ * How far below the viewport top the bar sticks: the iOS safe-area inset in
+ * the installed app (see styles/safeArea), 0 elsewhere.
+ */
+const stickyOffset = (bar: HTMLElement) =>
+  parseFloat(window.getComputedStyle(bar).top) || 0;
+
 export const usePinnedSearch = (query: string) => {
   const barRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -24,18 +31,22 @@ export const usePinnedSearch = (query: string) => {
 
   useLayoutEffect(() => {
     if (isSearching && barRef.current) {
-      setBarHeight(barRef.current.offsetHeight);
+      setBarHeight(barRef.current.offsetHeight + stickyOffset(barRef.current));
     }
   }, [isSearching]);
 
   // The results box is never sticky, so its position is real even while the
-  // bar above it is stuck; the bar belongs exactly one bar-height above it.
+  // bar above it is stuck; the bar belongs exactly one bar-height above it,
+  // and the bar itself sticks below any safe-area inset.
   const pinToTop = useCallback(() => {
     const bar = barRef.current;
     const results = resultsRef.current;
     if (!bar || !results) return;
     const top =
-      results.getBoundingClientRect().top + window.scrollY - bar.offsetHeight;
+      results.getBoundingClientRect().top +
+      window.scrollY -
+      bar.offsetHeight -
+      stickyOffset(bar);
     if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top });
   }, []);
 
