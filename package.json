@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@chakra-ui/react": "^3.0.0",
+    "@chakra-ui/react": "^3.37.0",
     "@emotion/react": "^11",
     "@tanstack/react-query": "^4.29.1",
     "@tanstack/react-query-devtools": "^4.29.1",
@@ -26,7 +26,7 @@
     "react-dom": "^18.1.0",
     "react-hook-form": "^7.43.9",
     "react-icon": "^1.0.0",
-    "react-icons": "^5.7.0",
+    "react-icons": "^4.4.0",
     "react-router-dom": "^6.3.0",
     "react-scripts": "5.0.1",
     "react-select": "^5.10.2",
@@ -86,5 +86,16 @@
   "resolutions": {
     "@types/react": "^18.2.0"
   },
-  "packageManager": "yarn@1.22.22"
+  "packageManager": "yarn@1.22.22",
+  "jest": {
+    "moduleNameMapper": {
+      "^@ark-ui/react/(anatomy|factory)$": "<rootDir>/node_modules/@ark-ui/react/dist/components/$1.cjs",
+      "^@ark-ui/react/(environment|locale)$": "<rootDir>/node_modules/@ark-ui/react/dist/providers/$1/index.cjs",
+      "^@ark-ui/react/utils$": "<rootDir>/node_modules/@ark-ui/react/dist/utils/index.cjs",
+      "^@ark-ui/react/(.+)$": "<rootDir>/node_modules/@ark-ui/react/dist/components/$1/index.cjs"
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@zag-js|@ark-ui|@pandacss|@internationalized|proxy-compare|uqr|next-themes)/)"
+    ]
+  }
 }
