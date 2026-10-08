@@ -6,10 +6,6 @@ import {
   Center,
   Spinner,
   Stack,
-  Tab,
-  
-  TabPanel,
-  TabPanels,
   Tabs,
   Text,
 } from "@chakra-ui/react";
@@ -74,17 +70,35 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   return (
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Box maxW="3xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
-        <Tabs.Root value={tabIndex} onValueChange={setTabIndex} variant='subtle' colorPalette="teal" fitted lazyMount>
+        {/* lazyMount + unmountOnExit = v2's isLazy: a tab mounts when opened and
+            unmounts when left, so its local state resets as before. */}
+        <Tabs.Root
+          value={String(tabIndex)}
+          onValueChange={({ value }) => setTabIndex(Number(value))}
+          variant="subtle"
+          colorPalette="teal"
+          fitted
+          lazyMount
+          unmountOnExit
+        >
           <Tabs.List bg={tabBg} borderWidth="1px" borderRadius="full" p={1} mb={4}>
-            {TABS.map((label) => (
-              <Tab key={label} fontSize="sm" px={2} py={1.5} color={tabColor}>
+            {TABS.map((label, index) => (
+              <Tabs.Trigger
+                key={label}
+                value={String(index)}
+                fontSize="sm"
+                px={2}
+                py={1.5}
+                color={tabColor}
+              >
                 {label}
-              </Tab>
+              </Tabs.Trigger>
             ))}
           </Tabs.List>
-          <TabPanels>
-            <TabPanel p={0}>{collect()}</TabPanel>
-            <TabPanel p={0}>
+          <Tabs.Content value={String(COLLECT)} p={0}>
+            {collect()}
+          </Tabs.Content>
+          <Tabs.Content value={String(OBLIGATIONS)} p={0}>
               <ObligationsTab
                 organisationId={organisationId}
                 obligations={obligations}
@@ -93,11 +107,10 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
                   setTabIndex(COLLECT);
                 }}
               />
-            </TabPanel>
-            <TabPanel p={0}>
-              <StartDatesTab organisationId={organisationId} />
-            </TabPanel>
-          </TabPanels>
+          </Tabs.Content>
+          <Tabs.Content value="2" p={0}>
+            <StartDatesTab organisationId={organisationId} />
+          </Tabs.Content>
         </Tabs.Root>
       </Box>
     </Box>

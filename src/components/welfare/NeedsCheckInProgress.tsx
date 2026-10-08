@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, Progress, Tab,  Tabs, Text } from "@chakra-ui/react";
+import { Box, Progress, Tabs, Text } from "@chakra-ui/react";
 import InsightGrid from "components/welfare/InsightGrid";
 import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {
@@ -79,14 +79,14 @@ const NeedsCheckInProgress = ({
         variant='subtle'
         colorPalette="orange"
         size="sm"
-        value={VIEWS.indexOf(view)}
-        onValueChange={(index) => setView(VIEWS[index])}
+        value={view}
+        onValueChange={({ value }) => setView(value as ProgressView)}
         mb={4}
       >
         <Tabs.List flexWrap="wrap" gap={2}>
-          <Tab>{`Pending ${progress.pending.length}`}</Tab>
-          <Tab>{`Followed Up ${progress.followedUp.length}`}</Tab>
-          <Tab>{`All ${progress.all.length}`}</Tab>
+          <Tabs.Trigger value="pending">{`Pending ${progress.pending.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="followedUp">{`Followed Up ${progress.followedUp.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="all">{`All ${progress.all.length}`}</Tabs.Trigger>
         </Tabs.List>
       </Tabs.Root>
 
