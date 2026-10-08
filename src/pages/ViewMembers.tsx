@@ -1,13 +1,15 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Flex,
   Text,
-  Heading,
   SimpleGrid,
-  Stack,
   Avatar,
   Input,
+  InputGroup,
+  InputLeftElement,
+  InputRightElement,
+  IconButton,
   Button,
   Checkbox,
   CheckboxGroup,
@@ -17,14 +19,7 @@ import {
   MenuItem,
   Icon,
   Collapse,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverArrow,
-  PopoverCloseButton,
-  PopoverBody,
-  useBreakpointValue,
-  useDisclosure,
+  useColorModeValue,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -37,19 +32,21 @@ import {
   FaFileExcel,
   FaFilePdf,
   FaUserPlus,
-  FaShareAlt,
-  FaChevronDown,
-  FaChevronUp,
+  FaFileExport,
   FaFilter,
+  FaColumns,
+  FaSearch,
 } from "react-icons/fa";
+import { FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import ReactSelect, { MultiValue } from "react-select";
 import { useMemberModel } from "hooks/useMemberModel";
+import { MemberRecord, useMembers } from "hooks/useMembers";
+import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { memberFieldLabeler } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
 import { Can } from "rbac/Can";
-import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
 import { LABELS } from "config/presentationLabels";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -62,32 +59,102 @@ type FilterableField = {
   name: string;
   options: string[];
 };
+type OpenPanel = "filters" | "fields" | null;
+
 const REQUIRED_EXPORT_FIELDS = ["name"];
+// Keys never offered as extra display fields.
+const HIDDEN_KEYS = ["name", "createdAt", "updatedAt", "organisationId", "id"];
+
+export const shownFieldsStorageKey = (organisationId: string) =>
+  `memberListFields-${organisationId}`;
+const legacyShownFieldsStorageKey = (organisationId: string) =>
+  `selectedFields-${organisationId}`;
+
+const parseFieldList = (raw: string | null): string[] | null => {
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The officer's chosen extra fields, or null when they have never chosen
+ * (show every field). The legacy key could never hold a deliberate empty
+ * choice — the old page re-selected everything — so an empty legacy list
+ * means "never chosen"; the current key stores an empty choice faithfully.
+ */
+const readShownFields = (organisationId: string): string[] | null => {
+  try {
+    const current = parseFieldList(
+      localStorage.getItem(shownFieldsStorageKey(organisationId))
+    );
+    if (current) return current;
+    const legacy = parseFieldList(
+      localStorage.getItem(legacyShownFieldsStorageKey(organisationId))
+    );
+    return legacy && legacy.length > 0 ? legacy : null;
+  } catch {
+    return null;
+  }
+};
+
+// Server-owned audit fields; not in the member model, so label them here.
+const SYSTEM_FIELD_LABELS: Record<string, string> = {
+  createdBy: "Created by",
+  updatedBy: "Updated by",
+};
+
+type PersonRef = { id: string; name: string };
+const isPersonRef = (value: unknown): value is PersonRef =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as PersonRef).name === "string";
+
+// Only a leading YYYY-MM-DD is a date: a bare "0801" phone is not year 801.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
+
+const formatFieldValue = (value: unknown): string => {
+  if (isPersonRef(value)) return value.name;
+  if (typeof value === "string" && ISO_DATE.test(value)) {
+    const parsed = parseISO(value);
+    if (isValid(parsed)) return format(parsed, "dd-MMM-yyyy");
+  }
+  if (typeof value === "object" && value !== null) return "—";
+  const text = String(value ?? "").trim();
+  return text === "" ? "—" : text;
+};
+
+const openExport = (response: { data?: string }) => {
+  if (response?.data) window.open(response.data, "_blank");
+};
 
 const ViewMembers: React.FC = () => {
   const terms = useTerms();
   const [org] = useGlobalStore((state) => [state.organisation]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const selectedFieldsStorageKey = `selectedFields-${org.id}`;
-  const [selectedFields, setSelectedFields] = useState<string[]>(() => {
-    const stored = localStorage.getItem(selectedFieldsStorageKey);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
   const navigate = useNavigate();
-  const isCompactActions = useBreakpointValue({ base: true, sm: false });
-  const { isOpen: isFieldsOpen, onToggle: onFieldsToggle } = useDisclosure();
-  // The keys you always want to exclude
-  const filteredKeys = useMemo(
-    () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
-    []
+  const [searchQuery, setSearchQuery] = useState("");
+  const pinnedSearch = usePinnedSearch(searchQuery);
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
+  const [chosenFields, setChosenFields] = useState<string[] | null>(() =>
+    readShownFields(org.id)
   );
+
+  const pageBg = useColorModeValue("gray.50", "gray.800");
+  const cardBg = useColorModeValue("white", "gray.700");
+  const borderColor = useColorModeValue("gray.200", "gray.600");
+  const mutedColor = useColorModeValue("gray.500", "gray.400");
+
+  const { members, isLoading, isError } = useMembers(org.id);
   // Display labels only; filters, query params and saved columns keep storage keys.
   const { fields: modelFields } = useMemberModel(org.id);
-  const labelFor = useMemo(
-    () => memberFieldLabeler(modelFields),
-    [modelFields]
-  );
+  const labelFor = useMemo(() => {
+    const modelLabel = memberFieldLabeler(modelFields);
+    return (key: string) => SYSTEM_FIELD_LABELS[key] ?? modelLabel(key);
+  }, [modelFields]);
   const filterableFields = useMemo<FilterableField[]>(
     () =>
       modelFields
@@ -97,68 +164,51 @@ const ViewMembers: React.FC = () => {
         .map((field) => ({ name: field.name, options: field.options ?? [] })),
     [modelFields]
   );
-  const url = convertParamsToString(orgRequest.MEMBERS, {
-    organisationId: org.id,
-  });
-  const [members, setMembers] = useState<any[]>([]);
-  const allExtraFields = useMemo(() => {
-    return members.length > 0
-      ? Object.keys(_.omit(members[0], filteredKeys))
-      : [];
-  }, [members, filteredKeys]);
-  const activeExportFilters = useMemo(
+  const allExtraFields = useMemo(
+    () => (members.length > 0 ? Object.keys(_.omit(members[0], HIDDEN_KEYS)) : []),
+    [members]
+  );
+  const shownFields = chosenFields ?? allExtraFields;
+
+  useEffect(() => {
+    if (chosenFields === null) return;
+    try {
+      localStorage.setItem(
+        shownFieldsStorageKey(org.id),
+        JSON.stringify(chosenFields)
+      );
+    } catch {
+      /* storage unavailable: the choice lasts for this visit only */
+    }
+  }, [chosenFields, org.id]);
+
+  const activeFilters = useMemo(
     () => Object.entries(filters).filter(([, values]) => values.length > 0),
     [filters]
   );
+
+  const url = convertParamsToString(orgRequest.MEMBERS, {
+    organisationId: org.id,
+  });
   const exportFields = useMemo(
     () =>
       Array.from(
-        new Set([
-          ...REQUIRED_EXPORT_FIELDS,
-          ...selectedFields.filter((field) => Boolean(field)),
-        ])
+        new Set([...REQUIRED_EXPORT_FIELDS, ...shownFields.filter(Boolean)])
       ),
-    [selectedFields]
+    [shownFields]
   );
   const exportQueryString = useMemo(() => {
     const queryParams = new URLSearchParams();
-
-    activeExportFilters.forEach(([field, values]) => {
+    activeFilters.forEach(([field, values]) => {
       queryParams.set(field, values.join(","));
     });
     if (exportFields.length) {
       queryParams.set("fields", exportFields.join(","));
     }
-
     const queryString = queryParams.toString();
     return queryString ? `?${queryString}` : "";
-  }, [exportFields, activeExportFilters]);
-  const exportMembersUrl = useMemo(
-    () => `${url}/export${exportQueryString}`,
-    [exportQueryString, url]
-  );
-  const exportMembersPdfUrl = useMemo(
-    () => `${url}/export/pdf${exportQueryString}`,
-    [exportQueryString, url]
-  );
+  }, [exportFields, activeFilters]);
 
-  useEffect(() => {
-    localStorage.setItem(
-      selectedFieldsStorageKey,
-      JSON.stringify(selectedFields)
-    );
-  }, [selectedFields, selectedFieldsStorageKey]);
-  useEffect(() => {
-    if (members.length > 0 && selectedFields.length === 0) {
-      setSelectedFields(allExtraFields);
-    }
-  }, [members, allExtraFields, selectedFields]);
-
-  const { isLoading, error } = useQueryWrapper(queryKeys.members(org.id), url, {
-    onSuccess: (res) => {
-      setMembers(res.data);
-    },
-  });
   const { refetch: exportMembers, isFetching: isExportingMembers } =
     useQueryWrapper(
       [
@@ -167,15 +217,8 @@ const ViewMembers: React.FC = () => {
         JSON.stringify(filters),
         exportFields.join(","),
       ],
-      exportMembersUrl,
-      {
-        enabled: false,
-        onSuccess: (response: any) => {
-          if (response?.data) {
-            window.open(response.data, "_blank");
-          }
-        },
-      }
+      `${url}/export${exportQueryString}`,
+      { enabled: false, onSuccess: openExport }
     );
   const { refetch: exportMembersPdf, isFetching: isExportingMembersPdf } =
     useQueryWrapper(
@@ -185,121 +228,102 @@ const ViewMembers: React.FC = () => {
         JSON.stringify(filters),
         exportFields.join(","),
       ],
-      exportMembersPdfUrl,
-      {
-        enabled: false,
-        onSuccess: (response: any) => {
-          if (response?.data) {
-            window.open(response.data, "_blank");
-          }
-        },
-      }
+      `${url}/export/pdf${exportQueryString}`,
+      { enabled: false, onSuccess: openExport }
     );
+  const exportUnavailable = !org.id || isLoading || isError;
 
-  const activeFilterCount = useMemo(
-    () => Object.values(filters).filter((values) => values.length > 0).length,
-    [filters]
+  const filteredMembers = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return members.filter(
+      (member) =>
+        member.name.toLowerCase().includes(query) &&
+        activeFilters.every(([field, values]) =>
+          values.includes(member[field] as string)
+        )
+    );
+  }, [members, searchQuery, activeFilters]);
+
+  const togglePanel = (panel: Exclude<OpenPanel, null>) =>
+    setOpenPanel((current) => (current === panel ? null : panel));
+
+  const handleSearch = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) =>
+      setSearchQuery(event.target.value),
+    []
   );
 
-  const filteredMembers = members.filter((member) => {
-    const matchesSearch = member.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesFilters = filterableFields.every((field) => {
-      const values = filters[field.name];
-      if (!values || values.length === 0) return true;
-      return values.includes(member[field.name]);
-    });
-    return matchesSearch && matchesFilters;
-  });
+  const displayFields = (member: MemberRecord) =>
+    shownFields.filter((key) => !HIDDEN_KEYS.includes(key) && key in member);
 
-  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(event.target.value);
-  };
+  const memberTerm = (count: number) =>
+    lowerTerm(count === 1 ? terms.memberSingular : terms.memberPlural);
+  const countText =
+    filteredMembers.length === members.length
+      ? `${members.length} ${memberTerm(members.length)}`
+      : `Showing ${filteredMembers.length} of ${members.length} ${memberTerm(
+          members.length
+        )}`;
 
-  // Remove filtered keys from member object and then only pick the ones user selected
-  const getDisplayFields = (member: any) => {
-    const memberEntries = Object.entries(_.omit(member, filteredKeys));
-    return memberEntries.filter(([key]) => selectedFields.includes(key));
-  };
-
-  const formatFieldValue = (value: any): string => {
-    if (typeof value === "string" && /\d{4}/.test(value)) {
-      const parsed = parseISO(value);
-      if (isValid(parsed)) return format(parsed, "dd-MMM-yyyy");
-    }
-    return String(value ?? "");
-  };
+  // Neutral page controls stay gray so they never read as a status colour.
+  const actionButtons = (
+    <Flex gap={2}>
+      <Can perm="members.manage">
+        <Button
+          flex="1"
+          onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
+          leftIcon={<FaUserPlus />}
+        >
+          {LABELS.addMember(terms)}
+        </Button>
+      </Can>
+      <Menu placement="bottom-end">
+        <MenuButton
+          as={Button}
+          flex="1"
+          variant="outline"
+          leftIcon={<FaFileExport />}
+        >
+          Export
+        </MenuButton>
+        <MenuList>
+          <MenuItem
+            icon={<Icon as={FaFileExcel} color="green.500" />}
+            onClick={() => exportMembers()}
+            isDisabled={exportUnavailable || isExportingMembers}
+          >
+            {isExportingMembers
+              ? "Exporting..."
+              : `Export ${terms.memberSingular} List`}
+          </MenuItem>
+          <MenuItem
+            icon={<Icon as={FaFilePdf} color="red.500" />}
+            onClick={() => exportMembersPdf()}
+            isDisabled={exportUnavailable || isExportingMembersPdf}
+          >
+            {isExportingMembersPdf
+              ? "Exporting..."
+              : `Export ${terms.memberSingular} PDF`}
+          </MenuItem>
+        </MenuList>
+      </Menu>
+    </Flex>
+  );
 
   return (
-    <Box minH={"100vh"} bg="gray.50">
-      <Box px="4">
-        <Flex alignItems="center" justifyContent="flex-end" mb={4}>
-          <Flex gap={2}>
-            <Can perm="members.manage">
-              <Button
-                variant="primary"
-                colorScheme="blue"
-                onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-                leftIcon={<FaUserPlus />}
-                aria-label={LABELS.addMember(terms)}
-                px={isCompactActions ? 3 : 4}
-              >
-                {!isCompactActions && LABELS.addMember(terms)}
-              </Button>
-            </Can>
-            <Menu>
-              <MenuButton
-                as={Button}
-                variant="solid"
-                colorScheme="teal"
-                leftIcon={<FaShareAlt />}
-                aria-label="Share"
-                px={isCompactActions ? 3 : 4}
-              >
-                {!isCompactActions && "Share"}
-              </MenuButton>
-              <MenuList>
-                <MenuItem
-                  icon={<Icon as={FaFileExcel} color="green.500" />}
-                  color="green.600"
-                  onClick={() => exportMembers()}
-                  isDisabled={
-                    !org.id || isLoading || Boolean(error) || isExportingMembers
-                  }
-                >
-                  {isExportingMembers
-                    ? "Exporting..."
-                    : `Export ${terms.memberSingular} List`}
-                </MenuItem>
-                <MenuItem
-                  icon={<Icon as={FaFilePdf} color="red.500" />}
-                  color="red.600"
-                  onClick={() => exportMembersPdf()}
-                  isDisabled={
-                    !org.id ||
-                    isLoading ||
-                    Boolean(error) ||
-                    isExportingMembersPdf
-                  }
-                >
-                  {isExportingMembersPdf
-                    ? "Exporting..."
-                    : `Export ${terms.memberSingular} PDF`}
-                </MenuItem>
-              </MenuList>
-            </Menu>
-          </Flex>
-        </Flex>
+    <Box minH={"100vh"} bg={pageBg}>
+      <Box px="4" pb="8" maxW="container.xl" mx="auto">
+        {actionButtons}
         {isLoading ? (
           <LoadingSpinner
             h="45vh"
             text={`Loading ${lowerTerm(terms.memberPlural)}...`}
           />
-        ) : error ? (
+        ) : isError ? (
           <Box
-            bg="#fff"
+            bg={cardBg}
             py="8"
+            mt="4"
             rounded={"xl"}
             boxShadow={"lg"}
             textAlign="center"
@@ -312,208 +336,251 @@ const ViewMembers: React.FC = () => {
           </Box>
         ) : (
           <>
-            <Flex
-              justify="center"
-              mb={8}
-              direction={{ base: "column", md: "row" }}
-              gap={3}
-            >
-              <Input
-                placeholder="Search"
-                value={searchQuery}
-                onChange={handleSearch}
-                mr={0}
-                maxW={{ base: "100%", md: "300px" }}
-              />
+            {/* Filters and column choice open inline, half-width each, so
+                neither covers the list or fights the phone keyboard. */}
+            <Flex mt="3" gap={2}>
               {filterableFields.length > 0 && (
-                <Popover placement="bottom-end" closeOnBlur>
-                  <PopoverTrigger>
-                    <Button
-                      leftIcon={<FaFilter />}
-                      variant="outline"
-                      colorScheme="blue"
-                      w={{ base: "100%", md: "auto" }}
-                    >
-                      Filters
-                      {activeFilterCount > 0 && ` (${activeFilterCount})`}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent w={{ base: "280px", md: "320px" }}>
-                    <PopoverArrow />
-                    <PopoverCloseButton />
-                    <PopoverBody>
-                      <Flex align="center" gap={3} mb={2} pr={6}>
-                        <Text fontWeight="bold">Filter by</Text>
-                        {activeFilterCount > 0 && (
-                          <Button
-                            size="xs"
-                            variant="link"
-                            colorScheme="blue"
-                            onClick={() => setFilters({})}
-                          >
-                            Clear all
-                          </Button>
-                        )}
-                      </Flex>
-                      {filterableFields.map((field) => {
-                        const options: SelectOption[] = field.options.map(
-                          (option) => ({
-                            value: option,
-                            label: capitalize(option),
-                          })
-                        );
-                        const selected = options.filter((option) =>
-                          (filters[field.name] ?? []).includes(option.value)
-                        );
-                        return (
-                          <Box key={field.name} mb={3}>
-                            <Text fontSize="sm" fontWeight="bold" mb={1}>
-                              {labelFor(field.name)}
-                            </Text>
-                            <ReactSelect
-                              isMulti
-                              placeholder={`Filter by ${labelFor(field.name)}`}
-                              options={options}
-                              value={selected}
-                              closeMenuOnSelect={false}
-                              onChange={(
-                                selected: MultiValue<SelectOption>
-                              ) => {
-                                const values = selected.map(
-                                  (item) => item.value
-                                );
-                                setFilters((prev) => ({
-                                  ...prev,
-                                  [field.name]: values,
-                                }));
-                              }}
-                            />
-                          </Box>
-                        );
-                      })}
-                    </PopoverBody>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </Flex>
-            <Text mb={4} fontWeight="bold">
-              {`Total ${terms.memberPlural}: ${filteredMembers.length}`}
-            </Text>
-            <Box mb={8}>
-              <Flex
-                align="center"
-                justify="space-between"
-                mb={2}
-                onClick={isCompactActions ? onFieldsToggle : undefined}
-                cursor={{ base: "pointer", md: "default" }}
-              >
-                <Heading as="h3" size="md">
-                  Select additional fields to display:
-                </Heading>
-                <Box display={{ base: "block", md: "none" }} color="gray.500">
-                  {isFieldsOpen ? <FaChevronUp /> : <FaChevronDown />}
-                </Box>
-              </Flex>
-              {isCompactActions && !isFieldsOpen && (
-                <Text fontSize="sm" color="gray.500">
-                  {selectedFields.length} selected — tap to customize
-                </Text>
-              )}
-              <Collapse in={!isCompactActions || isFieldsOpen} animateOpacity>
-                <CheckboxGroup
-                  value={selectedFields}
-                  onChange={(values: string[]) => setSelectedFields(values)}
+                <Button
+                  flex="1"
+                  variant="outline"
+                  leftIcon={<FaFilter />}
+                  aria-expanded={openPanel === "filters"}
+                  onClick={() => togglePanel("filters")}
                 >
-                  <Flex gap={4} wrap="wrap" pt={2}>
+                  {activeFilters.length > 0
+                    ? `Filters (${activeFilters.length})`
+                    : "Filters"}
+                </Button>
+              )}
+              <Button
+                flex="1"
+                variant="outline"
+                leftIcon={<FaColumns />}
+                aria-expanded={openPanel === "fields"}
+                onClick={() => togglePanel("fields")}
+              >
+                {`Fields (${shownFields.length})`}
+              </Button>
+            </Flex>
+            <Collapse in={openPanel === "filters"} animateOpacity unmountOnExit>
+              <Box
+                mt="2"
+                p="3"
+                bg={cardBg}
+                rounded="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+              >
+                <Flex align="center" justify="space-between" mb={2}>
+                  <Text fontWeight="bold">Filter by</Text>
+                  {activeFilters.length > 0 && (
+                    <Button size="sm" variant="link" onClick={() => setFilters({})}>
+                      Clear all
+                    </Button>
+                  )}
+                </Flex>
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                  {filterableFields.map((field) => {
+                    const options: SelectOption[] = field.options.map(
+                      (option) => ({ value: option, label: capitalize(option) })
+                    );
+                    const selected = options.filter((option) =>
+                      (filters[field.name] ?? []).includes(option.value)
+                    );
+                    return (
+                      <Box key={field.name}>
+                        <Text fontSize="sm" fontWeight="bold" mb={1}>
+                          {labelFor(field.name)}
+                        </Text>
+                        <ReactSelect
+                          isMulti
+                          aria-label={`Filter by ${labelFor(field.name)}`}
+                          placeholder="Any"
+                          options={options}
+                          value={selected}
+                          closeMenuOnSelect={false}
+                          menuPortalTarget={document.body}
+                          menuPosition="fixed"
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                          onChange={(values: MultiValue<SelectOption>) =>
+                            setFilters((prev) => ({
+                              ...prev,
+                              [field.name]: values.map((item) => item.value),
+                            }))
+                          }
+                        />
+                      </Box>
+                    );
+                  })}
+                </SimpleGrid>
+              </Box>
+            </Collapse>
+            <Collapse in={openPanel === "fields"} animateOpacity unmountOnExit>
+              <Box
+                mt="2"
+                p="3"
+                bg={cardBg}
+                rounded="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+              >
+                <Text fontWeight="bold" mb={2}>
+                  Show on each card
+                </Text>
+                <CheckboxGroup
+                  value={shownFields}
+                  onChange={(values: string[]) => setChosenFields(values)}
+                >
+                  <SimpleGrid columns={{ base: 2, md: 4 }} spacingX={3}>
                     {allExtraFields.map((field) => (
-                      <Checkbox key={field} value={field}>
+                      <Checkbox key={field} value={field} minH="44px">
                         {labelFor(field)}
                       </Checkbox>
                     ))}
-                  </Flex>
+                  </SimpleGrid>
                 </CheckboxGroup>
-              </Collapse>
-            </Box>
-            {filteredMembers.length === 0 ? (
-              <Box
-                bg="#fff"
-                py="8"
-                rounded={"xl"}
-                boxShadow={"lg"}
-                textAlign="center"
-              >
-                <Heading as="h2" size="lg">
-                  {`No ${lowerTerm(terms.memberPlural)} found`}
-                </Heading>
               </Box>
-            ) : (
-              <SimpleGrid columns={{ sm: 1, md: 2, lg: 3 }} spacing={8}>
-                {filteredMembers.map((member) => (
-                  <Box
-                    key={member.id}
-                    bg="#fff"
-                    p={6}
-                    rounded={"xl"}
-                    boxShadow={"lg"}
-                  >
-                    <Stack spacing={4}>
-                      <Flex justify="space-between" alignItems="center">
-                        <Flex align="center">
+            </Collapse>
+            {/* Only the search bar is pinned: with the phone keyboard open,
+                anything taller would squeeze the results it is filtering. */}
+            <Box
+              ref={pinnedSearch.barRef}
+              position="sticky"
+              top={0}
+              zIndex="sticky"
+              bg={pageBg}
+              mx={-4}
+              px={4}
+              py={2}
+              mt="2"
+            >
+              <InputGroup maxW={{ md: "400px" }}>
+                <InputLeftElement pointerEvents="none">
+                  <Icon as={FaSearch} color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  type="text"
+                  bg={cardBg}
+                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+                  value={searchQuery}
+                  onChange={handleSearch}
+                  {...pinnedSearch.inputProps}
+                />
+                {searchQuery && (
+                  <InputRightElement>
+                    <IconButton
+                      aria-label="Clear search"
+                      icon={<FiX />}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSearchQuery("")}
+                    />
+                  </InputRightElement>
+                )}
+              </InputGroup>
+            </Box>
+            {/* The list scrolls with the page rather than in a nested box. */}
+            <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
+              <Text fontSize="sm" color={mutedColor} mb={2}>
+                {countText}
+              </Text>
+              {filteredMembers.length === 0 ? (
+                <Text fontWeight="bold" mt="4" ml="1">
+                  {`No ${lowerTerm(terms.memberPlural)} found`}
+                </Text>
+              ) : (
+                <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={3}>
+                  {filteredMembers.map((member) => {
+                    const fields = displayFields(member);
+                    return (
+                      <Box
+                        key={member.id}
+                        bg={cardBg}
+                        p={3}
+                        rounded="lg"
+                        borderWidth="1px"
+                        borderColor={borderColor}
+                      >
+                        {/* Name leads and truncates; the actions sit in a
+                            non-shrinking slot so they never get squeezed. */}
+                        <Flex align="center" gap={3}>
                           <Avatar
-                            size="md"
-                            name={member.name}
-                            src={member.avatarUrl}
-                            mr={3}
-                          />
-                          <Text fontWeight="bold">{member.name}</Text>
-                        </Flex>
-                        <Can perm="members.manage">
-                          <Button
-                            variant="outline"
-                            colorScheme="blue"
-                            onClick={() => {
-                              const pagePath = convertParamsToString(
-                                PROTECTED_PATHS.UPDATE_MEMBER,
-                                { memberId: member.id }
-                              );
-                              navigate(pagePath);
-                            }}
-                          >
-                            <FaPencilAlt />
-                          </Button>
-                        </Can>
-                        <Can perm="attendance.view">
-                          <Button
                             size="sm"
-                            variant="outline"
-                            colorScheme="teal"
-                            onClick={() =>
-                              navigate(
-                                convertParamsToString(
-                                  PROTECTED_PATHS.MEMBER_ATTENDANCE_AVAILABILITY,
-                                  { memberId: member.id }
-                                )
-                              )
-                            }
+                            name={member.name}
+                            src={member.avatarUrl as string | undefined}
+                          />
+                          <Text
+                            flex="1"
+                            minW={0}
+                            fontWeight="bold"
+                            noOfLines={1}
                           >
-                            Availability
-                          </Button>
-                        </Can>
-                      </Flex>
-                      {/* Render only the additional fields that the user has selected */}
-                      {getDisplayFields(member).map(([key, value]) => (
-                        <Flex key={key} align="center">
-                          <Text fontWeight="bold" flexShrink={0} mr={2}>
-                            {labelFor(key)}:
+                            {member.name}
                           </Text>
-                          <Text>{formatFieldValue(value)}</Text>
+                          <Flex flexShrink={0} gap={1}>
+                            <Can perm="attendance.view">
+                              <Button
+                                variant="ghost"
+                                minH="44px"
+                                px={2}
+                                onClick={() =>
+                                  navigate(
+                                    convertParamsToString(
+                                      PROTECTED_PATHS.MEMBER_ATTENDANCE_AVAILABILITY,
+                                      { memberId: member.id }
+                                    )
+                                  )
+                                }
+                              >
+                                Availability
+                              </Button>
+                            </Can>
+                            <Can perm="members.manage">
+                              <IconButton
+                                aria-label={`Edit ${member.name}`}
+                                icon={<FaPencilAlt />}
+                                variant="ghost"
+                                minW="44px"
+                                minH="44px"
+                                onClick={() =>
+                                  navigate(
+                                    convertParamsToString(
+                                      PROTECTED_PATHS.UPDATE_MEMBER,
+                                      { memberId: member.id }
+                                    )
+                                  )
+                                }
+                              />
+                            </Can>
+                          </Flex>
                         </Flex>
-                      ))}
-                    </Stack>
-                  </Box>
-                ))}
-              </SimpleGrid>
-            )}
+                        {fields.length > 0 && (
+                          <SimpleGrid
+                            columns={2}
+                            spacingX={3}
+                            spacingY={2}
+                            mt={2}
+                          >
+                            {fields.map((key) => (
+                              <Box key={key} minW={0}>
+                                <Text fontSize="xs" color={mutedColor}>
+                                  {labelFor(key)}
+                                </Text>
+                                <Text fontSize="sm" wordBreak="break-word">
+                                  {formatFieldValue(member[key])}
+                                </Text>
+                              </Box>
+                            ))}
+                          </SimpleGrid>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </SimpleGrid>
+              )}
+            </Box>
           </>
         )}
       </Box>
