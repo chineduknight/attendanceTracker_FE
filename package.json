@@ -43,7 +43,8 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "prepare": "husky install",
-    "script": "concurrently \"yarn start\" \"yarn run server\""
+    "script": "concurrently \"yarn start\" \"yarn run server\"",
+    "postinstall": "chakra typegen src/styles/theme.ts"
   },
   "eslintConfig": {
     "extends": [
@@ -64,6 +65,7 @@
     ]
   },
   "devDependencies": {
+    "@chakra-ui/cli": "^3.37.0",
     "@types/react-datepicker": "^4.19.0",
     "@typescript-eslint/eslint-plugin": "^5.23.0",
     "@typescript-eslint/parser": "^5.23.0",
