@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { render } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
@@ -6,7 +6,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewMembers from "pages/ViewMembers";
+import { system } from "styles/theme";
 import { renderRoute } from "test-utils/renderWithProviders";
+import { toggle } from "test-utils/render";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
@@ -82,7 +84,7 @@ describe("<ViewMembers> with custom terminology", () => {
       });
     });
     render(
-      <ChakraProvider>
+      <ChakraProvider value={system}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={["/members"]}>
             <Routes>
@@ -181,12 +183,14 @@ describe("<ViewMembers> at phone width", () => {
     renderPage();
     await screen.findByText("Ada");
     fireEvent.click(screen.getByRole("button", { name: "Fields (2)" }));
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Voice Part" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Phone" }));
+    await toggle(await screen.findByRole("checkbox", { name: "Voice Part" }));
+    await toggle(screen.getByRole("checkbox", { name: "Phone" }));
 
     expect(screen.getByRole("button", { name: "Fields (0)" })).toBeInTheDocument();
     expect(screen.queryByText("0801")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("memberListFields-org1")!)).toEqual([]);
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("memberListFields-org1")!)).toEqual([])
+    );
   });
 
   it("honours a field choice saved under the legacy key", async () => {
@@ -212,7 +216,7 @@ describe("<ViewMembers> at phone width", () => {
 
   it("names the member on its edit button and opens that member", async () => {
     render(
-      <ChakraProvider>
+      <ChakraProvider value={system}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={["/members"]}>
             <Routes>

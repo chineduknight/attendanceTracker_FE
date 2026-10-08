@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { ChakraProvider } from "@chakra-ui/react";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import TruncatedText from "components/TruncatedText";
 
 const EMAIL = "ibrahim.musa@demochoir.test";
@@ -33,11 +33,7 @@ class ResizeObserverStub {
 }
 
 const renderText = () =>
-  render(
-    <ChakraProvider>
-      <TruncatedText>{EMAIL}</TruncatedText>
-    </ChakraProvider>
-  );
+  render(<TruncatedText>{EMAIL}</TruncatedText>);
 
 describe("<TruncatedText>", () => {
   beforeEach(() => {

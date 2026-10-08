@@ -1,13 +1,6 @@
-import {
-  Box,
-  Flex,
-  useColorModeValue,
-  Button,
-  FormControl,
-  FormLabel,
-  Input,
-  Stack,
-} from "@chakra-ui/react";
+import { Box, Flex, Button, Input, Stack, Field } from "@chakra-ui/react";
+
+import { useColorModeValue } from "components/ui/color-mode";
 
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";
@@ -56,7 +49,7 @@ const Category = () => {
         bg={useColorModeValue("gray.50", "gray.800")}
       >
         <Stack
-          spacing={4}
+          gap={4}
           w={"full"}
           mt="5rem"
           maxW={"md"}
@@ -66,13 +59,13 @@ const Category = () => {
           p={6}
         >
           <form onSubmit={handleSubmit(onSubmit)}>
-            <FormControl id="category" isRequired>
-              <FormLabel>{`${terms.categorySingular} name`}</FormLabel>
+            <Field.Root id="category" required>
+              <Field.Label>{`${terms.categorySingular} name`}</Field.Label>
               <Input
                 type="category"
                 {...register("categoryId", { required: true })}
               />
-            </FormControl>
+            </Field.Root>
             <Box>
               <Button
                 w="full"
@@ -85,7 +78,7 @@ const Category = () => {
                 fontWeight="bold"
                 fontSize="15px"
                 type="submit"
-                isLoading={isLoading}
+                loading={isLoading}
               >
                 Submit
               </Button>

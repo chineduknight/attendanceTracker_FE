@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  AlertDescription,
-  AlertIcon,
-  Box,
-  Button,
-  Flex,
-  Stack,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
+import { Alert, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { FaPlusCircle } from "react-icons/fa";
@@ -112,7 +103,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
 
   return (
     <Stack
-      spacing={4}
+      gap={4}
       w="full"
       maxW="md"
       bg={useColorModeValue("white", "gray.700")}
@@ -124,10 +115,10 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         {`Labels are what ${lowerTerm(terms.officerPlural)} see and can be changed at any time. Internal keys identify stored ${lowerTerm(terms.memberSingular)} data and stay fixed once saved.`}
       </Text>
       {serverError && (
-        <Alert status="error" borderRadius="md">
-          <AlertIcon />
-          <AlertDescription>{serverError}</AlertDescription>
-        </Alert>
+        <Alert.Root status="error" borderRadius="md">
+          <Alert.Indicator />
+          <Alert.Description>{serverError}</Alert.Description>
+        </Alert.Root>
       )}
       {fields.map((field) => (
         <ModelFieldCard
@@ -141,15 +132,12 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         />
       ))}
       <Button
-        leftIcon={<FaPlusCircle aria-hidden />}
         variant="logout"
         w="max-content"
-        onClick={() => setFields((current) => [...current, newDraftField()])}
-      >
-        Add field
-      </Button>
-      <Stack spacing={3}>
-        <Button onClick={handleSubmit} isLoading={isLoading}>
+        onClick={() => setFields((current) => [...current, newDraftField()])}><FaPlusCircle aria-hidden />Add field
+              </Button>
+      <Stack gap={3}>
+        <Button onClick={handleSubmit} loading={isLoading}>
           {isUpdating ? "Update" : "Submit"}
         </Button>
         <Button variant="outline" onClick={() => navigate(-1)}>

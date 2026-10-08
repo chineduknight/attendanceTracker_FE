@@ -1,7 +1,4 @@
-import {
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
-  FormControl, FormLabel, FormErrorMessage, Input, Button, Text,
-} from "@chakra-ui/react";
+import { Input, Button, Text, Field, Dialog, Portal } from "@chakra-ui/react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { authRequest } from "services";
 import { patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
@@ -25,33 +22,42 @@ const SetEmailModal = () => {
     mutate({ url: authRequest.SET_EMAIL, data });
 
   return (
-    <Modal isOpen={!!user.token && user.needsEmail} onClose={() => {}} closeOnOverlayClick={false} isCentered>
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>Add your email</ModalHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <ModalBody>
-            <Text mb={3} fontSize="sm" color="gray.600">
-              Set an email to unlock officer features and to redeem any pending invites.
-            </Text>
-            <FormControl isInvalid={!!errors.email}>
-              <FormLabel>Email</FormLabel>
-              <Input
-                type="email"
-                {...register("email", {
-                  required: "Email is required",
-                  pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: "Enter a valid email" },
-                })}
-              />
-              <FormErrorMessage>{errors.email?.message}</FormErrorMessage>
-            </FormControl>
-          </ModalBody>
-          <ModalFooter>
-            <Button type="submit" variant="primary" isLoading={isLoading}>Save email</Button>
-          </ModalFooter>
-        </form>
-      </ModalContent>
-    </Modal>
+    <Dialog.Root open={!!user.token && user.needsEmail} closeOnInteractOutside={false} placement='center' onOpenChange={e => {
+      if (!e.open)
+        {}
+    }}>
+      <Portal>
+
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header><Dialog.Title>Add your email</Dialog.Title></Dialog.Header>
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <Dialog.Body>
+                <Text mb={3} fontSize="sm" color="gray.600">
+                  Set an email to unlock officer features and to redeem any pending invites.
+                </Text>
+                <Field.Root invalid={!!errors.email}>
+                  <Field.Label>Email</Field.Label>
+                  <Input
+                    type="email"
+                    {...register("email", {
+                      required: "Email is required",
+                      pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: "Enter a valid email" },
+                    })}
+                  />
+                  <Field.ErrorText>{errors.email?.message}</Field.ErrorText>
+                </Field.Root>
+              </Dialog.Body>
+              <Dialog.Footer>
+                <Button type="submit" variant="primary" loading={isLoading}>Save email</Button>
+              </Dialog.Footer>
+            </form>
+          </Dialog.Content>
+        </Dialog.Positioner>
+
+      </Portal>
+    </Dialog.Root>
   );
 };
 

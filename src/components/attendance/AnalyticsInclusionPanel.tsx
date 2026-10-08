@@ -1,15 +1,5 @@
 import { useState } from "react";
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  FormControl,
-  FormHelperText,
-  FormLabel,
-  Text,
-  Textarea,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, Text, Textarea, Field } from "@chakra-ui/react";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
 import ConfirmModal from "components/finance/ConfirmModal";
@@ -80,7 +70,7 @@ const AnalyticsInclusionPanel = ({
         gap={2}
         flexWrap="wrap"
       >
-        <Badge colorScheme={inclusion.included ? "green" : "gray"}>
+        <Badge colorPalette={inclusion.included ? "green" : "gray"}>
           {inclusion.included
             ? "Included in analytics"
             : "Excluded from analytics"}
@@ -90,7 +80,7 @@ const AnalyticsInclusionPanel = ({
             size="sm"
             variant="outline"
             onClick={() => setIsConfirming(true)}
-            isDisabled={isSaving}
+            disabled={isSaving}
           >
             {actionLabel}
           </Button>
@@ -120,18 +110,18 @@ const AnalyticsInclusionPanel = ({
               <Text mb={4}>
                 {`This ${session} will remain available in ${session} history, but it will not count toward organisation or ${member} analytics.`}
               </Text>
-              <FormControl>
-                <FormLabel>Reason (optional)</FormLabel>
+              <Field.Root>
+                <Field.Label>Reason (optional)</Field.Label>
                 <Textarea
                   value={reason}
                   maxLength={ANALYTICS_EXCLUSION_REASON_MAX}
                   onChange={(event) => setReason(event.target.value)}
                   placeholder="Attendance was incompletely recorded"
                 />
-                <FormHelperText>
+                <Field.HelperText>
                   {`${reason.length}/${ANALYTICS_EXCLUSION_REASON_MAX} characters`}
-                </FormHelperText>
-              </FormControl>
+                </Field.HelperText>
+              </Field.Root>
             </>
           ) : (
             `Its stored attendance will count again in organisation and ${member} analytics.`

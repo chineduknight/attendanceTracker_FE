@@ -1,25 +1,18 @@
 import { useMemo, useState } from "react";
 import {
+  CloseButton,
   Button,
   Flex,
-  FormControl,
-  FormErrorMessage,
-  FormHelperText,
-  FormLabel,
   Input,
-  Modal,
-  ModalBody,
-  ModalCloseButton,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalOverlay,
-  Select,
+  NativeSelect,
   Stack,
-  Switch,
   Text,
   Textarea,
+  Field,
+  Dialog,
+  Portal,
 } from "@chakra-ui/react";
+import { Switch } from "components/ui/switch";
 import ReactSelect, { SingleValue } from "react-select";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
@@ -304,253 +297,265 @@ const WelfareFollowUpDialog = ({
     <>
       {/* Full screen on phones with the footer pinned, so Save stays
           reachable above the keyboard and the long form scrolls inside. */}
-      <Modal
-        isOpen
-        onClose={onClose}
-        isCentered
+      <Dialog.Root
+        open
+        placement='center'
         size={{ base: "full", md: "lg" }}
         scrollBehavior="inside"
+        onOpenChange={e => {
+          if (!e.open) {
+            onClose();
+          }
+        }}
       >
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>
-            {isEdit ? "Edit welfare follow-up" : "Add welfare follow-up"}
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Stack spacing={4}>
-              <FormControl
-                isInvalid={submitted && !resolvedMemberId}
-                isRequired
-              >
-                <FormLabel htmlFor="follow-up-member">Member</FormLabel>
-                {isManualCreate ? (
-                  <>
-                    <ReactSelect
-                      inputId="follow-up-member"
-                      classNamePrefix="follow-up-member"
-                      options={memberOptions}
-                      // Kept visible even if the scope changes after picking.
-                      value={
-                        memberId
-                          ? {
-                              value: memberId,
-                              label:
-                                members.members.find((m) => m.id === memberId)
-                                  ?.name ?? "",
-                            }
-                          : null
-                      }
-                      onChange={(
-                        selected: SingleValue<{ value: string; label: string }>,
-                      ) => setMemberId(selected?.value ?? "")}
-                      isLoading={members.isLoading}
-                      isDisabled={members.isLoading}
-                      placeholder={`Search ${lowerTerm(
-                        terms.memberPlural,
-                      )} by name`}
-                      noOptionsMessage={() =>
-                        members.isError
-                          ? `${terms.memberPlural} could not be loaded.`
-                          : `No matching ${lowerTerm(terms.memberPlural)}`
-                      }
-                      menuPortalTarget={document.body}
-                      menuPosition="fixed"
-                      styles={{
-                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                      }}
-                    />
-                    {memberStatusOptions.length > 0 && (
-                      <Select
-                        aria-label={`Filter ${lowerTerm(
-                          terms.memberPlural,
-                        )} by status`}
-                        size="sm"
-                        mt={2}
-                        value={memberStatus}
-                        onChange={(event) =>
-                          setMemberStatus(event.target.value)
-                        }
-                      >
-                        <option value={ALL_STATUSES}>All statuses</option>
-                        {memberStatusOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </Select>
+        <Portal>
+
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content>
+              <Dialog.Header><Dialog.Title>
+                {isEdit ? "Edit welfare follow-up" : "Add welfare follow-up"}
+              </Dialog.Title></Dialog.Header>
+              <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+              <Dialog.Body>
+                <Stack gap={4}>
+                  <Field.Root
+                    invalid={submitted && !resolvedMemberId}
+                    required
+                  >
+                    <Field.Label htmlFor="follow-up-member">Member</Field.Label>
+                    {isManualCreate ? (
+                      <>
+                        <ReactSelect
+                          inputId="follow-up-member"
+                          classNamePrefix="follow-up-member"
+                          options={memberOptions}
+                          // Kept visible even if the scope changes after picking.
+                          value={
+                            memberId
+                              ? {
+                                  value: memberId,
+                                  label:
+                                    members.members.find((m) => m.id === memberId)
+                                      ?.name ?? "",
+                                }
+                              : null
+                          }
+                          onChange={(
+                            selected: SingleValue<{ value: string; label: string }>,
+                          ) => setMemberId(selected?.value ?? "")}
+                          isLoading={members.isLoading}
+                          isDisabled={members.isLoading}
+                          placeholder={`Search ${lowerTerm(
+                            terms.memberPlural,
+                          )} by name`}
+                          noOptionsMessage={() =>
+                            members.isError
+                              ? `${terms.memberPlural} could not be loaded.`
+                              : `No matching ${lowerTerm(terms.memberPlural)}`
+                          }
+                          menuPortalTarget={document.body}
+                          menuPosition="fixed"
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+                        {memberStatusOptions.length > 0 && (
+                          <NativeSelect.Root size="sm">
+                            <NativeSelect.Field
+                              aria-label={`Filter ${lowerTerm(
+                                terms.memberPlural,
+                              )} by status`}
+                              mt={2}
+                              value={memberStatus}
+                              onChange={(event) =>
+                                setMemberStatus(event.target.value)
+                              }>
+                              <option value={ALL_STATUSES}>All statuses</option>
+                              {memberStatusOptions.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </NativeSelect.Field>
+                            <NativeSelect.Indicator />
+                          </NativeSelect.Root>
+                        )}
+                        {members.isError && (
+                          <Field.ErrorText>
+                            Could not load members. Close and try again.
+                          </Field.ErrorText>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Input
+                          id="follow-up-member"
+                          value={lockedMemberName}
+                          readOnly
+                          disabled
+                        />
+                        {isEdit && (
+                          <Field.HelperText>
+                            The member cannot be changed after logging.
+                          </Field.HelperText>
+                        )}
+                      </>
                     )}
-                    {members.isError && (
-                      <FormErrorMessage>
-                        Could not load members. Close and try again.
-                      </FormErrorMessage>
+                    {submitted && !resolvedMemberId && (
+                      <Field.ErrorText>Select a member.</Field.ErrorText>
                     )}
-                  </>
-                ) : (
-                  <>
+                  </Field.Root>
+
+                  <Field.Root required>
+                    <Field.Label htmlFor="follow-up-date">Date</Field.Label>
                     <Input
-                      id="follow-up-member"
-                      value={lockedMemberName}
-                      isReadOnly
-                      isDisabled
+                      id="follow-up-date"
+                      type="date"
+                      value={recordDate}
+                      onChange={(event) => setRecordDate(event.target.value)}
                     />
-                    {isEdit && (
-                      <FormHelperText>
-                        The member cannot be changed after logging.
-                      </FormHelperText>
-                    )}
-                  </>
-                )}
-                {submitted && !resolvedMemberId && (
-                  <FormErrorMessage>Select a member.</FormErrorMessage>
-                )}
-              </FormControl>
+                  </Field.Root>
 
-              <FormControl isRequired>
-                <FormLabel htmlFor="follow-up-date">Date</FormLabel>
-                <Input
-                  id="follow-up-date"
-                  type="date"
-                  value={recordDate}
-                  onChange={(event) => setRecordDate(event.target.value)}
-                />
-              </FormControl>
+                  <Field.Root invalid={submitted && !reason.trim()} required>
+                    <Field.Label htmlFor="follow-up-reason">Reason</Field.Label>
+                    <Input
+                      id="follow-up-reason"
+                      value={reason}
+                      maxLength={REASON_MAX_LENGTH}
+                      onChange={(event) => setReason(event.target.value)}
+                    />
+                    <Field.ErrorText>Reason is required.</Field.ErrorText>
+                  </Field.Root>
 
-              <FormControl isInvalid={submitted && !reason.trim()} isRequired>
-                <FormLabel htmlFor="follow-up-reason">Reason</FormLabel>
-                <Input
-                  id="follow-up-reason"
-                  value={reason}
-                  maxLength={REASON_MAX_LENGTH}
-                  onChange={(event) => setReason(event.target.value)}
-                />
-                <FormErrorMessage>Reason is required.</FormErrorMessage>
-              </FormControl>
+                  <Field.Root>
+                    <Field.Label htmlFor="follow-up-note">Note</Field.Label>
+                    <Textarea
+                      id="follow-up-note"
+                      value={note}
+                      maxLength={NOTE_MAX_LENGTH}
+                      onChange={(event) => setNote(event.target.value)}
+                    />
+                    <Field.HelperText>
+                      Keep notes brief and relevant. Avoid storing unnecessary
+                      sensitive personal information.
+                    </Field.HelperText>
+                  </Field.Root>
 
-              <FormControl>
-                <FormLabel htmlFor="follow-up-note">Note</FormLabel>
-                <Textarea
-                  id="follow-up-note"
-                  value={note}
-                  maxLength={NOTE_MAX_LENGTH}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-                <FormHelperText>
-                  Keep notes brief and relevant. Avoid storing unnecessary
-                  sensitive personal information.
-                </FormHelperText>
-              </FormControl>
+                  <Field.Root>
+                    <Field.Label>
+                      Keep open for follow-up
+                    </Field.Label>
+                    <Switch
+                      checked={keepOpen}
+                      onCheckedChange={setKeepOpen}
+                    />
+                  </Field.Root>
 
-              <FormControl>
-                <FormLabel htmlFor="follow-up-open">
-                  Keep open for follow-up
-                </FormLabel>
-                <Switch
-                  id="follow-up-open"
-                  isChecked={keepOpen}
-                  onChange={(event) => setKeepOpen(event.target.checked)}
-                />
-              </FormControl>
-
-              {keepOpen && (
-                <FormControl>
-                  <FormLabel htmlFor="follow-up-next-date">
-                    Next follow-up date
-                  </FormLabel>
-                  <Input
-                    id="follow-up-next-date"
-                    type="date"
-                    min={recordDate}
-                    value={nextFollowUpDate}
-                    onChange={(event) =>
-                      setNextFollowUpDate(event.target.value)
-                    }
-                  />
-                  <FormHelperText>
-                    Optional — an open follow-up can have no date.
-                  </FormHelperText>
-                </FormControl>
-              )}
-
-              {(keepOpen || isEdit) && (
-                <FormControl>
-                  <FormLabel htmlFor="follow-up-assignee">Assignment</FormLabel>
-                  {canManageAssignedOfficers ? (
-                    <Select
-                      id="follow-up-assignee"
-                      value={assignedToUserId}
-                      onChange={(event) =>
-                        setAssignedToUserId(event.target.value)
-                      }
-                    >
-                      <option value="">Unassigned</option>
-                      {assigneeOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : (
-                    <Text fontSize="sm">
-                      {assignedToName
-                        ? `Assigned to: ${assignedToName}`
-                        : "Unassigned"}
-                    </Text>
+                  {keepOpen && (
+                    <Field.Root>
+                      <Field.Label htmlFor="follow-up-next-date">
+                        Next follow-up date
+                      </Field.Label>
+                      <Input
+                        id="follow-up-next-date"
+                        type="date"
+                        min={recordDate}
+                        value={nextFollowUpDate}
+                        onChange={(event) =>
+                          setNextFollowUpDate(event.target.value)
+                        }
+                      />
+                      <Field.HelperText>
+                        Optional — an open follow-up can have no date.
+                      </Field.HelperText>
+                    </Field.Root>
                   )}
-                  {!canManageAssignedOfficers && (
+
+                  {(keepOpen || isEdit) && (
+                    <Field.Root>
+                      <Field.Label htmlFor="follow-up-assignee">Assignment</Field.Label>
+                      {canManageAssignedOfficers ? (
+                        <NativeSelect.Root>
+                          <NativeSelect.Field
+                            id="follow-up-assignee"
+                            value={assignedToUserId}
+                            onChange={(event) =>
+                              setAssignedToUserId(event.target.value)
+                            }>
+                            <option value="">Unassigned</option>
+                            {assigneeOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.name}
+                              </option>
+                            ))}
+                          </NativeSelect.Field>
+                          <NativeSelect.Indicator />
+                        </NativeSelect.Root>
+                      ) : (
+                        <Text fontSize="sm">
+                          {assignedToName
+                            ? `Assigned to: ${assignedToName}`
+                            : "Unassigned"}
+                        </Text>
+                      )}
+                      {!canManageAssignedOfficers && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          mt={2}
+                          onClick={() => setAssignedToUserId(currentUserId)}
+                          disabled={isSaving}
+                        >
+                          Assign to me
+                        </Button>
+                      )}
+                      <Field.HelperText>
+                        Optional. Assignment is for visibility only; Presence Pro
+                        will not send a notification in this phase.
+                      </Field.HelperText>
+                    </Field.Root>
+                  )}
+                </Stack>
+              </Dialog.Body>
+              <Dialog.Footer>
+                {/* Stacked on phones (Save on top): three buttons need ~350px
+                    and would overflow a 375px screen in a row. */}
+                <Flex
+                  width="100%"
+                  direction={{ base: "column-reverse", md: "row" }}
+                  align={{ base: "stretch", md: "center" }}
+                  justify={{ md: "flex-end" }}
+                  gap={3}
+                >
+                  {isEdit && (
                     <Button
-                      size="xs"
+                      colorPalette="red"
                       variant="outline"
-                      mt={2}
-                      onClick={() => setAssignedToUserId(currentUserId)}
-                      isDisabled={isSaving}
+                      mr={{ base: 0, md: "auto" }}
+                      onClick={() => setArchiveOpen(true)}
+                      disabled={isSaving}
                     >
-                      Assign to me
+                      Archive record
                     </Button>
                   )}
-                  <FormHelperText>
-                    Optional. Assignment is for visibility only; Presence Pro
-                    will not send a notification in this phase.
-                  </FormHelperText>
-                </FormControl>
-              )}
-            </Stack>
-          </ModalBody>
-          <ModalFooter>
-            {/* Stacked on phones (Save on top): three buttons need ~350px
-                and would overflow a 375px screen in a row. */}
-            <Flex
-              width="100%"
-              direction={{ base: "column-reverse", md: "row" }}
-              align={{ base: "stretch", md: "center" }}
-              justify={{ md: "flex-end" }}
-              gap={3}
-            >
-              {isEdit && (
-                <Button
-                  colorScheme="red"
-                  variant="outline"
-                  mr={{ base: 0, md: "auto" }}
-                  onClick={() => setArchiveOpen(true)}
-                  isDisabled={isSaving}
-                >
-                  Archive record
-                </Button>
-              )}
-              <Button variant="outline" onClick={onClose} isDisabled={isSaving}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSave}
-                isLoading={isSaving}
-              >
-                {isEdit ? "Save changes" : "Save follow-up"}
-              </Button>
-            </Flex>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+                  <Button variant="outline" onClick={onClose} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleSave}
+                    loading={isSaving}
+                  >
+                    {isEdit ? "Save changes" : "Save follow-up"}
+                  </Button>
+                </Flex>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+
+        </Portal>
+      </Dialog.Root>
 
       {isEdit && (
         <ConfirmModal

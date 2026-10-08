@@ -1,17 +1,13 @@
 import { useState } from "react";
+import { useColorModeValue } from "components/ui/color-mode";
 import {
   Box,
   Button,
   Center,
   Spinner,
   Stack,
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
   Tabs,
   Text,
-  useColorModeValue,
 } from "@chakra-ui/react";
 import CollectTab from "components/finance/CollectTab";
 import ObligationsTab from "components/finance/ObligationsTab";
@@ -48,13 +44,13 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
     }
     if (!obligations.length) {
       return (
-        <Stack align="center" textAlign="center" py={10} spacing={3}>
+        <Stack align="center" textAlign="center" py={10} gap={3}>
           <Text fontWeight="semibold">Nothing to collect yet</Text>
           <Text fontSize="sm" color="gray.500">
             Set up monthly dues or a one-off levy first.
           </Text>
           {canManage && (
-            <Button colorScheme="teal" onClick={() => setTabIndex(OBLIGATIONS)}>
+            <Button colorPalette="teal" onClick={() => setTabIndex(OBLIGATIONS)}>
               Set up an obligation
             </Button>
           )}
@@ -74,17 +70,35 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   return (
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Box maxW="3xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
-        <Tabs index={tabIndex} onChange={setTabIndex} variant="soft-rounded" colorScheme="teal" isFitted isLazy>
-          <TabList bg={tabBg} borderWidth="1px" borderRadius="full" p={1} mb={4}>
-            {TABS.map((label) => (
-              <Tab key={label} fontSize="sm" px={2} py={1.5} color={tabColor}>
+        {/* lazyMount + unmountOnExit = v2's isLazy: a tab mounts when opened and
+            unmounts when left, so its local state resets as before. */}
+        <Tabs.Root
+          value={String(tabIndex)}
+          onValueChange={({ value }) => setTabIndex(Number(value))}
+          variant="subtle"
+          colorPalette="teal"
+          fitted
+          lazyMount
+          unmountOnExit
+        >
+          <Tabs.List bg={tabBg} borderWidth="1px" borderRadius="full" p={1} mb={4}>
+            {TABS.map((label, index) => (
+              <Tabs.Trigger
+                key={label}
+                value={String(index)}
+                fontSize="sm"
+                px={2}
+                py={1.5}
+                color={tabColor}
+              >
                 {label}
-              </Tab>
+              </Tabs.Trigger>
             ))}
-          </TabList>
-          <TabPanels>
-            <TabPanel p={0}>{collect()}</TabPanel>
-            <TabPanel p={0}>
+          </Tabs.List>
+          <Tabs.Content value={String(COLLECT)} p={0}>
+            {collect()}
+          </Tabs.Content>
+          <Tabs.Content value={String(OBLIGATIONS)} p={0}>
               <ObligationsTab
                 organisationId={organisationId}
                 obligations={obligations}
@@ -93,12 +107,11 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
                   setTabIndex(COLLECT);
                 }}
               />
-            </TabPanel>
-            <TabPanel p={0}>
-              <StartDatesTab organisationId={organisationId} />
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+          </Tabs.Content>
+          <Tabs.Content value="2" p={0}>
+            <StartDatesTab organisationId={organisationId} />
+          </Tabs.Content>
+        </Tabs.Root>
       </Box>
     </Box>
   );

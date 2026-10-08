@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Flex, FormControl, FormHelperText, FormLabel, Input, Stack } from "@chakra-ui/react";
+import { Button, Flex, Input, Stack, Field } from "@chakra-ui/react";
 import { CLEAR_WARNING, formatBusinessDate, REALLOCATION_WARNING } from "helpers/financeCompliance";
 import ConfirmModal from "components/finance/ConfirmModal";
 
@@ -28,9 +28,9 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
       : `Clear ${memberName}'s financial start date? They will no longer be financially accountable. ${CLEAR_WARNING}`;
 
   return (
-    <Stack spacing={3}>
-      <FormControl>
-        <FormLabel htmlFor="financial-start-date">Financial start date</FormLabel>
+    <Stack gap={3}>
+      <Field.Root>
+        <Field.Label htmlFor="financial-start-date">Financial start date</Field.Label>
         <Input
           id="financial-start-date"
           type="date"
@@ -38,15 +38,15 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
-        <FormHelperText>Dues and levies apply from this month onward.</FormHelperText>
-      </FormControl>
+        <Field.HelperText>Dues and levies apply from this month onward.</Field.HelperText>
+      </Field.Root>
       <Flex gap={3}>
         {current && (
           <Button
             flex="1"
             variant="outline"
-            colorScheme="red"
-            isDisabled={isSaving}
+            colorPalette="red"
+            disabled={isSaving}
             onClick={() => setPending({ date: null })}
           >
             Clear
@@ -54,9 +54,9 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
         )}
         <Button
           flex="2"
-          colorScheme="purple"
-          isDisabled={!date || unchanged}
-          isLoading={isSaving}
+          colorPalette="purple"
+          disabled={!date || unchanged}
+          loading={isSaving}
           onClick={() => setPending({ date })}
         >
           {current ? "Update start date" : "Set start date"}

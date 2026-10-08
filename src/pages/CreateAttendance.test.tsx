@@ -8,7 +8,7 @@ import {
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import { confirmAlert } from "react-confirm-alert";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
@@ -86,7 +86,7 @@ const selectOrg = (id: string, { eligibility = false } = {}) =>
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/create"]}>
           <Routes>

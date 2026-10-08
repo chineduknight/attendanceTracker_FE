@@ -1,13 +1,5 @@
-import {
-  Box,
-  Flex,
-  useColorModeValue,
-  Text,
-  Stack,
-  Button,
-  Badge,
-  Select,
-} from "@chakra-ui/react";
+import { Box, Flex, Text, Stack, Button, Badge, NativeSelect } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useQueryWrapper } from "services/api/apiHelper";
@@ -104,7 +96,7 @@ const AllAttendance = () => {
   return (
     <Box minH={"100vh"} bg={pageBg}>
       <Stack
-        spacing={4}
+        gap={4}
         w={"full"}
         maxW={"md"}
         bg={cardBg}
@@ -122,17 +114,19 @@ const AllAttendance = () => {
           />
         ) : allAttend.length ? (
           <>
-            <Select
-              aria-label="Filter by analytics inclusion"
-              value={inclusionFilter}
-              onChange={(e) =>
-                setInclusionFilter(e.target.value as AnalyticsInclusionFilter)
-              }
-            >
-              <option value="all">All</option>
-              <option value="included">Included in analytics</option>
-              <option value="excluded">Excluded from analytics</option>
-            </Select>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                aria-label="Filter by analytics inclusion"
+                value={inclusionFilter}
+                onChange={(e) =>
+                  setInclusionFilter(e.target.value as AnalyticsInclusionFilter)
+                }>
+                <option value="all">All</option>
+                <option value="included">Included in analytics</option>
+                <option value="excluded">Excluded from analytics</option>
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
             {visibleAttendance.length === 0 && (
               <Text ml="4">
                 {`No ${lowerTerm(terms.attendanceSingular)} matches this filter.`}
@@ -165,14 +159,14 @@ const AllAttendance = () => {
                           {capitalizeFirstLetter(attendance.name)}
                         </Text>
                         {editCount > 0 && (
-                          <Badge colorScheme="orange" fontSize="0.65rem">
+                          <Badge colorPalette="orange" fontSize="0.65rem">
                             edited {editCount}×
                           </Badge>
                         )}
                         {!isAnalyticsIncluded(attendance) && (
                           <Badge
                             variant="outline"
-                            colorScheme="gray"
+                            colorPalette="gray"
                             fontSize="0.65rem"
                           >
                             Excluded from analytics
@@ -183,12 +177,12 @@ const AllAttendance = () => {
                         attendance.subCategory?.name) && (
                         <Flex gap={2} mt={1} flexWrap="wrap">
                           {attendance.category?.name && (
-                            <Badge colorScheme="purple">
+                            <Badge colorPalette="purple">
                               {attendance.category.name}
                             </Badge>
                           )}
                           {attendance.subCategory?.name && (
-                            <Badge colorScheme="cyan">
+                            <Badge colorPalette="cyan">
                               {attendance.subCategory.name}
                             </Badge>
                           )}
@@ -209,7 +203,7 @@ const AllAttendance = () => {
                           </Text>
                           <Button
                             variant="outline"
-                            colorScheme="blue"
+                            colorPalette="blue"
                             onClick={(e) => {
                               // stop the click from bubbling to the row onClick
                               e.stopPropagation();
@@ -226,7 +220,7 @@ const AllAttendance = () => {
                       )}
                     </Flex>
                   </Flex>
-                </Flex>
+                  </Flex>
                 );
             })}
           </>

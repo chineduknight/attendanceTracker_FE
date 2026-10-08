@@ -4,25 +4,20 @@ import {
   Flex,
   Text,
   SimpleGrid,
-  Avatar,
   Input,
   InputGroup,
-  InputLeftElement,
-  InputRightElement,
   IconButton,
   Button,
   Checkbox,
   CheckboxGroup,
   Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
   Icon,
-  Collapse,
+  Collapsible,
   Badge,
   Portal,
-  useColorModeValue,
 } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
+import { NameAvatar } from "components/ui/avatar";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
@@ -292,49 +287,54 @@ const ViewMembers: React.FC = () => {
       <Can perm="members.manage">
         <Button
           flex="1"
-          colorScheme="blue"
+          colorPalette="blue"
           onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-          leftIcon={<FaUserPlus />}
         >
+          <FaUserPlus />
           {LABELS.addMember(terms)}
         </Button>
       </Can>
-      <Menu placement="bottom-end">
-        <MenuButton
-          as={Button}
-          flex="1"
-          variant="outline"
-          colorScheme="blue"
-          leftIcon={<FaFileExport />}
-        >
-          Export
-        </MenuButton>
+      <Menu.Root positioning={{ placement: "bottom-end" }}>
+        <Menu.Trigger asChild>
+          <Button flex="1" variant="outline" colorPalette="blue">
+            <FaFileExport />
+            Export
+          </Button>
+        </Menu.Trigger>
         {/* Menus default to the dropdown layer (1000), below the pinned
             search bar (sticky, 1100), which would cover the lower items.
             Portaled and raised to the popover layer so it opens on top. */}
         <Portal>
-          <MenuList zIndex="popover">
-            <MenuItem
-              icon={<Icon as={FaFileExcel} color="green.500" />}
-              onClick={() => exportMembers()}
-              isDisabled={exportUnavailable || isExportingMembers}
-            >
-              {isExportingMembers
-                ? "Exporting..."
-                : `Export ${terms.memberSingular} List`}
-            </MenuItem>
-            <MenuItem
-              icon={<Icon as={FaFilePdf} color="red.500" />}
-              onClick={() => exportMembersPdf()}
-              isDisabled={exportUnavailable || isExportingMembersPdf}
-            >
-              {isExportingMembersPdf
-                ? "Exporting..."
-                : `Export ${terms.memberSingular} PDF`}
-            </MenuItem>
-          </MenuList>
+          <Menu.Positioner>
+            <Menu.Content zIndex="popover">
+              <Menu.Item
+                value="excel"
+                onSelect={() => exportMembers()}
+                disabled={exportUnavailable || isExportingMembers}
+              >
+                <Icon color="green.500" asChild>
+                  <FaFileExcel />
+                </Icon>
+                {isExportingMembers
+                  ? "Exporting..."
+                  : `Export ${terms.memberSingular} List`}
+              </Menu.Item>
+              <Menu.Item
+                value="pdf"
+                onSelect={() => exportMembersPdf()}
+                disabled={exportUnavailable || isExportingMembersPdf}
+              >
+                <Icon color="red.500" asChild>
+                  <FaFilePdf />
+                </Icon>
+                {isExportingMembersPdf
+                  ? "Exporting..."
+                  : `Export ${terms.memberSingular} PDF`}
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Positioner>
         </Portal>
-      </Menu>
+      </Menu.Root>
     </Flex>
   );
 
@@ -371,7 +371,7 @@ const ViewMembers: React.FC = () => {
                 <Button
                   flex="1"
                   variant="outline"
-                  colorScheme="blue"
+                  colorPalette="blue"
                   // Stays filled while any filter applies, so a narrowed
                   // list is obvious even with the panel closed.
                   bg={
@@ -379,10 +379,10 @@ const ViewMembers: React.FC = () => {
                       ? activeToggleBg
                       : undefined
                   }
-                  leftIcon={<FaFilter />}
                   aria-expanded={openPanel === "filters"}
                   onClick={() => togglePanel("filters")}
                 >
+                  <FaFilter />
                   {activeFilters.length > 0
                     ? `Filters (${activeFilters.length})`
                     : "Filters"}
@@ -391,16 +391,19 @@ const ViewMembers: React.FC = () => {
               <Button
                 flex="1"
                 variant="outline"
-                colorScheme="blue"
+                colorPalette="blue"
                 bg={openPanel === "fields" ? activeToggleBg : undefined}
-                leftIcon={<FaColumns />}
                 aria-expanded={openPanel === "fields"}
                 onClick={() => togglePanel("fields")}
               >
+                <FaColumns />
                 {`Fields (${shownFields.length})`}
               </Button>
             </Flex>
-            <Collapse in={openPanel === "filters"} animateOpacity unmountOnExit>
+            {/* lazyMount + unmountOnExit = v2's Collapse unmountOnExit: a closed
+                panel is not in the DOM at all. */}
+            <Collapsible.Root open={openPanel === "filters"} lazyMount unmountOnExit>
+              <Collapsible.Content>
               <Box
                 mt="2"
                 p="3"
@@ -414,14 +417,18 @@ const ViewMembers: React.FC = () => {
                   {activeFilters.length > 0 && (
                     <Button
                       size="sm"
-                      variant="link"
+                      variant="plain"
+                      h="auto"
+                      px={0}
+                      color="blue.600"
+                      _hover={{ textDecoration: "underline" }}
                       onClick={() => setFilters({})}
                     >
                       Clear all
                     </Button>
                   )}
                 </Flex>
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
                   {filterableFields.map((field) => {
                     const options: SelectOption[] = field.options.map(
                       (option) => ({ value: option, label: capitalize(option) })
@@ -458,8 +465,10 @@ const ViewMembers: React.FC = () => {
                   })}
                 </SimpleGrid>
               </Box>
-            </Collapse>
-            <Collapse in={openPanel === "fields"} animateOpacity unmountOnExit>
+              </Collapsible.Content>
+            </Collapsible.Root>
+            <Collapsible.Root open={openPanel === "fields"} lazyMount unmountOnExit>
+              <Collapsible.Content>
               <Box
                 mt="2"
                 p="3"
@@ -473,18 +482,23 @@ const ViewMembers: React.FC = () => {
                 </Text>
                 <CheckboxGroup
                   value={shownFields}
-                  onChange={(values: string[]) => setChosenFields(values)}
+                  onValueChange={(values) => setChosenFields(values)}
                 >
-                  <SimpleGrid columns={{ base: 2, md: 4 }} spacingX={3}>
+                  <SimpleGrid columns={{ base: 2, md: 4 }} columnGap={3}>
                     {allExtraFields.map((field) => (
-                      <Checkbox key={field} value={field} minH="44px">
-                        {labelFor(field)}
-                      </Checkbox>
+                      <Checkbox.Root key={field} value={field} minH="44px">
+                        <Checkbox.HiddenInput />
+                        <Checkbox.Control>
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
+                        <Checkbox.Label>{labelFor(field)}</Checkbox.Label>
+                      </Checkbox.Root>
                     ))}
                   </SimpleGrid>
                 </CheckboxGroup>
               </Box>
-            </Collapse>
+              </Collapsible.Content>
+            </Collapsible.Root>
             {/* Only the search bar is pinned: with the phone keyboard open,
                 anything taller would squeeze the results it is filtering. */}
             <Box
@@ -498,10 +512,27 @@ const ViewMembers: React.FC = () => {
               py={2}
               mt="2"
             >
-              <InputGroup maxW={{ md: "400px" }}>
-                <InputLeftElement pointerEvents="none">
-                  <Icon as={FaSearch} color="gray.400" />
-                </InputLeftElement>
+              <InputGroup
+                maxW={{ md: "400px" }}
+                startElement={
+                  <Icon color="gray.400" asChild>
+                    <FaSearch />
+                  </Icon>
+                }
+                startElementProps={{ pointerEvents: "none" }}
+                endElement={
+                  searchQuery ? (
+                    <IconButton
+                      aria-label="Clear search"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSearchQuery("")}
+                    >
+                      <FiX />
+                    </IconButton>
+                  ) : undefined
+                }
+              >
                 <Input
                   type="text"
                   bg={cardBg}
@@ -510,17 +541,6 @@ const ViewMembers: React.FC = () => {
                   onChange={handleSearch}
                   {...pinnedSearch.inputProps}
                 />
-                {searchQuery && (
-                  <InputRightElement>
-                    <IconButton
-                      aria-label="Clear search"
-                      icon={<FiX />}
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}
-                    />
-                  </InputRightElement>
-                )}
               </InputGroup>
             </Box>
             {/* The list scrolls with the page rather than in a nested box. */}
@@ -542,7 +562,7 @@ const ViewMembers: React.FC = () => {
                   {`No ${lowerTerm(terms.memberPlural)} found`}
                 </Text>
               ) : (
-                <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={3}>
+                <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={3}>
                   {filteredMembers.map((member) => {
                     const fields = displayFields(member);
                     return (
@@ -557,7 +577,7 @@ const ViewMembers: React.FC = () => {
                         {/* Name leads and truncates; the actions sit in a
                             non-shrinking slot so they never get squeezed. */}
                         <Flex align="center" gap={3}>
-                          <Avatar
+                          <NameAvatar
                             size="sm"
                             name={member.name}
                             src={member.avatarUrl as string | undefined}
@@ -566,7 +586,7 @@ const ViewMembers: React.FC = () => {
                             flex="1"
                             minW={0}
                             fontWeight="bold"
-                            noOfLines={1}
+                            lineClamp={1}
                           >
                             {member.name}
                           </Text>
@@ -576,7 +596,7 @@ const ViewMembers: React.FC = () => {
                             <Can perm="attendance.view">
                               <Button
                                 variant="outline"
-                                colorScheme="teal"
+                                colorPalette="teal"
                                 size="sm"
                                 {...compactTapTarget}
                                 onClick={() =>
@@ -594,9 +614,8 @@ const ViewMembers: React.FC = () => {
                             <Can perm="members.manage">
                               <IconButton
                                 aria-label={`Edit ${member.name}`}
-                                icon={<FaPencilAlt />}
                                 variant="outline"
-                                colorScheme="blue"
+                                colorPalette="blue"
                                 size="sm"
                                 {...compactTapTarget}
                                 onClick={() =>
@@ -607,15 +626,17 @@ const ViewMembers: React.FC = () => {
                                     )
                                   )
                                 }
-                              />
+                              >
+                                <FaPencilAlt />
+                              </IconButton>
                             </Can>
                           </Flex>
                         </Flex>
                         {fields.length > 0 && (
                           <SimpleGrid
                             columns={2}
-                            spacingX={3}
-                            spacingY={2}
+                            columnGap={3}
+                            rowGap={2}
                             mt={2}
                           >
                             {fields.map((key) => {
@@ -631,7 +652,7 @@ const ViewMembers: React.FC = () => {
                                   </Text>
                                   {asTag ? (
                                     <Badge
-                                      colorScheme="blue"
+                                      colorPalette="blue"
                                       variant="subtle"
                                       textTransform="none"
                                       fontSize="sm"

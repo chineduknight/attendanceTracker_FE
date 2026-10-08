@@ -32,7 +32,7 @@ const StatTiles: React.FC<StatTilesProps> = ({ behaviorCounts, totalSessions }) 
     },
   ];
   return (
-    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+    <SimpleGrid columns={{ base: 2, md: 4 }} gap={3}>
       {tiles.map((tile) => (
         <Box key={tile.key} bg={tile.bg} color="white" borderRadius="12px" p={4} textAlign="center">
           <Text fontSize="xs" textTransform="uppercase" letterSpacing="wider" opacity={0.9}>

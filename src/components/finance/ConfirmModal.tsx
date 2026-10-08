@@ -1,15 +1,5 @@
 import { ReactNode } from "react";
-import {
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  ModalCloseButton,
-  Button,
-  Text,
-} from "@chakra-ui/react";
+import { CloseButton, Button, Text, Dialog, Portal } from "@chakra-ui/react";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -40,32 +30,42 @@ const ConfirmModal = ({
   onConfirm,
   onClose,
 }: ConfirmModalProps) => (
-  <Modal isOpen={isOpen} onClose={onClose} isCentered>
-    <ModalOverlay />
-    <ModalContent>
-      <ModalHeader>{title}</ModalHeader>
-      <ModalCloseButton />
-      <ModalBody>{typeof body === "string" ? <Text>{body}</Text> : body}</ModalBody>
-      <ModalFooter gap={3}>
-        <Button
-          variant="outline"
-          colorScheme="gray"
-          onClick={onClose}
-          isDisabled={isLoading}
-        >
-          {cancelLabel}
-        </Button>
-        <Button
-          variant="solid"
-          colorScheme={confirmColorScheme}
-          onClick={onConfirm}
-          isLoading={isLoading}
-        >
-          {confirmLabel}
-        </Button>
-      </ModalFooter>
-    </ModalContent>
-  </Modal>
+  <Dialog.Root open={isOpen} placement='center' onOpenChange={e => {
+    if (!e.open) {
+      onClose();
+    }
+  }}>
+    <Portal>
+
+      <Dialog.Backdrop />
+      <Dialog.Positioner>
+        <Dialog.Content>
+          <Dialog.Header><Dialog.Title>{title}</Dialog.Title></Dialog.Header>
+          <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+          <Dialog.Body>{typeof body === "string" ? <Text>{body}</Text> : body}</Dialog.Body>
+          <Dialog.Footer gap={3}>
+            <Button
+              variant="outline"
+              colorPalette="gray"
+              onClick={onClose}
+              disabled={isLoading}
+            >
+              {cancelLabel}
+            </Button>
+            <Button
+              variant="solid"
+              colorPalette={confirmColorScheme}
+              onClick={onConfirm}
+              loading={isLoading}
+            >
+              {confirmLabel}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Positioner>
+
+    </Portal>
+  </Dialog.Root>
 );
 
 export default ConfirmModal;

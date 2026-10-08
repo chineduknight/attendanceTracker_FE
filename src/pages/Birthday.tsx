@@ -1,25 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useColorModeValue } from "components/ui/color-mode";
 import {
+  CloseButton,
   Box,
   Button,
   Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerHeader,
-  DrawerOverlay,
   Flex,
   Input,
   Menu,
-  MenuButton,
-  MenuDivider,
-  MenuItem,
-  MenuList,
   Spinner,
   Text,
   VStack,
-  useColorModeValue,
   useDisclosure,
+  Portal,
 } from "@chakra-ui/react";
 import {
   FaCheck,
@@ -96,7 +89,7 @@ const getErrorMessage = (err: any, fallback: string): string => {
  */
 const Birthday: React.FC = () => {
   const org = useGlobalStore((state) => state.organisation);
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { open, onOpen, onClose } = useDisclosure();
   const pageBg: string = useColorModeValue("gray.50", "gray.800");
   const today = localBusinessDate();
 
@@ -413,13 +406,10 @@ const Birthday: React.FC = () => {
               <Button
                 size={{ base: "sm", md: "md" }}
                 flexShrink={0}
-                leftIcon={<FaShareAlt />}
                 onClick={onOpen}
-                isDisabled={list.members.length === 0 || list.isFetching}
-                colorScheme="gray"
-              >
-                Share
-              </Button>
+                disabled={list.members.length === 0 || list.isFetching}
+                colorPalette="gray"><FaShareAlt />Share
+                              </Button>
             </Flex>
 
             <BirthdaySummaryCards
@@ -439,43 +429,38 @@ const Birthday: React.FC = () => {
               gap={2}
               align="center"
             >
-              <Menu placement="bottom-start">
-                <MenuButton
-                  as={Button}
-                  size={{ base: "sm", md: "md" }}
-                  flexShrink={0}
-                  colorScheme="pink"
-                  variant={activeMoreLabel ? "solid" : "outline"}
-                  rightIcon={<FaChevronDown />}
-                  aria-label={`More ranges${
-                    activeMoreLabel ? `, ${activeMoreLabel} selected` : ""
-                  }`}
-                >
-                  {activeMoreLabel ?? "More"}
-                </MenuButton>
-                <MenuList zIndex="dropdown">
-                  {MORE_PRESETS.map(({ preset, label }) => (
-                    <MenuItem
-                      key={preset}
-                      onClick={() => applyPreset(preset)}
-                      icon={
-                        activePreset === preset ? <FaCheck /> : <Box w="1em" />
-                      }
-                    >
-                      {label}
-                    </MenuItem>
-                  ))}
-                  <MenuDivider />
-                  <MenuItem
-                    onClick={startCustom}
-                    icon={
-                      activePreset === "custom" ? <FaCheck /> : <Box w="1em" />
-                    }
-                  >
-                    Custom
-                  </MenuItem>
-                </MenuList>
-              </Menu>
+              <Menu.Root positioning={{
+                placement: 'bottom-start'
+              }}>
+                <Menu.Trigger asChild><Button
+                    size={{ base: "sm", md: "md" }}
+                    flexShrink={0}
+                    colorPalette="pink"
+                    variant={activeMoreLabel ? "solid" : "outline"}
+                    aria-label={`More ranges${
+                      activeMoreLabel ? `, ${activeMoreLabel} selected` : ""
+                    }`}>
+                    {activeMoreLabel ?? "More"}
+                    <FaChevronDown /></Button></Menu.Trigger>
+                <Portal><Menu.Positioner><Menu.Content>
+                      {MORE_PRESETS.map(({ preset, label }) => (
+                        <Menu.Item
+                          key={preset}
+                          onSelect={() => applyPreset(preset)}
+                          value={preset}>
+                          {activePreset === preset ? <FaCheck /> : <Box w="1em" />}
+                          {label}
+                        </Menu.Item>
+                      ))}
+                      <Menu.Separator />
+                      <Menu.Item
+                        onSelect={startCustom}
+                        value="custom">
+                        {activePreset === "custom" ? <FaCheck /> : <Box w="1em" />}
+                        Custom
+                      </Menu.Item>
+                    </Menu.Content></Menu.Positioner></Portal>
+              </Menu.Root>
               {statusOptions.length > 0 && (
                 <Box flex={1} minW={0} maxW={{ md: "320px" }}>
                   <ReactSelect
@@ -519,9 +504,9 @@ const Birthday: React.FC = () => {
                 <Button
                   size={{ base: "sm", md: "md" }}
                   flexShrink={0}
-                  colorScheme="pink"
+                  colorPalette="pink"
                   onClick={applyCustom}
-                  isDisabled={!customValid}
+                  disabled={!customValid}
                 >
                   Apply
                 </Button>
@@ -547,61 +532,55 @@ const Birthday: React.FC = () => {
       </Box>
 
       {/* Share drawer */}
-      <Drawer isOpen={isOpen} placement="bottom" onClose={onClose}>
-        <DrawerOverlay />
-        <DrawerContent borderTopRadius="xl">
-          <DrawerCloseButton />
-          <DrawerHeader>Share Birthdays</DrawerHeader>
-          <DrawerBody pb={8}>
-            <VStack spacing={3}>
-              <Button
-                w="100%"
-                size="lg"
-                leftIcon={<FaFileExcel />}
-                bg="green.500"
-                color="white"
-                _hover={{ bg: "green.600" }}
-                isLoading={isExportingExcel}
-                onClick={() => refetchExcel()}
-              >
-                Export Excel
-              </Button>
-              <Button
-                w="100%"
-                size="lg"
-                leftIcon={<FaFilePdf />}
-                bg="red.500"
-                color="white"
-                _hover={{ bg: "red.600" }}
-                isLoading={isExportingPdf}
-                onClick={() => refetchPdf()}
-              >
-                Export PDF
-              </Button>
-              <Button
-                w="100%"
-                size="lg"
-                leftIcon={<FaWhatsapp />}
-                bg="#25D366"
-                color="white"
-                _hover={{ bg: "#1ebe5d" }}
-                onClick={handleWhatsApp}
-              >
-                Share on WhatsApp
-              </Button>
-              <Button
-                w="100%"
-                size="lg"
-                leftIcon={<FaCopy />}
-                colorScheme="gray"
-                onClick={handleCopyToClipboard}
-              >
-                Copy to Clipboard
-              </Button>
-            </VStack>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
+      <Drawer.Root open={open} placement='bottom' onOpenChange={e => {
+        if (!e.open) {
+          onClose();
+        }
+      }}>
+        <Portal>
+
+          <Drawer.Backdrop />
+          <Drawer.Positioner>
+            <Drawer.Content borderTopRadius="xl">
+              <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+              <Drawer.Header><Drawer.Title>Share Birthdays</Drawer.Title></Drawer.Header>
+              <Drawer.Body pb={8}>
+                <VStack gap={3}>
+                  <Button
+                    w="100%"
+                    size="lg"
+                    bg="green.500"
+                    color="white"
+                    _hover={{ bg: "green.600" }}
+                    loading={isExportingExcel}
+                    onClick={() => refetchExcel()}><FaFileExcel />Export Excel
+                                  </Button>
+                  <Button
+                    w="100%"
+                    size="lg"
+                    bg="red.500"
+                    color="white"
+                    _hover={{ bg: "red.600" }}
+                    loading={isExportingPdf}
+                    onClick={() => refetchPdf()}><FaFilePdf />Export PDF
+                                  </Button>
+                  <Button
+                    w="100%"
+                    size="lg"
+                    bg="#25D366"
+                    color="white"
+                    _hover={{ bg: "#1ebe5d" }}
+                    onClick={handleWhatsApp}><FaWhatsapp />Share on WhatsApp
+                                  </Button>
+                  <Button w="100%" size="lg" colorPalette="gray" onClick={handleCopyToClipboard}><FaCopy />Copy to Clipboard
+                                  </Button>
+                </VStack>
+              </Drawer.Body>
+            </Drawer.Content>
+          </Drawer.Positioner>
+
+        </Portal>
+      </Drawer.Root>
     </Box>
   );
 };

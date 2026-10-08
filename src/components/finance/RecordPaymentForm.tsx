@@ -1,16 +1,5 @@
 import { FormEvent, useState } from "react";
-import {
-  Button,
-  Flex,
-  FormControl,
-  FormErrorMessage,
-  FormHelperText,
-  FormLabel,
-  Input,
-  InputGroup,
-  InputLeftAddon,
-  Stack,
-} from "@chakra-ui/react";
+import { Button, Flex, Input, InputGroup,  Stack, Field } from "@chakra-ui/react";
 import { FaMoneyBillWave } from "react-icons/fa";
 import { formatMoney } from "helpers/financeConstants";
 import {
@@ -46,53 +35,49 @@ const RecordPaymentForm = ({ obligation, row, isSaving, onRecord }: RecordPaymen
   };
 
   return (
-    <Stack as="form" spacing={3} onSubmit={submit}>
-      <FormControl isInvalid={overBalance}>
-        <FormLabel htmlFor="record-amount">Amount received</FormLabel>
-        <InputGroup size="lg">
-          <InputLeftAddon>₦</InputLeftAddon>
-          <Input
-            id="record-amount"
-            type="number"
-            inputMode="decimal"
-            min={0}
-            placeholder="0"
-            value={raw}
-            onChange={(e) => setRaw(e.target.value)}
-          />
-        </InputGroup>
-        {overBalance ? (
-          <FormErrorMessage>{`More than the ${formatMoney(balance)} still owed.`}</FormErrorMessage>
-        ) : (
-          hint && <FormHelperText>{hint}</FormHelperText>
-        )}
-      </FormControl>
+    <Stack gap={3} asChild><form onSubmit={submit}>
+        <Field.Root invalid={overBalance}>
+          <Field.Label htmlFor="record-amount">Amount received</Field.Label>
+          <InputGroup startAddon="₦" startAddonProps={{ fontSize: "lg" }}>
+            <Input
+              size="lg"
+              id="record-amount"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              placeholder="0"
+              value={raw}
+              onChange={(e) => setRaw(e.target.value)}
+            />
+          </InputGroup>
+          {overBalance ? (
+            <Field.ErrorText>{`More than the ${formatMoney(balance)} still owed.`}</Field.ErrorText>
+          ) : (
+            hint && <Field.HelperText>{hint}</Field.HelperText>
+          )}
+        </Field.Root>
 
-      <Flex gap={2} wrap="wrap" role="group" aria-label="Quick amounts">
-        {quickAmounts(obligation, row).map((option) => (
-          <Button
-            key={option.label}
-            size="sm"
-            variant="outline"
-            borderRadius="full"
-            onClick={() => setRaw(String(option.amount))}
-          >
-            {`${option.label} · ${formatMoney(option.amount)}`}
-          </Button>
-        ))}
-      </Flex>
+        <Flex gap={2} wrap="wrap" role="group" aria-label="Quick amounts">
+          {quickAmounts(obligation, row).map((option) => (
+            <Button
+              key={option.label}
+              size="sm"
+              variant="outline"
+              borderRadius="full"
+              onClick={() => setRaw(String(option.amount))}
+            >
+              {`${option.label} · ${formatMoney(option.amount)}`}
+            </Button>
+          ))}
+        </Flex>
 
-      <Button
-        type="submit"
-        size="lg"
-        colorScheme="green"
-        leftIcon={<FaMoneyBillWave />}
-        isDisabled={!isValid}
-        isLoading={isSaving}
-      >
-        {isValid ? `Record ${formatMoney(amount)}` : "Record payment"}
-      </Button>
-    </Stack>
+        <Button
+          type="submit"
+          size="lg"
+          colorPalette="green"
+          disabled={!isValid}
+          loading={isSaving}><FaMoneyBillWave />{isValid ? `Record ${formatMoney(amount)}` : "Record payment"}</Button>
+      </form></Stack>
   );
 };
 

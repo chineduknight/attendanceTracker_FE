@@ -1,4 +1,5 @@
-import { Flex, Text, IconButton, Avatar, useDisclosure } from "@chakra-ui/react";
+import { Flex, Text, IconButton, useDisclosure } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { FaBars, FaArrowCircleLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import NavDrawer from "components/NavDrawer";
@@ -30,37 +31,31 @@ const AppHeader = ({ title, showBack = true }: AppHeaderProps) => {
         {showBack && (
           <IconButton
             aria-label="Back"
-            icon={<FaArrowCircleLeft />}
             onClick={handleBack}
             variant="ghost"
             color="#fff"
             _hover={{ bg: "primaryHover" }}
-            size="sm"
-          />
+            size="sm"><FaArrowCircleLeft /></IconButton>
         )}
         <IconButton
           aria-label="Open menu"
-          icon={<FaBars />}
           onClick={drawer.onOpen}
           variant="ghost"
           color="#fff"
           _hover={{ bg: "primaryHover" }}
-          size="sm"
-        />
+          size="sm"><FaBars /></IconButton>
         <Text fontWeight="bold" color="#fff">
           {title}
         </Text>
       </Flex>
 
-      <Avatar
+      <NameAvatar
         size="sm"
-        name={username}
         aria-label="Account menu"
         cursor="pointer"
-        onClick={drawer.onOpen}
-      />
+        onClick={drawer.onOpen} name={username} />
 
-      <NavDrawer isOpen={drawer.isOpen} onClose={drawer.onClose} />
+      <NavDrawer isOpen={drawer.open} onClose={drawer.onClose} />
     </Flex>
   );
 };

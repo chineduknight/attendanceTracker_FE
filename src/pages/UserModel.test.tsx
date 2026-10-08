@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
@@ -11,6 +11,7 @@ import UserModel from "pages/UserModel";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
+import { toggle } from "test-utils/render";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -40,7 +41,7 @@ const selectOrg = (id: string) =>
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/user-model"]}>
           <Routes>
@@ -96,6 +97,24 @@ describe("<UserModel>", () => {
       { _id: "a-part", name: "part", label: "Voice Part", type: "option", required: true, options: ["Soprano", "Alto"] },
     ]);
     await screen.findByText("add member page");
+  });
+
+  it("toggles Required on an editable field and saves the new value", async () => {
+    selectOrg("orgB");
+    renderPage();
+    const section = await waitFor(() => card("Section"));
+    const required = within(section).getByRole("checkbox", { name: "Required" });
+    expect(required).not.toBeChecked();
+
+    await toggle(required);
+    expect(required).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(mockPost.mock.calls[0][0]).toBe("/organisations/orgB/model");
+    expect(posted()[1]).toEqual({
+      _id: "b-part", name: "part", label: "Section", type: "option", required: true, options: ["Strings"],
+    });
   });
 
   it("adds a new field with a client-only draft id and no fabricated _id", async () => {

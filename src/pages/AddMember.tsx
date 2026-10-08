@@ -1,16 +1,6 @@
-import {
-  Box,
-  Flex,
-  Checkbox,
-  useColorModeValue,
-  Button,
-  FormControl,
-  FormLabel,
-  Input,
-  Stack,
-  Heading,
-  Select,
-} from "@chakra-ui/react";
+import { Box, Flex, Button, Input, Stack, Heading, NativeSelect, Field } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
+import { FormCheckbox } from "components/ui/checkbox";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
@@ -37,7 +27,7 @@ import { lowerTerm } from "helpers/organisationPresentation";
 import { LABELS } from "config/presentationLabels";
 
 interface FormData {
-  [fieldName: string]: string;
+  [fieldName: string]: string | boolean;
 }
 
 const AddOrUpdateMember = () => {
@@ -66,7 +56,7 @@ const AddOrUpdateMember = () => {
     }
   }, [params.memberId]);
 
-  const { register, handleSubmit, reset } = useForm<FormData>();
+  const { register, control, handleSubmit, reset } = useForm<FormData>();
   useEffect(() => {
     if (currentMember && isUpdating) {
       reset(currentMember);
@@ -182,54 +172,57 @@ const AddOrUpdateMember = () => {
     // Labels are display-only; every input stays registered under its storage key.
     return membersModel.map((field) => {
       if (field.type === "checkbox") {
-        const fieldValue = isUpdating ? currentMember[field.name] : false; // Get the current member field value when updating
+        // Controlled: the async reset(currentMember) must reach the visible box.
         return (
-          <FormControl key={field._id ?? field.name} id={field.name}>
-            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
-            <Checkbox
-              {...register(field.name)}
-              colorScheme="blue"
-              defaultChecked={fieldValue} // Set the default checked value for the checkbox
+          <Field.Root key={field._id ?? field.name} id={field.name}>
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
+            <FormCheckbox
+              control={control}
+              name={field.name}
+              label={displayMemberFieldLabel(field)}
+              colorPalette="blue"
             />
-          </FormControl>
+          </Field.Root>
         );
       } else if (field.type === "option") {
         const fieldValue = isUpdating ? currentMember[field.name] : "";
         return (
-          <FormControl
+          <Field.Root
             key={field._id ?? field.name}
             id={field.name}
-            isRequired={field.required}
+            required={field.required}
           >
-            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
-            <Select
-              defaultValue={fieldValue}
-              {...register(field.name, { required: field.required })}
-            >
-              {Array.isArray(field.options) &&
-                field.options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-            </Select>
-          </FormControl>
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                defaultValue={fieldValue}
+                {...register(field.name, { required: field.required })}>
+                {Array.isArray(field.options) &&
+                  field.options.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </Field.Root>
         );
       } else {
         const fieldValue = isUpdating ? currentMember[field.name] : ""; // Get the current member field value when updating
         return (
-          <FormControl
+          <Field.Root
             key={field._id ?? field.name}
             id={field.name}
-            isRequired={field.required}
+            required={field.required}
           >
-            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
             <Input
               type={field.type}
               defaultValue={fieldValue}
               {...register(field.name, { required: field.required })}
             />
-          </FormControl>
+          </Field.Root>
         );
       }
     });
@@ -241,13 +234,9 @@ const AddOrUpdateMember = () => {
         {!isGettingMembers && membersModel.length !== 0 && (
           <Can perm="members.manage">
             <Button
-              leftIcon={<FaPlusSquare />}
-              colorScheme="blue"
+              colorPalette="blue"
               variant="outline"
-              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-            >
-              {`Update ${LABELS.memberModel(terms)}`}
-            </Button>
+              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}><FaPlusSquare />{`Update ${LABELS.memberModel(terms)}`}</Button>
           </Can>
         )}
       </Flex>
@@ -269,20 +258,16 @@ const AddOrUpdateMember = () => {
                   <Can perm="members.manage">
                     <Button
                       mt="4"
-                      leftIcon={<FaPlusSquare />}
-                      colorScheme="blue"
+                      colorPalette="blue"
                       variant="outline"
-                      onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-                    >
-                      {`Create ${LABELS.memberModel(terms)}`}
-                    </Button>
+                      onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}><FaPlusSquare />{`Create ${LABELS.memberModel(terms)}`}</Button>
                   </Can>
                 </Flex>
               ) : (
                 <div style={{ width: "90%" }}>
                   <form onSubmit={onSubmit}>
                     <Stack
-                      spacing={4}
+                      gap={4}
                       w={"full"}
                       maxW={"md"}
                       rounded={"xl"}
@@ -302,8 +287,7 @@ const AddOrUpdateMember = () => {
                           fontWeight="bold"
                           fontSize="15px"
                           type="submit"
-                          isLoading={isLoading}
-                          // onClick={onSubmit}
+                          loading={isLoading}
                         >
                           {isUpdating ? "Update" : "Submit"}
                         </Button>
@@ -317,17 +301,13 @@ const AddOrUpdateMember = () => {
                       {isUpdating && (
                         <Can perm="members.manage">
                           <Button
-                            leftIcon={<FaTrash />}
                             bg="red.500"
                             color="white"
                             _hover={{ bg: "red.600" }}
                             w="full"
                             mt="8"
-                            isLoading={isDeleting}
-                            onClick={handleDeleteMember}
-                          >
-                            {`Delete ${terms.memberSingular}`}
-                          </Button>
+                            loading={isDeleting}
+                            onClick={handleDeleteMember}><FaTrash />{`Delete ${terms.memberSingular}`}</Button>
                         </Can>
                       )}
                     </Stack>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useColorModeValue } from "../ui/color-mode";
 import {
   Box,
   Button,
@@ -7,17 +8,14 @@ import {
   IconButton,
   Input,
   InputGroup,
-  InputLeftElement,
+  
   Menu,
-  MenuButton,
-  MenuItem,
-  MenuList,
   Progress,
-  Select,
+  NativeSelect,
   Spinner,
   Stack,
   Text,
-  useColorModeValue,
+  Portal,
 } from "@chakra-ui/react";
 import { FaChevronRight, FaEllipsisV, FaFileExcel, FaFilePdf, FaSearch } from "react-icons/fa";
 import { formatMoney } from "helpers/financeConstants";
@@ -92,37 +90,34 @@ const MemberRow = ({
   return (
     <GroupedListItem p={0}>
       <Box
-        as="button"
-        type="button"
-        onClick={onOpen}
         w="full"
         textAlign="left"
         px={{ base: 3, md: 5 }}
         py={3}
         _hover={{ bg: hoverBg }}
         _focusVisible={{ boxShadow: "outline", outline: "none" }}
-      >
-        <Flex align="center" gap={3}>
-          <Stack spacing={1.5} flex="1" minW={0}>
-            <Flex align="center" gap={2} justify="space-between">
-              <Text fontWeight="semibold" noOfLines={1}>
-                {row.name}
-              </Text>
-              <StandingBadge row={row} />
-            </Flex>
-            {isDuesObligation(obligation) && row.accountable && <MonthStrip row={row} />}
-            <Flex justify="space-between" fontSize="sm" color={muted} gap={2}>
-              <Text>{standingLabel(row, obligation)}</Text>
-              {amount && (
-                <Text fontWeight="medium" color={amount.isOverdue ? behindColor : muted}>
-                  {amount.text}
+        asChild><button type="button" onClick={onOpen}>
+          <Flex align="center" gap={3}>
+            <Stack gap={1.5} flex="1" minW={0}>
+              <Flex align="center" gap={2} justify="space-between">
+                <Text fontWeight="semibold" lineClamp={1}>
+                  {row.name}
                 </Text>
-              )}
-            </Flex>
-          </Stack>
-          <Box as={FaChevronRight} color="gray.400" flexShrink={0} aria-hidden="true" />
-        </Flex>
-      </Box>
+                <StandingBadge row={row} />
+              </Flex>
+              {isDuesObligation(obligation) && row.accountable && <MonthStrip row={row} />}
+              <Flex justify="space-between" fontSize="sm" color={muted} gap={2}>
+                <Text>{standingLabel(row, obligation)}</Text>
+                {amount && (
+                  <Text fontWeight="medium" color={amount.isOverdue ? behindColor : muted}>
+                    {amount.text}
+                  </Text>
+                )}
+              </Flex>
+            </Stack>
+            <Box color="gray.400" flexShrink={0} aria-hidden="true" asChild><FaChevronRight /></Box>
+          </Flex>
+        </button></Box>
     </GroupedListItem>
   );
 };
@@ -157,39 +152,48 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
   const memberPlural = lowerTerm(terms.memberPlural);
 
   return (
-    <Stack spacing={4}>
+    <Stack gap={4}>
       <Flex gap={2} align="center">
-        <Select
-          aria-label="Obligation"
-          value={obligationId}
-          onChange={(e) => onObligationChange(e.target.value)}
-          bg={cardBg}
-          fontWeight="semibold"
-        >
-          {obligations.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </Select>
-        <Menu placement="bottom-end">
-          <MenuButton
-            as={IconButton}
-            aria-label="Export"
-            icon={<FaEllipsisV />}
-            variant="outline"
+        <NativeSelect.Root>
+          <NativeSelect.Field
+            aria-label="Obligation"
+            value={obligationId}
+            onChange={(e) => onObligationChange(e.target.value)}
             bg={cardBg}
-            isDisabled={!compliance}
-          />
-          <MenuList>
-            <MenuItem icon={<FaFileExcel />} onClick={excel.run} isDisabled={excel.isExporting}>
-              {excel.isExporting ? "Exporting Excel…" : "Export Excel"}
-            </MenuItem>
-            <MenuItem icon={<FaFilePdf />} onClick={pdf.run} isDisabled={pdf.isExporting}>
-              {pdf.isExporting ? "Exporting PDF…" : "Export PDF"}
-            </MenuItem>
-          </MenuList>
-        </Menu>
+            fontWeight="semibold">
+            {obligations.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </NativeSelect.Field>
+          <NativeSelect.Indicator />
+        </NativeSelect.Root>
+        <Menu.Root positioning={{
+          placement: 'bottom-end'
+        }}>
+          <Menu.Trigger asChild><IconButton
+              aria-label="Export"
+              variant="outline"
+              bg={cardBg}
+              disabled={!compliance}><FaEllipsisV /></IconButton></Menu.Trigger>
+          <Portal><Menu.Positioner><Menu.Content>
+                <Menu.Item
+                  onSelect={excel.run}
+                  disabled={excel.isExporting}
+                  value='item-0'>
+                  <FaFileExcel />
+                  {excel.isExporting ? "Exporting Excel…" : "Export Excel"}
+                </Menu.Item>
+                <Menu.Item
+                  onSelect={pdf.run}
+                  disabled={pdf.isExporting}
+                  value='item-1'>
+                  <FaFilePdf />
+                  {pdf.isExporting ? "Exporting PDF…" : "Export PDF"}
+                </Menu.Item>
+              </Menu.Content></Menu.Positioner></Portal>
+        </Menu.Root>
       </Flex>
 
       {isLoading && (
@@ -213,25 +217,28 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                 {`collected · ${formatPct(collectionPct(compliance.summary))}`}
               </Text>
             </Flex>
-            <Progress
+            <Progress.Root
               value={collectionPct(compliance.summary)}
-              colorScheme="green"
+              colorPalette="green"
               size="sm"
               borderRadius="full"
               my={2}
-              aria-label="Share collected"
-            />
+              aria-label="Share collected">
+              <Progress.Track>
+                <Progress.Range />
+              </Progress.Track>
+            </Progress.Root>
             <Flex justify="space-between" fontSize="sm" color={muted} gap={2} wrap="wrap">
               <Text>{`${formatMoney(compliance.summary.totalOutstanding)} left to collect`}</Text>
               <Text>{`${counts.paid} of ${counts.paid + counts.owing} paid in full`}</Text>
             </Flex>
             {compliance.summary.totalArrears !== undefined && (
               <Button
-                variant="link"
+                variant='plain'
                 size="sm"
                 mt={2}
-                colorScheme={compliance.summary.totalArrears > 0 ? "red" : "teal"}
-                isDisabled={!compliance.summary.behindMembers}
+                colorPalette={compliance.summary.totalArrears > 0 ? "red" : "teal"}
+                disabled={!compliance.summary.behindMembers}
                 onClick={() => {
                   setFilter("behind");
                   setSort("behind");
@@ -244,12 +251,12 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
             )}
           </Box>
 
-          <Stack spacing={2}>
+          <Stack gap={2}>
             <Flex gap={2}>
-              <InputGroup>
-                <InputLeftElement pointerEvents="none" color="gray.400">
-                  <FaSearch />
-                </InputLeftElement>
+              <InputGroup
+                startElement={<FaSearch />}
+                startElementProps={{ pointerEvents: "none", color: "gray.400" }}
+              >
                 <Input
                   type="search"
                   placeholder={`Search ${memberPlural}`}
@@ -259,20 +266,22 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                   bg={cardBg}
                 />
               </InputGroup>
-              <Select
-                aria-label="Sort"
-                value={sort}
-                onChange={(e) => setSort(e.target.value as CollectSort)}
-                bg={cardBg}
-                w={{ base: "40%", md: "48" }}
-                flexShrink={0}
-              >
-                {sortOptions.map((key) => (
-                  <option key={key} value={key}>
-                    {COLLECT_SORT_LABELS[key]}
-                  </option>
-                ))}
-              </Select>
+              <NativeSelect.Root>
+                <NativeSelect.Field
+                  aria-label="Sort"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as CollectSort)}
+                  bg={cardBg}
+                  w={{ base: "40%", md: "48" }}
+                  flexShrink={0}>
+                  {sortOptions.map((key) => (
+                    <option key={key} value={key}>
+                      {COLLECT_SORT_LABELS[key]}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
             </Flex>
             <FilterChips<CollectFilter>
               label="Filter by payment status"
@@ -295,7 +304,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
           </Stack>
 
           {shown.length === 0 ? (
-            <Stack align="center" py={8} spacing={3} textAlign="center">
+            <Stack align="center" py={8} gap={3} textAlign="center">
               <Text color={muted}>
                 {rows.length === 0
                   ? `No ${memberPlural} yet.`

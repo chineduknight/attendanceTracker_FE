@@ -5,11 +5,11 @@ import {
   Flex,
   HStack,
   Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
+  
+  
+  
+  
+  
   Text,
   Badge,
   Wrap,
@@ -84,41 +84,41 @@ const OfficersTab = ({ organisationId }: Props) => {
         </Can>
       </Flex>
       <Box overflowX="auto">
-        <Table size="sm">
-          <Thead>
-            <Tr>
-              <Th>Name</Th>
-              <Th>Email</Th>
-              <Th>Role</Th>
-              <Th>Permissions</Th>
-              <Th></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+        <Table.Root size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>Name</Table.ColumnHeader>
+              <Table.ColumnHeader>Email</Table.ColumnHeader>
+              <Table.ColumnHeader>Role</Table.ColumnHeader>
+              <Table.ColumnHeader>Permissions</Table.ColumnHeader>
+              <Table.ColumnHeader></Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {officers.map((o) => {
               const isOwnerRow = o.userId === organisation.owner;
               return (
-                <Tr key={o.userId}>
-                  <Td>{o.username}</Td>
-                  <Td>{o.email}</Td>
-                  <Td>
+                <Table.Row key={o.userId}>
+                  <Table.Cell>{o.username}</Table.Cell>
+                  <Table.Cell>{o.email}</Table.Cell>
+                  <Table.Cell>
                     <Badge>{o.roleName}</Badge>
-                  </Td>
-                  <Td>
+                  </Table.Cell>
+                  <Table.Cell>
                     <Wrap>
                       {o.permissions.map((p) => (
                         <WrapItem key={p}>
-                          <Badge colorScheme="green" variant="subtle">
+                          <Badge colorPalette="green" variant="subtle">
                             {p}
                           </Badge>
                         </WrapItem>
                       ))}
                     </Wrap>
-                  </Td>
-                  <Td>
+                  </Table.Cell>
+                  <Table.Cell>
                     {!isOwnerRow && (
                       <Can perm="officers.manage">
-                        <HStack spacing={2}>
+                        <HStack gap={2}>
                           <Button size="xs" onClick={() => setRoleTarget(o)}>
                             Role
                           </Button>
@@ -127,7 +127,7 @@ const OfficersTab = ({ organisationId }: Props) => {
                           </Button>
                           <Button
                             size="xs"
-                            colorScheme="red"
+                            colorPalette="red"
                             onClick={() => handleRemove(o)}
                           >
                             Remove
@@ -135,19 +135,19 @@ const OfficersTab = ({ organisationId }: Props) => {
                         </HStack>
                       </Can>
                     )}
-                  </Td>
-                </Tr>
+                  </Table.Cell>
+                </Table.Row>
               );
             })}
             {officers.length === 0 && (
-              <Tr>
-                <Td colSpan={5}>
+              <Table.Row>
+                <Table.Cell colSpan={5}>
                   <Text color="gray.500">{`No ${lowerTerm(terms.officerPlural)} yet.`}</Text>
-                </Td>
-              </Tr>
+                </Table.Cell>
+              </Table.Row>
             )}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
 
       <InviteOfficerModal

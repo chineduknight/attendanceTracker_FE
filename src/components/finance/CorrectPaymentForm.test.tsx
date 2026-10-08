@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import CorrectPaymentForm from "components/finance/CorrectPaymentForm";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
 
@@ -39,7 +40,7 @@ test("dues shows 12 month inputs; a levy shows one total", () => {
   expect(screen.getByLabelText("Dec")).toBeInTheDocument();
 });
 
-test("a levy pre-fills its current total and confirms before overwriting", () => {
+test("a levy pre-fills its current total and confirms before overwriting", async () => {
   const { onCorrectLevy } = setup({
     obligation: levy,
     row: { memberId: "m1", name: "Ada", accountable: true, paid: 4000 },
@@ -49,7 +50,7 @@ test("a levy pre-fills its current total and confirms before overwriting", () =>
   fireEvent.change(input, { target: { value: "6000" } });
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectLevy).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Yes, update"));
+  fireEvent.click(await screen.findByText("Yes, update"));
   expect(onCorrectLevy).toHaveBeenCalledWith(6000);
 });
 
@@ -106,22 +107,22 @@ test("Fill all and Clear all set every accountable month", () => {
   expect(screen.getByLabelText("Feb")).toBeDisabled();
 });
 
-test("builds monthlyPaid in order with numbers, only after confirming", () => {
+test("builds monthlyPaid in order with numbers, only after confirming", async () => {
   const { onCorrectDues } = setup();
   fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "500" } });
   fireEvent.change(screen.getByLabelText("Feb"), { target: { value: "300" } });
 
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectDues).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Yes, update"));
+  fireEvent.click(await screen.findByText("Yes, update"));
   expect(onCorrectDues).toHaveBeenCalledWith({ "1": 500, "2": 300 });
 });
 
-test("clearing everything asks for a destructive confirmation", () => {
+test("clearing everything asks for a destructive confirmation", async () => {
   const { onCorrectDues } = setup({ row: paidJanToMar });
   fireEvent.click(screen.getByText("Clear all"));
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectDues).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Yes, clear"));
+  fireEvent.click(await screen.findByText("Yes, clear"));
   expect(onCorrectDues).toHaveBeenCalledWith({});
 });

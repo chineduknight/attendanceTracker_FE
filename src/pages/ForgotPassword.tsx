@@ -1,7 +1,5 @@
-import {
-  Flex, Box, FormControl, FormLabel, FormErrorMessage, Input, Stack,
-  Button, Heading, Text, Link, useColorModeValue,
-} from "@chakra-ui/react";
+import { Flex, Box, Input, Stack, Button, Heading, Text, Link, Field } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useState } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { Link as RouterLink } from "react-router-dom";
@@ -40,11 +38,11 @@ const ForgotPassword = () => {
 
   return (
     <Flex minH="100vh" align="center" justify="center" bg={useColorModeValue("gray.50", "gray.800")}>
-      <Stack spacing={8} mx="auto" maxW="lg" pb={12} px={6}>
+      <Stack gap={8} mx="auto" maxW="lg" pb={12} px={6}>
         <Heading fontSize="4xl" textAlign="center">Forgot your password?</Heading>
         <Box rounded="lg" bg={useColorModeValue("white", "gray.700")} boxShadow="lg" p={8}>
           {submittedEmail ? (
-            <Stack spacing={4}>
+            <Stack gap={4}>
               <Heading fontSize="xl">Check your inbox</Heading>
               <Text color="gray.600">
                 If <b>{submittedEmail}</b> is registered, we&apos;ve sent a reset link.
@@ -57,18 +55,17 @@ const ForgotPassword = () => {
                 </Link>
                 .
               </Text>
-              <Link as={RouterLink} to={PUBLIC_PATHS.LOGIN} color="blue.400" textAlign="center">
-                Back to sign in
-              </Link>
+              <Link color="blue.400" textAlign="center" asChild><RouterLink to={PUBLIC_PATHS.LOGIN}>Back to sign in
+                              </RouterLink></Link>
             </Stack>
           ) : (
             <form onSubmit={handleSubmit(onSubmit)}>
-              <Stack spacing={4}>
+              <Stack gap={4}>
                 <Text color="gray.600">
                   Enter the email tied to your account and we&apos;ll send you a link to reset your password.
                 </Text>
-                <FormControl isInvalid={!!errors.email}>
-                  <FormLabel>Email</FormLabel>
+                <Field.Root invalid={!!errors.email}>
+                  <Field.Label>Email</Field.Label>
                   <Input
                     type="email"
                     autoComplete="email"
@@ -77,14 +74,13 @@ const ForgotPassword = () => {
                       pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: "Enter a valid email" },
                     })}
                   />
-                  <FormErrorMessage>{errors.email?.message}</FormErrorMessage>
-                </FormControl>
-                <Button type="submit" bg="blue.400" color="white" isLoading={isLoading} _hover={{ bg: "blue.500" }}>
+                  <Field.ErrorText>{errors.email?.message}</Field.ErrorText>
+                </Field.Root>
+                <Button type="submit" bg="blue.400" color="white" loading={isLoading} _hover={{ bg: "blue.500" }}>
                   Send reset link
                 </Button>
-                <Link as={RouterLink} to={PUBLIC_PATHS.LOGIN} color="blue.400" textAlign="center">
-                  Back to sign in
-                </Link>
+                <Link color="blue.400" textAlign="center" asChild><RouterLink to={PUBLIC_PATHS.LOGIN}>Back to sign in
+                                  </RouterLink></Link>
               </Stack>
             </form>
           )}

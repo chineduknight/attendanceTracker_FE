@@ -4,12 +4,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { confirmAlert } from "react-confirm-alert";
 import { toast } from "react-toastify";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import AddMember from "pages/AddMember";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
+import { toggle } from "test-utils/render";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
@@ -36,7 +37,7 @@ const ADA = { id: "m1", name: "Ada", part: "Alto" };
 
 const renderAt = (path: string) =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
@@ -198,3 +199,90 @@ describe("<AddMember> member-model copy", () => {
   });
 });
 
+
+// A checkbox member field: v3's checkbox is controlled through react-hook-form,
+// so the async reset(currentMember) on update must reach the visible box.
+describe("<AddMember> checkbox fields", () => {
+  const CHECKBOX_MODEL = {
+    fields: [
+      { _id: "f-name", name: "name", label: "Full Name", type: "text", required: true },
+      { _id: "f-bap", name: "baptised", label: "Baptised", type: "checkbox", required: false },
+    ],
+  };
+  const withMember = (member: Record<string, unknown>) =>
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? CHECKBOX_MODEL : member } }),
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1", permissions: [] } });
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  it("create: starts unticked, toggles on and submits true", async () => {
+    withMember({});
+    renderAt(PROTECTED_PATHS.ADD_MEMBER);
+    const box = await screen.findByRole("checkbox", { name: "Baptised" });
+    expect(box).not.toBeChecked();
+    fireEvent.change(screen.getByLabelText(/Full Name/), { target: { value: "Bola" } });
+
+    await toggle(box);
+    expect(box).toBeChecked();
+
+    const [, body] = await confirmSubmit();
+    expect(body).toEqual({ name: "Bola", baptised: true });
+  });
+
+  it("create: an untouched box submits a real false", async () => {
+    withMember({});
+    renderAt(PROTECTED_PATHS.ADD_MEMBER);
+    await screen.findByRole("checkbox", { name: "Baptised" });
+    fireEvent.change(screen.getByLabelText(/Full Name/), { target: { value: "Bola" } });
+
+    const [, body] = await confirmSubmit();
+    expect(body).toEqual({ name: "Bola", baptised: false });
+  });
+
+  it("update: a stored true renders checked after the member loads", async () => {
+    withMember({ id: "m1", name: "Ada", baptised: true });
+    renderAt("/member/update/m1");
+    const box = await screen.findByRole("checkbox", { name: "Baptised" });
+    await waitFor(() => expect(box).toBeChecked());
+  });
+
+  it("update: a stored false stays unchecked", async () => {
+    withMember({ id: "m1", name: "Ada", baptised: false });
+    renderAt("/member/update/m1");
+    const name = (await screen.findByLabelText(/Full Name/)) as HTMLInputElement;
+    await waitFor(() => expect(name.value).toBe("Ada"));
+    expect(screen.getByRole("checkbox", { name: "Baptised" })).not.toBeChecked();
+  });
+
+  it("update: true -> false submits false", async () => {
+    withMember({ id: "m1", name: "Ada", baptised: true });
+    renderAt("/member/update/m1");
+    const box = await screen.findByRole("checkbox", { name: "Baptised" });
+    await waitFor(() => expect(box).toBeChecked());
+
+    await toggle(box);
+    expect(box).not.toBeChecked();
+
+    const [, body] = await confirmSubmit();
+    expect(body).toMatchObject({ name: "Ada", baptised: false, memberId: "m1" });
+  });
+
+  it("update: false -> true submits true", async () => {
+    withMember({ id: "m1", name: "Ada", baptised: false });
+    renderAt("/member/update/m1");
+    const name = (await screen.findByLabelText(/Full Name/)) as HTMLInputElement;
+    await waitFor(() => expect(name.value).toBe("Ada"));
+    const box = screen.getByRole("checkbox", { name: "Baptised" });
+
+    await toggle(box);
+
+    const [, body] = await confirmSubmit();
+    expect(body).toMatchObject({ name: "Ada", baptised: true, memberId: "m1" });
+  });
+});

@@ -1,26 +1,21 @@
-import {
+import { CloseButton,
   Box,
   Flex,
-  useColorModeValue,
   Text,
   Button,
   Input,
   Heading,
   InputGroup,
-  InputLeftElement,
-  InputRightElement,
+  
+  
   IconButton,
   Icon,
   Container,
   Drawer,
-  DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
-  DrawerHeader,
-  DrawerBody,
-  DrawerFooter,
   useDisclosure,
+  Portal,
 } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import { FaSearch, FaPencilAlt, FaUserPlus } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -577,7 +572,7 @@ const MarkAttendanceSession = () => {
     <Box minH={"100vh"} bg={pageBg}>
       <Container>
         <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
-          <Heading fontSize="22px" noOfLines={1}>
+          <Heading fontSize="22px" lineClamp={1}>
             {`${terms.memberPlural} ${currentAttendance.name}`}
           </Heading>
           <Flex gap={2} alignItems="center" flexShrink={0}>
@@ -586,13 +581,11 @@ const MarkAttendanceSession = () => {
                 aria-label={`Edit ${lowerTerm(
                   terms.attendanceSingular
                 )} details`}
-                icon={<FaPencilAlt />}
                 variant="outline"
-                colorScheme="blue"
-                onClick={detailsDrawer.onOpen}
-              />
+                colorPalette="blue"
+                onClick={detailsDrawer.onOpen}><FaPencilAlt /></IconButton>
             )}
-            <Button variant="outline" colorScheme="blue" onClick={onRefresh}>
+            <Button variant="outline" colorPalette="blue" onClick={onRefresh}>
               Refresh
             </Button>
           </Flex>
@@ -630,11 +623,7 @@ const MarkAttendanceSession = () => {
                 mt="3"
                 size="sm"
                 variant="outline"
-                leftIcon={<FaUserPlus />}
-                onClick={() => setIsAddingMember(true)}
-              >
-                {`Add ${lowerTerm(terms.memberSingular)} to this ${session}`}
-              </Button>
+                onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${lowerTerm(terms.memberSingular)} to this ${session}`}</Button>
             )}
             <QuickMarkToolbar
               statuses={statuses.active}
@@ -677,10 +666,19 @@ const MarkAttendanceSession = () => {
               py={2}
               mt="2"
             >
-              <InputGroup>
-                <InputLeftElement pointerEvents="none">
-                  <Icon as={FaSearch} color="gray.400" />
-                </InputLeftElement>
+              <InputGroup
+                startElement={<Icon color="gray.400" asChild><FaSearch /></Icon>}
+                startElementProps={{ pointerEvents: "none" }}
+                endElement={
+                  searchQuery ? (
+                      <IconButton
+                        aria-label="Clear search"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSearchQuery("")}><FiX /></IconButton>
+                  ) : undefined
+                }
+              >
                 <Input
                   type="text"
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
@@ -688,17 +686,6 @@ const MarkAttendanceSession = () => {
                   onChange={handleSearch}
                   {...pinnedSearch.inputProps}
                 />
-                {searchQuery && (
-                  <InputRightElement>
-                    <IconButton
-                      aria-label="Clear search"
-                      icon={<FiX />}
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}
-                    />
-                  </InputRightElement>
-                )}
               </InputGroup>
             </Box>
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
@@ -728,7 +715,7 @@ const MarkAttendanceSession = () => {
                         <Button
                           size="sm"
                           variant="ghost"
-                          colorScheme="red"
+                          colorPalette="red"
                           aria-label={`Remove ${item.name} from this ${session}`}
                           onClick={() => removeManualMember(item.id)}
                         >
@@ -762,16 +749,16 @@ const MarkAttendanceSession = () => {
                 onClick={() => navigate(-1)}
                 flex="1"
                 variant="outline"
-                colorScheme="gray"
-                isDisabled={isLoading}
+                colorPalette="gray"
+                disabled={isLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={onSubmit}
                 flex="2"
-                isLoading={isLoading}
-                isDisabled={
+                loading={isLoading}
+                disabled={
                   sessionRoster.length === 0 ||
                   (isUpdate && (!details.name.trim() || !details.date))
                 }
@@ -794,34 +781,44 @@ const MarkAttendanceSession = () => {
       )}
 
       {isUpdate && (
-        <Drawer
-          isOpen={detailsDrawer.isOpen}
-          placement="right"
-          onClose={detailsDrawer.onClose}
+        <Drawer.Root
+          open={detailsDrawer.open}
+          placement='end'
           size={{ base: "full", md: "md" }}
+          onOpenChange={e => {
+            if (!e.open) {
+              detailsDrawer.onClose();
+            }
+          }}
         >
-          <DrawerOverlay />
-          <DrawerContent>
-            <DrawerCloseButton />
-            <DrawerHeader>{`${terms.attendanceSingular} details`}</DrawerHeader>
-            <DrawerBody>
-              <AttendanceDetailsForm
-                value={details}
-                onChange={onDetailsChange}
-                categories={categories}
-              />
-            </DrawerBody>
-            <DrawerFooter>
-              <Button
-                w="full"
-                variant="primary"
-                onClick={detailsDrawer.onClose}
-              >
-                Done
-              </Button>
-            </DrawerFooter>
-          </DrawerContent>
-        </Drawer>
+          <Portal>
+
+            <Drawer.Backdrop />
+            <Drawer.Positioner>
+              <Drawer.Content>
+                <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+                <Drawer.Header><Drawer.Title>{`${terms.attendanceSingular} details`}</Drawer.Title></Drawer.Header>
+                <Drawer.Body>
+                  <AttendanceDetailsForm
+                    value={details}
+                    onChange={onDetailsChange}
+                    categories={categories}
+                  />
+                </Drawer.Body>
+                <Drawer.Footer>
+                  <Button
+                    w="full"
+                    variant="primary"
+                    onClick={detailsDrawer.onClose}
+                  >
+                    Done
+                  </Button>
+                </Drawer.Footer>
+              </Drawer.Content>
+            </Drawer.Positioner>
+
+          </Portal>
+        </Drawer.Root>
       )}
     </Box>
   );

@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import StatTiles from "components/analytics/StatTiles";
 
 it("renders behavior tiles and the organisation's total", () => {

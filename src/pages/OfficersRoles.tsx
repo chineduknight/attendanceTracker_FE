@@ -1,6 +1,5 @@
-import {
-  Box, Tabs, TabList, TabPanels, Tab, TabPanel, useColorModeValue,
-} from "@chakra-ui/react";
+import { Box, Tabs } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import OfficersTab from "components/officers/OfficersTab";
@@ -21,18 +20,16 @@ const OfficersRolesContent = ({ organisationId }: ContentProps) => {
   return (
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Box p={4}>
-        <Tabs variant="enclosed" colorScheme="blue">
-          <TabList>
-            <Tab>{terms.officerPlural}</Tab>
-            <Tab>Pending Invites</Tab>
-            <Tab>Roles</Tab>
-          </TabList>
-          <TabPanels>
-            <TabPanel><OfficersTab organisationId={organisationId} /></TabPanel>
-            <TabPanel><PendingInvitesTab organisationId={organisationId} /></TabPanel>
-            <TabPanel><RolesTab organisationId={organisationId} /></TabPanel>
-          </TabPanels>
-        </Tabs>
+        <Tabs.Root defaultValue="officers" variant="enclosed" colorPalette="blue">
+          <Tabs.List>
+            <Tabs.Trigger value="officers">{terms.officerPlural}</Tabs.Trigger>
+            <Tabs.Trigger value="invites">Pending Invites</Tabs.Trigger>
+            <Tabs.Trigger value="roles">Roles</Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="officers"><OfficersTab organisationId={organisationId} /></Tabs.Content>
+          <Tabs.Content value="invites"><PendingInvitesTab organisationId={organisationId} /></Tabs.Content>
+          <Tabs.Content value="roles"><RolesTab organisationId={organisationId} /></Tabs.Content>
+        </Tabs.Root>
       </Box>
     </Box>
   );

@@ -8,9 +8,9 @@ const Loader = (props: LoaderType) => {
   return (
     <Center h={h} w="100%">
       <Spinner
-        thickness="4px"
-        speed="0.65s"
-        emptyColor="gray.200"
+        borderWidth="4px"
+        animationDuration="0.65s"
+        css={{ "--spinner-track-color": "colors.gray.200" }}
         color="black"
         size="xl"
       />

@@ -14,3 +14,12 @@ body {
   background-color: red;
   /* Add other styles as needed */
 }
+/* Chakra v3 hides a loading button's label with visibility:hidden, which
+   drops it from the accessibility tree, so a saving button has no name.
+   Keep the label in the tree but transparent, as v2 did; the spinner sits
+   on top. Plain (unlayered) CSS on purpose: Chakra's recipe styles live in
+   a cascade layer and cannot override the loader's unlayered style. */
+.chakra-button[data-loading] > span > span:last-child {
+  visibility: visible;
+  color: transparent;
+}

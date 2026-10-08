@@ -10,7 +10,8 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format, parseISO } from "date-fns";
-import theme from "styles/theme";
+import { system } from "styles/theme";
+import { selectTab, toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
@@ -199,7 +200,7 @@ const LocationProbe = () => {
 
 const renderPage = (path = "/welfare") =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
@@ -500,13 +501,13 @@ describe("<Welfare> Needs Check-in progress", () => {
     expect(attentionRegion().getByText("Signal Member 4")).toBeInTheDocument();
     expect(attentionRegion().getByText("Signal Member 5")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Followed Up 3" }));
+    await selectTab(screen.getByRole("tab", { name: "Followed Up 3" }));
     expect(attentionRegion().getByText("Signal Member 1")).toBeInTheDocument();
     expect(attentionRegion().getByText("Signal Member 2")).toBeInTheDocument();
     expect(attentionRegion().getByText("Signal Member 3")).toBeInTheDocument();
     expect(attentionRegion().queryByText("Signal Member 4")).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "All 11" }));
+    await selectTab(screen.getByRole("tab", { name: "All 11" }));
     expect(
       attentionRegion().getAllByRole("heading", { name: /^Signal Member/ })
     ).toHaveLength(11);
@@ -534,7 +535,7 @@ describe("<Welfare> Needs Check-in progress", () => {
       cardOf("Signal Member 3").queryByText("Follow-up logged")
     ).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Followed Up 2" }));
+    await selectTab(screen.getByRole("tab", { name: "Followed Up 2" }));
     expect(
       cardOf("Signal Member 1").getByText("Needs check-in")
     ).toBeInTheDocument();
@@ -588,7 +589,7 @@ describe("<Welfare> Needs Check-in progress", () => {
         attentionRegion().getAllByRole("button", { name: "Add follow-up" })[0]
       );
       if (workflowStatus === "open") {
-        fireEvent.click(screen.getByLabelText("Keep open for follow-up"));
+        await toggle(screen.getByLabelText("Keep open for follow-up"));
       }
       fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
 

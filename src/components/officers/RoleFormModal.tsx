@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton,
-  FormControl, FormLabel, FormErrorMessage, Input, Button,
-} from "@chakra-ui/react";
+import { CloseButton, Input, Button, Field, Dialog, Portal } from "@chakra-ui/react";
 import {
   useQueryWrapper, postRequest, putRequest, useMutationWrapper, queryClient,
 } from "services/api/apiHelper";
@@ -51,28 +48,38 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
   const nameInvalid = touchedName && name.trim().length === 0;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered scrollBehavior="inside">
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>{isEdit ? "Edit role" : "Create role"}</ModalHeader>
-        <ModalCloseButton />
-        <ModalBody>
-          <FormControl isInvalid={nameInvalid} mb={4}>
-            <FormLabel>Role name</FormLabel>
-            <Input value={name} onChange={(e) => { setName(e.target.value); setTouchedName(true); }} />
-            <FormErrorMessage>Name is required</FormErrorMessage>
-          </FormControl>
-          {catalog && <PermissionGrid areas={catalog.areas} value={perms} onChange={setPerms} />}
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-          <Button variant="primary" isLoading={creating || updating}
-            isDisabled={name.trim().length === 0} onClick={onSave}>
-            {isEdit ? "Save" : "Create"}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+    <Dialog.Root open={isOpen} size='lg' placement='center' scrollBehavior="inside" onOpenChange={e => {
+      if (!e.open) {
+        onClose();
+      }
+    }}>
+      <Portal>
+
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header><Dialog.Title>{isEdit ? "Edit role" : "Create role"}</Dialog.Title></Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.Body>
+              <Field.Root invalid={nameInvalid} mb={4}>
+                <Field.Label>Role name</Field.Label>
+                <Input value={name} onChange={(e) => { setName(e.target.value); setTouchedName(true); }} />
+                <Field.ErrorText>Name is required</Field.ErrorText>
+              </Field.Root>
+              {catalog && <PermissionGrid areas={catalog.areas} value={perms} onChange={setPerms} />}
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
+              <Button variant="primary" loading={creating || updating}
+                disabled={name.trim().length === 0} onClick={onSave}>
+                {isEdit ? "Save" : "Create"}
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+
+      </Portal>
+    </Dialog.Root>
   );
 };
 

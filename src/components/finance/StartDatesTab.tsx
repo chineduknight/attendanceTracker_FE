@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useColorModeValue } from "../ui/color-mode";
 import {
   Box,
   Button,
@@ -7,11 +8,10 @@ import {
   Flex,
   Input,
   InputGroup,
-  InputLeftElement,
+  
   Spinner,
   Stack,
   Text,
-  useColorModeValue,
 } from "@chakra-ui/react";
 import { FaChevronRight, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -109,7 +109,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
   }
 
   return (
-    <Stack spacing={4} pb={selected.size ? 28 : 0}>
+    <Stack gap={4} pb={selected.size ? 28 : 0}>
       <Box>
         <Text fontWeight="semibold">{`${terms.memberSingular} start dates`}</Text>
         <Text fontSize="sm" color={muted}>
@@ -117,10 +117,10 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
         </Text>
       </Box>
 
-      <InputGroup>
-        <InputLeftElement pointerEvents="none" color="gray.400">
-          <FaSearch />
-        </InputLeftElement>
+      <InputGroup
+        startElement={<FaSearch />}
+        startElementProps={{ pointerEvents: "none", color: "gray.400" }}
+      >
         <Input
           type="search"
           placeholder={`Search ${memberPlural}`}
@@ -138,9 +138,9 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
       />
 
       {canManage && shown.length > 0 && (
-        <Checkbox isChecked={allShownSelected} onChange={toggleAllShown} px={1}>
+        <Checkbox.Root onCheckedChange={toggleAllShown} px={1} checked={allShownSelected}><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
           <Text fontSize="sm">{`Select all ${shown.length} shown`}</Text>
-        </Checkbox>
+        </Checkbox.Label></Checkbox.Root>
       )}
 
       {shown.length === 0 ? (
@@ -151,8 +151,8 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
         <GroupedList>
           {shown.map((m) => {
             const details = (
-              <Stack spacing={0.5} flex="1" minW={0} textAlign="left">
-                <Text fontWeight="semibold" noOfLines={1}>
+              <Stack gap={0.5} flex="1" minW={0} textAlign="left">
+                <Text fontWeight="semibold" lineClamp={1}>
                   {m.name}
                 </Text>
                 <Text fontSize="sm" color={m.financialStartDate ? muted : "orange.500"}>
@@ -166,33 +166,28 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
               <GroupedListItem key={m.id} p={0}>
                 <Flex align="center">
                   {canManage && (
-                    <Checkbox
+                    <Checkbox.Root
                       size="lg"
                       pl={{ base: 3, md: 5 }}
                       py={3}
-                      isChecked={selected.has(m.id)}
-                      onChange={() => toggle(m.id)}
-                      aria-label={`Select ${m.name}`}
-                    />
+                      onCheckedChange={() => toggle(m.id)}
+                      checked={selected.has(m.id)}><Checkbox.HiddenInput aria-label={`Select ${m.name}`} /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Root>
                   )}
                   {canManage ? (
                     <Flex
-                      as="button"
-                      type="button"
                       align="center"
                       flex="1"
                       minW={0}
                       gap={3}
                       px={3}
                       py={3}
-                      onClick={() => setEditing(m)}
                       _hover={{ bg: hoverBg }}
                       _focusVisible={{ boxShadow: "outline", outline: "none" }}
                       aria-label={`Edit start date for ${m.name}`}
-                    >
-                      {details}
-                      <Box as={FaChevronRight} color="gray.400" aria-hidden="true" />
-                    </Flex>
+                      asChild><button type="button" onClick={() => setEditing(m)}>
+                        {details}
+                        <Box color="gray.400" aria-hidden="true" asChild><FaChevronRight /></Box>
+                      </button></Flex>
                   ) : (
                     <Flex px={{ base: 3, md: 5 }} py={3} flex="1" minW={0}>
                       {details}
@@ -219,7 +214,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
           pt={3}
           pb="calc(12px + env(safe-area-inset-bottom))"
         >
-          <Stack spacing={2} maxW="lg" mx="auto">
+          <Stack gap={2} maxW="lg" mx="auto">
             <Flex justify="space-between" align="center">
               <Text fontWeight="semibold">{`${selected.size} ${memberWord(selected.size)} selected`}</Text>
               <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
@@ -234,10 +229,10 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
                 onChange={(e) => setBulkDate(e.target.value)}
               />
               <Button
-                colorScheme="purple"
+                colorPalette="purple"
                 flexShrink={0}
-                isDisabled={!bulkDate}
-                isLoading={startDate.isSaving}
+                disabled={!bulkDate}
+                loading={startDate.isSaving}
                 onClick={() => setConfirmBulk(true)}
               >
                 Set date

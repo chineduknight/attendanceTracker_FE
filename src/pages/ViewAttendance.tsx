@@ -1,18 +1,18 @@
 import {
   Box,
   Flex,
-  useColorModeValue,
   Text,
   Button,
   Input,
   Heading,
   InputGroup,
-  InputLeftElement,
-  InputRightElement,
+  
+  
   IconButton,
   Icon,
   Container,
 } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -393,7 +393,7 @@ const Attendance = () => {
             {/* Title first, date beneath it, so a long session name never
                 collides with the date on a narrow screen. */}
             <Box mt="4">
-              <Heading fontSize="22px" noOfLines={2}>
+              <Heading fontSize="22px" lineClamp={2}>
                 {attendanceInfo?.name}
               </Heading>
               <Text color="gray.600" mt={1}>
@@ -403,23 +403,15 @@ const Attendance = () => {
             {/* Sharing the session just marked is the page's main job, so
                 Share leads as the solid action; Excel export is secondary. */}
             <Flex mt="3" gap={2}>
-              <Button
-                flex="1"
-                onClick={handleSendToWhatsapp}
-                leftIcon={<FaShareAlt />}
-              >
-                Share
-              </Button>
+              <Button flex="1" onClick={handleSendToWhatsapp}><FaShareAlt />Share
+                              </Button>
               <Button
                 flex="1"
                 onClick={sendToExcel}
-                isLoading={isFetching}
-                leftIcon={<FaFileExcel />}
+                loading={isFetching}
                 variant="outline"
-                colorScheme="green"
-              >
-                Export to Excel
-              </Button>
+                colorPalette="green"><FaFileExcel />Export to Excel
+                              </Button>
             </Flex>
             {attendanceInfo && (
               <ExpectedRosterSummary
@@ -437,12 +429,8 @@ const Attendance = () => {
                   mt="3"
                   size="sm"
                   variant="outline"
-                  leftIcon={<FaUserPlus />}
-                  isDisabled={!canChangeRoster}
-                  onClick={() => setIsAddingMember(true)}
-                >
-                  {`Add ${memberTerm} to this ${session}`}
-                </Button>
+                  disabled={!canChangeRoster}
+                  onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${memberTerm} to this ${session}`}</Button>
                 {!canChangeRoster && (
                   <Text fontSize="sm" color="gray.500" mt={1}>
                     {`No edits remain for this ${session}.`}
@@ -510,10 +498,19 @@ const Attendance = () => {
               py={2}
               mt="2"
             >
-              <InputGroup>
-                <InputLeftElement pointerEvents="none">
-                  <Icon as={FaSearch} color="gray.400" />
-                </InputLeftElement>
+              <InputGroup
+                startElement={<Icon color="gray.400" asChild><FaSearch /></Icon>}
+                startElementProps={{ pointerEvents: "none" }}
+                endElement={
+                  searchQuery ? (
+                      <IconButton
+                        aria-label="Clear search"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSearchQuery("")}><FiX /></IconButton>
+                  ) : undefined
+                }
+              >
                 <Input
                   type="text"
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
@@ -521,17 +518,6 @@ const Attendance = () => {
                   onChange={handleSearch}
                   {...pinnedSearch.inputProps}
                 />
-                {searchQuery && (
-                  <InputRightElement>
-                    <IconButton
-                      aria-label="Clear search"
-                      icon={<FiX />}
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}
-                    />
-                  </InputRightElement>
-                )}
               </InputGroup>
             </Box>
             {/* The roster scrolls with the page rather than in a nested box. */}
@@ -557,9 +543,9 @@ const Attendance = () => {
                         <Button
                           size="sm"
                           variant="ghost"
-                          colorScheme="red"
+                          colorPalette="red"
                           aria-label={`Remove ${item.member.name} from this ${session}`}
-                          isDisabled={!canChangeRoster}
+                          disabled={!canChangeRoster}
                           onClick={() => setRemoving(item)}
                         >
                           Remove
@@ -578,17 +564,13 @@ const Attendance = () => {
             )}
             <Button
               onClick={handleDelete}
-              isLoading={isDeleting}
-              leftIcon={<FaTrash />}
+              loading={isDeleting}
               bg="red.500"
               color="white"
               _hover={{ bg: "red.600" }}
               w="full"
               mt="4"
-              mb="8"
-            >
-              {`Delete ${terms.attendanceSingular}`}
-            </Button>
+              mb="8"><FaTrash />{`Delete ${terms.attendanceSingular}`}</Button>
           </>
         )}
       </Container>

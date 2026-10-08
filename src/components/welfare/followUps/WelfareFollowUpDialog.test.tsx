@@ -9,7 +9,8 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
-import theme from "styles/theme";
+import { system } from "styles/theme";
+import { toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import WelfareFollowUpDialog, {
@@ -151,7 +152,7 @@ const renderDialog = (over: RenderOverrides = {}) => {
     isSaving: over.isSaving ?? false,
   };
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <WelfareFollowUpDialog {...props} />
       </QueryClientProvider>
@@ -249,7 +250,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Family situation" },
     });
-    fireEvent.click(screen.getByLabelText("Keep open for follow-up"));
+    await toggle(screen.getByLabelText("Keep open for follow-up"));
     expect(screen.getByLabelText("Next follow-up date")).toBeInTheDocument();
     fireEvent.click(saveButton());
 
@@ -267,7 +268,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Travelling" },
     });
-    fireEvent.click(screen.getByLabelText("Keep open for follow-up"));
+    await toggle(screen.getByLabelText("Keep open for follow-up"));
     fireEvent.change(screen.getByLabelText("Next follow-up date"), {
       target: { value: "2026-10-14" },
     });
@@ -397,11 +398,11 @@ describe("WelfareFollowUpDialog — edit", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("does not clear the next date when the record is closed through edit", () => {
+  it("does not clear the next date when the record is closed through edit", async () => {
     const update = jest.fn();
     renderDialog({ request: EDIT_REQUEST, update });
 
-    fireEvent.click(screen.getByLabelText("Keep open for follow-up"));
+    await toggle(screen.getByLabelText("Keep open for follow-up"));
     expect(
       screen.queryByLabelText("Next follow-up date"),
     ).not.toBeInTheDocument();
@@ -412,18 +413,17 @@ describe("WelfareFollowUpDialog — edit", () => {
     expect(payload).not.toHaveProperty("nextFollowUpDate");
   });
 
-  it("archives only after an explicit confirmation, sending the revision", () => {
+  it("archives only after an explicit confirmation, sending the revision", async () => {
     const archive = jest.fn();
     renderDialog({ request: EDIT_REQUEST, archive });
 
     fireEvent.click(screen.getByRole("button", { name: "Archive record" }));
-    expect(
-      screen.getByText("Archive record", { selector: "header" }),
-    ).toBeInTheDocument();
+    // The confirmation is its own dialog, named by its title.
+    const confirm = await screen.findByRole("dialog", { name: "Archive record" });
     archive.mockImplementation((_id, _revision, callbacks) =>
       callbacks?.onSuccess?.(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Yes, archive" }));
+    fireEvent.click(within(confirm).getByRole("button", { name: "Yes, archive" }));
 
     expect(archive).toHaveBeenCalledWith("f1", 3, expect.anything());
     expect(toast.success).toHaveBeenCalledWith("Follow-up archived");
@@ -488,9 +488,13 @@ describe("WelfareFollowUpDialog — in-flight state", () => {
   it("disables the footer actions while saving", () => {
     renderDialog({ request: EDIT_REQUEST, isSaving: true });
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    // Chakra keeps the "Loading..." label visible for a loading button, so
-    // match the accessible name with a pattern.
-    expect(screen.getByRole("button", { name: /Save changes/ })).toBeDisabled();
+    // v3 hides a loading button's label with visibility:hidden; App.css keeps
+    // it named in browsers, but jsdom never loads App.css, so find the
+    // saving button by its loading state instead of its name.
+    const saving = screen
+      .getAllByRole("button", { hidden: true })
+      .find((button) => button.hasAttribute("data-loading"));
+    expect(saving).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Archive record" }),
     ).toBeDisabled();

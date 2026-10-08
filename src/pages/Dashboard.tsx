@@ -1,10 +1,5 @@
-import {
-  Box,
-  useColorModeValue,
-  Button,
-  Heading,
-  Grid,
-} from "@chakra-ui/react";
+import { Box, Button, Heading, Grid } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useNavigate } from "react-router-dom";
 import useGlobalStore from "zStore";
 import { useNavActions } from "hooks/useNavActions";
@@ -28,13 +23,9 @@ const Dashboard = () => {
         {actions.map(({ label, icon: Icon, colorScheme, path }) => (
           <Button
             key={path}
-            leftIcon={<Icon />}
-            colorScheme={colorScheme}
+            colorPalette={colorScheme}
             variant="outline"
-            onClick={() => navigate(path)}
-          >
-            {label}
-          </Button>
+            onClick={() => navigate(path)}><Icon />{label}</Button>
         ))}
       </Grid>
     </Box>

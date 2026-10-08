@@ -26,7 +26,10 @@ const FilterChips = <T extends string>({ label, options, value, onChange }: Filt
     pb={1}
     mx={-1}
     px={1}
-    sx={{ scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}
+    css={{
+      scrollbarWidth: "none",
+      '& &::-webkit-scrollbar': { display: "none" }
+    }}
   >
     {options.map((option) => {
       const isActive = option.value === value;
@@ -37,7 +40,7 @@ const FilterChips = <T extends string>({ label, options, value, onChange }: Filt
           borderRadius="full"
           flexShrink={0}
           variant={isActive ? "solid" : "outline"}
-          colorScheme={isActive ? "teal" : "gray"}
+          colorPalette={isActive ? "teal" : "gray"}
           aria-pressed={isActive}
           onClick={() => onChange(option.value)}
         >

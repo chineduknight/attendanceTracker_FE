@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, Progress, Tab, TabList, Tabs, Text } from "@chakra-ui/react";
+import { Box, Progress, Tabs, Text } from "@chakra-ui/react";
 import InsightGrid from "components/welfare/InsightGrid";
 import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {
@@ -12,7 +12,6 @@ import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
 
 type ProgressView = "pending" | "followedUp" | "all";
-const VIEWS: readonly ProgressView[] = ["pending", "followedUp", "all"];
 
 interface NeedsCheckInProgressProps {
   /** The backend's attention list for this review — never altered here. */
@@ -62,30 +61,33 @@ const NeedsCheckInProgress = ({
           {`${progress.followedUp.length} of ${progress.all.length} followed up`}
         </Text>
         {/* The sentence above is the accessible value; the bar is visual. */}
-        <Progress
+        <Progress.Root
           aria-hidden="true"
           value={progress.followedUp.length}
           max={Math.max(progress.all.length, 1)}
           size="xs"
-          colorScheme="green"
-          borderRadius="full"
-        />
+          colorPalette="green"
+          borderRadius="full">
+          <Progress.Track>
+            <Progress.Range />
+          </Progress.Track>
+        </Progress.Root>
       </Box>
 
-      <Tabs
-        variant="soft-rounded"
-        colorScheme="orange"
+      <Tabs.Root
+        variant='subtle'
+        colorPalette="orange"
         size="sm"
-        index={VIEWS.indexOf(view)}
-        onChange={(index) => setView(VIEWS[index])}
+        value={view}
+        onValueChange={({ value }) => setView(value as ProgressView)}
         mb={4}
       >
-        <TabList flexWrap="wrap" gap={2}>
-          <Tab>{`Pending ${progress.pending.length}`}</Tab>
-          <Tab>{`Followed Up ${progress.followedUp.length}`}</Tab>
-          <Tab>{`All ${progress.all.length}`}</Tab>
-        </TabList>
-      </Tabs>
+        <Tabs.List flexWrap="wrap" gap={2}>
+          <Tabs.Trigger value="pending">{`Pending ${progress.pending.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="followedUp">{`Followed Up ${progress.followedUp.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="all">{`All ${progress.all.length}`}</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
 
       {shown.length === 0 ? (
         <Text color="gray.500">

@@ -35,7 +35,7 @@ const BirthdaySummaryCards = ({
   activePreset,
   onSelect,
 }: BirthdaySummaryCardsProps) => (
-  <SimpleGrid columns={3} spacing={{ base: 2, md: 4 }}>
+  <SimpleGrid columns={3} gap={{ base: 2, md: 4 }}>
     {CARDS.map(({ preset, label, key }) => (
       <StatTile
         key={preset}

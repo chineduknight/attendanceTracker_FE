@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Box, Button, Divider, Flex, SimpleGrid, Stack, Text } from "@chakra-ui/react";
+import { Box, Button, Flex, SimpleGrid, Stack, Text, Separator } from "@chakra-ui/react";
 import { formatMoney } from "helpers/financeConstants";
 import {
   arrearsOf,
@@ -52,7 +52,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
   const body = () => {
     if (!row.accountable) {
       return (
-        <Stack spacing={4}>
+        <Stack gap={4}>
           <Text>{`${row.name} has no financial start date, so nothing is due from them yet.`}</Text>
           {canManage && (
             <StartDateForm
@@ -71,8 +71,8 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
     }
 
     return (
-      <Stack spacing={4}>
-        <SimpleGrid columns={3} spacing={3}>
+      <Stack gap={4}>
+        <SimpleGrid columns={3} gap={3}>
           <Figure label="Paid" value={formatMoney(paidOf(row))} />
           {row.arrears !== undefined ? (
             <>
@@ -95,7 +95,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
 
         {canManage && isLiable(row) && (
           <>
-            <Divider />
+            <Separator />
             {mode === "record" ? (
               <>
                 {balanceOf(row) > 0 ? (
@@ -110,7 +110,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
                     Nothing left to pay on this obligation.
                   </Text>
                 )}
-                <Button variant="link" size="sm" alignSelf="center" onClick={() => setMode("correct")}>
+                <Button variant='plain' size="sm" alignSelf="center" onClick={() => setMode("correct")}>
                   Made a mistake? Correct the record
                 </Button>
               </>
@@ -124,7 +124,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
                   onCorrectDues={payments.correctDues}
                   onCorrectLevy={payments.correctLevy}
                 />
-                <Button variant="link" size="sm" alignSelf="center" onClick={() => setMode("record")}>
+                <Button variant='plain' size="sm" alignSelf="center" onClick={() => setMode("record")}>
                   Back to record payment
                 </Button>
               </>

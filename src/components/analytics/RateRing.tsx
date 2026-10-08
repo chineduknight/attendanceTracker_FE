@@ -15,7 +15,9 @@ const RateRing: React.FC<RateRingProps> = ({ rate, size = 76, trackColor = "#0BC
       position="relative" flex="0 0 auto"
       width={`${size}px`} height={`${size}px`} borderRadius="50%"
       display="flex" alignItems="center" justifyContent="center"
-      sx={{ background: `conic-gradient(${trackColor} 0 ${clamped}%, rgba(255,255,255,0.22) ${clamped}% 100%)` }}
+      css={{
+        background: `conic-gradient(${trackColor} 0 ${clamped}%, rgba(255,255,255,0.22) ${clamped}% 100%)`
+      }}
     >
       <Box
         width={`${inner}px`} height={`${inner}px`} borderRadius="50%" bg="purple.600"

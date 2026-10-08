@@ -1,7 +1,5 @@
-import {
-  Flex, Box, FormControl, FormLabel, FormErrorMessage, Input, Stack,
-  Button, Heading, Link, useColorModeValue,
-} from "@chakra-ui/react";
+import { Flex, Box, Input, Stack, Button, Heading, Link, Field } from "@chakra-ui/react";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import PasswordInput from "components/PasswordInput";
@@ -47,18 +45,18 @@ const Signup = () => {
 
   return (
     <Flex minH="100vh" align="center" justify="center" bg={useColorModeValue("gray.50", "gray.800")}>
-      <Stack spacing={8} mx="auto" maxW="lg" pb={12} px={6}>
+      <Stack gap={8} mx="auto" maxW="lg" pb={12} px={6}>
         <Heading fontSize="4xl" textAlign="center">Create your account</Heading>
         <Box rounded="lg" bg={useColorModeValue("white", "gray.700")} boxShadow="lg" p={8}>
           <form onSubmit={handleSubmit(onSubmit)}>
-            <Stack spacing={4}>
-              <FormControl isInvalid={!!errors.username}>
-                <FormLabel>Username</FormLabel>
+            <Stack gap={4}>
+              <Field.Root invalid={!!errors.username}>
+                <Field.Label>Username</Field.Label>
                 <Input {...register("username", { required: "Username is required" })} />
-                <FormErrorMessage>{errors.username?.message}</FormErrorMessage>
-              </FormControl>
-              <FormControl isInvalid={!!errors.email}>
-                <FormLabel>Email</FormLabel>
+                <Field.ErrorText>{errors.username?.message}</Field.ErrorText>
+              </Field.Root>
+              <Field.Root invalid={!!errors.email}>
+                <Field.Label>Email</Field.Label>
                 <Input
                   type="email"
                   {...register("email", {
@@ -66,10 +64,10 @@ const Signup = () => {
                     pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: "Enter a valid email" },
                   })}
                 />
-                <FormErrorMessage>{errors.email?.message}</FormErrorMessage>
-              </FormControl>
-              <FormControl isInvalid={!!errors.password}>
-                <FormLabel>Password</FormLabel>
+                <Field.ErrorText>{errors.email?.message}</Field.ErrorText>
+              </Field.Root>
+              <Field.Root invalid={!!errors.password}>
+                <Field.Label>Password</Field.Label>
                 <PasswordInput
                   autoComplete="new-password"
                   {...register("password", {
@@ -80,10 +78,10 @@ const Signup = () => {
                     },
                   })}
                 />
-                <FormErrorMessage>{errors.password?.message}</FormErrorMessage>
-              </FormControl>
-              <FormControl isInvalid={!!errors.confirmPassword}>
-                <FormLabel>Confirm password</FormLabel>
+                <Field.ErrorText>{errors.password?.message}</Field.ErrorText>
+              </Field.Root>
+              <Field.Root invalid={!!errors.confirmPassword}>
+                <Field.Label>Confirm password</Field.Label>
                 <PasswordInput
                   autoComplete="new-password"
                   {...register("confirmPassword", {
@@ -92,14 +90,13 @@ const Signup = () => {
                       value === watch("password") || "Passwords do not match",
                   })}
                 />
-                <FormErrorMessage>{errors.confirmPassword?.message}</FormErrorMessage>
-              </FormControl>
-              <Button type="submit" bg="blue.400" color="white" isLoading={isLoading} _hover={{ bg: "blue.500" }}>
+                <Field.ErrorText>{errors.confirmPassword?.message}</Field.ErrorText>
+              </Field.Root>
+              <Button type="submit" bg="blue.400" color="white" loading={isLoading} _hover={{ bg: "blue.500" }}>
                 Sign up
               </Button>
-              <Link as={RouterLink} to={PUBLIC_PATHS.LOGIN} color="blue.400" textAlign="center">
-                Already have an account? Sign in
-              </Link>
+              <Link color="blue.400" textAlign="center" asChild><RouterLink to={PUBLIC_PATHS.LOGIN}>Already have an account? Sign in
+                              </RouterLink></Link>
             </Stack>
           </form>
         </Box>

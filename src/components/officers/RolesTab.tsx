@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Box, Button, Flex, HStack, Table, Thead, Tbody, Tr, Th, Td, Badge, Wrap, WrapItem,
+  Box, Button, Flex, HStack, Table,      Badge, Wrap, WrapItem,
 } from "@chakra-ui/react";
 import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
@@ -51,31 +51,31 @@ const RolesTab = ({ organisationId }: Props) => {
         </Can>
       </Flex>
       <Box overflowX="auto">
-        <Table size="sm">
-          <Thead><Tr><Th>Role</Th><Th>Permissions</Th><Th></Th></Tr></Thead>
-          <Tbody>
+        <Table.Root size="sm">
+          <Table.Header><Table.Row><Table.ColumnHeader>Role</Table.ColumnHeader><Table.ColumnHeader>Permissions</Table.ColumnHeader><Table.ColumnHeader></Table.ColumnHeader></Table.Row></Table.Header>
+          <Table.Body>
             {roles.map((r) => (
-              <Tr key={r.id}>
-                <Td>{r.name}{r.isSystem && <Badge ml={2} colorScheme="purple">system</Badge>}</Td>
-                <Td>
+              <Table.Row key={r.id}>
+                <Table.Cell>{r.name}{r.isSystem && <Badge ml={2} colorPalette="purple">system</Badge>}</Table.Cell>
+                <Table.Cell>
                   <Wrap>
                     {r.permissions.map((p) => (
-                      <WrapItem key={p}><Badge colorScheme="green" variant="subtle">{p}</Badge></WrapItem>
+                      <WrapItem key={p}><Badge colorPalette="green" variant="subtle">{p}</Badge></WrapItem>
                     ))}
                   </Wrap>
-                </Td>
-                <Td>
+                </Table.Cell>
+                <Table.Cell>
                   <Can perm="officers.manage">
-                    <HStack spacing={2}>
-                      <Button size="xs" onClick={() => openEdit(r)} isDisabled={r.isSystem}>Edit</Button>
-                      <Button size="xs" colorScheme="red" onClick={() => handleDelete(r)} isDisabled={r.isSystem}>Delete</Button>
+                    <HStack gap={2}>
+                      <Button size="xs" onClick={() => openEdit(r)} disabled={r.isSystem}>Edit</Button>
+                      <Button size="xs" colorPalette="red" onClick={() => handleDelete(r)} disabled={r.isSystem}>Delete</Button>
                     </HStack>
                   </Can>
-                </Td>
-              </Tr>
+                </Table.Cell>
+              </Table.Row>
             ))}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
       <RoleFormModal organisationId={organisationId} role={editing} isOpen={formOpen} onClose={() => setFormOpen(false)} />
     </Box>

@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
 import { toast } from "react-toastify";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
@@ -203,7 +203,7 @@ const serve = (over: ServeOptions = {}) => {
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/welfare"]}>
           <Routes>

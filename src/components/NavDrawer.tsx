@@ -1,19 +1,16 @@
-import {
+import { CloseButton,
   Drawer,
-  DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
-  DrawerBody,
   Box,
   Text,
-  Avatar,
   Badge,
   VStack,
   Button,
-  Divider,
   Icon,
   useDisclosure,
+  Separator,
+  Portal,
 } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { FaArrowLeft, FaKey, FaSignOutAlt, FaTachometerAlt } from "react-icons/fa";
 import { IconType } from "react-icons";
 import { useNavigate } from "react-router-dom";
@@ -65,67 +62,69 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
 
   return (
     <>
-      <Drawer isOpen={isOpen} onClose={onClose} placement="left">
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerBody p={0}>
-            <Box bg="primary" color="#fff" p={4} pt={10}>
-              <Avatar size="md" name={user.username} mb={2} />
-              <Text fontWeight="bold" noOfLines={1}>
-                {user.username || "Account"}
-              </Text>
-              {user.email && (
-                <Text fontSize="sm" noOfLines={1}>
-                  {user.email}
-                </Text>
-              )}
-              {organisation.roleName && (
-                <Badge mt={2} colorScheme="blue">
-                  {organisation.roleName}
-                </Badge>
-              )}
-            </Box>
+      <Drawer.Root open={isOpen} placement='start' onOpenChange={e => {
+        if (!e.open) {
+          onClose();
+        }
+      }}>
+        <Portal>
 
-            <VStack align="stretch" spacing={0} py={2}>
-              {navActions.map(({ label, icon, path, colorScheme }) => (
-                <Button
-                  key={path}
-                  variant="ghost"
-                  justifyContent="flex-start"
-                  color={`${colorScheme}.600`}
-                  leftIcon={<Icon as={icon} color={`${colorScheme}.600`} />}
-                  borderRadius={0}
-                  onClick={() => goTo(path)}
-                >
-                  {label}
-                </Button>
-              ))}
-            </VStack>
+          <Drawer.Backdrop />
+          <Drawer.Positioner>
+            <Drawer.Content>
+              <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+              <Drawer.Body p={0}>
+                <Box bg="primary" color="#fff" p={4} pt={10}>
+                  <NameAvatar size="md" mb={2} name={user.username} />
+                  <Text fontWeight="bold" lineClamp={1}>
+                    {user.username || "Account"}
+                  </Text>
+                  {user.email && (
+                    <Text fontSize="sm" lineClamp={1}>
+                      {user.email}
+                    </Text>
+                  )}
+                  {organisation.roleName && (
+                    <Badge mt={2} colorPalette="blue">
+                      {organisation.roleName}
+                    </Badge>
+                  )}
+                </Box>
 
-            <Divider />
+                <VStack align="stretch" gap={0} py={2}>
+                  {navActions.map(({ label, icon, path, colorScheme }) => (
+                    <Button
+                      key={path}
+                      variant="ghost"
+                      justifyContent="flex-start"
+                      color={`${colorScheme}.600`}
+                      borderRadius={0}
+                      onClick={() => goTo(path)}><Icon as={icon} color={`${colorScheme}.600`} />{label}</Button>
+                  ))}
+                </VStack>
 
-            <VStack align="stretch" spacing={0} py={2}>
-              {ACCOUNT_ACTIONS.map(({ label, icon, colorScheme, onClick }) => (
-                <Button
-                  key={label}
-                  variant="ghost"
-                  justifyContent="flex-start"
-                  color={`${colorScheme}.600`}
-                  leftIcon={<Icon as={icon} color={`${colorScheme}.600`} />}
-                  borderRadius={0}
-                  onClick={onClick}
-                >
-                  {label}
-                </Button>
-              ))}
-            </VStack>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
+                <Separator />
+
+                <VStack align="stretch" gap={0} py={2}>
+                  {ACCOUNT_ACTIONS.map(({ label, icon, colorScheme, onClick }) => (
+                    <Button
+                      key={label}
+                      variant="ghost"
+                      justifyContent="flex-start"
+                      color={`${colorScheme}.600`}
+                      borderRadius={0}
+                      onClick={onClick}><Icon as={icon} color={`${colorScheme}.600`} />{label}</Button>
+                  ))}
+                </VStack>
+              </Drawer.Body>
+            </Drawer.Content>
+          </Drawer.Positioner>
+
+        </Portal>
+      </Drawer.Root>
 
       <ChangePasswordModal
-        isOpen={changePassword.isOpen}
+        isOpen={changePassword.open}
         onClose={changePassword.onClose}
       />
     </>

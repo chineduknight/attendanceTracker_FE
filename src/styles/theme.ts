@@ -1,23 +1,38 @@
-import { extendTheme } from "@chakra-ui/react";
-import { ButtonStyles as Button } from "./components/buttonStyles";
+import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import { buttonRecipe } from "./components/buttonStyles";
+import {
+  containerRecipe,
+  headingRecipe,
+  inputRecipe,
+  nativeSelectSlotRecipe,
+  textareaRecipe,
+} from "./components/v2Parity";
 
-// custom themes in chakra UI
-// https://chakra-ui.com/docs/theming/customize-theme
-// https://www.easyreact.com/articles/chakra-ui-customisations
-
-const myTheme = extendTheme({
-  fonts: {
-    heading: "Palanquin",
-    body: "Palanquin",
-  },
-  colors: {
-    primary: "#3182CE", // blue.500 — the color every header already uses
-    primaryHover: "#2B6CB0", // blue.600 — hover state for primary-colored surfaces
-    secondary: "#2FA07224",
-  },
-  components: {
-    Button, // Has to match to the name of the component
+// https://chakra-ui.com/docs/theming/overview
+const config = defineConfig({
+  theme: {
+    tokens: {
+      fonts: {
+        heading: { value: "Palanquin" },
+        body: { value: "Palanquin" },
+      },
+      colors: {
+        primary: { value: "#3182CE" }, // blue.500 — the color every header already uses
+        primaryHover: { value: "#2B6CB0" }, // blue.600 — hover state for primary-colored surfaces
+        secondary: { value: "#2FA07224" },
+      },
+    },
+    recipes: {
+      button: buttonRecipe,
+      heading: headingRecipe,
+      input: inputRecipe,
+      textarea: textareaRecipe,
+      container: containerRecipe,
+    },
+    slotRecipes: {
+      nativeSelect: nativeSelectSlotRecipe,
+    },
   },
 });
 
-export default myTheme;
+export const system = createSystem(defaultConfig, config);

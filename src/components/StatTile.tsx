@@ -1,4 +1,5 @@
-import { Box, Button, Flex, Text, useColorModeValue } from "@chakra-ui/react";
+import { Box, Button, Flex, Text } from "@chakra-ui/react";
+import { useColorModeValue } from "./ui/color-mode";
 import { IconType } from "react-icons";
 
 export interface StatTileProps {
@@ -47,12 +48,17 @@ const StatTile = ({
     <>
       <Flex align="center" gap={1.5} minW={0}>
         {Icon && (
+          // A wrapping span, not asChild: react-icons components cannot take
+          // the ref asChild passes down.
           <Box
-            as={Icon}
+            as="span"
+            display="inline-flex"
             aria-hidden="true"
             color={isSolid ? "white" : accent}
             flexShrink={0}
-          />
+          >
+            <Icon />
+          </Box>
         )}
         <Text
           fontSize={{ base: "xs", md: "md" }}

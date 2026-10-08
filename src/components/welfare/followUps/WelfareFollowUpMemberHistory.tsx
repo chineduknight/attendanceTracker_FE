@@ -1,17 +1,5 @@
 import { useMemo } from "react";
-import {
-  Badge,
-  Box,
-  Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerHeader,
-  DrawerOverlay,
-  Flex,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { CloseButton, Badge, Box, Drawer, Flex, Stack, Text, Portal } from "@chakra-ui/react";
 import { useTerms } from "hooks/useOrgPresentation";
 import { useWelfareFollowUps } from "hooks/useWelfareFollowUps";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -60,71 +48,81 @@ const WelfareFollowUpMemberHistory = ({
   const memberName = request.memberName ?? `member ${request.memberId}`;
 
   return (
-    <Drawer
-      isOpen
-      onClose={onClose}
-      placement="right"
+    <Drawer.Root
+      open
+      placement='end'
       size={{ base: "full", md: "md" }}
+      onOpenChange={e => {
+        if (!e.open) {
+          onClose();
+        }
+      }}
     >
-      <DrawerOverlay />
-      <DrawerContent>
-        <DrawerCloseButton />
-        <DrawerHeader>Follow-up history</DrawerHeader>
-        <DrawerBody>
-          <Text fontWeight="semibold" mb={4}>
-            {memberName}
-          </Text>
+      <Portal>
 
-          {isLoading && <Text color="gray.500">Loading history...</Text>}
-          {!isLoading && isError && (
-            <Text color="red.500">
-              Follow-up history could not be loaded right now.
-            </Text>
-          )}
-          {!isLoading && !isError && ordered.length === 0 && (
-            <Text color="gray.500">{`No follow-ups recorded for this ${lowerTerm(
-              terms.memberSingular,
-            )} yet.`}</Text>
-          )}
+        <Drawer.Backdrop />
+        <Drawer.Positioner>
+          <Drawer.Content>
+            <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+            <Drawer.Header><Drawer.Title>Follow-up history</Drawer.Title></Drawer.Header>
+            <Drawer.Body>
+              <Text fontWeight="semibold" mb={4}>
+                {memberName}
+              </Text>
 
-          <Stack spacing={3}>
-            {ordered.map((record) => (
-              <Box
-                key={record.id}
-                borderWidth="1px"
-                borderRadius="md"
-                px={3}
-                py={2}
-              >
-                <Flex align="center" justify="space-between" gap={2} mb={1}>
-                  <Text fontSize="sm" fontWeight="semibold">
-                    {followUpDateLabel(record.recordDate)}
-                  </Text>
-                  <Badge
-                    colorScheme={
-                      record.workflowStatus === "open" ? "green" : "gray"
-                    }
-                  >
-                    {record.workflowStatus === "open" ? "Open" : "Closed"}
-                  </Badge>
-                </Flex>
-                <Text fontWeight="medium">{record.reason}</Text>
-                {record.note && (
-                  <Text fontSize="sm" color="gray.600" mt={1}>
-                    {record.note}
-                  </Text>
-                )}
-                <Text fontSize="xs" color="gray.500" mt={1}>
-                  {record.createdBy?.name
-                    ? `Logged by ${record.createdBy.name}`
-                    : "Logged by unknown user"}
+              {isLoading && <Text color="gray.500">Loading history...</Text>}
+              {!isLoading && isError && (
+                <Text color="red.500">
+                  Follow-up history could not be loaded right now.
                 </Text>
-              </Box>
-            ))}
-          </Stack>
-        </DrawerBody>
-      </DrawerContent>
-    </Drawer>
+              )}
+              {!isLoading && !isError && ordered.length === 0 && (
+                <Text color="gray.500">{`No follow-ups recorded for this ${lowerTerm(
+                  terms.memberSingular,
+                )} yet.`}</Text>
+              )}
+
+              <Stack gap={3}>
+                {ordered.map((record) => (
+                  <Box
+                    key={record.id}
+                    borderWidth="1px"
+                    borderRadius="md"
+                    px={3}
+                    py={2}
+                  >
+                    <Flex align="center" justify="space-between" gap={2} mb={1}>
+                      <Text fontSize="sm" fontWeight="semibold">
+                        {followUpDateLabel(record.recordDate)}
+                      </Text>
+                      <Badge
+                        colorPalette={
+                          record.workflowStatus === "open" ? "green" : "gray"
+                        }
+                      >
+                        {record.workflowStatus === "open" ? "Open" : "Closed"}
+                      </Badge>
+                    </Flex>
+                    <Text fontWeight="medium">{record.reason}</Text>
+                    {record.note && (
+                      <Text fontSize="sm" color="gray.600" mt={1}>
+                        {record.note}
+                      </Text>
+                    )}
+                    <Text fontSize="xs" color="gray.500" mt={1}>
+                      {record.createdBy?.name
+                        ? `Logged by ${record.createdBy.name}`
+                        : "Logged by unknown user"}
+                    </Text>
+                  </Box>
+                ))}
+              </Stack>
+            </Drawer.Body>
+          </Drawer.Content>
+        </Drawer.Positioner>
+
+      </Portal>
+    </Drawer.Root>
   );
 };
 

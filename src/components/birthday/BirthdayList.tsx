@@ -1,4 +1,5 @@
-import { Box, Flex, Text, useColorModeValue } from "@chakra-ui/react";
+import { Box, Flex, Text } from "@chakra-ui/react";
+import { useColorModeValue } from "../ui/color-mode";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -67,7 +68,7 @@ const BirthdayList = ({
               <Text
                 fontWeight="semibold"
                 fontSize={{ base: "sm", md: "md" }}
-                noOfLines={1}
+                lineClamp={1}
                 minW={0}
               >
                 {isToday && (

@@ -67,7 +67,7 @@ const AttendanceEligibilityEditor = ({
       ?.field ?? field;
 
   return (
-    <Stack spacing={3} borderWidth="1px" borderRadius="md" p={3}>
+    <Stack gap={3} borderWidth="1px" borderRadius="md" p={3}>
       <Box aria-live="polite">
         <Text fontWeight="bold">
           {expectedCount === null

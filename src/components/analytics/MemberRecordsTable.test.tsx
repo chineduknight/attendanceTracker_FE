@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import MemberRecordsTable from "components/analytics/MemberRecordsTable";
 import { createStatusConfig } from "helpers/attendanceStatuses";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
