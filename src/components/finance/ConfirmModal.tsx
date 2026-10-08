@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Button, Text, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Button, Text, Dialog, Portal } from "@chakra-ui/react";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -40,8 +40,8 @@ const ConfirmModal = ({
       <Dialog.Backdrop />
       <Dialog.Positioner>
         <Dialog.Content>
-          <Dialog.Header>{title}</Dialog.Header>
-          <Dialog.CloseTrigger />
+          <Dialog.Header><Dialog.Title>{title}</Dialog.Title></Dialog.Header>
+          <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
           <Dialog.Body>{typeof body === "string" ? <Text>{body}</Text> : body}</Dialog.Body>
           <Dialog.Footer gap={3}>
             <Button

@@ -1,4 +1,4 @@
-import {
+import { CloseButton,
   Drawer,
   Box,
   Text,
@@ -72,7 +72,7 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
           <Drawer.Backdrop />
           <Drawer.Positioner>
             <Drawer.Content>
-              <Drawer.CloseTrigger />
+              <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
               <Drawer.Body p={0}>
                 <Box bg="primary" color="#fff" p={4} pt={10}>
                   <Avatar.Root size="md" mb={2}><Avatar.Fallback name={user.username} /></Avatar.Root>

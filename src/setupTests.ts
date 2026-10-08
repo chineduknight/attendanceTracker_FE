@@ -7,3 +7,15 @@ import '@testing-library/jest-dom';
 // jsdom doesn't implement window.scrollTo; stub it so components that call it
 // (e.g. ScrollToTop) don't emit "Not implemented" noise during tests.
 window.scrollTo = jest.fn();
+
+// Chakra v3 (Ark/Zag) measures dialogs, menus and popovers with
+// ResizeObserver, which jsdom lacks. A no-op is enough: tests never resize.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+if (!("ResizeObserver" in window)) {
+  (window as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
+    ResizeObserverStub;
+}

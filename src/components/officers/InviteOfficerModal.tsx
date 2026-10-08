@@ -1,4 +1,4 @@
-import { Input, NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Input, NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { toast } from "react-toastify";
 import { useQueryWrapper, postRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
@@ -44,8 +44,8 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
-            <Dialog.Header>{`Invite ${lowerTerm(terms.officerSingular)}`}</Dialog.Header>
-            <Dialog.CloseTrigger />
+            <Dialog.Header><Dialog.Title>{`Invite ${lowerTerm(terms.officerSingular)}`}</Dialog.Title></Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
             <form onSubmit={handleSubmit(onSubmit)}>
               <Dialog.Body>
                 <Field.Root invalid={!!errors.email} mb={3}>

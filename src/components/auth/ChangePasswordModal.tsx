@@ -1,4 +1,4 @@
-import { Button, Stack, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Button, Stack, Field, Dialog, Portal } from "@chakra-ui/react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { toast } from "react-toastify";
 import PasswordInput from "components/PasswordInput";
@@ -83,8 +83,8 @@ const ChangePasswordModal = ({ isOpen, onClose }: ChangePasswordModalProps) => {
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
-            <Dialog.Header>Change password</Dialog.Header>
-            <Dialog.CloseTrigger />
+            <Dialog.Header><Dialog.Title>Change password</Dialog.Title></Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
             <form onSubmit={handleSubmit(onSubmit)}>
               <Dialog.Body>
                 <Stack gap={4}>

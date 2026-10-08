@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Badge, Box, Drawer, Flex, Stack, Text, Portal } from "@chakra-ui/react";
+import { CloseButton, Badge, Box, Drawer, Flex, Stack, Text, Portal } from "@chakra-ui/react";
 import { useTerms } from "hooks/useOrgPresentation";
 import { useWelfareFollowUps } from "hooks/useWelfareFollowUps";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -63,8 +63,8 @@ const WelfareFollowUpMemberHistory = ({
         <Drawer.Backdrop />
         <Drawer.Positioner>
           <Drawer.Content>
-            <Drawer.CloseTrigger />
-            <Drawer.Header>Follow-up history</Drawer.Header>
+            <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+            <Drawer.Header><Drawer.Title>Follow-up history</Drawer.Title></Drawer.Header>
             <Drawer.Body>
               <Text fontWeight="semibold" mb={4}>
                 {memberName}

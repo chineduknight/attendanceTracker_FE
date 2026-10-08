@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Input, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Input, Button, Field, Dialog, Portal } from "@chakra-ui/react";
 import {
   useQueryWrapper, postRequest, putRequest, useMutationWrapper, queryClient,
 } from "services/api/apiHelper";
@@ -58,8 +58,8 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
-            <Dialog.Header>{isEdit ? "Edit role" : "Create role"}</Dialog.Header>
-            <Dialog.CloseTrigger />
+            <Dialog.Header><Dialog.Title>{isEdit ? "Edit role" : "Create role"}</Dialog.Title></Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
             <Dialog.Body>
               <Field.Root invalid={nameInvalid} mb={4}>
                 <Field.Label>Role name</Field.Label>

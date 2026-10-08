@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  CloseButton,
   Button,
   Flex,
   Input,
@@ -312,10 +313,10 @@ const WelfareFollowUpDialog = ({
           <Dialog.Backdrop />
           <Dialog.Positioner>
             <Dialog.Content>
-              <Dialog.Header>
+              <Dialog.Header><Dialog.Title>
                 {isEdit ? "Edit welfare follow-up" : "Add welfare follow-up"}
-              </Dialog.Header>
-              <Dialog.CloseTrigger />
+              </Dialog.Title></Dialog.Header>
+              <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
               <Dialog.Body>
                 <Stack gap={4}>
                   <Field.Root

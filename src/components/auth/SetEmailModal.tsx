@@ -31,7 +31,7 @@ const SetEmailModal = () => {
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
-            <Dialog.Header>Add your email</Dialog.Header>
+            <Dialog.Header><Dialog.Title>Add your email</Dialog.Title></Dialog.Header>
             <form onSubmit={handleSubmit(onSubmit)}>
               <Dialog.Body>
                 <Text mb={3} fontSize="sm" color="gray.600">

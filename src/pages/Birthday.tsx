@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useColorModeValue } from "components/ui/color-mode";
 import {
+  CloseButton,
   Box,
   Button,
   Drawer,
@@ -541,8 +542,8 @@ const Birthday: React.FC = () => {
           <Drawer.Backdrop />
           <Drawer.Positioner>
             <Drawer.Content borderTopRadius="xl">
-              <Drawer.CloseTrigger />
-              <Drawer.Header>Share Birthdays</Drawer.Header>
+              <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+              <Drawer.Header><Drawer.Title>Share Birthdays</Drawer.Title></Drawer.Header>
               <Drawer.Body pb={8}>
                 <VStack gap={3}>
                   <Button

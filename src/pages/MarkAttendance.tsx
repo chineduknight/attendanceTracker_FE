@@ -1,4 +1,4 @@
-import {
+import { CloseButton,
   Box,
   Flex,
   Text,
@@ -796,8 +796,8 @@ const MarkAttendanceSession = () => {
             <Drawer.Backdrop />
             <Drawer.Positioner>
               <Drawer.Content>
-                <Drawer.CloseTrigger />
-                <Drawer.Header>{`${terms.attendanceSingular} details`}</Drawer.Header>
+                <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+                <Drawer.Header><Drawer.Title>{`${terms.attendanceSingular} details`}</Drawer.Title></Drawer.Header>
                 <Drawer.Body>
                   <AttendanceDetailsForm
                     value={details}

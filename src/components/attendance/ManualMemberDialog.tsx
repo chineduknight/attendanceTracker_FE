@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, NativeSelect, Text, Textarea, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Button, NativeSelect, Text, Textarea, Field, Dialog, Portal } from "@chakra-ui/react";
 import ReactSelect, { SingleValue } from "react-select";
 import { AttendanceStatusConfig } from "helpers/attendanceStatuses";
 import {
@@ -58,8 +58,8 @@ const ManualMemberForm = ({
 
   return (
     <>
-      <Dialog.Header>{`Add ${member} to this ${session}`}</Dialog.Header>
-      <Dialog.CloseTrigger disabled={isSaving} />
+      <Dialog.Header><Dialog.Title>{`Add ${member} to this ${session}`}</Dialog.Title></Dialog.Header>
+      <Dialog.CloseTrigger asChild><CloseButton size="sm" disabled={isSaving} /></Dialog.CloseTrigger>
       <Dialog.Body>
         <Text mb={2}>
           {`Use this only when the ${member} was not expected for this ${session} but physically attended.`}

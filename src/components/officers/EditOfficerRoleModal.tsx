@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
 import { useQueryWrapper, patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -42,8 +42,8 @@ const EditOfficerRoleModal = ({ organisationId, officer, onClose }: Props) => {
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
-            <Dialog.Header>Change role — {officer?.username}</Dialog.Header>
-            <Dialog.CloseTrigger />
+            <Dialog.Header><Dialog.Title>Change role — {officer?.username}</Dialog.Title></Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
             <Dialog.Body>
               <Field.Root>
                 <Field.Label>Role</Field.Label>

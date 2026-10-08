@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Button, Dialog, Portal } from "@chakra-ui/react";
 import { useQueryWrapper, patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -50,8 +50,8 @@ const EditOfficerPermissionsModal = ({ organisationId, officer, onClose }: Props
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
-            <Dialog.Header>Permissions — {officer?.username}</Dialog.Header>
-            <Dialog.CloseTrigger />
+            <Dialog.Header><Dialog.Title>Permissions — {officer?.username}</Dialog.Title></Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
             <Dialog.Body>
               {catalog && (
                 <PermissionGrid areas={catalog.areas} value={selected} onChange={setSelected} />
