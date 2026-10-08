@@ -48,6 +48,7 @@ import { MemberRecord, useMembers } from "hooks/useMembers";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { memberFieldLabeler } from "helpers/memberFields";
 import LoadingSpinner from "components/LoadingSpinner";
+import TruncatedText from "components/TruncatedText";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
 import { LABELS } from "config/presentationLabels";
@@ -642,9 +643,9 @@ const ViewMembers: React.FC = () => {
                                       {value}
                                     </Badge>
                                   ) : (
-                                    <Text fontSize="sm" wordBreak="break-word">
+                                    <TruncatedText fontSize="sm">
                                       {value}
-                                    </Text>
+                                    </TruncatedText>
                                   )}
                                 </Box>
                               );
