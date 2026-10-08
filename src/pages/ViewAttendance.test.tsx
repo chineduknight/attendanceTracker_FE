@@ -588,6 +588,22 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
   });
 
+  it("clears the search with one tap and brings the full roster back", async () => {
+    setup(["attendance.view"]);
+    await renderPage();
+    const search = screen.getByPlaceholderText("Search member");
+    fireEvent.change(search, { target: { value: "Zara" } });
+    expect(screen.queryByText("Tolu")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(search).toHaveValue("");
+    expect(screen.getByText("Tolu")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Clear search" })
+    ).not.toBeInTheDocument();
+  });
+
   it("explains the one-session semantics and lists only off-roster candidates", async () => {
     setup(MANAGER);
     await renderPage();

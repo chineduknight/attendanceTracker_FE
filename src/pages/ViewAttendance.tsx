@@ -8,6 +8,9 @@ import {
   Heading,
   InputGroup,
   InputLeftElement,
+  InputRightElement,
+  IconButton,
+  Icon,
   Container,
 } from "@chakra-ui/react";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
@@ -25,7 +28,14 @@ import {
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
 import LoadingSpinner from "components/LoadingSpinner";
-import { FaFileExcel, FaShareAlt, FaTrash, FaUserPlus } from "react-icons/fa";
+import {
+  FaFileExcel,
+  FaSearch,
+  FaShareAlt,
+  FaTrash,
+  FaUserPlus,
+} from "react-icons/fa";
+import { FiX } from "react-icons/fi";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
@@ -366,8 +376,10 @@ const Attendance = () => {
       ],
     });
   };
+  const pageBg = useColorModeValue("gray.50", "gray.800");
+
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+    <Box minH={"100vh"} bg={pageBg}>
       <Container>
         {isLoadingAttendance ? (
           <LoadingSpinner
@@ -376,30 +388,36 @@ const Attendance = () => {
           />
         ) : (
           <>
-            <Flex mt="4" justifyContent="flex-end">
-              <Flex gap={2}>
-                <Button
-                  onClick={handleSendToWhatsapp}
-                  leftIcon={<FaShareAlt />}
-                >
-                  Share
-                </Button>
-                <Button
-                  onClick={sendToExcel}
-                  isLoading={isFetching}
-                  leftIcon={<FaFileExcel />}
-                  bg="green.500"
-                  color="white"
-                  _hover={{ bg: "green.600" }}
-                >
-                  Export to Excel
-                </Button>
-              </Flex>
-            </Flex>
-
-            <Flex mt="4" alignItems="center" justifyContent="space-between">
-              <Heading fontSize="22px">{attendanceInfo?.name}</Heading>
-              <Text>{formattedDate}</Text>
+            {/* Title first, date beneath it, so a long session name never
+                collides with the date on a narrow screen. */}
+            <Box mt="4">
+              <Heading fontSize="22px" noOfLines={2}>
+                {attendanceInfo?.name}
+              </Heading>
+              <Text color="gray.600" mt={1}>
+                {formattedDate}
+              </Text>
+            </Box>
+            {/* Sharing the session just marked is the page's main job, so
+                Share leads as the solid action; Excel export is secondary. */}
+            <Flex mt="3" gap={2}>
+              <Button
+                flex="1"
+                onClick={handleSendToWhatsapp}
+                leftIcon={<FaShareAlt />}
+              >
+                Share
+              </Button>
+              <Button
+                flex="1"
+                onClick={sendToExcel}
+                isLoading={isFetching}
+                leftIcon={<FaFileExcel />}
+                variant="outline"
+                colorScheme="green"
+              >
+                Export to Excel
+              </Button>
             </Flex>
             {attendanceInfo && (
               <ExpectedRosterSummary
@@ -437,24 +455,17 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
-              <InputGroup>
-                <InputLeftElement pointerEvents="none" />
-                <Input
-                  type="search"
-                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-                  onChange={handleSearch}
-                />
-              </InputGroup>
-              <Box minW={{ base: "100%", sm: "200px" }}>
+            {/* Side by side even on a phone: each filter takes half the width,
+                so the placeholders stay short while aria-labels keep the
+                full wording. */}
+            <Flex mt="4" gap={2}>
+              <Box flex="1" minW={0}>
                 <ReactSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
                   )} status`}
-                  placeholder={`Filter by ${lowerTerm(
-                    terms.attendanceSingular,
-                  )}`}
+                  placeholder={`${terms.attendanceSingular} status`}
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
                   closeMenuOnSelect={false}
@@ -466,11 +477,11 @@ const Attendance = () => {
                   }
                 />
               </Box>
-              <Box minW={{ base: "100%", sm: "200px" }}>
+              <Box flex="1" minW={0}>
                 <ReactSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
-                  placeholder={`Filter by ${lowerTerm(terms.memberSingular)} status`}
+                  placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
                   closeMenuOnSelect={false}
@@ -483,6 +494,42 @@ const Attendance = () => {
                 />
               </Box>
             </Flex>
+            <StatusCountSummary counts={filteredCounts} />
+            {/* Only the search bar is pinned: with the phone keyboard open,
+                anything taller would squeeze the results it is filtering. */}
+            <Box
+              position="sticky"
+              top={0}
+              zIndex="sticky"
+              bg={pageBg}
+              mx={-4}
+              px={4}
+              py={2}
+              mt="2"
+            >
+              <InputGroup>
+                <InputLeftElement pointerEvents="none">
+                  <Icon as={FaSearch} color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  type="text"
+                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+                  value={searchQuery}
+                  onChange={handleSearch}
+                />
+                {searchQuery && (
+                  <InputRightElement>
+                    <IconButton
+                      aria-label="Clear search"
+                      icon={<FiX />}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSearchQuery("")}
+                    />
+                  </InputRightElement>
+                )}
+              </InputGroup>
+            </Box>
             {filteredMembers.length === 0 && (
               <Box mt="4">
                 <Text ml="4" fontWeight="bold">
@@ -490,8 +537,8 @@ const Attendance = () => {
                 </Text>
               </Box>
             )}
-            <StatusCountSummary counts={filteredCounts} />
-            <Box mt="4" overflow="scroll" maxH="500px">
+            {/* The roster scrolls with the page rather than in a nested box. */}
+            <Box>
               {filteredMembers.map((item) => (
                 <AttendanceMemberRow
                   key={item.memberId}
