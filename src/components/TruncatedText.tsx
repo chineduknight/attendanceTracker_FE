@@ -7,8 +7,12 @@ interface TruncatedTextProps extends Omit<TextProps, "children" | "noOfLines"> {
 
 /**
  * One line with an ellipsis. Only when the text actually overflows does it
- * become a button that expands to the full value on tap (phones have no
+ * act as a button that expands to the full value on tap (phones have no
  * hover for a tooltip); short values stay plain text.
+ *
+ * The element is always the same <p>: swapping it for a <button> once an
+ * overflow is measured detached the observed node, whose 0-width resize
+ * then reported "fits" and flipped the toggle straight back off.
  */
 const TruncatedText = ({ children, ...textProps }: TruncatedTextProps) => {
   const ref = useRef<HTMLParagraphElement>(null);
@@ -17,6 +21,7 @@ const TruncatedText = ({ children, ...textProps }: TruncatedTextProps) => {
 
   useLayoutEffect(() => {
     const element = ref.current;
+    // Expanded text wraps, so it never overflows; keep the last verdict.
     if (!element || isExpanded) return;
     const measure = () =>
       setIsOverflowing(element.scrollWidth > element.clientWidth);
@@ -28,6 +33,7 @@ const TruncatedText = ({ children, ...textProps }: TruncatedTextProps) => {
     return () => observer.disconnect();
   }, [children, isExpanded]);
 
+  const toggle = () => setIsExpanded((expanded) => !expanded);
   const isToggle = isOverflowing || isExpanded;
   return (
     <Text
@@ -42,14 +48,17 @@ const TruncatedText = ({ children, ...textProps }: TruncatedTextProps) => {
             textOverflow: "ellipsis",
           })}
       {...(isToggle && {
-        as: "button",
-        type: "button",
-        display: "block",
-        w: "full",
-        textAlign: "left",
+        role: "button",
+        tabIndex: 0,
         cursor: "pointer",
         "aria-expanded": isExpanded,
-        onClick: () => setIsExpanded((expanded) => !expanded),
+        onClick: toggle,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+          }
+        },
       })}
     >
       {children}
