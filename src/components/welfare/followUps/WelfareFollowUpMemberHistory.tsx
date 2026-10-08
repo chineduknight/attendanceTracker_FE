@@ -60,7 +60,12 @@ const WelfareFollowUpMemberHistory = ({
   const memberName = request.memberName ?? `member ${request.memberId}`;
 
   return (
-    <Drawer isOpen onClose={onClose} placement="right" size="md">
+    <Drawer
+      isOpen
+      onClose={onClose}
+      placement="right"
+      size={{ base: "full", md: "md" }}
+    >
       <DrawerOverlay />
       <DrawerContent>
         <DrawerCloseButton />

@@ -39,8 +39,9 @@ const WelfareFollowUpHistory = ({
             </Text>
             {canManage && (
               <Button
-                size="xs"
+                size={{ base: "sm", md: "xs" }}
                 variant="outline"
+                flexShrink={0}
                 onClick={() => onReopen(record)}
                 isDisabled={isSaving}
               >

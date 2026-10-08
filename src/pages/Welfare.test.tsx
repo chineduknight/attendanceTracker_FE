@@ -291,12 +291,14 @@ describe("<Welfare>", () => {
     expect(
       screen.getByText("2 consecutive unexplained absences"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Previous: 100%")).toBeInTheDocument();
-    expect(screen.getByText("Recent: 50%")).toBeInTheDocument();
-    expect(screen.getByText("↓ 50 percentage points")).toBeInTheDocument();
-    expect(screen.getByText("3 Present")).toBeInTheDocument();
-    expect(screen.getByText("1 Excused")).toBeInTheDocument();
-    expect(screen.getByText("2 Absent")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Physical presence: previous 100% → recent 50% (↓ 50 pts)",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Recent: 3 Present · 1 Excused · 2 Absent"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Last present: 28 Sep")).toBeInTheDocument();
   });
 
@@ -330,7 +332,7 @@ describe("<Welfare>", () => {
       within(encouragement).getByText("Physical presence improved"),
     ).toBeInTheDocument();
     expect(
-      within(encouragement).getByText("↑ 50 percentage points"),
+      within(encouragement).getByText(/\(↑ 50 pts\)$/),
     ).toBeInTheDocument();
     expect(within(encouragement).queryByText(/score/i)).not.toBeInTheDocument();
   });

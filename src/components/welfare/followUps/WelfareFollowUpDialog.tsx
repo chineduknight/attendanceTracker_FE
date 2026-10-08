@@ -302,7 +302,15 @@ const WelfareFollowUpDialog = ({
 
   return (
     <>
-      <Modal isOpen onClose={onClose} isCentered size="lg">
+      {/* Full screen on phones with the footer pinned, so Save stays
+          reachable above the keyboard and the long form scrolls inside. */}
+      <Modal
+        isOpen
+        onClose={onClose}
+        isCentered
+        size={{ base: "full", md: "lg" }}
+        scrollBehavior="inside"
+      >
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>
@@ -509,12 +517,20 @@ const WelfareFollowUpDialog = ({
             </Stack>
           </ModalBody>
           <ModalFooter>
-            <Flex width="100%" align="center" gap={3}>
+            {/* Stacked on phones (Save on top): three buttons need ~350px
+                and would overflow a 375px screen in a row. */}
+            <Flex
+              width="100%"
+              direction={{ base: "column-reverse", md: "row" }}
+              align={{ base: "stretch", md: "center" }}
+              justify={{ md: "flex-end" }}
+              gap={3}
+            >
               {isEdit && (
                 <Button
                   colorScheme="red"
                   variant="outline"
-                  mr="auto"
+                  mr={{ base: 0, md: "auto" }}
                   onClick={() => setArchiveOpen(true)}
                   isDisabled={isSaving}
                 >

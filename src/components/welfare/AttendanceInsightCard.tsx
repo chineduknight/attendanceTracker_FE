@@ -7,6 +7,7 @@ import {
   Link,
   List,
   ListItem,
+  Stack,
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
@@ -57,6 +58,27 @@ const dateLabel = (value: string): string => {
 
 const percent = (value: number): string => `${value}%`;
 
+/** Both periods on one line; the words keep it readable without the arrow. */
+const presenceSummary = (
+  insight: WelfareInsight,
+  withChange: boolean,
+): string => {
+  const base = `Physical presence: previous ${percent(
+    insight.previous.presenceRate,
+  )} → recent ${percent(insight.recent.presenceRate)}`;
+  const change = insight.presenceChangePoints;
+  if (!withChange || change == null) return base;
+  return `${base} (${change < 0 ? "↓" : "↑"} ${Math.abs(change)} pts)`;
+};
+
+const recentCounts = (insight: WelfareInsight): string =>
+  `Recent: ${(["present", "excused", "absent"] as const)
+    .map(
+      (behavior) =>
+        `${insight.recent[behavior]} ${BEHAVIOR_META[behavior].label}`,
+    )
+    .join(" · ")}`;
+
 /** Why the member appears. Signal keys come from the backend untouched. */
 const attentionReasons = (insight: WelfareInsight): string[] => {
   const reasons: string[] = [];
@@ -104,7 +126,6 @@ const AttendanceInsightCard = ({
   const reasons = reasonsFor(insight, variant);
   const memberName =
     insight.name ?? `Unknown ${lowerTerm(terms.memberSingular)}`;
-  const change = insight.presenceChangePoints;
   const followUpBadge =
     openFollowUpCount && openFollowUpCount > 0
       ? openFollowUpCount === 1
@@ -127,18 +148,24 @@ const AttendanceInsightCard = ({
       aria-label={memberName}
       borderWidth="1px"
       borderRadius="lg"
-      p={4}
+      p={{ base: 3, md: 4 }}
       bg={cardBg}
       h="full"
     >
       <Flex
-        align="center"
+        align="flex-start"
         justify="space-between"
         gap={2}
         mb={reasons.length ? 2 : 3}
       >
-        <Heading size="sm">{memberName}</Heading>
-        <Badge colorScheme={colorScheme}>{label}</Badge>
+        {/* Names wrap rather than truncate so the officer always knows who
+            the card is about; the badge never shrinks. */}
+        <Heading size="sm" minW={0} overflowWrap="anywhere">
+          {memberName}
+        </Heading>
+        <Badge colorScheme={colorScheme} flexShrink={0}>
+          {label}
+        </Badge>
       </Flex>
 
       {(followUpLogged || followUpBadge) && (
@@ -160,65 +187,23 @@ const AttendanceInsightCard = ({
         </List>
       )}
 
-      {variant === "communicated" ? (
-        <Box mb={3}>
-          <Text fontSize="sm">
-            {`Previous presence: ${percent(insight.previous.presenceRate)}`}
-          </Text>
-          <Text fontSize="sm">
-            {`Recent presence: ${percent(insight.recent.presenceRate)}`}
-          </Text>
-        </Box>
-      ) : (
-        <Box mb={3}>
-          <Text fontWeight="semibold">Physical presence</Text>
-          <Text fontSize="sm">
-            {`Previous: ${percent(insight.previous.presenceRate)}`}
-          </Text>
-          <Text fontSize="sm">
-            {`Recent: ${percent(insight.recent.presenceRate)}`}
-          </Text>
-          {change != null && (
-            <Text fontSize="sm" fontWeight="medium">
-              {`${change < 0 ? "↓" : "↑"} ${Math.abs(
-                change,
-              )} percentage points`}
-            </Text>
-          )}
-        </Box>
-      )}
-
-      <Box mb={3}>
-        <Text fontWeight="semibold">Recent</Text>
-        <List spacing={0}>
-          {(["present", "excused", "absent"] as const).map((behavior) => (
-            <ListItem key={behavior}>
-              <Text fontSize="sm">
-                {`${insight.recent[behavior]} ${BEHAVIOR_META[behavior].label}`}
-              </Text>
-            </ListItem>
-          ))}
-        </List>
-      </Box>
-
-      {variant === "attention" && insight.lastPresentDate && (
-        <Text fontSize="sm" mb={3}>
-          {`Last present: ${dateLabel(insight.lastPresentDate)}`}
-        </Text>
-      )}
-
-      {variant === "communicated" && (
-        <Box mb={3}>
-          <Text fontSize="sm">
+      <Stack spacing={1} fontSize="sm" mb={3}>
+        <Text>{presenceSummary(insight, variant !== "communicated")}</Text>
+        <Text>{recentCounts(insight)}</Text>
+        {variant === "attention" && insight.lastPresentDate && (
+          <Text>{`Last present: ${dateLabel(insight.lastPresentDate)}`}</Text>
+        )}
+        {variant === "communicated" && (
+          <Text>
             {`Attendance Rate: ${percent(insight.recent.attendanceRate)}`}
           </Text>
-          {insight.recent.absent === 0 && insight.recent.excused > 0 && (
-            <Text fontSize="sm" color="gray.500">
-              The missed sessions were excused.
-            </Text>
+        )}
+        {variant === "communicated" &&
+          insight.recent.absent === 0 &&
+          insight.recent.excused > 0 && (
+            <Text color="gray.500">The missed sessions were excused.</Text>
           )}
-        </Box>
-      )}
+      </Stack>
 
       <Flex justify="space-between" align="center" gap={2} wrap="wrap">
         <Link
@@ -226,11 +211,16 @@ const AttendanceInsightCard = ({
           to={`${analyticsPath}?${analyticsQuery}`}
           color="blue.500"
           fontWeight="medium"
+          py={2}
         >
           {`View ${lowerTerm(terms.attendanceSingular)} history`}
         </Link>
         {onAddFollowUp && (
-          <Button size="xs" variant="outline" onClick={onAddFollowUp}>
+          <Button
+            size={{ base: "sm", md: "xs" }}
+            variant="outline"
+            onClick={onAddFollowUp}
+          >
             {followUpLogged ? "Add another follow-up" : "Add follow-up"}
           </Button>
         )}
