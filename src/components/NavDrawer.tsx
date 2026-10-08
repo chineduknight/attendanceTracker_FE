@@ -2,7 +2,6 @@ import { CloseButton,
   Drawer,
   Box,
   Text,
-  Avatar,
   Badge,
   VStack,
   Button,
@@ -11,6 +10,7 @@ import { CloseButton,
   Separator,
   Portal,
 } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { FaArrowLeft, FaKey, FaSignOutAlt, FaTachometerAlt } from "react-icons/fa";
 import { IconType } from "react-icons";
 import { useNavigate } from "react-router-dom";
@@ -75,7 +75,7 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
               <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
               <Drawer.Body p={0}>
                 <Box bg="primary" color="#fff" p={4} pt={10}>
-                  <Avatar.Root size="md" mb={2}><Avatar.Fallback name={user.username} /></Avatar.Root>
+                  <NameAvatar size="md" mb={2} name={user.username} />
                   <Text fontWeight="bold" lineClamp={1}>
                     {user.username || "Account"}
                   </Text>

@@ -1,4 +1,5 @@
-import { Flex, Text, IconButton, Avatar, useDisclosure } from "@chakra-ui/react";
+import { Flex, Text, IconButton, useDisclosure } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { FaBars, FaArrowCircleLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import NavDrawer from "components/NavDrawer";
@@ -48,11 +49,11 @@ const AppHeader = ({ title, showBack = true }: AppHeaderProps) => {
         </Text>
       </Flex>
 
-      <Avatar.Root
+      <NameAvatar
         size="sm"
         aria-label="Account menu"
         cursor="pointer"
-        onClick={drawer.onOpen}><Avatar.Fallback name={username} /></Avatar.Root>
+        onClick={drawer.onOpen} name={username} />
 
       <NavDrawer isOpen={drawer.open} onClose={drawer.onClose} />
     </Flex>

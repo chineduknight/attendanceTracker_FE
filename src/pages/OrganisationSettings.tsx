@@ -6,12 +6,12 @@ import {
   Button,
   Stack,
   Input,
-  Avatar,
   Heading,
   Text,
   Separator,
   Field,
 } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { useForm } from "react-hook-form";
 import { FormSwitch } from "components/ui/switch";
 import { toast } from "react-toastify";
@@ -239,11 +239,11 @@ const OrganisationSettings = () => {
                 <Field.Root invalid={Boolean(errors.image)}>
                   <Field.Label>Logo URL</Field.Label>
                   <Flex align="center" gap={3}>
-                    <Avatar.Root
+                    <NameAvatar
                       size="md"
                       bg={watch("image") ? "white" : undefined}
                       borderWidth="2px"
-                      borderColor="blue.400"><Avatar.Fallback name={watch("name")} /><Avatar.Image src={watch("image")} /></Avatar.Root>
+                      borderColor="blue.400" name={watch("name")} src={watch("image")} />
                     <Input
                       placeholder="https://cdn.example.com/logo.png"
                       {...register("image", {

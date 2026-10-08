@@ -6,7 +6,6 @@ import {
   Heading,
   SimpleGrid,
   Stack,
-  Avatar,
   Input,
   Button,
   Checkbox,
@@ -19,6 +18,7 @@ import {
   useDisclosure,
   Portal,
 } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
@@ -445,7 +445,7 @@ const ViewMembers: React.FC = () => {
                     <Stack gap={4}>
                       <Flex justify="space-between" alignItems="center">
                         <Flex align="center">
-                          <Avatar.Root size="md" mr={3}><Avatar.Fallback name={member.name} /><Avatar.Image src={member.avatarUrl} /></Avatar.Root>
+                          <NameAvatar size="md" mr={3} name={member.name} src={member.avatarUrl} />
                           <Text fontWeight="bold">{member.name}</Text>
                         </Flex>
                         <Can perm="members.manage">

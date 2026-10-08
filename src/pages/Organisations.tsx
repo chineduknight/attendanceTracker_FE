@@ -1,4 +1,5 @@
-import { Box, Flex, Button, Text, Stack, Avatar, Badge } from "@chakra-ui/react";
+import { Box, Flex, Button, Text, Stack, Badge } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { useColorModeValue } from "components/ui/color-mode";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -100,14 +101,14 @@ const OrgList = () => {
                 }}
               >
                 <Flex alignItems="center">
-                  <Avatar.Root
+                  <NameAvatar
                     w="45px"
                     h="45px"
                     // Neutral backing for logos with transparency, so Chakra's
                     // name-derived colour doesn't show through the image.
                     bg={org.image ? "white" : undefined}
                     borderWidth="2px"
-                    borderColor="blue.400"><Avatar.Fallback name={org.name} /><Avatar.Image src={org.image} /></Avatar.Root>
+                    borderColor="blue.400" name={org.name} src={org.image} />
                   <Text ml="4" textAlign="left">
                     {" "}
                     {org.name}
