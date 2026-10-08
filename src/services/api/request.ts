@@ -69,6 +69,7 @@ export const financeRequest = {
   COMPLIANCE_EXPORT_PDF:
     "/finance/:organisationId/obligations/:id/compliance/export/pdf",
   FINANCIAL_START_DATE: "/finance/members/:memberId/financial-start-date",
+  BULK_FINANCIAL_START_DATE: "/finance/:organisationId/members/financial-start-date",
 };
 
 export const rbacRequest = {

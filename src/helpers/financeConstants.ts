@@ -19,17 +19,35 @@ export const MONTHS: { value: number; label: string }[] = [
   { value: 12, label: "Dec" },
 ];
 
-const STATUS_COLORS: Record<MonthStatus, string> = {
-  paid: "green.100",
-  partial: "yellow.100",
-  unpaid: "red.100",
-  "not-due": "gray.100",
+/**
+ * Colour scheme + words for each month/overall status. Colour is never the
+ * only signal: every place that paints a status also renders or announces
+ * its label.
+ */
+export const STATUS_META: Record<MonthStatus, { label: string; scheme: string }> = {
+  paid: { label: "Paid", scheme: "green" },
+  partial: { label: "Part paid", scheme: "orange" },
+  unpaid: { label: "Unpaid", scheme: "red" },
+  "not-due": { label: "Not due", scheme: "gray" },
 };
 
-export function monthStatusColor(status: MonthStatus): string {
-  return STATUS_COLORS[status] ?? "gray.100";
+export function statusMeta(status: MonthStatus) {
+  return STATUS_META[status] ?? STATUS_META["not-due"];
 }
 
+/**
+ * Naira with kobo only when there are any: "₦751,000" rather than
+ * "₦751,000.00", so long figures fit a phone-width row.
+ */
 export function formatMoney(value: number): string {
-  return String(formatAmount(value ?? 0, DEFAULT_COUNTRY, DEFAULT_CURRENCY));
+  const amount = value ?? 0;
+  if (!Number.isInteger(amount)) {
+    return String(formatAmount(amount, DEFAULT_COUNTRY, DEFAULT_CURRENCY));
+  }
+  return new Intl.NumberFormat(`en-${DEFAULT_COUNTRY}`, {
+    style: "currency",
+    currency: DEFAULT_CURRENCY,
+    currencyDisplay: "symbol",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }

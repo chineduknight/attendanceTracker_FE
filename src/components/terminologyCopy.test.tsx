@@ -7,10 +7,11 @@ import theme from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { DEFAULT_TERMINOLOGY, OrganisationTerminology } from "helpers/organisationPresentation";
-import AccountabilityTab from "components/finance/AccountabilityTab";
-import ComplianceTab from "components/finance/ComplianceTab";
+import StartDatesTab from "components/finance/StartDatesTab";
+import CollectTab from "components/finance/CollectTab";
 import PendingInvitesTab from "components/officers/PendingInvitesTab";
 import QuickMarkToolbar from "components/attendance/QuickMarkToolbar";
+import { Obligation } from "components/finance/financeTypes";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn(), info: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -59,19 +60,24 @@ describe("terminology in finance and officer copy", () => {
   });
 
   it.each([
-    [DEFAULT_TERMINOLOGY, "Member accountability"],
-    [SCHOOL, "Student accountability"],
-  ])("titles finance accountability with the member term", async (terms, heading) => {
-    renderWithTerms(<AccountabilityTab organisationId="org1" prefillMemberId="" />, terms);
+    [DEFAULT_TERMINOLOGY, "Member start dates"],
+    [SCHOOL, "Student start dates"],
+  ])("titles finance start dates with the member term", async (terms, heading) => {
+    renderWithTerms(<StartDatesTab organisationId="org1" />, terms);
     expect(await screen.findByText(heading)).toBeInTheDocument();
   });
 
   it.each([
-    [DEFAULT_TERMINOLOGY, "No members match your search or filter."],
-    [SCHOOL, "No students match your search or filter."],
-  ])("uses the member plural in the compliance empty state", async (terms, message) => {
+    [DEFAULT_TERMINOLOGY, "No members yet."],
+    [SCHOOL, "No students yet."],
+  ])("uses the member plural in the collect empty state", async (terms, message) => {
     renderWithTerms(
-      <ComplianceTab organisationId="org1" obligationId="ob1" onSetStartDate={jest.fn()} />,
+      <CollectTab
+        organisationId="org1"
+        obligations={[EMPTY_COMPLIANCE.obligation as Obligation]}
+        obligationId="ob1"
+        onObligationChange={jest.fn()}
+      />,
       terms,
     );
     expect(await screen.findByText(message)).toBeInTheDocument();

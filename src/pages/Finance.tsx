@@ -1,63 +1,101 @@
 import { useState } from "react";
 import {
   Box,
-  Tabs,
-  TabList,
-  TabPanels,
+  Button,
+  Center,
+  Spinner,
+  Stack,
   Tab,
+  TabList,
   TabPanel,
+  TabPanels,
+  Tabs,
+  Text,
   useColorModeValue,
 } from "@chakra-ui/react";
+import CollectTab from "components/finance/CollectTab";
 import ObligationsTab from "components/finance/ObligationsTab";
-import ComplianceTab from "components/finance/ComplianceTab";
-import PaymentsTab from "components/finance/PaymentsTab";
-import AccountabilityTab from "components/finance/AccountabilityTab";
+import StartDatesTab from "components/finance/StartDatesTab";
+import { defaultObligationId } from "helpers/financeCompliance";
+import { useObligations } from "hooks/useFinance";
+import { usePermissions } from "rbac/usePermissions";
 import useGlobalStore from "zStore";
 
+const TABS = ["Collect", "Obligations", "Start dates"] as const;
+const COLLECT = 0;
+const OBLIGATIONS = 1;
+
 const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
-  const [selectedObligationId, setSelectedObligationId] = useState<string>("");
-  const [tabIndex, setTabIndex] = useState<number>(0);
-  const [prefillMemberId, setPrefillMemberId] = useState<string>("");
+  const canManage = usePermissions().has("finance.manage");
+  const [tabIndex, setTabIndex] = useState(COLLECT);
+  const [chosenId, setChosenId] = useState("");
+  const { obligations, isLoading } = useObligations(organisationId);
+  const tabBg = useColorModeValue("white", "gray.700");
+  const tabColor = useColorModeValue("gray.600", "gray.200");
+
+  // A chosen obligation that has since been deleted falls back to the default.
+  const obligationId = obligations.some((o) => o.id === chosenId)
+    ? chosenId
+    : defaultObligationId(obligations);
+
+  const collect = () => {
+    if (isLoading) {
+      return (
+        <Center py={10}>
+          <Spinner />
+        </Center>
+      );
+    }
+    if (!obligations.length) {
+      return (
+        <Stack align="center" textAlign="center" py={10} spacing={3}>
+          <Text fontWeight="semibold">Nothing to collect yet</Text>
+          <Text fontSize="sm" color="gray.500">
+            Set up monthly dues or a one-off levy first.
+          </Text>
+          {canManage && (
+            <Button colorScheme="teal" onClick={() => setTabIndex(OBLIGATIONS)}>
+              Set up an obligation
+            </Button>
+          )}
+        </Stack>
+      );
+    }
+    return (
+      <CollectTab
+        organisationId={organisationId}
+        obligations={obligations}
+        obligationId={obligationId}
+        onObligationChange={setChosenId}
+      />
+    );
+  };
 
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Box p={4}>
-        <Tabs index={tabIndex} onChange={setTabIndex} variant="enclosed" colorScheme="green">
-          <TabList>
-            <Tab>Obligations</Tab>
-            <Tab>Compliance</Tab>
-            <Tab>Payments</Tab>
-            <Tab>Accountability</Tab>
+    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
+      <Box maxW="3xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
+        <Tabs index={tabIndex} onChange={setTabIndex} variant="soft-rounded" colorScheme="teal" isFitted isLazy>
+          <TabList bg={tabBg} borderWidth="1px" borderRadius="full" p={1} mb={4}>
+            {TABS.map((label) => (
+              <Tab key={label} fontSize="sm" px={2} py={1.5} color={tabColor}>
+                {label}
+              </Tab>
+            ))}
           </TabList>
           <TabPanels>
-            <TabPanel>
+            <TabPanel p={0}>{collect()}</TabPanel>
+            <TabPanel p={0}>
               <ObligationsTab
                 organisationId={organisationId}
-                selectedObligationId={selectedObligationId}
-                onSelectObligation={(id) => {
-                  setSelectedObligationId(id);
-                  setTabIndex(1);
+                obligations={obligations}
+                onOpen={(id) => {
+                  setChosenId(id);
+                  setTabIndex(COLLECT);
                 }}
               />
             </TabPanel>
-            <TabPanel>
-              <ComplianceTab
-                organisationId={organisationId}
-                obligationId={selectedObligationId}
-                onSetStartDate={(memberId) => {
-                  setPrefillMemberId(memberId);
-                  setTabIndex(3);
-                }}
-              />
-            </TabPanel>
-            <TabPanel>
-              <PaymentsTab organisationId={organisationId} />
-            </TabPanel>
-            <TabPanel>
-              <AccountabilityTab
-                organisationId={organisationId}
-                prefillMemberId={prefillMemberId}
-              />
+            <TabPanel p={0}>
+              <StartDatesTab organisationId={organisationId} />
             </TabPanel>
           </TabPanels>
         </Tabs>
@@ -69,8 +107,8 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
 /**
  * Finance owns no selection state itself: `FinanceWorkspace` is keyed by the
  * organisation id so switching organisations remounts it, clearing the
- * selected obligation, prefill member and tab index before Organisation B can
- * use an Organisation A id.
+ * chosen obligation, open member sheet, selections and tab before
+ * Organisation B can use an Organisation A id.
  */
 const Finance = () => {
   const [organisation] = useGlobalStore((s) => [s.organisation]);

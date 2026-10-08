@@ -152,12 +152,16 @@ export const queryKeys = {
     /** Prefix covering every compliance query for one organisation. */
     complianceRoot: (organisationId: string) =>
       ["finance", organisationId, "compliance"] as const,
-    compliance: (organisationId: string, obligationId: string) =>
-      ["finance", organisationId, "compliance", obligationId] as const,
+    /** `asOf` (YYYY-MM-DD) scopes the arrears figures to the officer's date. */
+    compliance: (organisationId: string, obligationId: string, asOf?: string) =>
+      asOf
+        ? (["finance", organisationId, "compliance", obligationId, asOf] as const)
+        : (["finance", organisationId, "compliance", obligationId] as const),
     complianceExport: (
       organisationId: string,
       obligationId: string,
       format: "excel" | "pdf",
+      asOf?: string,
     ) =>
       [
         "finance",
@@ -166,6 +170,7 @@ export const queryKeys = {
         obligationId,
         "export",
         format,
+        ...(asOf ? [asOf] : []),
       ] as const,
   },
 
