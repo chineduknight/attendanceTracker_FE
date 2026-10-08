@@ -56,11 +56,27 @@ export type BirthdayPreset =
 export const localBusinessDate = (date: Date = new Date()): string =>
   format(date, "yyyy-MM-dd");
 
-/** Compact range label, e.g. "7 Oct". */
+/** Compact range label for the screen, e.g. "7 Oct". */
 export const formatBirthdayRangeDate = (value: string): string => {
   const parsed = parseISO(value);
   return isValid(parsed) ? format(parsed, "d MMM") : value;
 };
+
+/**
+ * Range label for shared text, e.g. "1 Sep 2026". A shared message leaves
+ * the app and is read later, so it carries the year (production behaviour
+ * kept when main was reconciled into staging). Screen labels stay compact.
+ */
+export const formatBirthdayShareRangeDate = (value: string): string => {
+  const parsed = parseISO(value);
+  return isValid(parsed) ? format(parsed, "d MMM yyyy") : value;
+};
+
+/** Header line for shared birthday text, e.g. "🎂 Birthdays (1 Sep 2026 to 30 Sep 2026)". */
+export const birthdayShareHeader = (range: BirthdayRange): string =>
+  `🎂 Birthdays (${formatBirthdayShareRangeDate(range.fromDate)} to ${formatBirthdayShareRangeDate(
+    range.toDate,
+  )})`;
 
 /**
  * Full-date ranges for the proactive presets. `next7` and `next30` include

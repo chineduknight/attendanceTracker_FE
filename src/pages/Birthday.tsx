@@ -44,6 +44,7 @@ import {
   birthdayOccurrenceInRange,
   birthdayRangeForPreset,
   birthdayRelativeLabel,
+  birthdayShareHeader,
   formatBirthdayRangeDate,
   hasDobDateField,
   localBusinessDate,
@@ -351,9 +352,7 @@ const Birthday: React.FC = () => {
     );
 
   const buildShareText = () => {
-    const header = `🎂 Birthdays (${formatBirthdayRangeDate(
-      range.fromDate
-    )} to ${formatBirthdayRangeDate(range.toDate)})\n\n`;
+    const header = `${birthdayShareHeader(range)}\n\n`;
     const lines = list.members.map((member, index) => {
       const occurrence = birthdayOccurrenceInRange(member, range);
       const display = occurrence

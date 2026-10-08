@@ -5,6 +5,9 @@ import {
   birthdayOccurrenceInRange,
   birthdayRangeForPreset,
   birthdayRelativeLabel,
+  birthdayShareHeader,
+  formatBirthdayRangeDate,
+  formatBirthdayShareRangeDate,
   localBusinessDate,
   parseLegacyDob,
 } from "helpers/birthday";
@@ -142,5 +145,35 @@ describe("birthdayRangeForPreset", () => {
     expect(localBusinessDate(new Date("2026-10-07T15:00:00Z"))).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );
+  });
+});
+
+describe("shared birthday text", () => {
+  it("puts the year in the share header for a same-year range", () => {
+    expect(birthdayShareHeader({ fromDate: "2026-09-01", toDate: "2026-09-30" })).toBe(
+      "🎂 Birthdays (1 Sep 2026 to 30 Sep 2026)",
+    );
+  });
+
+  it("shows both years when the range crosses into a new year", () => {
+    expect(birthdayShareHeader({ fromDate: "2026-12-28", toDate: "2027-01-05" })).toBe(
+      "🎂 Birthdays (28 Dec 2026 to 5 Jan 2027)",
+    );
+  });
+
+  it("keeps the on-screen range label compact, without the year", () => {
+    expect(formatBirthdayRangeDate("2026-09-01")).toBe("1 Sep");
+    expect(formatBirthdayShareRangeDate("2026-09-01")).toBe("1 Sep 2026");
+  });
+
+  it("falls back to the stored value when a date can't be parsed", () => {
+    expect(formatBirthdayShareRangeDate("not-a-date")).toBe("not-a-date");
+  });
+
+  it("takes a shared row's weekday from the occurrence in the range, across years", () => {
+    const range = { fromDate: "2026-12-28", toDate: "2027-01-05" };
+    const occurrence = birthdayOccurrenceInRange({ dob: "1990-01-03" }, range);
+    expect(occurrence).toBe("2027-01-03");
+    expect(birthdayDisplayDate(occurrence as string)).toBe("Sun, 3 Jan");
   });
 });

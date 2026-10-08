@@ -493,10 +493,11 @@ describe("<Birthday> sharing and exports", () => {
     const url = String(open.mock.calls[0][0]);
     expect(url.startsWith("https://wa.me/?text=")).toBe(true);
     const text = decodeURIComponent(url.replace("https://wa.me/?text=", ""));
+    // Shared text carries the year; the on-screen range stays compact.
     expect(text).toContain(
-      `🎂 Birthdays (${format(new Date(), "d MMM")} to ${format(
+      `🎂 Birthdays (${format(new Date(), "d MMM yyyy")} to ${format(
         addDays(new Date(), 30),
-        "d MMM",
+        "d MMM yyyy",
       )})`,
     );
     expect(text).toContain(`1. Ada Okafor — ${displayAt(0)} (Today)`);
