@@ -145,6 +145,19 @@ describe("<MarkAttendance> with configured statuses", () => {
     expect(countText("Present")).toBe("Present: 0");
   });
 
+  it("steps the Submit bar aside while searching so the keyboard leaves room for results", async () => {
+    renderAt("/mark");
+    await screen.findByText("Ada");
+    const search = screen.getByPlaceholderText("Search member");
+    expect(screen.getByRole("button", { name: "Submit" })).toBeVisible();
+
+    fireEvent.focus(search);
+    expect(screen.queryByRole("button", { name: "Submit" })).not.toBeInTheDocument();
+
+    fireEvent.blur(search);
+    expect(screen.getByRole("button", { name: "Submit" })).toBeVisible();
+  });
+
   it("cycles through active statuses in configured order", async () => {
     renderAt("/mark");
     await screen.findByText("Ada");

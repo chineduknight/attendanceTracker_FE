@@ -38,15 +38,18 @@ import {
   isValidAvailabilityDate,
 } from "helpers/attendanceAvailability";
 import { lowerTerm, withArticle } from "helpers/organisationPresentation";
+import { todayBusinessDate } from "helpers/financeCompliance";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
-const EMPTY_DETAILS: AttendanceDetails = {
+// Most sessions are recorded on the day they happen, so start on today's
+// local business date; the officer can still pick any other date.
+const initialDetails = (): AttendanceDetails => ({
   name: "",
   categoryId: "",
   subCategoryId: "",
-  date: "",
-};
+  date: todayBusinessDate(),
+});
 
 const CreateAttendanceForm = ({
   organisationId,
@@ -74,7 +77,7 @@ const CreateAttendanceForm = ({
     isError: memberModelFailed,
   } = useMemberModel(organisationId, { enabled: eligibilityEnabled });
   const { members, isSuccess: membersLoaded } = useMembers(organisationId);
-  const [details, setDetails] = useState<AttendanceDetails>(EMPTY_DETAILS);
+  const [details, setDetails] = useState<AttendanceDetails>(initialDetails);
   const [eligibilityRules, setEligibilityRules] = useState<
     AttendanceEligibilityRule[]
   >([]);

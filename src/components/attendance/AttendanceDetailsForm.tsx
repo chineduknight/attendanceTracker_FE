@@ -1,4 +1,14 @@
-import { FormControl, FormLabel, Input, Select, Stack } from "@chakra-ui/react";
+import {
+  Box,
+  FormControl,
+  FormLabel,
+  Input,
+  Select,
+  Stack,
+} from "@chakra-ui/react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { format, isValid, parseISO } from "date-fns";
 import { CategoryType } from "hooks/useCategories";
 import { useTerms } from "hooks/useOrgPresentation";
 
@@ -23,13 +33,11 @@ const AttendanceDetailsForm = ({
   const terms = useTerms();
   const subCategories =
     categories.find((c) => c.id === value.categoryId)?.subCategories ?? [];
-  // Cap at the user's LOCAL calendar day. toISOString() would use the UTC day,
-  // which is already "tomorrow" for evening users in timezones behind UTC.
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
-    2,
-    "0",
-  )}-${String(now.getDate()).padStart(2, "0")}`;
+  // Sessions are recorded for today or the past, never the future. The cap is
+  // the user's LOCAL calendar day; the picker enforces it for typed dates too,
+  // which a native <input type="date" max> does not (and iOS ignores max).
+  const today = new Date();
+  const selectedDate = value.date ? parseISO(value.date) : null;
 
   return (
     <Stack spacing={4}>
@@ -79,12 +87,18 @@ const AttendanceDetailsForm = ({
 
       <FormControl id="date" isRequired>
         <FormLabel mb="0">Date</FormLabel>
-        <Input
-          type="date"
-          max={today}
-          value={value.date}
-          onChange={(e) => onChange({ ...value, date: e.target.value })}
-        />
+        <Box sx={{ ".react-datepicker-wrapper": { width: "100%" } }}>
+          <DatePicker
+            selected={selectedDate && isValid(selectedDate) ? selectedDate : null}
+            onChange={(date: Date | null) =>
+              onChange({ ...value, date: date ? format(date, "yyyy-MM-dd") : "" })
+            }
+            maxDate={today}
+            dateFormat="MMM d, yyyy"
+            placeholderText="Select date"
+            customInput={<Input />}
+          />
+        </Box>
       </FormControl>
     </Stack>
   );

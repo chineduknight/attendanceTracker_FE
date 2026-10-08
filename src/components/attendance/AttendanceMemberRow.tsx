@@ -44,35 +44,44 @@ const AttendanceMemberRow = ({
       display="block"
       w="full"
       h="auto"
-      minH="40px"
-      px="3"
+      minH="44px"
+      pl="4"
+      pr="2"
       border="1px solid"
       borderColor={isFilled ? solidColor(status.color) : "green"}
       bg={isFilled ? solidColor(status.color) : undefined}
       color={isFilled ? "white" : undefined}
       cursor={onToggle ? "pointer" : "default"}
     >
-      <Flex align="center" justify="space-between" gap={2} minH="38px">
-        <Text flex="1" textAlign="center" noOfLines={1}>
+      {/* Names lead on the left so a long roster scans like a list; the
+          status sits in its own non-shrinking slot so a long name truncates
+          instead of running into it. */}
+      <Flex align="center" gap={3} minH="42px">
+        <Text flex="1" minW={0} textAlign="left" noOfLines={1}>
           {name}
         </Text>
-        <Badge
-          title={status.label}
-          colorScheme={status.color}
-          variant={isFilled ? "solid" : "subtle"}
-          bg={isFilled ? "whiteAlpha.300" : undefined}
-        >
-          {status.label}
-        </Badge>
-        {isManual && (
+        <Flex flexShrink={0} align="center" gap={1}>
+          {/* Untouched rows share the default status, so its badge stays
+              quiet; marked rows name their status on the filled row. */}
           <Badge
-            colorScheme="purple"
-            variant="outline"
-            bg={isFilled ? "white" : undefined}
+            title={status.label}
+            colorScheme={isFilled ? status.color : "gray"}
+            variant={isFilled ? "solid" : "subtle"}
+            bg={isFilled ? "whiteAlpha.300" : undefined}
+            fontWeight={isFilled ? "bold" : "medium"}
           >
-            {MANUAL_BADGE_LABEL}
+            {status.label}
           </Badge>
-        )}
+          {isManual && (
+            <Badge
+              colorScheme="purple"
+              variant="outline"
+              bg={isFilled ? "white" : undefined}
+            >
+              {MANUAL_BADGE_LABEL}
+            </Badge>
+          )}
+        </Flex>
       </Flex>
     </Button>
   );
