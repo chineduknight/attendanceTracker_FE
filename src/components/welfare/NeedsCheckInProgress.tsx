@@ -1,13 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Box,
-  SimpleGrid,
-  Tab,
-  TabList,
-  Tabs,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Box, Progress, Tab, TabList, Tabs, Text } from "@chakra-ui/react";
 import InsightGrid from "components/welfare/InsightGrid";
 import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {
@@ -33,32 +25,11 @@ interface NeedsCheckInProgressProps {
   onAddFollowUp?: (insight: WelfareInsight, variant: InsightVariant) => void;
 }
 
-const Counter = ({ label, value }: { label: string; value: number }) => {
-  const bg = useColorModeValue("white", "gray.700");
-  return (
-    <Box
-      role="group"
-      aria-label={label}
-      borderWidth="1px"
-      borderRadius="lg"
-      px={3}
-      py={2}
-      bg={bg}
-    >
-      <Text fontSize="xl" fontWeight="bold">
-        {value}
-      </Text>
-      <Text fontSize="sm" color="gray.500">
-        {label}
-      </Text>
-    </Box>
-  );
-};
-
 /**
  * Operational Welfare progress for the attendance-derived Needs Check-in list
- * (welfare.view only). Flagged is the backend list length; Followed Up and
+ * (welfare.view only). All is the backend list length; Followed Up and
  * Pending only partition it by linked follow-ups for this review date. The
+ * tabs carry the counts, with one "N of M followed up" line above them. The
  * attendance signal is never suppressed — a followed-up member still shows
  * "Needs check-in", plus "Follow-up logged".
  */
@@ -86,11 +57,20 @@ const NeedsCheckInProgress = ({
 
   return (
     <>
-      <SimpleGrid columns={3} spacing={3} mb={4} maxW="md">
-        <Counter label="Flagged" value={progress.all.length} />
-        <Counter label="Followed Up" value={progress.followedUp.length} />
-        <Counter label="Pending" value={progress.pending.length} />
-      </SimpleGrid>
+      <Box mb={3} maxW="md">
+        <Text fontSize="sm" mb={1}>
+          {`${progress.followedUp.length} of ${progress.all.length} followed up`}
+        </Text>
+        {/* The sentence above is the accessible value; the bar is visual. */}
+        <Progress
+          aria-hidden="true"
+          value={progress.followedUp.length}
+          max={Math.max(progress.all.length, 1)}
+          size="xs"
+          colorScheme="green"
+          borderRadius="full"
+        />
+      </Box>
 
       <Tabs
         variant="soft-rounded"

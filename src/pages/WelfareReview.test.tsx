@@ -9,7 +9,7 @@ import {
 import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import theme from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -225,13 +225,12 @@ const overviewCalls = () =>
 const callsTo = (part: string) =>
   mockGet.mock.calls.filter(([url]) => String(url).includes(part));
 
-const counter = (label: string) =>
-  within(
-    within(screen.getByRole("region", { name: "Needs Check-in" })).getByRole(
-      "group",
-      { name: label }
-    )
-  );
+/** Progress counts live on the Needs Check-in tabs ("All" = flagged). */
+const progressTab = (label: string, count: number) =>
+  screen.getByRole("tab", { name: `${label} ${count}` });
+
+const summaryTile = (label: string) =>
+  screen.getByRole("button", { name: new RegExp(`^${label}`) });
 
 const attentionRegion = () =>
   within(screen.getByRole("region", { name: "Needs Check-in" }));
@@ -277,6 +276,28 @@ describe("<Welfare> review as-of date", () => {
     await waitForProgress();
     expect(overviewCalls().some((u) => u.includes("2026-02-30"))).toBe(false);
     expect(screen.getByTestId("location")).toHaveTextContent(`asOf=${TODAY}`);
+  });
+
+  it("replaces a future asOf with today and never sends it", async () => {
+    const future = format(addDays(new Date(), 1), "yyyy-MM-dd");
+    renderPage(`/welfare?asOf=${future}`);
+    await waitForProgress();
+    expect(overviewCalls().some((u) => u.includes(future))).toBe(false);
+    expect(screen.getByTestId("location")).toHaveTextContent(`asOf=${TODAY}`);
+  });
+
+  it("caps the date picker at today and ignores a typed future date", async () => {
+    renderPage(`/welfare?asOf=${PAST_REVIEW}`);
+    await waitForProgress();
+    const input = screen.getByLabelText("Review as of");
+    expect(input).toHaveAttribute("max", TODAY);
+
+    const future = format(addDays(new Date(), 3), "yyyy-MM-dd");
+    fireEvent.change(input, { target: { value: future } });
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      `asOf=${PAST_REVIEW}`
+    );
+    expect(overviewCalls().some((u) => u.includes(future))).toBe(false);
   });
 
   it("reloads the overview when another date is chosen, and Today resets it", async () => {
@@ -417,9 +438,9 @@ describe("<Welfare> Needs Check-in progress", () => {
   it("shows 11 flagged / 0 followed up / 11 pending with no linked follow-ups", async () => {
     renderPage();
     await waitForProgress();
-    expect(counter("Flagged").getByText("11")).toBeInTheDocument();
-    expect(counter("Followed Up").getByText("0")).toBeInTheDocument();
-    expect(counter("Pending").getByText("11")).toBeInTheDocument();
+    expect(progressTab("All", 11)).toBeInTheDocument();
+    expect(progressTab("Followed Up", 0)).toBeInTheDocument();
+    expect(progressTab("Pending", 11)).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Pending 11" })).toHaveAttribute(
       "aria-selected",
       "true"
@@ -443,12 +464,15 @@ describe("<Welfare> Needs Check-in progress", () => {
     renderPage();
     await waitForProgress();
 
-    expect(counter("Flagged").getByText("11")).toBeInTheDocument();
-    expect(counter("Followed Up").getByText("3")).toBeInTheDocument();
-    expect(counter("Pending").getByText("8")).toBeInTheDocument();
+    expect(progressTab("All", 11)).toBeInTheDocument();
+    expect(progressTab("Followed Up", 3)).toBeInTheDocument();
+    expect(progressTab("Pending", 8)).toBeInTheDocument();
+    expect(
+      attentionRegion().getByText("3 of 11 followed up"),
+    ).toBeInTheDocument();
     // The raw backend summary card is never faked down.
     expect(
-      within(screen.getByRole("group", { name: "Needs Check-in" })).getByText(
+      within(summaryTile("Needs Check-in")).getByText(
         "11"
       )
     ).toBeInTheDocument();
@@ -540,7 +564,7 @@ describe("<Welfare> Needs Check-in progress", () => {
       });
       renderPage();
       await waitForProgress();
-      expect(counter("Pending").getByText("2")).toBeInTheDocument();
+      expect(progressTab("Pending", 2)).toBeInTheDocument();
 
       fireEvent.click(
         attentionRegion().getAllByRole("button", { name: "Add follow-up" })[0]
@@ -551,9 +575,9 @@ describe("<Welfare> Needs Check-in progress", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
 
       await waitFor(() =>
-        expect(counter("Followed Up").getByText("1")).toBeInTheDocument()
+        expect(progressTab("Followed Up", 1)).toBeInTheDocument()
       );
-      expect(counter("Pending").getByText("1")).toBeInTheDocument();
+      expect(progressTab("Pending", 1)).toBeInTheDocument();
       expect(mockPost).toHaveBeenCalledWith(
         "/welfare/org1/follow-ups",
         expect.objectContaining({ workflowStatus, sourceAsOf: TODAY })
@@ -561,7 +585,7 @@ describe("<Welfare> Needs Check-in progress", () => {
       // Attendance truth untouched: one overview request, raw summary intact.
       expect(overviewCalls()).toHaveLength(1);
       expect(
-        within(screen.getByRole("group", { name: "Needs Check-in" })).getByText(
+        within(summaryTile("Needs Check-in")).getByText(
           "2"
         )
       ).toBeInTheDocument();
