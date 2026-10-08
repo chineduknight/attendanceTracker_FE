@@ -1780,6 +1780,12 @@ Shared wrappers in `src/components/ui` (use them instead of the raw parts):
   (always a boolean). Never `register` a checkbox root: it never reaches the
   hidden input, and `defaultChecked` ignores a later `reset()`.
 - `NameAvatar`: initials on a name-derived colour, image when present.
+- `DateField` (`ui/date-field`): every date input. Reads and writes
+  `YYYY-MM-DD` (no timezone shift), enforces `min`/`max` for typed dates too,
+  themed for dark mode. Use `todayValue()` for a "no future dates" cap. Do
+  not add native `type="date"` inputs; existing ones move over per batch.
+- `AmountInput` (`ui/amount-input`): money entry. Shows `6,000`, hands the
+  form `"6000"`, so payloads are unchanged. Not for counts or limits.
 
 v3 traps that type-check but misbehave:
 
