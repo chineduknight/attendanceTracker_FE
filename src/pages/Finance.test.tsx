@@ -3,6 +3,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
+import { toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
@@ -101,6 +102,19 @@ const renderFinance = () =>
       </QueryClientProvider>
     </ChakraProvider>,
   );
+
+/**
+ * Switch tabs and let the new panel settle: v3 mounts lazy tab content
+ * through a presence machine, so an element grabbed straight after the
+ * click can be a copy that is about to be replaced.
+ */
+const openTab = async (name: string) => {
+  fireEvent.click(await screen.findByRole("tab", { name }));
+  await waitFor(() =>
+    expect(screen.getByRole("tab", { name })).toHaveAttribute("aria-selected", "true"),
+  );
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+};
 
 const VIEWER: PermissionKey[] = ["finance.view"];
 const MANAGER: PermissionKey[] = ["finance.view", "finance.manage"];
@@ -224,7 +238,7 @@ describe("Obligations", () => {
     ]);
     setOrg("org1", "owner");
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Obligations" }));
+    await openTab("Obligations");
 
     expect(await screen.findByText(/of .*12,000.* · 63%/)).toBeInTheDocument();
     expect(screen.getAllByLabelText("Share collected")).toHaveLength(1);
@@ -245,7 +259,7 @@ describe("Obligations", () => {
     ]);
     setOrg("org1", "owner");
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Obligations" }));
+    await openTab("Obligations");
 
     expect(await screen.findByText(/1,400 of .*2,000 · 70%$/)).toBeInTheDocument();
     expect(screen.getByLabelText("Share collected")).toBeInTheDocument();
@@ -256,7 +270,7 @@ describe("Obligations", () => {
   it("opens an obligation in Collect when tapped", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Obligations" }));
+    await openTab("Obligations");
     fireEvent.click(await screen.findByText("Building Levy"));
 
     await waitFor(() => expect(screen.getByLabelText("Obligation")).toHaveValue("levy"));
@@ -265,7 +279,7 @@ describe("Obligations", () => {
   it("hides create, rename and delete from a viewer", async () => {
     setOrg("org1", VIEWER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Obligations" }));
+    await openTab("Obligations");
     await screen.findByText("Building Levy");
 
     expect(screen.queryByRole("button", { name: "New obligation" })).not.toBeInTheDocument();
@@ -285,12 +299,12 @@ describe("Start dates", () => {
   it("filters to members without a start date and bulk-sets after confirming", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Start dates" }));
+    await openTab("Start dates");
     fireEvent.click(await screen.findByRole("button", { name: "No start date 1" }));
 
     const list = screen.getByRole("list");
     expect(within(list).queryByText("Ada")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("Select Chidi"));
+    await toggle(screen.getByLabelText("Select Chidi"));
     expect(screen.getByText("1 member selected")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Start date for selected"), {
@@ -320,9 +334,9 @@ describe("Start dates", () => {
     });
     setOrg("org1", MANAGER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Start dates" }));
+    await openTab("Start dates");
     fireEvent.click(await screen.findByLabelText("Select Ada"));
-    fireEvent.click(screen.getByLabelText("Select Bola"));
+    await toggle(screen.getByLabelText("Select Bola"));
     fireEvent.change(screen.getByLabelText("Start date for selected"), {
       target: { value: `${YEAR}-02-01` },
     });
@@ -346,7 +360,7 @@ describe("Start dates", () => {
   it("warns that clearing a start date clears the member's payments", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Start dates" }));
+    await openTab("Start dates");
     fireEvent.click(await screen.findByRole("button", { name: "Edit start date for Ada" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clear" }));
 
@@ -364,7 +378,7 @@ describe("Start dates", () => {
   it("is read-only for a viewer", async () => {
     setOrg("org1", VIEWER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Start dates" }));
+    await openTab("Start dates");
     await screen.findByText("Chidi");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Edit start date/ })).not.toBeInTheDocument();
@@ -436,8 +450,8 @@ describe("organisation switching", () => {
   it("resets the tab and any selections when the organisation changes", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
-    fireEvent.click(await screen.findByRole("tab", { name: "Start dates" }));
-    fireEvent.click(await screen.findByLabelText("Select Chidi"));
+    await openTab("Start dates");
+    await toggle(await screen.findByLabelText("Select Chidi"));
     expect(screen.getByText("1 member selected")).toBeInTheDocument();
 
     act(() => setOrg("org2", MANAGER));
@@ -445,7 +459,7 @@ describe("organisation switching", () => {
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Collect" })).toHaveAttribute("aria-selected", "true"),
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Start dates" }));
+    await openTab("Start dates");
     expect(await screen.findByLabelText("Select Chidi")).not.toBeChecked();
     expect(screen.queryByText(/members? selected$/)).not.toBeInTheDocument();
   });
