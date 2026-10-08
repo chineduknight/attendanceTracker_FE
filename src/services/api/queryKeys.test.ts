@@ -107,6 +107,21 @@ describe("queryKeys tenant scoping", () => {
     expect(rbacHits).toHaveLength(1);
   });
 
+  it("keeps dated compliance reports and exports under their organisation's root", () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.finance.compliance("orgA", "ob1", "2026-10-08"), { org: "A" });
+    client.setQueryData(queryKeys.finance.complianceExport("orgA", "ob1", "pdf", "2026-10-08"), "url");
+    client.setQueryData(queryKeys.finance.compliance("orgB", "ob1", "2026-10-08"), { org: "B" });
+
+    const hits = client
+      .getQueryCache()
+      .findAll({ queryKey: queryKeys.finance.complianceRoot("orgA") });
+    expect(hits).toHaveLength(2);
+    expect(queryKeys.finance.compliance("orgA", "ob1", "2026-10-08")).not.toEqual(
+      queryKeys.finance.compliance("orgA", "ob1", "2026-10-09"),
+    );
+  });
+
   it("scopes welfare to the organisation and nests the overview under its root", () => {
     expect(queryKeys.welfare.root("orgA")).toEqual(["welfare", "orgA"]);
     expect(queryKeys.welfare.root("orgA")).not.toEqual(

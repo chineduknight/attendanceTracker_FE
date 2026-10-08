@@ -19,15 +19,20 @@ export const MONTHS: { value: number; label: string }[] = [
   { value: 12, label: "Dec" },
 ];
 
-const STATUS_COLORS: Record<MonthStatus, string> = {
-  paid: "green.100",
-  partial: "yellow.100",
-  unpaid: "red.100",
-  "not-due": "gray.100",
+/**
+ * Colour scheme + words for each month/overall status. Colour is never the
+ * only signal: every place that paints a status also renders or announces
+ * its label.
+ */
+export const STATUS_META: Record<MonthStatus, { label: string; scheme: string }> = {
+  paid: { label: "Paid", scheme: "green" },
+  partial: { label: "Part paid", scheme: "orange" },
+  unpaid: { label: "Unpaid", scheme: "red" },
+  "not-due": { label: "Not due", scheme: "gray" },
 };
 
-export function monthStatusColor(status: MonthStatus): string {
-  return STATUS_COLORS[status] ?? "gray.100";
+export function statusMeta(status: MonthStatus) {
+  return STATUS_META[status] ?? STATUS_META["not-due"];
 }
 
 export function formatMoney(value: number): string {
