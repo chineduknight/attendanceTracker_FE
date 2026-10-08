@@ -26,6 +26,11 @@ const dayOffset = (offset: number) => format(addDays(new Date(), offset), "yyyy-
 const displayAt = (offset: number) => format(addDays(new Date(), offset), "EEE, d MMM");
 const NEXT7_END = dayOffset(7);
 const NEXT30_END = dayOffset(30);
+// Secondary ranges sit behind the "More ranges" menu.
+const chooseMoreRange = async (label: string) => {
+  fireEvent.click(screen.getByRole("button", { name: /^More ranges/ }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: label }));
+};
 const THIS_MONTH_START = format(startOfMonth(new Date()), "yyyy-MM-dd");
 const THIS_MONTH_END = format(endOfMonth(new Date()), "yyyy-MM-dd");
 const NEXT_MONTH_START = format(startOfMonth(addMonths(new Date(), 1)), "yyyy-MM-dd");
@@ -259,7 +264,7 @@ describe("<Birthday> proactive experience", () => {
       renderPage();
       await screen.findByText("Ada Okafor");
 
-      fireEvent.click(screen.getByRole("button", { name: label }));
+      await chooseMoreRange(label);
 
       await waitFor(() => {
         const calls = birthdayCalls().filter(([url]) => {
@@ -271,11 +276,34 @@ describe("<Birthday> proactive experience", () => {
     },
   );
 
+  it("labels the heading with the ACTIVE range, not the 30-day snapshot", async () => {
+    const rangeLabel = (from: Date, to: Date) =>
+      `${format(from, "d MMM")} → ${format(to, "d MMM")}`;
+    renderPage();
+    await screen.findByText("Ada Okafor");
+    expect(
+      screen.getByText(rangeLabel(new Date(), addDays(new Date(), 30))),
+    ).toBeInTheDocument();
+
+    await chooseMoreRange("Next Month");
+    const nextMonth = addMonths(new Date(), 1);
+    expect(
+      await screen.findByText(
+        rangeLabel(startOfMonth(nextMonth), endOfMonth(nextMonth)),
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Today/ }));
+    expect(
+      await screen.findByText(format(new Date(), "d MMM")),
+    ).toBeInTheDocument();
+  });
+
   it("requires a valid custom range before loading it", async () => {
     renderPage();
     await screen.findByText("Ada Okafor");
 
-    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    await chooseMoreRange("Custom");
     const from = screen.getByLabelText("From date");
     const to = screen.getByLabelText("To date");
     // Seeded with the active range; make it invalid first.
@@ -489,7 +517,7 @@ describe("<Birthday> sharing and exports", () => {
     renderPage();
     await screen.findByText("Ada Okafor");
 
-    fireEvent.click(screen.getByRole("button", { name: "This Month" }));
+    await chooseMoreRange("This Month");
     expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
     await waitFor(() => {
       const calls = birthdayCalls().filter(([url]) => {
