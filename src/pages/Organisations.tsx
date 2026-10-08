@@ -10,7 +10,7 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import { FaTrashAlt, FaCog } from "react-icons/fa";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { useState } from "react";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
@@ -19,6 +19,7 @@ import { OrganisationSummary } from "rbac/types";
 import { queryKeys } from "services/api/queryKeys";
 
 const OrgList = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const navigate = useNavigate();
   const [setOrg] = useGlobalStore((state) => [state.updateOrganisation]);
   const onSuccess = () => {
@@ -40,26 +41,15 @@ const OrgList = () => {
     }
   );
 
-  function handleDelete(orgDelete, e) {
+  async function handleDelete(orgDelete, e) {
     e.stopPropagation();
-    confirmAlert({
+    const confirmed = await confirm({
       title: "Delete organisation",
-      message: `Are you sure you want to delete "${orgDelete.name}"?`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () =>
-            mutate({
-              url: `/organisations/${orgDelete.id}`,
-            }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      body: `Are you sure you want to delete "${orgDelete.name}"?`,
+      confirmLabel: "Delete",
+      destructive: true,
     });
+    if (confirmed) mutate({ url: `/organisations/${orgDelete.id}` });
   }
 
   function handOrg(org) {
@@ -148,6 +138,7 @@ const OrgList = () => {
           </Text>
         )}
       </Stack>
+      {confirmDialog}
     </Box>
   );
 };

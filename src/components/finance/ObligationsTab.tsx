@@ -35,7 +35,7 @@ import { invalidateFinance } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import { Obligation, ObligationType } from "components/finance/financeTypes";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import FinanceSheet from "components/finance/FinanceSheet";
 import FilterChips from "components/finance/FilterChips";
 
@@ -330,13 +330,13 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
         </FinanceSheet>
       )}
 
-      <ConfirmModal
-        isOpen={!!toDelete}
+      <ConfirmDialog
+        open={!!toDelete}
         title="Delete obligation"
         body={`Delete "${toDelete?.name}"? This cannot be undone.`}
         confirmLabel="Yes, delete"
         cancelLabel="No"
-        confirmColorScheme="red"
+        confirmPalette="red"
         onConfirm={() => {
           if (toDelete) {
             remove({

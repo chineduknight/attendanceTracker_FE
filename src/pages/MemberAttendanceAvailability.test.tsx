@@ -1,3 +1,4 @@
+import { confirmInDialog } from "test-utils/render";
 import {
   cleanup,
   fireEvent,
@@ -81,7 +82,6 @@ const renderPage = () =>
 describe("<MemberAttendanceAvailability>", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(window, "confirm").mockReturnValue(true);
     useGlobalStore.setState({
       organisation: {
         ...EMPTY_ORG,
@@ -188,8 +188,10 @@ describe("<MemberAttendanceAvailability>", () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
-    expect(window.confirm).toHaveBeenCalled();
-    expect(mockArchive).toHaveBeenCalledWith("current", expect.any(Function));
-    await waitFor(() => expect(mockArchive).toHaveBeenCalled());
+    const dialog = await confirmInDialog("Remove");
+    expect(dialog).toHaveTextContent("Remove this rehearsal availability period?");
+    await waitFor(() =>
+      expect(mockArchive).toHaveBeenCalledWith("current", expect.any(Function)),
+    );
   });
 });

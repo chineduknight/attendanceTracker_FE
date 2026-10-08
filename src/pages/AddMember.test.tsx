@@ -1,8 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { confirmAlert } from "react-confirm-alert";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
@@ -10,10 +9,9 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import AddMember from "pages/AddMember";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
-import { toggle } from "test-utils/render";
+import { toggle, confirmInDialog } from "test-utils/render";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
@@ -24,7 +22,6 @@ jest.mock("services/api", () => ({
 const mockedAxios = require("services/api").default;
 const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
-const mockConfirm = confirmAlert as jest.Mock;
 
 // `part` was relabelled to "Voice Part"; its key and options are unchanged.
 const MODEL = {
@@ -52,8 +49,7 @@ const renderAt = (path: string) =>
 
 const confirmSubmit = async () => {
   fireEvent.click(screen.getByRole("button", { name: /^(Submit|Update)$/ }));
-  await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
-  mockConfirm.mock.calls[0][0].buttons[0].onClick();
+  await confirmInDialog(/^(Submit|Update)$/);
   await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
   return mockPost.mock.calls[0];
 };
@@ -133,7 +129,7 @@ describe("<AddMember> with custom terminology", () => {
 
     await confirmSubmit();
 
-    expect(toast.success).toHaveBeenCalledWith("Student added successfully");
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Student added successfully"));
   });
 
   it("uses the member term in update success copy", async () => {
@@ -145,20 +141,17 @@ describe("<AddMember> with custom terminology", () => {
 
     await confirmSubmit();
 
-    expect(toast.success).toHaveBeenCalledWith("Student updated successfully");
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Student updated successfully"));
   });
 
   it("uses the member term in the delete confirm and success copy", async () => {
     renderAt("/member/update/m1");
     await screen.findByLabelText("Voice Part");
     fireEvent.click(screen.getByRole("button", { name: /Delete Student/ }));
-    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    const dialog = await confirmInDialog("Delete");
+    expect(within(dialog).getByText("Delete Student")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("delete this student?");
 
-    const options = mockConfirm.mock.calls[0][0];
-    expect(options.title).toBe("Delete Student");
-    expect(options.message).toContain("delete this student?");
-
-    options.buttons[0].onClick();
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("Student deleted successfully"),
     );

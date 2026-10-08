@@ -17,7 +17,7 @@ import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields";
 import PageLoader from "components/PageLoader";
 import { Can } from "rbac/Can";
@@ -31,6 +31,7 @@ interface FormData {
 }
 
 const AddOrUpdateMember = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
   const [membersModel, setMembersModel] = useState<MemberModelField[]>([]);
@@ -124,47 +125,31 @@ const AddOrUpdateMember = () => {
     },
   );
 
-  const handleDeleteMember = () => {
+  const handleDeleteMember = async () => {
     const url = convertParamsToString(orgRequest.DELETE_MEMBER, {
       organisationId: org.id,
       id: params.memberId as string,
     });
-    confirmAlert({
+    const confirmed = await confirm({
       title: `Delete ${terms.memberSingular}`,
-      message: `Are you sure you want to delete this ${lowerTerm(
+      body: `Are you sure you want to delete this ${lowerTerm(
         terms.memberSingular,
       )}? This cannot be undone.`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => deleteMember({ url }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: "Delete",
+      destructive: true,
     });
+    if (confirmed) deleteMember({ url });
   };
 
-  const onSubmit = handleSubmit((data) => {
-    confirmAlert({
+  const onSubmit = handleSubmit(async (data) => {
+    const confirmed = await confirm({
       title: "Confirmation",
-      message: `Are you sure you want to ${
+      body: `Are you sure you want to ${
         isUpdating ? "update" : "submit"
       } the ${lowerTerm(terms.memberSingular)}?`,
-      buttons: [
-        {
-          label: "Yes",
-          onClick: () => handleAddMember(data),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: isUpdating ? "Update" : "Submit",
     });
+    if (confirmed) handleAddMember(data);
   });
 
   // Render the form fields based on the members' model
@@ -318,6 +303,7 @@ const AddOrUpdateMember = () => {
           </Box>
         )}
       </>
+      {confirmDialog}
     </Box>
   );
 };

@@ -1784,6 +1784,12 @@ Shared wrappers in `src/components/ui` (use them instead of the raw parts):
   `YYYY-MM-DD` (no timezone shift), enforces `min`/`max` for typed dates too,
   themed for dark mode. Use `todayValue()` for a "no future dates" cap. Do
   not add native `type="date"` inputs; existing ones move over per batch.
+- `useConfirm` / `ConfirmDialog` (`ui/confirm-dialog`): every confirmation.
+  `if (await confirm({ title, body, confirmLabel: "Delete", destructive: true }))`
+  and render `{confirmDialog}`; use `ConfirmDialog` directly when the dialog
+  must show a loading state. Name the action on the button (not "Yes"); no
+  `window.confirm`. Tests answer it with `confirmInDialog("Delete")`
+  (`role="alertdialog"`).
 - `AmountInput` (`ui/amount-input`): money entry. Shows `6,000`, hands the
   form `"6000"`, so payloads are unchanged. Not for counts or limits.
 

@@ -29,7 +29,7 @@ import { lowerTerm } from "helpers/organisationPresentation";
 import { ALL_STATUSES, memberHasStatus } from "helpers/welfareReview";
 import { useTerms } from "hooks/useOrgPresentation";
 import { Officer } from "rbac/types";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {
   WelfareFollowUp,
@@ -558,13 +558,13 @@ const WelfareFollowUpDialog = ({
       </Dialog.Root>
 
       {isEdit && (
-        <ConfirmModal
-          isOpen={archiveOpen}
+        <ConfirmDialog
+          open={archiveOpen}
           title="Archive record"
           body={`Archive the follow-up for ${lockedMemberName}? It will no longer appear in follow-up lists.`}
           confirmLabel="Yes, archive"
-          confirmColorScheme="red"
-          isLoading={isSaving}
+          confirmPalette="red"
+          loading={isSaving}
           onConfirm={handleArchive}
           onClose={() => setArchiveOpen(false)}
         />

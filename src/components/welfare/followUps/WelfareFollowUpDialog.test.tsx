@@ -419,7 +419,7 @@ describe("WelfareFollowUpDialog — edit", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Archive record" }));
     // The confirmation is its own dialog, named by its title.
-    const confirm = await screen.findByRole("dialog", { name: "Archive record" });
+    const confirm = await screen.findByRole("alertdialog", { name: "Archive record" });
     archive.mockImplementation((_id, _revision, callbacks) =>
       callbacks?.onSuccess?.(),
     );

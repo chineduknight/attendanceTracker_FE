@@ -31,7 +31,7 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import _ from "lodash";
 import { toast } from "react-toastify";
 import PageLoader from "components/PageLoader";
@@ -105,6 +105,7 @@ const readDraft = (storageKey: string): unknown => {
 };
 
 const MarkAttendanceSession = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
   const [searchQuery, setSearchQuery] = useState("");
   // While the search box has focus the phone keyboard covers half the screen,
@@ -547,24 +548,15 @@ const MarkAttendanceSession = () => {
     sessionRules,
   ]);
 
-  const onSubmit = () => {
-    confirmAlert({
+  const onSubmit = async () => {
+    const confirmed = await confirm({
       title: "Please verify count",
-      message: `${formatStatusCounts(
+      body: `${formatStatusCounts(
         statusCounts
       )}. Are you sure you want to submit?`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => sendAttandanceToAPI(),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: isUpdate ? "Update" : "Submit",
     });
+    if (confirmed) sendAttandanceToAPI();
   };
 
   const pageBg = useColorModeValue("gray.50", "gray.800");
@@ -822,6 +814,7 @@ const MarkAttendanceSession = () => {
           </Portal>
         </Drawer.Root>
       )}
+      {confirmDialog}
     </Box>
   );
 };

@@ -15,7 +15,7 @@ import {
   Wrap,
   WrapItem,
 } from "@chakra-ui/react";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -33,6 +33,7 @@ import { lowerTerm } from "helpers/organisationPresentation";
 interface Props { organisationId: string; }
 
 const OfficersTab = ({ organisationId }: Props) => {
+  const { confirm, confirmDialog } = useConfirm();
   const [organisation] = useGlobalStore((s) => [s.organisation]);
   const terms = useTerms();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -49,28 +50,21 @@ const OfficersTab = ({ organisationId }: Props) => {
     })
   );
 
-  const handleRemove = (o: Officer) =>
-    confirmAlert({
+  const handleRemove = async (o: Officer) => {
+    const confirmed = await confirm({
       title: `Remove ${lowerTerm(terms.officerSingular)}`,
-      message: `Remove ${o.username} from this organisation?`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () =>
-            removeMutate({
-              url: convertParamsToString(rbacRequest.OFFICER_ONE, {
-                organisationId,
-                userId: o.userId,
-              }),
-            }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      body: `Remove ${o.username} from this organisation?`,
+      confirmLabel: "Remove",
+      destructive: true,
     });
+    if (!confirmed) return;
+    removeMutate({
+      url: convertParamsToString(rbacRequest.OFFICER_ONE, {
+        organisationId,
+        userId: o.userId,
+      }),
+    });
+  };
 
   if (isLoading) return <PageLoader />;
 
@@ -165,6 +159,7 @@ const OfficersTab = ({ organisationId }: Props) => {
         officer={permsTarget}
         onClose={() => setPermsTarget(null)}
       />
+      {confirmDialog}
     </Box>
   );
 };

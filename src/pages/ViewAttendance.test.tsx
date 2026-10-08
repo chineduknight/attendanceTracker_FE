@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { confirmAlert } from "react-confirm-alert";
+import { confirmInDialog } from "test-utils/render";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -13,7 +13,6 @@ import { PermissionKey } from "rbac/permissions";
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
@@ -28,7 +27,6 @@ const mockDelete: jest.Mock = require("services/api").default.delete;
 const mockPatch: jest.Mock = require("services/api").default.patch;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockPost: jest.Mock = require("services/api").default.post;
-const mockConfirm = confirmAlert as jest.Mock;
 
 const entry = (memberId: string, name: string, attendanceStatus: string) => ({
   _id: `${memberId}-row`,
@@ -245,12 +243,9 @@ describe("<ViewAttendance> with custom terminology", () => {
     await screen.findByText("Zara");
 
     fireEvent.click(screen.getByRole("button", { name: /Delete Session/ }));
-    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
-    const options = mockConfirm.mock.calls[0][0];
-    expect(options.title).toBe("Delete Session");
-    expect(options.message).toContain("delete this session record?");
-
-    options.buttons[0].onClick();
+    const dialog = await confirmInDialog("Delete");
+    expect(within(dialog).getByText("Delete Session")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("delete this session record?");
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("Failed to delete session."),
     );
@@ -310,7 +305,7 @@ describe("<ViewAttendance> analytics inclusion", () => {
     await screen.findByText("Zara");
   };
   // v3 dialogs open a tick after the click, so wait for one to appear.
-  const dialog = async () => within(await screen.findByRole("dialog"));
+  const dialog = async () => within(await screen.findByRole("alertdialog"));
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -395,7 +390,7 @@ describe("<ViewAttendance> analytics inclusion", () => {
     fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
     fireEvent.click((await dialog()).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
     );
     expect(mockPatch).not.toHaveBeenCalled();
   });
@@ -512,6 +507,8 @@ describe("<ViewAttendance> manual per-session attendance", () => {
   };
   // v3 dialogs open a tick after the click, so wait for one to appear.
   const dialog = async () => within(await screen.findByRole("dialog"));
+  // Removal asks through the shared ConfirmDialog (role="alertdialog").
+  const confirmation = async () => within(await screen.findByRole("alertdialog"));
   const rowContainer = (name: string) =>
     screen.getByText(name).closest("div.chakra-button")
       ?.parentElement as HTMLElement;
@@ -726,9 +723,9 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(removes[0]).toHaveAccessibleName("Remove Tolu from this attendance");
 
     fireEvent.click(removes[0]);
-    expect((await dialog()).getByText("Remove Tolu from this attendance?")).toBeInTheDocument();
+    expect((await confirmation()).getByText("Remove Tolu from this attendance?")).toBeInTheDocument();
     expect(
-      (await dialog()).getByText(
+      (await confirmation()).getByText(
         "Tolu was manually added to this attendance. Removing them deletes this historical attendance entry from this attendance only."
       )
     ).toBeInTheDocument();
@@ -743,7 +740,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     });
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this attendance" }));
-    fireEvent.click((await dialog()).getByRole("button", { name: "Remove from this attendance" }));
+    fireEvent.click((await confirmation()).getByRole("button", { name: "Remove from this attendance" }));
 
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith(
@@ -762,7 +759,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     });
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this attendance" }));
-    fireEvent.click((await dialog()).getByRole("button", { name: "Remove from this attendance" }));
+    fireEvent.click((await confirmation()).getByRole("button", { name: "Remove from this attendance" }));
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("Attendance edits are locked.")
@@ -842,7 +839,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this rehearsal" }));
     expect(
-      (await dialog()).getByRole("button", { name: "Remove from this rehearsal" })
+      (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" })
     ).toBeInTheDocument();
   });
 });

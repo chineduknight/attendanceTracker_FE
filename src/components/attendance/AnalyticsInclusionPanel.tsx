@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Badge, Box, Button, Flex, Text, Textarea, Field } from "@chakra-ui/react";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -97,8 +97,8 @@ const AnalyticsInclusionPanel = ({
         </Text>
       )}
 
-      <ConfirmModal
-        isOpen={isConfirming}
+      <ConfirmDialog
+        open={isConfirming}
         title={
           inclusion.included
             ? `Exclude this ${session} from analytics?`
@@ -129,8 +129,8 @@ const AnalyticsInclusionPanel = ({
         }
         cancelLabel="Cancel"
         confirmLabel={inclusion.included ? "Exclude from analytics" : "Restore"}
-        confirmColorScheme={inclusion.included ? "orange" : "blue"}
-        isLoading={isSaving}
+        confirmPalette={inclusion.included ? "orange" : "blue"}
+        loading={isSaving}
         onConfirm={confirm}
         onClose={close}
       />
