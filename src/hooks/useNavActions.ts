@@ -18,10 +18,10 @@ export function useNavActions(): ResolvedNavAction[] {
     () =>
       NAV_ACTIONS.filter(
         (action) => (!action.feature || visibility[action.feature]) && has(action.perm),
-      ).map(({ label, icon, colorScheme, path, perm }) => ({
+      ).map(({ label, icon, palette, path, perm }) => ({
         label: resolveText(label, terms),
         icon,
-        colorScheme,
+        palette,
         path,
         perm,
       })),

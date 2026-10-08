@@ -48,6 +48,7 @@ import BirthdaySummaryCards, {
   BirthdaySummary,
 } from "components/birthday/BirthdaySummaryCards";
 import BirthdayList from "components/birthday/BirthdayList";
+import PageLoader from "components/PageLoader";
 
 type StatusOption = { value: string; label: string };
 type ActivePreset = BirthdayPreset | "custom";
@@ -376,7 +377,7 @@ const Birthday: React.FC = () => {
   return (
     <Box minH="100vh" bg={pageBg}>
       <Box maxW="5xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
-        {!modelLoaded && !modelError && <Spinner />}
+        {!modelLoaded && !modelError && <PageLoader h="40vh" />}
         {modelError && (
           <Text color="red.500">Error loading the member model.</Text>
         )}

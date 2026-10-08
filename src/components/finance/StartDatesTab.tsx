@@ -3,13 +3,11 @@ import { useColorModeValue } from "../ui/color-mode";
 import {
   Box,
   Button,
-  Center,
   Checkbox,
   Flex,
   Input,
   InputGroup,
   
-  Spinner,
   Stack,
   Text,
 } from "@chakra-ui/react";
@@ -33,6 +31,7 @@ import ConfirmModal from "components/finance/ConfirmModal";
 import FilterChips from "components/finance/FilterChips";
 import FinanceSheet from "components/finance/FinanceSheet";
 import StartDateForm from "components/finance/StartDateForm";
+import PageLoader from "components/PageLoader";
 
 const FILTERS = Object.keys(START_DATE_FILTER_LABELS) as StartDateFilter[];
 
@@ -102,9 +101,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
 
   if (isLoading) {
     return (
-      <Center py={10}>
-        <Spinner />
-      </Center>
+      <PageLoader h="30vh" label="Loading start dates..." />
     );
   }
 

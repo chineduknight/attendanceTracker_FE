@@ -40,7 +40,7 @@ import {
   FeatureVisibilitySettings,
   TerminologySettings,
 } from "components/settings/PresentationSettings";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import AttendanceStatusesEditor from "components/settings/AttendanceStatusesEditor";
 import {
   StatusRow,
@@ -209,7 +209,7 @@ const OrganisationSettings = () => {
     <RequirePermission perm="settings.view">
       <Box minH="100vh" bg={pageBg}>
         {isFetching ? (
-          <LoadingSpinner h="30vh" text="Loading settings..." />
+          <PageLoader h="30vh" label="Loading settings..." />
         ) : (
           <Flex align="center" justify="center">
             <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>

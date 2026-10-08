@@ -3,8 +3,6 @@ import { useColorModeValue } from "components/ui/color-mode";
 import {
   Box,
   Button,
-  Center,
-  Spinner,
   Stack,
   Tabs,
   Text,
@@ -16,6 +14,7 @@ import { defaultObligationId } from "helpers/financeCompliance";
 import { useObligations } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import useGlobalStore from "zStore";
+import PageLoader from "components/PageLoader";
 
 const TABS = ["Collect", "Obligations", "Start dates"] as const;
 const COLLECT = 0;
@@ -37,9 +36,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   const collect = () => {
     if (isLoading) {
       return (
-        <Center py={10}>
-          <Spinner />
-        </Center>
+        <PageLoader h="30vh" label="Loading obligations..." />
       );
     }
     if (!obligations.length) {

@@ -7,7 +7,7 @@ import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from 
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { queryKeys } from "services/api/queryKeys";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import { Can } from "rbac/Can";
 import { Role } from "rbac/types";
 import RoleFormModal from "components/officers/RoleFormModal";
@@ -41,7 +41,7 @@ const RolesTab = ({ organisationId }: Props) => {
       ],
     });
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <PageLoader />;
 
   return (
     <Box>

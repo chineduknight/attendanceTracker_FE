@@ -6,7 +6,7 @@ import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from 
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { queryKeys } from "services/api/queryKeys";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import { Can } from "rbac/Can";
 import { Invite } from "rbac/types";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -35,7 +35,7 @@ const PendingInvitesTab = ({ organisationId }: Props) => {
       ],
     });
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <PageLoader />;
 
   return (
     <Box>

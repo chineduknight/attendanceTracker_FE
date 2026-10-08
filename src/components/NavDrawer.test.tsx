@@ -50,4 +50,10 @@ describe("<NavDrawer>", () => {
     expect(useGlobalStore.getState().user).toEqual(EMPTY_USER);
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("keeps the colour-mode control hidden while dark mode is off", () => {
+    setState({});
+    renderDrawer();
+    expect(screen.queryByText("Appearance")).not.toBeInTheDocument();
+  });
 });

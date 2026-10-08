@@ -14,7 +14,7 @@ import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore from "zStore";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import ModelFieldCard from "components/members/ModelFieldCard";
 import { useMemberModel } from "hooks/useMemberModel";
 import { MemberModelField } from "helpers/memberFields";
@@ -172,9 +172,9 @@ const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
     );
   }
   return (
-    <LoadingSpinner
+    <PageLoader
       h="40vh"
-      text={`Loading ${lowerTerm(terms.memberSingular)} model...`}
+      label={`Loading ${lowerTerm(terms.memberSingular)} model...`}
     />
   );
 };

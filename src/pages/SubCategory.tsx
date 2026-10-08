@@ -13,7 +13,7 @@ import { convertParamsToString } from "helpers/stringManipulations";
 import { useState } from "react";
 import { CategoryType } from "hooks/useCategories";
 import { toast } from "react-toastify";
-import Loader from "components/Loader";
+import PageLoader from "components/PageLoader";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
 const SubCategory = () => {
@@ -60,7 +60,7 @@ const SubCategory = () => {
   };
 
   if (isGettingCat) {
-    return <Loader />;
+    return <PageLoader />;
   }
   return (
     <Box minH={"100vh"} bg={"gray.50"}>

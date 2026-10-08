@@ -27,7 +27,7 @@ import {
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import {
   FaFileExcel,
   FaSearch,
@@ -384,9 +384,9 @@ const Attendance = () => {
     <Box minH={"100vh"} bg={pageBg}>
       <Container>
         {isLoadingAttendance ? (
-          <LoadingSpinner
+          <PageLoader
             h="40vh"
-            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+            label={`Loading ${lowerTerm(terms.attendancePlural)}...`}
           />
         ) : (
           <>
