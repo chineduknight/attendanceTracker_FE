@@ -10,15 +10,20 @@ import {
   DrawerOverlay,
   Flex,
   Input,
+  Menu,
+  MenuButton,
+  MenuDivider,
+  MenuItem,
+  MenuList,
   Spinner,
   Text,
   VStack,
-  Wrap,
-  WrapItem,
   useColorModeValue,
   useDisclosure,
 } from "@chakra-ui/react";
 import {
+  FaCheck,
+  FaChevronDown,
   FaCopy,
   FaFileExcel,
   FaFilePdf,
@@ -53,7 +58,9 @@ import BirthdayList from "components/birthday/BirthdayList";
 type StatusOption = { value: string; label: string };
 type ActivePreset = BirthdayPreset | "custom";
 
-const PRESET_BUTTONS: Array<{ preset: BirthdayPreset; label: string }> = [
+// Secondary ranges live behind "More" so the three count tiles own the
+// first row on mobile.
+const MORE_PRESETS: Array<{ preset: BirthdayPreset; label: string }> = [
   { preset: "thisMonth", label: "This Month" },
   { preset: "nextMonth", label: "Next Month" },
   { preset: "threeMonths", label: "3 Months" },
@@ -95,7 +102,7 @@ const Birthday: React.FC = () => {
   // Proactive default: today → today + 30, no Find click required.
   const [activePreset, setActivePreset] = useState<ActivePreset>("next30");
   const [range, setRange] = useState<BirthdayRange>(() =>
-    birthdayRangeForPreset("next30", localBusinessDate()),
+    birthdayRangeForPreset("next30", localBusinessDate())
   );
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -111,7 +118,7 @@ const Birthday: React.FC = () => {
       statusSelection.organisationId === org.id
         ? statusSelection.values
         : ["all"],
-    [statusSelection, org.id],
+    [statusSelection, org.id]
   );
   const setStatusFilter = (values: string[]) =>
     setStatusSelection({ organisationId: org.id, values });
@@ -129,7 +136,7 @@ const Birthday: React.FC = () => {
   // no status filter is exposed at all.
   const statusOptions = useMemo(() => {
     const statusField = fields.find(
-      (field) => field.name.trim().toLowerCase() === "status",
+      (field) => field.name.trim().toLowerCase() === "status"
     );
     return statusField?.options?.filter(Boolean) ?? [];
   }, [fields]);
@@ -143,8 +150,8 @@ const Birthday: React.FC = () => {
       if (!selected.length) return current;
       const valid = selected.filter((status) =>
         statusOptions.some(
-          (option) => option.toLowerCase() === status.toLowerCase(),
-        ),
+          (option) => option.toLowerCase() === status.toLowerCase()
+        )
       );
       if (valid.length === selected.length) return current;
       return {
@@ -156,7 +163,7 @@ const Birthday: React.FC = () => {
 
   const selectedStatuses = useMemo(
     () => statusFilter.filter((status) => status !== "all"),
-    [statusFilter],
+    [statusFilter]
   );
   const statusesParam = selectedStatuses.join(",");
 
@@ -164,7 +171,7 @@ const Birthday: React.FC = () => {
   // whichever range the active list below is showing.
   const summaryRange = useMemo(
     () => birthdayRangeForPreset("next30", today),
-    [today],
+    [today]
   );
   const summary = useBirthdays(org.id, {
     fromDate: summaryRange.fromDate,
@@ -212,14 +219,19 @@ const Birthday: React.FC = () => {
     setRange({ fromDate: customFrom, toDate: customTo });
   };
 
+  const activeMoreLabel =
+    activePreset === "custom"
+      ? "Custom"
+      : MORE_PRESETS.find(({ preset }) => preset === activePreset)?.label;
+
   const emptyState =
     activePreset === "today"
       ? "No birthdays today."
       : activePreset === "next7"
-        ? "No birthdays in the next 7 days."
-        : activePreset === "next30"
-          ? "No birthdays in the next 30 days."
-          : "No birthdays found for this date range.";
+      ? "No birthdays in the next 7 days."
+      : activePreset === "next30"
+      ? "No birthdays in the next 30 days."
+      : "No birthdays found for this date range.";
 
   const statusSelectOptions = useMemo<StatusOption[]>(
     () => [
@@ -229,15 +241,15 @@ const Birthday: React.FC = () => {
         label: option.charAt(0).toUpperCase() + option.slice(1),
       })),
     ],
-    [statusOptions],
+    [statusOptions]
   );
 
   const selectedStatusOptions = useMemo(
     () =>
       statusSelectOptions.filter((option) =>
-        statusFilter.includes(option.value),
+        statusFilter.includes(option.value)
       ),
-    [statusFilter, statusSelectOptions],
+    [statusFilter, statusSelectOptions]
   );
 
   const handleStatusChange = (selected: MultiValue<StatusOption>) => {
@@ -260,7 +272,7 @@ const Birthday: React.FC = () => {
   // dataset when the officer selected something else.
   const exportQueryString = useMemo(
     () => buildBirthdayQueryString(range.fromDate, range.toDate, statusesParam),
-    [range.fromDate, range.toDate, statusesParam],
+    [range.fromDate, range.toDate, statusesParam]
   );
 
   const exportPdfUrl = useMemo(() => {
@@ -298,7 +310,7 @@ const Birthday: React.FC = () => {
   const handleExportError = (err: any, format: "PDF" | "Excel") => {
     const message = getErrorMessage(
       err,
-      `Failed to export ${format}. Please try again.`,
+      `Failed to export ${format}. Please try again.`
     );
     if (message) {
       toast.error(message);
@@ -311,14 +323,14 @@ const Birthday: React.FC = () => {
       "pdf",
       range.fromDate,
       range.toDate,
-      statusesParam,
+      statusesParam
     ),
     exportPdfUrl,
     {
       enabled: false,
       onSuccess: (response: any) => handleExportSuccess(response, "PDF"),
       onError: (err: any) => handleExportError(err, "PDF"),
-    },
+    }
   );
 
   const { refetch: refetchExcel, isFetching: isExportingExcel } =
@@ -328,19 +340,19 @@ const Birthday: React.FC = () => {
         "excel",
         range.fromDate,
         range.toDate,
-        statusesParam,
+        statusesParam
       ),
       exportExcelUrl,
       {
         enabled: false,
         onSuccess: (response: any) => handleExportSuccess(response, "Excel"),
         onError: (err: any) => handleExportError(err, "Excel"),
-      },
+      }
     );
 
   const buildShareText = () => {
     const header = `🎂 Birthdays (${formatBirthdayRangeDate(
-      range.fromDate,
+      range.fromDate
     )} to ${formatBirthdayRangeDate(range.toDate)})\n\n`;
     const lines = list.members.map((member, index) => {
       const occurrence = birthdayOccurrenceInRange(member, range);
@@ -371,21 +383,7 @@ const Birthday: React.FC = () => {
 
   return (
     <Box minH="100vh" bg={pageBg}>
-      <Box p={4}>
-        {/* Share button */}
-        <Flex mb={3} justifyContent="flex-end">
-          <Button
-            leftIcon={<FaShareAlt />}
-            onClick={onOpen}
-            isDisabled={
-              list.members.length === 0 || list.isFetching || !dobConfigured
-            }
-            colorScheme="gray"
-          >
-            Share
-          </Button>
-        </Flex>
-
+      <Box maxW="5xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
         {!modelLoaded && !modelError && <Spinner />}
         {modelError && (
           <Text color="red.500">Error loading the member model.</Text>
@@ -399,14 +397,31 @@ const Birthday: React.FC = () => {
 
         {modelLoaded && dobConfigured && (
           <>
-            <Box mb={3}>
-              <Text fontWeight="semibold">Upcoming birthdays</Text>
-              <Text fontSize="sm" color="gray.500">
-                {`${formatBirthdayRangeDate(
-                  summaryRange.fromDate,
-                )} → ${formatBirthdayRangeDate(summaryRange.toDate)}`}
-              </Text>
-            </Box>
+            <Flex mb={3} align="center" justify="space-between" gap={3}>
+              <Box minW={0}>
+                <Text fontWeight="semibold" fontSize={{ base: "md", md: "xl" }}>
+                  Upcoming birthdays
+                </Text>
+                {/* The ACTIVE list range, not the backing 30-day snapshot. */}
+                <Text fontSize={{ base: "sm", md: "md" }} color="gray.500">
+                  {range.fromDate === range.toDate
+                    ? formatBirthdayRangeDate(range.fromDate)
+                    : `${formatBirthdayRangeDate(
+                        range.fromDate
+                      )} → ${formatBirthdayRangeDate(range.toDate)}`}
+                </Text>
+              </Box>
+              <Button
+                size={{ base: "sm", md: "md" }}
+                flexShrink={0}
+                leftIcon={<FaShareAlt />}
+                onClick={onOpen}
+                isDisabled={list.members.length === 0 || list.isFetching}
+                colorScheme="gray"
+              >
+                Share
+              </Button>
+            </Flex>
 
             <BirthdaySummaryCards
               summary={counts}
@@ -419,33 +434,51 @@ const Birthday: React.FC = () => {
               </Text>
             )}
 
-            <Flex mt={4} mb={3} gap={3} align="center" wrap="wrap">
-              <Wrap spacing={2}>
-                {PRESET_BUTTONS.map(({ preset, label }) => (
-                  <WrapItem key={preset}>
-                    <Button
-                      size="sm"
-                      variant={activePreset === preset ? "solid" : "outline"}
-                      colorScheme="pink"
+            <Flex
+              mt={{ base: 3, md: 4 }}
+              mb={{ base: 3, md: 4 }}
+              gap={2}
+              align="center"
+            >
+              <Menu placement="bottom-start">
+                <MenuButton
+                  as={Button}
+                  size={{ base: "sm", md: "md" }}
+                  flexShrink={0}
+                  colorScheme="pink"
+                  variant={activeMoreLabel ? "solid" : "outline"}
+                  rightIcon={<FaChevronDown />}
+                  aria-label={`More ranges${
+                    activeMoreLabel ? `, ${activeMoreLabel} selected` : ""
+                  }`}
+                >
+                  {activeMoreLabel ?? "More"}
+                </MenuButton>
+                <MenuList zIndex="dropdown">
+                  {MORE_PRESETS.map(({ preset, label }) => (
+                    <MenuItem
+                      key={preset}
                       onClick={() => applyPreset(preset)}
+                      icon={
+                        activePreset === preset ? <FaCheck /> : <Box w="1em" />
+                      }
                     >
                       {label}
-                    </Button>
-                  </WrapItem>
-                ))}
-                <WrapItem>
-                  <Button
-                    size="sm"
-                    variant={activePreset === "custom" ? "solid" : "outline"}
-                    colorScheme="pink"
+                    </MenuItem>
+                  ))}
+                  <MenuDivider />
+                  <MenuItem
                     onClick={startCustom}
+                    icon={
+                      activePreset === "custom" ? <FaCheck /> : <Box w="1em" />
+                    }
                   >
                     Custom
-                  </Button>
-                </WrapItem>
-              </Wrap>
+                  </MenuItem>
+                </MenuList>
+              </Menu>
               {statusOptions.length > 0 && (
-                <Box w={{ base: "100%", md: "260px" }}>
+                <Box flex={1} minW={0} maxW={{ md: "320px" }}>
                   <ReactSelect
                     isMulti
                     placeholder="Filter by status"
@@ -459,35 +492,37 @@ const Birthday: React.FC = () => {
             </Flex>
 
             {activePreset === "custom" && (
-              <Flex
-                mb={4}
-                gap={2}
-                align="center"
-                direction={{ base: "column", md: "row" }}
-              >
+              <Flex mb={3} gap={2} align="center">
                 <Input
                   type="date"
+                  size={{ base: "sm", md: "md" }}
+                  flex={1}
+                  minW={0}
+                  maxW={{ md: "180px" }}
                   value={customFrom}
                   onChange={(event) => setCustomFrom(event.target.value)}
                   placeholder="From date"
                   aria-label="From date"
                   max={customTo || undefined}
-                  w={{ base: "100%", md: "auto" }}
                 />
                 <Input
                   type="date"
+                  size={{ base: "sm", md: "md" }}
+                  flex={1}
+                  minW={0}
+                  maxW={{ md: "180px" }}
                   value={customTo}
                   onChange={(event) => setCustomTo(event.target.value)}
                   placeholder="To date"
                   aria-label="To date"
                   min={customFrom || undefined}
-                  w={{ base: "100%", md: "auto" }}
                 />
                 <Button
+                  size={{ base: "sm", md: "md" }}
+                  flexShrink={0}
                   colorScheme="pink"
                   onClick={applyCustom}
                   isDisabled={!customValid}
-                  w={{ base: "100%", md: "auto" }}
                 >
                   Apply
                 </Button>

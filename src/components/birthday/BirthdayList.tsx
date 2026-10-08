@@ -1,4 +1,5 @@
 import {
+  Box,
   Flex,
   List,
   ListItem,
@@ -25,6 +26,8 @@ interface BirthdayListProps {
  * Name, birthday date and relative timing — never age, birth year or
  * "turning" wording. Rows come from the backend sorted; occurrence dates
  * prefer Phase 7B metadata and fall back to the centralized legacy parser.
+ * One grouped list with dividers keeps rows dense on mobile; today's
+ * birthdays get an accent plus the visible "Today" text, never colour alone.
  */
 const BirthdayList = ({
   members,
@@ -33,13 +36,15 @@ const BirthdayList = ({
   emptyState,
 }: BirthdayListProps) => {
   const cardBg = useColorModeValue("white", "gray.700");
+  const todayBg = useColorModeValue("pink.50", "whiteAlpha.100");
+  const dividerColor = useColorModeValue("gray.100", "gray.600");
 
   if (members.length === 0) {
     return <Text color="gray.500">{emptyState}</Text>;
   }
 
   return (
-    <List spacing={2}>
+    <List borderWidth="1px" borderRadius="lg" bg={cardBg} overflow="hidden">
       {members.map((member, index) => {
         const occurrence = birthdayOccurrenceInRange(member, range);
         const display = occurrence
@@ -48,20 +53,45 @@ const BirthdayList = ({
         const relative = occurrence
           ? birthdayRelativeLabel(occurrence, asOf)
           : null;
+        const isToday = occurrence === asOf;
         return (
           <ListItem
             key={member._id ?? `${member.name ?? "member"}-${index}`}
-            borderWidth="1px"
-            borderRadius="lg"
-            p={3}
-            bg={cardBg}
+            px={{ base: 3, md: 5 }}
+            py={{ base: 2, md: 3 }}
+            bg={isToday ? todayBg : undefined}
+            borderLeftWidth="3px"
+            borderLeftColor={isToday ? "pink.400" : "transparent"}
+            borderTopWidth={index === 0 ? 0 : "1px"}
+            borderTopColor={dividerColor}
           >
-            <Flex align="center" justify="space-between" gap={2} wrap="wrap">
-              <Text fontWeight="semibold">{member.name ?? ""}</Text>
-              <Flex align="center" gap={2} wrap="wrap">
-                <Text>{display}</Text>
+            <Flex align="center" justify="space-between" gap={3}>
+              <Text
+                fontWeight="semibold"
+                fontSize={{ base: "sm", md: "md" }}
+                noOfLines={1}
+                minW={0}
+              >
+                {isToday && (
+                  <Box as="span" aria-hidden="true" mr={1}>
+                    🎂
+                  </Box>
+                )}
+                {member.name ?? ""}
+              </Text>
+              <Flex
+                direction={{ base: "column", md: "row" }}
+                align={{ base: "flex-end", md: "center" }}
+                gap={{ base: 0, md: 3 }}
+                flexShrink={0}
+              >
+                <Text fontSize={{ base: "sm", md: "md" }}>{display}</Text>
                 {relative && (
-                  <Text fontSize="sm" color="gray.500">
+                  <Text
+                    fontSize={{ base: "xs", md: "sm" }}
+                    color={isToday ? "pink.500" : "gray.500"}
+                    fontWeight={isToday ? "semibold" : "normal"}
+                  >
                     {relative}
                   </Text>
                 )}
