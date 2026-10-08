@@ -128,6 +128,14 @@ const formatFieldValue = (value: unknown): string => {
   return text === "" ? "—" : text;
 };
 
+// Small on the card, but each still takes a 44px-tall tap: an invisible
+// zone extends past the visible edge (only 4px sideways, so neighbours
+// 8px apart never overlap).
+const compactTapTarget = {
+  position: "relative",
+  _before: { content: '""', position: "absolute", inset: "-6px -4px" },
+} as const;
+
 const openExport = (response: { data?: string }) => {
   if (response?.data) window.open(response.data, "_blank");
 };
@@ -557,8 +565,7 @@ const ViewMembers: React.FC = () => {
                                 variant="outline"
                                 colorScheme="teal"
                                 size="sm"
-                                minH="44px"
-                                px={3}
+                                {...compactTapTarget}
                                 onClick={() =>
                                   navigate(
                                     convertParamsToString(
@@ -578,8 +585,7 @@ const ViewMembers: React.FC = () => {
                                 variant="outline"
                                 colorScheme="blue"
                                 size="sm"
-                                minW="44px"
-                                minH="44px"
+                                {...compactTapTarget}
                                 onClick={() =>
                                   navigate(
                                     convertParamsToString(
