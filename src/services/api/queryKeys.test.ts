@@ -113,7 +113,13 @@ describe("queryKeys tenant scoping", () => {
       queryKeys.welfare.root("orgB"),
     );
     const overviewA = queryKeys.welfare.overview("orgA", "2026-10-07");
-    expect(overviewA).toEqual(["welfare", "orgA", "overview", "2026-10-07"]);
+    expect(overviewA).toEqual([
+      "welfare",
+      "orgA",
+      "overview",
+      "2026-10-07",
+      "",
+    ]);
     expect(overviewA).not.toEqual(
       queryKeys.welfare.overview("orgB", "2026-10-07"),
     );
@@ -122,6 +128,28 @@ describe("queryKeys tenant scoping", () => {
     );
     expect(matches(queryKeys.welfare.root("orgA"), overviewA)).toBe(true);
     expect(matches(queryKeys.welfare.root("orgB"), overviewA)).toBe(false);
+  });
+
+  it("distinguishes Welfare overview keys by organisation, review date and status scope", () => {
+    const base = queryKeys.welfare.overview("orgA", "2026-10-08", "Active");
+    expect(base).toEqual([
+      "welfare",
+      "orgA",
+      "overview",
+      "2026-10-08",
+      "Active",
+    ]);
+    expect(base).not.toEqual(
+      queryKeys.welfare.overview("orgB", "2026-10-08", "Active"),
+    );
+    expect(base).not.toEqual(
+      queryKeys.welfare.overview("orgA", "2026-10-01", "Active"),
+    );
+    expect(base).not.toEqual(
+      queryKeys.welfare.overview("orgA", "2026-10-08", "Inactive"),
+    );
+    expect(base).not.toEqual(queryKeys.welfare.overview("orgA", "2026-10-08"));
+    expect(matches(queryKeys.welfare.root("orgA"), base)).toBe(true);
   });
 
   it("scopes welfare follow-ups to the organisation and nests lists under the root", () => {

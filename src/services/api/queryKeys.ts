@@ -71,9 +71,13 @@ export const queryKeys = {
   welfare: {
     /** Prefix covering every Welfare query for one organisation. */
     root: (organisationId: string) => ["welfare", organisationId] as const,
-    /** Overview for one business date; a new day is a new comparison horizon. */
-    overview: (organisationId: string, asOf: string) =>
-      ["welfare", organisationId, "overview", asOf] as const,
+    /**
+     * Overview for one review date and member-status scope. Either changing is
+     * a different population/horizon, so neither may reuse the other's result.
+     * Empty string stands in for "all statuses" so the key stays stable.
+     */
+    overview: (organisationId: string, asOf: string, status?: string) =>
+      ["welfare", organisationId, "overview", asOf, status ?? ""] as const,
     followUps: {
       /** Prefix covering every follow-up query for one organisation. */
       root: (organisationId: string) =>
