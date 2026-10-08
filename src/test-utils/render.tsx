@@ -70,3 +70,16 @@ export const confirmInDialog = async (button: string | RegExp) => {
   fireEvent.click(within(dialog).getByRole("button", { name: button }));
   return dialog;
 };
+
+/**
+ * The CSS Chakra generated for an element's own classes. jsdom does no layout
+ * and cannot compute dvh/env(), so layout contracts are checked on the rules.
+ */
+export const generatedCss = (element: HTMLElement) =>
+  Array.from(document.styleSheets)
+    .flatMap((sheet) => Array.from(sheet.cssRules) as CSSStyleRule[])
+    .filter((rule) =>
+      Array.from(element.classList).some((cls) => rule.selectorText === `.${cls}`),
+    )
+    .map((rule) => rule.cssText)
+    .join(" ");

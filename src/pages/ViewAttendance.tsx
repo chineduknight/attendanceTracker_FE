@@ -1,21 +1,14 @@
-import { SAFE_TOP } from "styles/safeArea";
 import {
   Box,
   Flex,
   Text,
   Button,
-  Input,
   Heading,
-  InputGroup,
-  
-  
-  IconButton,
-  Icon,
   Container,
 } from "@chakra-ui/react";
 import { useColorModeValue } from "components/ui/color-mode";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { PROTECTED_PATHS } from "routes/pagePath";
@@ -31,16 +24,16 @@ import { format } from "date-fns";
 import PageLoader from "components/PageLoader";
 import {
   FaFileExcel,
-  FaSearch,
   FaShareAlt,
   FaTrash,
   FaUserPlus,
 } from "react-icons/fa";
-import { FiX } from "react-icons/fi";
 import { toast } from "react-toastify";
 import ReactSelect, { MultiValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
+import PinnedSearchBar from "components/PinnedSearchBar";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
@@ -183,7 +176,12 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { isFetching: isFetchingAttendance } = useQueryWrapper(
+  const {
+    isFetching: isFetchingAttendance,
+    isError: attendanceFailed,
+    error: attendanceError,
+    refetch: refetchAttendance,
+  } = useQueryWrapper(
     queryKeys.attendance(org.id, param.id),
     url,
     {
@@ -202,7 +200,6 @@ const Attendance = () => {
   const rulesOutdated =
     memberModelLoaded && eligibilityIssues(storedRules, memberFields).length > 0;
 
-  const handleSearch = useCallback((e) => setSearchQuery(e.target.value), []);
 
   const statusOptions = useMemo<StatusOption[]>(() => {
     const unique = Array.from(
@@ -382,6 +379,15 @@ const Attendance = () => {
             h="40vh"
             label={`Loading ${lowerTerm(terms.attendancePlural)}...`}
           />
+        ) : attendanceFailed && !attendanceInfo ? (
+          <Box mt="8">
+            <ErrorState
+              title={`Couldn't load this ${lowerTerm(terms.attendanceSingular)}`}
+              description={errorMessage(attendanceError)}
+              onRetry={() => refetchAttendance()}
+              retrying={isFetchingAttendance}
+            />
+          </Box>
         ) : (
           <>
             {/* Title first, date beneath it, so a long session name never
@@ -481,48 +487,28 @@ const Attendance = () => {
             <StatusCountSummary counts={filteredCounts} />
             {/* Only the search bar is pinned: with the phone keyboard open,
                 anything taller would squeeze the results it is filtering. */}
-            <Box
-              ref={pinnedSearch.barRef}
-              position="sticky"
-              // Pins below the status bar in the installed app (0 elsewhere).
-              top={SAFE_TOP}
-              zIndex="sticky"
+            <PinnedSearchBar
+              pinnedSearch={pinnedSearch}
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+              // Matches this page's background until it moves to PageContainer.
               bg={pageBg}
-              mx={-4}
-              px={4}
-              py={2}
-              mt="2"
-            >
-              <InputGroup
-                startElement={<Icon color="gray.400" asChild><FaSearch /></Icon>}
-                startElementProps={{ pointerEvents: "none" }}
-                endElement={
-                  searchQuery ? (
-                      <IconButton
-                        aria-label="Clear search"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSearchQuery("")}><FiX /></IconButton>
-                  ) : undefined
-                }
-              >
-                <Input
-                  type="text"
-                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-                  value={searchQuery}
-                  onChange={handleSearch}
-                  {...pinnedSearch.inputProps}
-                />
-              </InputGroup>
-            </Box>
+            />
             {/* The roster scrolls with the page rather than in a nested box. */}
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
               {filteredMembers.length === 0 && (
-                <Box mt="4">
-                  <Text ml="4" fontWeight="bold">
-                    {`No ${lowerTerm(terms.memberSingular)} found`}
-                  </Text>
-                </Box>
+                <EmptyState
+                  title={`No ${lowerTerm(terms.memberSingular)} found`}
+                  description={searchQuery ? `Nothing matches "${searchQuery}".` : undefined}
+                  action={
+                    searchQuery ? (
+                      <Button variant="outline" colorPalette="gray" onClick={() => setSearchQuery("")}>
+                        Clear search
+                      </Button>
+                    ) : undefined
+                  }
+                />
               )}
               {filteredMembers.map((item) => (
                 <AttendanceMemberRow

@@ -41,6 +41,7 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import ReactSelect, { MultiValue } from "react-select";
 import { useMemberModel } from "hooks/useMemberModel";
 import { MemberRecord, useMembers } from "hooks/useMembers";
+import { ErrorState } from "components/ui/states";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { memberFieldLabeler } from "helpers/memberFields";
 import PageLoader from "components/PageLoader";
@@ -161,7 +162,7 @@ const ViewMembers: React.FC = () => {
   const accentColor = useColorModeValue("blue.600", "blue.300");
   const activeToggleBg = useColorModeValue("blue.50", "whiteAlpha.200");
 
-  const { members, isLoading, isError } = useMembers(org.id);
+  const { members, isLoading, isError, refetch: refetchMembers } = useMembers(org.id);
   // Display labels only; filters, query params and saved columns keep storage keys.
   const { fields: modelFields } = useMemberModel(org.id);
   const labelFor = useMemo(() => {
@@ -349,19 +350,11 @@ const ViewMembers: React.FC = () => {
             label={`Loading ${lowerTerm(terms.memberPlural)}...`}
           />
         ) : isError ? (
-          <Box
-            bg={cardBg}
-            py="8"
-            mt="4"
-            rounded={"xl"}
-            boxShadow={"lg"}
-            textAlign="center"
-          >
-            <Text color="red.500" fontWeight="bold">
-              {`Error occurred while fetching ${lowerTerm(
-                terms.memberPlural
-              )}.`}
-            </Text>
+          <Box mt="8">
+            <ErrorState
+              title={`Couldn't load ${lowerTerm(terms.memberPlural)}`}
+              onRetry={() => refetchMembers()}
+            />
           </Box>
         ) : (
           <>

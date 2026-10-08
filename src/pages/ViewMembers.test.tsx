@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { render } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
@@ -65,13 +65,20 @@ describe("<ViewMembers> with custom terminology", () => {
     expect(await screen.findByText("Loading students...")).toBeInTheDocument();
   });
 
-  it("names the member term when the list fails to load", async () => {
+  it("names the member term when the list fails to load, and retries", async () => {
     jest.spyOn(console, "error").mockImplementation(() => undefined);
     mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
     renderPage();
-    expect(
-      await screen.findByText("Error occurred while fetching students.")
-    ).toBeInTheDocument();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load students");
+
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: { data: url.includes("/model") ? { fields: [] } : [{ id: "member-1", name: "Ada" }] },
+      })
+    );
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Ada")).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
 

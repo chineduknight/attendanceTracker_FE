@@ -1,5 +1,6 @@
 import { act, screen } from "@testing-library/react";
-import { render } from "test-utils/render";
+import { generatedCss, render } from "test-utils/render";
+import PageContainer from "components/layout/PageContainer";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
@@ -81,6 +82,33 @@ describe("<ProtectedLayout>", () => {
       </MemoryRouter>
     );
     expect(screen.getByText("View Students")).toBeInTheDocument();
+  });
+
+  it("owns the screen height, so header + page fill it without overflowing", () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/finance"]}>
+        <Routes>
+          <Route element={<ProtectedLayout />}>
+            <Route path="/finance" element={<PageContainer>short page</PageContainer>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    const shell = generatedCss(screen.getByTestId("app-shell"));
+    const pageArea = generatedCss(screen.getByTestId("app-page-area"));
+    const page = generatedCss(screen.getByRole("main"));
+
+    // Exactly one 100dvh, on the shell: a column of header + page area.
+    expect(shell).toContain("min-height: 100dvh");
+    expect(shell).toContain("flex-direction: column");
+    // The page area takes what the header leaves, whatever its height...
+    expect(pageArea).toContain("flex: 1");
+    expect(pageArea).toContain("flex-direction: column");
+    expect(pageArea).not.toContain("100dvh");
+    // ...and the page grows into it instead of claiming its own viewport.
+    expect(page).toContain("flex: 1");
+    expect(page).not.toContain("100dvh");
+    expect(screen.getByRole("banner")).toBeInTheDocument();
   });
 });
 
