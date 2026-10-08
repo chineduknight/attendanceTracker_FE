@@ -17,6 +17,9 @@ import {
 } from "components/welfare/followUps/followUpPresentation";
 import { WelfareFollowUp } from "components/welfare/followUps/types";
 
+/** Phone-sized tap targets; compact on wider screens. */
+const ACTION_SIZE = { base: "sm", md: "xs" };
+
 interface WelfareFollowUpCardProps {
   record: WelfareFollowUp;
   /** Business date the due state is read against, same as the list query. */
@@ -59,14 +62,18 @@ const WelfareFollowUpCard = ({
     <Box
       borderWidth="1px"
       borderRadius="lg"
-      p={4}
+      p={{ base: 3, md: 4 }}
       bg={cardBg}
       role="group"
       aria-label={record.reason}
     >
-      <Flex align="center" justify="space-between" gap={2} mb={1}>
-        <Heading size="sm">{memberName}</Heading>
-        <Badge colorScheme="green">Open</Badge>
+      <Flex align="flex-start" justify="space-between" gap={2} mb={1}>
+        <Heading size="sm" minW={0} overflowWrap="anywhere">
+          {memberName}
+        </Heading>
+        <Badge colorScheme="green" flexShrink={0}>
+          Open
+        </Badge>
       </Flex>
 
       <Text fontWeight="medium" mb={1}>
@@ -100,7 +107,7 @@ const WelfareFollowUpCard = ({
       <HStack spacing={2} wrap="wrap">
         {canManage && (
           <Button
-            size="xs"
+            size={ACTION_SIZE}
             onClick={() => onEdit(record)}
             isDisabled={isSaving}
           >
@@ -109,7 +116,7 @@ const WelfareFollowUpCard = ({
         )}
         {canManage && (
           <Button
-            size="xs"
+            size={ACTION_SIZE}
             variant="outline"
             onClick={() => onCloseRecord(record)}
             isDisabled={isSaving}
@@ -117,9 +124,11 @@ const WelfareFollowUpCard = ({
             Close follow-up
           </Button>
         )}
+        {/* Ghost, not link: a link-variant button has no padding and is
+            too small a tap target on phones. */}
         <Button
-          size="xs"
-          variant="link"
+          size={ACTION_SIZE}
+          variant="ghost"
           onClick={() => onViewHistory(record)}
           isDisabled={isSaving}
         >

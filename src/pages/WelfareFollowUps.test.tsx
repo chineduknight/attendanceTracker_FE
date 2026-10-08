@@ -236,6 +236,13 @@ const pickMember = async (name: string) => {
   fireEvent.click(await screen.findByRole("option", { name }));
 };
 
+/** The record list starts collapsed under the summary counts. */
+const openFollowUpList = async () => {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Show follow-ups" }),
+  );
+};
+
 const callsTo = (part: string) =>
   mockGet.mock.calls.filter(([url]) => String(url).includes(part));
 
@@ -285,6 +292,7 @@ describe("<Welfare> follow-ups — access & privacy", () => {
     expect(
       await screen.findByRole("heading", { name: "Follow-ups" }),
     ).toBeInTheDocument();
+    await openFollowUpList();
     expect(screen.getByText("Bereavement")).toBeInTheDocument();
     expect(screen.getByText("Called the family.")).toBeInTheDocument();
     expect(screen.getByText("Assigned to: Welfare II")).toBeInTheDocument();
@@ -300,7 +308,7 @@ describe("<Welfare> follow-ups — access & privacy", () => {
   it("gives view-only officers read access without write actions", async () => {
     serve({ list: listFor([openRecord({ id: "f-open" }), closedRecord()]) });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
 
     expect(
       screen.queryByRole("button", { name: "Add welfare follow-up" }),
@@ -329,7 +337,7 @@ describe("<Welfare> follow-ups — access & privacy", () => {
     });
     serve({ list: listFor([openRecord({ id: "f-open" }), closedRecord()]) });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
 
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(
@@ -357,7 +365,7 @@ describe("<Welfare> follow-ups — access & privacy", () => {
       data: { data: openRecord({ id: "f-open", workflowStatus: "closed" }) },
     });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
 
     // Manage actions on existing records keep working.
     fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
@@ -450,7 +458,7 @@ describe("<Welfare> follow-ups — summary & list", () => {
     ];
     serve({ list: listFor(records) });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
 
     expect(
       within(screen.getByRole("group", { name: "Open" })).getByText("4"),
@@ -476,6 +484,39 @@ describe("<Welfare> follow-ups — summary & list", () => {
     dueLabelInCard("Dateless reason", "Open — no date set");
   });
 
+  it("starts with only the counts and reveals the records on request", async () => {
+    serve({
+      list: listFor([
+        openRecord({ id: "f-open", note: "Called the family." }),
+        closedRecord(),
+      ]),
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Follow-ups" });
+
+    // Progress is visible without expanding; the records are not.
+    expect(
+      within(screen.getByRole("group", { name: "Open" })).getByText("1"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Called the family.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Recent follow-up history" }),
+    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Show follow-ups" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+    expect(screen.getByText("Called the family.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Recent follow-up history" }),
+    ).toBeInTheDocument();
+    const hide = screen.getByRole("button", { name: "Hide follow-ups" });
+    expect(hide).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(hide);
+    expect(screen.queryByText("Called the family.")).not.toBeInTheDocument();
+  });
+
   it("shows an error instead of zero counts when the follow-up API fails", async () => {
     serve({ failList: true });
     renderPage();
@@ -497,7 +538,7 @@ describe("<Welfare> follow-ups — summary & list", () => {
       ]),
     });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
 
     expect(
       screen.getByRole("heading", { name: "Recent follow-up history" }),
@@ -510,7 +551,7 @@ describe("<Welfare> follow-ups — summary & list", () => {
   it("opens the member history drawer filtered by memberId", async () => {
     serve({ list: listFor([openRecord({ id: "f-open" })]) });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
 
     fireEvent.click(screen.getByRole("button", { name: "Member history" }));
     const drawer = await screen.findByRole("dialog");
@@ -591,7 +632,7 @@ describe("<Welfare> follow-ups — workflow", () => {
       data: { data: openRecord({ id: "f-open", workflowStatus: "closed" }) },
     });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
     const listCallsBefore = callsTo("/follow-ups").length;
 
     fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
@@ -619,6 +660,7 @@ describe("<Welfare> follow-ups — workflow", () => {
       data: { data: openRecord({ id: "f-closed" }) },
     });
     renderPage();
+    await openFollowUpList();
     await screen.findByRole("heading", { name: "Recent follow-up history" });
 
     fireEvent.click(screen.getByRole("button", { name: "Reopen follow-up" }));
@@ -646,7 +688,7 @@ describe("<Welfare> follow-ups — workflow", () => {
       },
     });
     renderPage();
-    await screen.findByRole("heading", { name: "Follow-ups" });
+    await openFollowUpList();
     const listCallsBefore = callsTo("/follow-ups").length;
 
     fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
@@ -671,6 +713,7 @@ describe("<Welfare> follow-ups — tenancy", () => {
       org2List: EMPTY_LIST,
     });
     renderPage();
+    await openFollowUpList();
     await screen.findByText("Org A private note.");
 
     act(() => setOrg({ id: "org2" }));

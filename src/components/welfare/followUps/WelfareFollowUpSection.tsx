@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Box, Button, Flex, Heading, SimpleGrid, Text } from "@chakra-ui/react";
-import { FaPlus } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaPlus } from "react-icons/fa";
 import {
   WelfareFollowUp,
   WelfareFollowUpSummary,
@@ -33,11 +34,13 @@ interface WelfareFollowUpSectionProps {
   onViewHistory: (record: WelfareFollowUp) => void;
 }
 
+const LIST_ID = "welfare-follow-up-list";
+
 const FollowUpStat = ({ label, value }: { label: string; value: number }) => (
   <Box
     borderWidth="1px"
     borderRadius="md"
-    px={4}
+    px={{ base: 3, md: 4 }}
     py={2}
     role="group"
     aria-label={label}
@@ -55,6 +58,11 @@ const FollowUpStat = ({ label, value }: { label: string; value: number }) => (
  * Phase 7C follow-up log (§8). Additive to the 7A insights below it, and
  * deliberately independent: a follow-up failure shows an error instead of
  * zero counts, and never blocks the rest of Welfare.
+ *
+ * The record list starts collapsed: the counts show progress at a glance
+ * while Needs Check-in, the primary action list, stays near the top of a
+ * phone screen. The page keys this section by organisation, so the toggle
+ * resets on a switch.
  */
 const WelfareFollowUpSection = ({
   summary,
@@ -77,6 +85,7 @@ const WelfareFollowUpSection = ({
   const closedRecords = records
     .filter((record) => record.workflowStatus === "closed")
     .slice(0, RECENT_HISTORY_LIMIT);
+  const [isListOpen, setIsListOpen] = useState(false);
 
   return (
     <Box as="section" aria-label="Follow-ups" mt={8}>
@@ -94,55 +103,76 @@ const WelfareFollowUpSection = ({
 
       {!isLoading && summary && (
         <>
-          <Flex gap={3} wrap="wrap" mb={4}>
+          <SimpleGrid columns={3} spacing={{ base: 2, md: 3 }} mb={3} maxW="md">
             <FollowUpStat label="Open" value={summary.open} />
             <FollowUpStat label="Due Today" value={summary.dueToday} />
             <FollowUpStat label="Overdue" value={summary.overdue} />
-          </Flex>
+          </SimpleGrid>
 
-          {canCreateManualFollowUp && (
+          <Flex gap={2} wrap="wrap" mb={isListOpen ? 5 : 0}>
+            {canCreateManualFollowUp && (
+              <Button
+                size="sm"
+                leftIcon={<FaPlus aria-hidden="true" />}
+                onClick={onAdd}
+                isDisabled={isSaving}
+              >
+                Add welfare follow-up
+              </Button>
+            )}
             <Button
               size="sm"
-              leftIcon={<FaPlus aria-hidden="true" />}
-              onClick={onAdd}
-              isDisabled={isSaving}
-              mb={5}
+              variant="outline"
+              rightIcon={
+                isListOpen ? (
+                  <FaChevronUp aria-hidden="true" />
+                ) : (
+                  <FaChevronDown aria-hidden="true" />
+                )
+              }
+              aria-expanded={isListOpen}
+              aria-controls={LIST_ID}
+              onClick={() => setIsListOpen((open) => !open)}
             >
-              Add welfare follow-up
+              {isListOpen ? "Hide follow-ups" : "Show follow-ups"}
             </Button>
-          )}
+          </Flex>
 
-          <Heading size="sm" mb={2}>
-            Open follow-ups
-          </Heading>
-          {openRecords.length === 0 ? (
-            <Text color="gray.500">No open follow-ups.</Text>
-          ) : (
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
-              {openRecords.map((record) => (
-                <WelfareFollowUpCard
-                  key={record.id}
-                  record={record}
-                  asOf={asOf}
-                  canManage={canManage}
-                  isSaving={isSaving}
-                  onEdit={onEdit}
-                  onCloseRecord={onCloseRecord}
-                  onViewHistory={onViewHistory}
-                />
-              ))}
-            </SimpleGrid>
-          )}
+          {isListOpen && (
+            <Box id={LIST_ID}>
+              <Heading size="sm" mb={2}>
+                Open follow-ups
+              </Heading>
+              {openRecords.length === 0 ? (
+                <Text color="gray.500">No open follow-ups.</Text>
+              ) : (
+                <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+                  {openRecords.map((record) => (
+                    <WelfareFollowUpCard
+                      key={record.id}
+                      record={record}
+                      asOf={asOf}
+                      canManage={canManage}
+                      isSaving={isSaving}
+                      onEdit={onEdit}
+                      onCloseRecord={onCloseRecord}
+                      onViewHistory={onViewHistory}
+                    />
+                  ))}
+                </SimpleGrid>
+              )}
 
-          <Heading size="sm" mt={6} mb={2}>
-            Recent follow-up history
-          </Heading>
-          <WelfareFollowUpHistory
-            records={closedRecords}
-            canManage={canManage}
-            isSaving={isSaving}
-            onReopen={onReopen}
-          />
+              <Heading size="sm" mt={6} mb={2}>
+                Recent follow-up history
+              </Heading>
+              <WelfareFollowUpHistory
+                records={closedRecords}
+                canManage={canManage}
+                isSaving={isSaving}
+                onReopen={onReopen}
+              />
+            </Box>
+          )}
         </>
       )}
     </Box>

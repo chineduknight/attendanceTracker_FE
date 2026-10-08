@@ -36,23 +36,26 @@ const WelfareReviewControls = ({
 }: WelfareReviewControlsProps) => {
   const terms = useTerms();
   return (
-    <Flex gap={4} wrap="wrap" align="flex-end" mb={4}>
-      <FormControl w="auto">
+    <Flex gap={{ base: 3, md: 4 }} wrap="wrap" align="flex-end" mb={4}>
+      <FormControl w={{ base: "full", sm: "auto" }}>
         <FormLabel htmlFor="welfare-as-of" fontSize="sm" mb={1}>
           Review as of
         </FormLabel>
         <Flex gap={2}>
+          {/* md (16px) on phones: iOS Safari zooms into any smaller input. */}
           <Input
             id="welfare-as-of"
             type="date"
-            size="sm"
-            w="auto"
+            size={{ base: "md", md: "sm" }}
+            flex={{ base: 1, sm: "initial" }}
+            w={{ base: "full", sm: "auto" }}
             value={asOf}
             onChange={(event) => onAsOfChange(event.target.value)}
           />
           <Button
-            size="sm"
+            size={{ base: "md", md: "sm" }}
             variant="outline"
+            flexShrink={0}
             onClick={onToday}
             isDisabled={isToday}
           >
@@ -62,13 +65,13 @@ const WelfareReviewControls = ({
       </FormControl>
 
       {statusOptions.length > 0 && (
-        <FormControl w="auto">
+        <FormControl w={{ base: "full", sm: "auto" }}>
           <FormLabel htmlFor="welfare-status" fontSize="sm" mb={1}>
             {`${terms.memberSingular} status`}
           </FormLabel>
           <Select
             id="welfare-status"
-            size="sm"
+            size={{ base: "md", md: "sm" }}
             value={status}
             onChange={(event) => onStatusChange(event.target.value)}
           >
