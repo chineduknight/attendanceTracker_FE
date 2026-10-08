@@ -20,6 +20,7 @@ import {
   Icon,
   Collapse,
   Badge,
+  Portal,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
@@ -75,7 +76,9 @@ const parseFieldList = (raw: string | null): string[] | null => {
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : null;
+    return Array.isArray(parsed)
+      ? parsed.filter((v) => typeof v === "string")
+      : null;
   } catch {
     return null;
   }
@@ -182,7 +185,8 @@ const ViewMembers: React.FC = () => {
     [filterableFields]
   );
   const allExtraFields = useMemo(
-    () => (members.length > 0 ? Object.keys(_.omit(members[0], HIDDEN_KEYS)) : []),
+    () =>
+      members.length > 0 ? Object.keys(_.omit(members[0], HIDDEN_KEYS)) : [],
     [members]
   );
   const shownFields = chosenFields ?? allExtraFields;
@@ -304,33 +308,37 @@ const ViewMembers: React.FC = () => {
         >
           Export
         </MenuButton>
-        <MenuList>
-          <MenuItem
-            icon={<Icon as={FaFileExcel} color="green.500" />}
-            onClick={() => exportMembers()}
-            isDisabled={exportUnavailable || isExportingMembers}
-          >
-            {isExportingMembers
-              ? "Exporting..."
-              : `Export ${terms.memberSingular} List`}
-          </MenuItem>
-          <MenuItem
-            icon={<Icon as={FaFilePdf} color="red.500" />}
-            onClick={() => exportMembersPdf()}
-            isDisabled={exportUnavailable || isExportingMembersPdf}
-          >
-            {isExportingMembersPdf
-              ? "Exporting..."
-              : `Export ${terms.memberSingular} PDF`}
-          </MenuItem>
-        </MenuList>
+        {/* Portaled: in place, the pinned search bar (a higher layer)
+            covers the open menu. */}
+        <Portal>
+          <MenuList>
+            <MenuItem
+              icon={<Icon as={FaFileExcel} color="green.500" />}
+              onClick={() => exportMembers()}
+              isDisabled={exportUnavailable || isExportingMembers}
+            >
+              {isExportingMembers
+                ? "Exporting..."
+                : `Export ${terms.memberSingular} List`}
+            </MenuItem>
+            <MenuItem
+              icon={<Icon as={FaFilePdf} color="red.500" />}
+              onClick={() => exportMembersPdf()}
+              isDisabled={exportUnavailable || isExportingMembersPdf}
+            >
+              {isExportingMembersPdf
+                ? "Exporting..."
+                : `Export ${terms.memberSingular} PDF`}
+            </MenuItem>
+          </MenuList>
+        </Portal>
       </Menu>
     </Flex>
   );
 
   return (
     <Box minH={"100vh"} bg={pageBg}>
-      <Box px="4" pb="8" maxW="container.xl" mx="auto">
+      <Box px="4" pt="4" pb="8" maxW="container.xl" mx="auto">
         {actionButtons}
         {isLoading ? (
           <LoadingSpinner
@@ -402,7 +410,11 @@ const ViewMembers: React.FC = () => {
                 <Flex align="center" justify="space-between" mb={2}>
                   <Text fontWeight="bold">Filter by</Text>
                   {activeFilters.length > 0 && (
-                    <Button size="sm" variant="link" onClick={() => setFilters({})}>
+                    <Button
+                      size="sm"
+                      variant="link"
+                      onClick={() => setFilters({})}
+                    >
                       Clear all
                     </Button>
                   )}
@@ -515,8 +527,7 @@ const ViewMembers: React.FC = () => {
                 {isNarrowed ? (
                   <>
                     Showing {countNumber(filteredMembers.length)} of{" "}
-                    {countNumber(members.length)}{" "}
-                    {memberTerm(members.length)}
+                    {countNumber(members.length)} {memberTerm(members.length)}
                   </>
                 ) : (
                   <>
