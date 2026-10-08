@@ -36,6 +36,7 @@ import { hasDobDateField, localBusinessDate } from "helpers/birthday";
 import {
   effectiveWelfareStatus,
   statusesParam,
+  welfareBirthdayPresentation,
   welfareStatusScope,
 } from "helpers/welfareReview";
 import {
@@ -156,9 +157,17 @@ const Welfare = () => {
     enabled: showBirthdays,
     asOf,
   });
+  // Real local today only decides the wording (upcoming vs review range), once,
+  // so the tile, heading and relative labels can never disagree.
+  const birthdayPresentation = welfareBirthdayPresentation(
+    birthdays.fromDate,
+    today,
+  );
   // A failed birthday query hides its card rather than showing a fake zero.
-  const birthdayCount =
-    showBirthdays && birthdays.isSuccess ? birthdays.members.length : null;
+  const birthdayTile =
+    showBirthdays && birthdays.isSuccess
+      ? { count: birthdays.members.length, label: birthdayPresentation.label }
+      : null;
 
   // Phase 7C: private follow-ups are separately permissioned. Without
   // welfare.view no follow-up request is made and no note text can render.
@@ -264,7 +273,7 @@ const Welfare = () => {
               <ReviewWindowCaption overview={overview} />
               <WelfareSummaryCards
                 summary={overview.summary}
-                birthdayCount={birthdayCount}
+                birthdayTile={birthdayTile}
               />
 
               {canViewFollowUps && (
@@ -395,6 +404,7 @@ const Welfare = () => {
                     toDate: birthdays.toDate,
                   }}
                   today={today}
+                  presentation={birthdayPresentation}
                   isFetching={birthdays.isFetching}
                   isError={birthdays.isError}
                 />
@@ -413,6 +423,7 @@ const Welfare = () => {
                   toDate: birthdays.toDate,
                 }}
                 today={today}
+                presentation={birthdayPresentation}
                 isFetching={birthdays.isFetching}
                 isError={birthdays.isError}
               />

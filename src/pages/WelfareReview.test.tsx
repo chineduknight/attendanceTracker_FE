@@ -749,48 +749,121 @@ describe("<Welfare> birthday snapshot follows the review date", () => {
       ],
     },
   };
-  const plus7 = (value: string) =>
-    format(addDays(parseISO(value), 7), "yyyy-MM-dd");
+  const UPCOMING = "Upcoming Birthdays";
+  const REVIEW_RANGE = "Birthdays in Review Range";
+  const shift = (value: string, days: number) =>
+    format(addDays(parseISO(value), days), "yyyy-MM-dd");
+  // Starts before real today but its +7 range runs past it.
+  const STRADDLE = shift(TODAY, -3);
+  const EMPTY_REVIEW = "2026-09-01";
   const birthdayRanges = () =>
     callsTo("/members/birthday").map(([url]) => {
       const params = new URL(String(url), "http://x").searchParams;
       return `${params.get("startDate")}→${params.get("endDate")}`;
     });
-  const birthdayRegion = () =>
-    within(screen.getByRole("region", { name: "Upcoming Birthdays" }));
+  const birthdayRegion = (label: string) =>
+    within(screen.getByRole("region", { name: label }));
+  const expectNoRelativeLabels = (label: string) => {
+    expect(birthdayRegion(label).queryByText("Today")).toBeNull();
+    expect(birthdayRegion(label).queryByText("Tomorrow")).toBeNull();
+    expect(birthdayRegion(label).queryByText(/^In \d+ days$/)).toBeNull();
+  };
 
   beforeEach(() => {
     orgs.org1.model = DOB_MODEL;
     orgs.org2.model = DOB_MODEL;
     orgs.org1.birthdays = {
-      [TODAY]: [{ name: "Today Person", occurrenceDate: plus7(TODAY) }],
+      [TODAY]: [
+        { name: "Today Person", occurrenceDate: TODAY },
+        { name: "Later Person", occurrenceDate: shift(TODAY, 4) },
+      ],
       [PAST_REVIEW]: [
         { name: "Past One", occurrenceDate: "2026-10-01" },
         { name: "Past Two", occurrenceDate: "2026-10-03" },
       ],
+      [STRADDLE]: [
+        { name: "Before Today", occurrenceDate: shift(TODAY, -1) },
+        { name: "On Today", occurrenceDate: TODAY },
+        { name: "After Today", occurrenceDate: shift(TODAY, 2) },
+      ],
     };
   });
 
-  it("loads a pinned historical asOf's range on page load", async () => {
+  it("calls a today review upcoming, with relative labels, on the tile and section alike", async () => {
+    renderPage();
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+    expect(birthdayRanges()).toEqual([`${TODAY}→${shift(TODAY, 7)}`]);
+    expect(within(summaryTile(UPCOMING)).getByText("2")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: UPCOMING })).toBeInTheDocument();
+    expect(birthdayRegion(UPCOMING).getByText("Today")).toBeInTheDocument();
+    expect(birthdayRegion(UPCOMING).getByText("In 4 days")).toBeInTheDocument();
+    expect(screen.queryByText(REVIEW_RANGE)).toBeNull();
+  });
+
+  it("keeps an entirely past pinned review, labelled as a review range without relative wording", async () => {
     renderPage(`/welfare?asOf=${PAST_REVIEW}`);
     expect(await screen.findByText("Past One")).toBeInTheDocument();
     expect(birthdayRanges()).toEqual(["2026-09-30→2026-10-07"]);
-    expect(birthdayRegion().getByText("30 Sep – 7 Oct")).toBeInTheDocument();
     expect(
-      within(summaryTile("Upcoming Birthdays")).getByText("2")
+      screen.getByRole("heading", { name: REVIEW_RANGE })
     ).toBeInTheDocument();
-    expect(screen.queryByText("Today Person")).toBeNull();
-    // Relative labels stay anchored on the real today: a past review never
-    // calls an old birthday "Today".
-    expect(birthdayRegion().queryByText("Today")).toBeNull();
+    expect(
+      birthdayRegion(REVIEW_RANGE).getByText("30 Sep – 7 Oct")
+    ).toBeInTheDocument();
+    // The historical count is retained, under the same label as the section.
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("2")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Past Two")).toBeInTheDocument();
+    expect(screen.getByText("Thu, 1 Oct")).toBeInTheDocument();
+    expect(screen.queryByText(UPCOMING)).toBeNull();
+    expectNoRelativeLabels(REVIEW_RANGE);
+  });
+
+  it("treats a review that straddles today as a review range and suppresses relative labels", async () => {
+    renderPage(`/welfare?asOf=${STRADDLE}`);
+    expect(await screen.findByText("After Today")).toBeInTheDocument();
+    expect(birthdayRanges()).toEqual([`${STRADDLE}→${shift(STRADDLE, 7)}`]);
+    expect(
+      screen.getByRole("heading", { name: REVIEW_RANGE })
+    ).toBeInTheDocument();
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("3")
+    ).toBeInTheDocument();
+    expect(
+      birthdayRegion(REVIEW_RANGE).getByText(
+        `${format(parseISO(STRADDLE), "d MMM")} – ${format(
+          parseISO(shift(STRADDLE, 7)),
+          "d MMM"
+        )}`
+      )
+    ).toBeInTheDocument();
+    // Dates still render; only the relative wording is dropped.
+    expect(
+      birthdayRegion(REVIEW_RANGE).getByText(
+        format(parseISO(TODAY), "EEE, d MMM")
+      )
+    ).toBeInTheDocument();
+    expectNoRelativeLabels(REVIEW_RANGE);
+  });
+
+  it("shows the shared empty state for an empty past review without hiding the section", async () => {
+    renderPage(`/welfare?asOf=${EMPTY_REVIEW}`);
+    expect(
+      await screen.findByText("No birthdays in this review range.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: REVIEW_RANGE })
+    ).toBeInTheDocument();
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("0")
+    ).toBeInTheDocument();
   });
 
   it("requests the new range when the review date changes, and Today restores it", async () => {
     renderPage();
     expect(await screen.findByText("Today Person")).toBeInTheDocument();
-    expect(
-      within(summaryTile("Upcoming Birthdays")).getByText("1")
-    ).toBeInTheDocument();
+    expect(within(summaryTile(UPCOMING)).getByText("2")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Review as of"), {
       target: { value: PAST_REVIEW },
@@ -798,17 +871,15 @@ describe("<Welfare> birthday snapshot follows the review date", () => {
     expect(await screen.findByText("Past Two")).toBeInTheDocument();
     expect(screen.queryByText("Today Person")).toBeNull();
     expect(
-      within(summaryTile("Upcoming Birthdays")).getByText("2")
+      within(summaryTile(REVIEW_RANGE)).getByText("2")
     ).toBeInTheDocument();
     expect(birthdayRanges()).toContain("2026-09-30→2026-10-07");
 
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
     expect(await screen.findByText("Today Person")).toBeInTheDocument();
     expect(screen.queryByText("Past Two")).toBeNull();
-    expect(
-      within(summaryTile("Upcoming Birthdays")).getByText("1")
-    ).toBeInTheDocument();
-    expect(birthdayRanges()[0]).toBe(`${TODAY}→${plus7(TODAY)}`);
+    expect(within(summaryTile(UPCOMING)).getByText("2")).toBeInTheDocument();
+    expect(birthdayRanges()[0]).toBe(`${TODAY}→${shift(TODAY, 7)}`);
   });
 
   it("never shows another organisation's birthdays after a switch", async () => {

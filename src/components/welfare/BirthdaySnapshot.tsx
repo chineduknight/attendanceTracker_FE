@@ -5,17 +5,17 @@ import {
   BirthdayRange,
   formatBirthdayRangeDate,
 } from "helpers/birthday";
+import { WelfareBirthdayPresentation } from "helpers/welfareReview";
 import { sectionTargetProps } from "components/welfare/welfareSections";
 
 interface BirthdaySnapshotProps {
   members: BirthdayMember[];
   /** The review range: selected review date through review date + 7. */
   range: BirthdayRange;
-  /**
-   * Local business today for Today/Tomorrow labels. Deliberately not the
-   * review date: a past review must never call an old birthday "Today".
-   */
+  /** Real local business today; anchors Today/Tomorrow labels only. */
   today: string;
+  /** Shared with the summary tile so both always use the same wording. */
+  presentation: WelfareBirthdayPresentation;
   isFetching: boolean;
   isError: boolean;
 }
@@ -23,24 +23,27 @@ interface BirthdaySnapshotProps {
 /**
  * Reuses the existing Birthday API for the selected review range, and the
  * Birthday page's own list so occurrence dates (Phase 7B metadata, or the
- * shared legacy parser) are rendered one way everywhere. A failure is shown
- * locally and never breaks the rest of Welfare.
+ * shared legacy parser) are rendered one way everywhere. A range that began
+ * before today is still shown in full (it is part of the review), just
+ * without relative wording. A failure is shown locally and never breaks the
+ * rest of Welfare.
  */
 const BirthdaySnapshot = ({
   members,
   range,
   today,
+  presentation,
   isFetching,
   isError,
 }: BirthdaySnapshotProps) => (
   <Box
     as="section"
-    aria-label="Upcoming Birthdays"
+    aria-label={presentation.label}
     mt={8}
     {...sectionTargetProps("birthdays")}
   >
     <Heading size="md" mb={1}>
-      Upcoming Birthdays
+      {presentation.label}
     </Heading>
     <Text fontSize="sm" color="gray.500" mb={3}>
       {`${formatBirthdayRangeDate(range.fromDate)} – ${formatBirthdayRangeDate(
@@ -56,6 +59,7 @@ const BirthdaySnapshot = ({
         members={members}
         range={range}
         asOf={today}
+        showRelativeLabels={presentation.isUpcoming}
         emptyState="No birthdays in this review range."
       />
     )}

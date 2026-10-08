@@ -5,6 +5,7 @@ import {
   isBusinessDate,
   memberHasStatus,
   statusesParam,
+  welfareBirthdayPresentation,
   welfareStatusScope,
 } from "helpers/welfareReview";
 import { WelfareInsight } from "components/welfare/welfareTypes";
@@ -246,5 +247,27 @@ describe("attentionProgress", () => {
     const progress = attentionProgress(attention, [followUp()], REVIEW);
     expect(progress.all).toBe(attention);
     expect(attention).toEqual(ELEVEN);
+  });
+});
+
+describe("welfareBirthdayPresentation", () => {
+  const TODAY = "2026-10-08";
+  const UPCOMING = { isUpcoming: true, label: "Upcoming Birthdays" };
+  const REVIEW = { isUpcoming: false, label: "Birthdays in Review Range" };
+
+  it("calls a range starting today upcoming", () => {
+    expect(welfareBirthdayPresentation("2026-10-08", TODAY)).toEqual(UPCOMING);
+  });
+
+  it("calls a future range upcoming", () => {
+    expect(welfareBirthdayPresentation("2026-10-20", TODAY)).toEqual(UPCOMING);
+  });
+
+  it("calls an entirely past range a review range", () => {
+    expect(welfareBirthdayPresentation("2026-09-29", TODAY)).toEqual(REVIEW);
+  });
+
+  it("calls a range that straddles today a review range", () => {
+    expect(welfareBirthdayPresentation("2026-10-04", TODAY)).toEqual(REVIEW);
   });
 });
