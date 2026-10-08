@@ -97,7 +97,8 @@
       "^@ark-ui/react/(.+)$": "<rootDir>/node_modules/@ark-ui/react/dist/components/$1/index.cjs"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(@zag-js|@ark-ui|@pandacss|@internationalized|proxy-compare|uqr|next-themes)/)"
+      "[/\\\\]node_modules[/\\\\](?!(@zag-js|@ark-ui|@pandacss|@internationalized|proxy-compare|uqr|next-themes)[/\\\\]).+\\.(js|jsx|mjs|cjs|ts|tsx)$",
+      "^.+\\.module\\.(css|sass|scss)$"
     ]
   }
 }

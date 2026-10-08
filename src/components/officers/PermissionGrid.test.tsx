@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
+import { render } from "test-utils/render";
 import PermissionGrid from "components/officers/PermissionGrid";
 import { PERMISSION_AREAS } from "rbac/permissions";
 

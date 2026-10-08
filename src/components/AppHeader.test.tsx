@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
+import { render } from "test-utils/render";
 import { MemoryRouter } from "react-router-dom";
 import useGlobalStore, { EMPTY_USER } from "zStore";
 import AppHeader from "components/AppHeader";

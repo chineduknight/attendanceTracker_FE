@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import BirthdayList from "components/birthday/BirthdayList";
 import { BirthdayMember } from "helpers/birthday";
 

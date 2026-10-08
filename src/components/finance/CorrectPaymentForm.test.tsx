@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import CorrectPaymentForm from "components/finance/CorrectPaymentForm";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
 

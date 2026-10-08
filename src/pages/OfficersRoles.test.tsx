@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render } from "test-utils/render";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";

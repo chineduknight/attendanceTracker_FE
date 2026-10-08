@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import { MemoryRouter } from "react-router-dom";
 import useGlobalStore, { EMPTY_ORG, OrganisationType } from "zStore";
 import Dashboard from "pages/Dashboard";
