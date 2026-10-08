@@ -1,13 +1,5 @@
-import {
-  Box,
-  Flex,
-  useColorModeValue,
-  Button,
-  Text,
-  Stack,
-  Avatar,
-  Badge,
-} from "@chakra-ui/react";
+import { Box, Flex, Button, Text, Stack, Avatar, Badge } from "@chakra-ui/react";
+import { useColorModeValue } from "../components/ui/color-mode";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
@@ -81,7 +73,7 @@ const OrgList = () => {
         + Add Org
       </Button>
       <Stack
-        spacing={4}
+        gap={4}
         w={"full"}
         maxW={"md"}
         bg={useColorModeValue("white", "gray.700")}
@@ -108,17 +100,14 @@ const OrgList = () => {
                 }}
               >
                 <Flex alignItems="center">
-                  <Avatar
-                    name={org.name}
-                    src={org.image}
+                  <Avatar.Root
                     w="45px"
                     h="45px"
                     // Neutral backing for logos with transparency, so Chakra's
                     // name-derived colour doesn't show through the image.
                     bg={org.image ? "white" : undefined}
                     borderWidth="2px"
-                    borderColor="blue.400"
-                  />
+                    borderColor="blue.400"><Avatar.Fallback name={org.name} /><Avatar.Image src={org.image} /></Avatar.Root>
                   <Text ml="4" textAlign="left">
                     {" "}
                     {org.name}
@@ -135,7 +124,7 @@ const OrgList = () => {
                         navigate(PROTECTED_PATHS.SETTINGS);
                       }}
                       variant="outline"
-                      colorScheme="blue"
+                      colorPalette="blue"
                     >
                       <FaCog />
                     </Button>

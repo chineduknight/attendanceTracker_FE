@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Button,
-} from "@chakra-ui/react";
+import { Button, Dialog, Portal } from "@chakra-ui/react";
 import { useQueryWrapper, patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -42,22 +40,32 @@ const EditOfficerPermissionsModal = ({ organisationId, officer, onClose }: Props
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg" isCentered scrollBehavior="inside">
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>Permissions — {officer?.username}</ModalHeader>
-        <ModalCloseButton />
-        <ModalBody>
-          {catalog && (
-            <PermissionGrid areas={catalog.areas} value={selected} onChange={setSelected} />
-          )}
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-          <Button variant="primary" isLoading={isLoading} onClick={onSave}>Save</Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+    <Dialog.Root open={isOpen} size='lg' placement='center' scrollBehavior="inside" onOpenChange={e => {
+      if (!e.open) {
+        onClose();
+      }
+    }}>
+      <Portal>
+
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>Permissions — {officer?.username}</Dialog.Header>
+            <Dialog.CloseTrigger />
+            <Dialog.Body>
+              {catalog && (
+                <PermissionGrid areas={catalog.areas} value={selected} onChange={setSelected} />
+              )}
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
+              <Button variant="primary" loading={isLoading} onClick={onSave}>Save</Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+
+      </Portal>
+    </Dialog.Root>
   );
 };
 

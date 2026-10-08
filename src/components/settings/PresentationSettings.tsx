@@ -1,15 +1,4 @@
-import {
-  Box,
-  FormControl,
-  FormErrorMessage,
-  FormLabel,
-  Heading,
-  Input,
-  SimpleGrid,
-  Stack,
-  Switch,
-  Text,
-} from "@chakra-ui/react";
+import { Box, Heading, Input, SimpleGrid, Stack, Switch, Text, Field } from "@chakra-ui/react";
 import { FieldErrors, UseFormRegister } from "react-hook-form";
 import { OrgSettingsForm } from "helpers/orgPayloads";
 import {
@@ -30,7 +19,7 @@ const validateTerm = (value: string) => termError(value) ?? true;
 
 /** Organisation terminology: display words only, never API fields. */
 export const TerminologySettings = ({ register, errors, isReadOnly }: PresentationSettingsProps) => (
-  <Stack spacing={3}>
+  <Stack gap={3}>
     <Box>
       <Heading size="sm">Terminology</Heading>
       <Text fontSize="sm" color="gray.500">
@@ -38,19 +27,19 @@ export const TerminologySettings = ({ register, errors, isReadOnly }: Presentati
       </Text>
     </Box>
     {TERM_GROUPS.map(({ title, singular, plural }) => (
-      <SimpleGrid key={title} columns={{ base: 1, sm: 2 }} spacing={3}>
+      <SimpleGrid key={title} columns={{ base: 1, sm: 2 }} gap={3}>
         {[
           { key: singular, label: `${title} singular` },
           { key: plural, label: `${title} plural` },
         ].map(({ key, label }) => (
-          <FormControl key={key} isInvalid={Boolean(errors.terminology?.[key])} isRequired>
-            <FormLabel mb="1">{label}</FormLabel>
+          <Field.Root key={key} invalid={Boolean(errors.terminology?.[key])} required>
+            <Field.Label mb="1">{label}</Field.Label>
             <Input
-              isReadOnly={isReadOnly}
+              readOnly={isReadOnly}
               {...register(`terminology.${key}`, { validate: validateTerm })}
             />
-            <FormErrorMessage>{errors.terminology?.[key]?.message}</FormErrorMessage>
-          </FormControl>
+            <Field.ErrorText>{errors.terminology?.[key]?.message}</Field.ErrorText>
+          </Field.Root>
         ))}
       </SimpleGrid>
     ))}
@@ -59,7 +48,7 @@ export const TerminologySettings = ({ register, errors, isReadOnly }: Presentati
 
 /** Optional modules shown in this organisation's navigation. */
 export const FeatureVisibilitySettings = ({ register, isReadOnly }: PresentationSettingsProps) => (
-  <Stack spacing={3}>
+  <Stack gap={3}>
     <Box>
       <Heading size="sm">Visible modules</Heading>
       <Text fontSize="sm" color="gray.500">
@@ -67,16 +56,16 @@ export const FeatureVisibilitySettings = ({ register, isReadOnly }: Presentation
       </Text>
     </Box>
     {OPTIONAL_FEATURES.map((feature) => (
-      <FormControl key={feature} display="flex" alignItems="center" justifyContent="space-between">
-        <FormLabel htmlFor={`feature-${feature}`} mb="0">
+      <Field.Root key={feature} display="flex" alignItems="center" justifyContent="space-between">
+        <Field.Label htmlFor={`feature-${feature}`} mb="0">
           {FEATURE_LABELS[feature]}
-        </FormLabel>
+        </Field.Label>
         <Switch
           id={`feature-${feature}`}
-          isDisabled={isReadOnly}
+          disabled={isReadOnly}
           {...register(`featureVisibility.${feature}`)}
         />
-      </FormControl>
+      </Field.Root>
     ))}
   </Stack>
 );

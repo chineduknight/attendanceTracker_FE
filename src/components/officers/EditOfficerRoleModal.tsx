@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton,
-  FormControl, FormLabel, Select, Button,
-} from "@chakra-ui/react";
+import { NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
 import { useQueryWrapper, patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -35,25 +32,38 @@ const EditOfficerRoleModal = ({ organisationId, officer, onClose }: Props) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} isCentered>
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>Change role — {officer?.username}</ModalHeader>
-        <ModalCloseButton />
-        <ModalBody>
-          <FormControl>
-            <FormLabel>Role</FormLabel>
-            <Select value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </Select>
-          </FormControl>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-          <Button variant="primary" isLoading={isLoading} isDisabled={!roleId} onClick={onSave}>Save</Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+    <Dialog.Root open={isOpen} placement='center' onOpenChange={e => {
+      if (!e.open) {
+        onClose();
+      }
+    }}>
+      <Portal>
+
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>Change role — {officer?.username}</Dialog.Header>
+            <Dialog.CloseTrigger />
+            <Dialog.Body>
+              <Field.Root>
+                <Field.Label>Role</Field.Label>
+                <NativeSelect.Root>
+                  <NativeSelect.Field value={roleId} onValueChange={(e) => setRoleId(e.target.value)}>
+                    {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </NativeSelect.Field>
+                  <NativeSelect.Indicator />
+                </NativeSelect.Root>
+              </Field.Root>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
+              <Button variant="primary" loading={isLoading} disabled={!roleId} onClick={onSave}>Save</Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+
+      </Portal>
+    </Dialog.Root>
   );
 };
 

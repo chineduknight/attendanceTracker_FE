@@ -12,19 +12,12 @@ import {
   Checkbox,
   CheckboxGroup,
   Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
   Icon,
-  Collapse,
+  Collapsible,
   Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverArrow,
-  PopoverCloseButton,
-  PopoverBody,
   useBreakpointValue,
   useDisclosure,
+  Portal,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -76,7 +69,7 @@ const ViewMembers: React.FC = () => {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const navigate = useNavigate();
   const isCompactActions = useBreakpointValue({ base: true, sm: false });
-  const { isOpen: isFieldsOpen, onToggle: onFieldsToggle } = useDisclosure();
+  const { open: isFieldsOpen, onToggle: onFieldsToggle } = useDisclosure();
   // The keys you always want to exclude
   const filteredKeys = useMemo(
     () => ["name", "createdAt", "updatedAt", "organisationId", "id"],
@@ -239,56 +232,49 @@ const ViewMembers: React.FC = () => {
             <Can perm="members.manage">
               <Button
                 variant="primary"
-                colorScheme="blue"
+                colorPalette="blue"
                 onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
-                leftIcon={<FaUserPlus />}
                 aria-label={LABELS.addMember(terms)}
-                px={isCompactActions ? 3 : 4}
-              >
-                {!isCompactActions && LABELS.addMember(terms)}
-              </Button>
+                px={isCompactActions ? 3 : 4}><FaUserPlus />{!isCompactActions && LABELS.addMember(terms)}</Button>
             </Can>
-            <Menu>
-              <MenuButton
-                as={Button}
-                variant="solid"
-                colorScheme="teal"
-                leftIcon={<FaShareAlt />}
-                aria-label="Share"
-                px={isCompactActions ? 3 : 4}
-              >
-                {!isCompactActions && "Share"}
-              </MenuButton>
-              <MenuList>
-                <MenuItem
-                  icon={<Icon as={FaFileExcel} color="green.500" />}
-                  color="green.600"
-                  onClick={() => exportMembers()}
-                  isDisabled={
-                    !org.id || isLoading || Boolean(error) || isExportingMembers
-                  }
-                >
-                  {isExportingMembers
-                    ? "Exporting..."
-                    : `Export ${terms.memberSingular} List`}
-                </MenuItem>
-                <MenuItem
-                  icon={<Icon as={FaFilePdf} color="red.500" />}
-                  color="red.600"
-                  onClick={() => exportMembersPdf()}
-                  isDisabled={
-                    !org.id ||
-                    isLoading ||
-                    Boolean(error) ||
-                    isExportingMembersPdf
-                  }
-                >
-                  {isExportingMembersPdf
-                    ? "Exporting..."
-                    : `Export ${terms.memberSingular} PDF`}
-                </MenuItem>
-              </MenuList>
-            </Menu>
+            <Menu.Root>
+              <Menu.Trigger asChild><Button
+                  variant="solid"
+                  colorPalette="teal"
+                  aria-label="Share"
+                  px={isCompactActions ? 3 : 4}><FaShareAlt />
+                  {!isCompactActions && "Share"}
+                </Button></Menu.Trigger>
+              <Portal><Menu.Positioner><Menu.Content>
+                    <Menu.Item
+                      icon={<Icon color="green.500" asChild><FaFileExcel /></Icon>}
+                      color="green.600"
+                      onSelect={() => exportMembers()}
+                      disabled={
+                        !org.id || isLoading || Boolean(error) || isExportingMembers
+                      }
+                      value='item-0'>
+                      {isExportingMembers
+                        ? "Exporting..."
+                        : `Export ${terms.memberSingular} List`}
+                    </Menu.Item>
+                    <Menu.Item
+                      icon={<Icon color="red.500" asChild><FaFilePdf /></Icon>}
+                      color="red.600"
+                      onSelect={() => exportMembersPdf()}
+                      disabled={
+                        !org.id ||
+                        isLoading ||
+                        Boolean(error) ||
+                        isExportingMembersPdf
+                      }
+                      value='item-1'>
+                      {isExportingMembersPdf
+                        ? "Exporting..."
+                        : `Export ${terms.memberSingular} PDF`}
+                    </Menu.Item>
+                  </Menu.Content></Menu.Positioner></Portal>
+            </Menu.Root>
           </Flex>
         </Flex>
         {isLoading ? (
@@ -321,79 +307,77 @@ const ViewMembers: React.FC = () => {
               <Input
                 placeholder="Search"
                 value={searchQuery}
-                onChange={handleSearch}
+                onValueChange={handleSearch}
                 mr={0}
                 maxW={{ base: "100%", md: "300px" }}
               />
               {filterableFields.length > 0 && (
-                <Popover placement="bottom-end" closeOnBlur>
-                  <PopoverTrigger>
-                    <Button
-                      leftIcon={<FaFilter />}
-                      variant="outline"
-                      colorScheme="blue"
-                      w={{ base: "100%", md: "auto" }}
-                    >
-                      Filters
-                      {activeFilterCount > 0 && ` (${activeFilterCount})`}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent w={{ base: "280px", md: "320px" }}>
-                    <PopoverArrow />
-                    <PopoverCloseButton />
-                    <PopoverBody>
-                      <Flex align="center" gap={3} mb={2} pr={6}>
-                        <Text fontWeight="bold">Filter by</Text>
-                        {activeFilterCount > 0 && (
-                          <Button
-                            size="xs"
-                            variant="link"
-                            colorScheme="blue"
-                            onClick={() => setFilters({})}
-                          >
-                            Clear all
-                          </Button>
-                        )}
-                      </Flex>
-                      {filterableFields.map((field) => {
-                        const options: SelectOption[] = field.options.map(
-                          (option) => ({
-                            value: option,
-                            label: capitalize(option),
-                          })
-                        );
-                        const selected = options.filter((option) =>
-                          (filters[field.name] ?? []).includes(option.value)
-                        );
-                        return (
-                          <Box key={field.name} mb={3}>
-                            <Text fontSize="sm" fontWeight="bold" mb={1}>
-                              {labelFor(field.name)}
-                            </Text>
-                            <ReactSelect
-                              isMulti
-                              placeholder={`Filter by ${labelFor(field.name)}`}
-                              options={options}
-                              value={selected}
-                              closeMenuOnSelect={false}
-                              onChange={(
-                                selected: MultiValue<SelectOption>
-                              ) => {
-                                const values = selected.map(
-                                  (item) => item.value
-                                );
-                                setFilters((prev) => ({
-                                  ...prev,
-                                  [field.name]: values,
-                                }));
-                              }}
-                            />
-                          </Box>
-                        );
-                      })}
-                    </PopoverBody>
-                  </PopoverContent>
-                </Popover>
+                <Popover.Root closeOnInteractOutside positioning={{
+                  placement: 'bottom-end'
+                }}>
+                  <Popover.Trigger asChild>
+                    <Button variant="outline" colorPalette="blue" w={{ base: "100%", md: "auto" }}><FaFilter />
+                        Filters
+                        {activeFilterCount > 0 && ` (${activeFilterCount})`}</Button>
+                  </Popover.Trigger>
+                  <Popover.Positioner>
+                    <Popover.Content w={{ base: "280px", md: "320px" }}>
+                      <Popover.Arrow />
+                      <Popover.CloseTrigger />
+                      <Popover.Body>
+                        <Flex align="center" gap={3} mb={2} pr={6}>
+                          <Text fontWeight="bold">Filter by</Text>
+                          {activeFilterCount > 0 && (
+                            <Button
+                              size="xs"
+                              variant='plain'
+                              colorPalette="blue"
+                              onClick={() => setFilters({})}
+                            >
+                              Clear all
+                            </Button>
+                          )}
+                        </Flex>
+                        {filterableFields.map((field) => {
+                          const options: SelectOption[] = field.options.map(
+                            (option) => ({
+                              value: option,
+                              label: capitalize(option),
+                            })
+                          );
+                          const selected = options.filter((option) =>
+                            (filters[field.name] ?? []).includes(option.value)
+                          );
+                          return (
+                            <Box key={field.name} mb={3}>
+                              <Text fontSize="sm" fontWeight="bold" mb={1}>
+                                {labelFor(field.name)}
+                              </Text>
+                              <ReactSelect
+                                isMulti
+                                placeholder={`Filter by ${labelFor(field.name)}`}
+                                options={options}
+                                value={selected}
+                                closeMenuOnSelect={false}
+                                onChange={(
+                                  selected: MultiValue<SelectOption>
+                                ) => {
+                                  const values = selected.map(
+                                    (item) => item.value
+                                  );
+                                  setFilters((prev) => ({
+                                    ...prev,
+                                    [field.name]: values,
+                                  }));
+                                }}
+                              />
+                            </Box>
+                          );
+                        })}
+                      </Popover.Body>
+                    </Popover.Content>
+                  </Popover.Positioner>
+                </Popover.Root>
               )}
             </Flex>
             <Text mb={4} fontWeight="bold">
@@ -419,20 +403,22 @@ const ViewMembers: React.FC = () => {
                   {selectedFields.length} selected — tap to customize
                 </Text>
               )}
-              <Collapse in={!isCompactActions || isFieldsOpen} animateOpacity>
-                <CheckboxGroup
-                  value={selectedFields}
-                  onChange={(values: string[]) => setSelectedFields(values)}
-                >
-                  <Flex gap={4} wrap="wrap" pt={2}>
-                    {allExtraFields.map((field) => (
-                      <Checkbox key={field} value={field}>
-                        {labelFor(field)}
-                      </Checkbox>
-                    ))}
-                  </Flex>
-                </CheckboxGroup>
-              </Collapse>
+              <Collapsible.Root open={!isCompactActions || isFieldsOpen}>
+                <Collapsible.Content>
+                  <CheckboxGroup
+                    value={selectedFields}
+                    onValueChange={(values: string[]) => setSelectedFields(values)}
+                  >
+                    <Flex gap={4} wrap="wrap" pt={2}>
+                      {allExtraFields.map((field) => (
+                        <Checkbox.Root key={field} value={field}><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
+                          {labelFor(field)}
+                        </Checkbox.Label></Checkbox.Root>
+                      ))}
+                    </Flex>
+                  </CheckboxGroup>
+                </Collapsible.Content>
+              </Collapsible.Root>
             </Box>
             {filteredMembers.length === 0 ? (
               <Box
@@ -447,7 +433,7 @@ const ViewMembers: React.FC = () => {
                 </Heading>
               </Box>
             ) : (
-              <SimpleGrid columns={{ sm: 1, md: 2, lg: 3 }} spacing={8}>
+              <SimpleGrid columns={{ sm: 1, md: 2, lg: 3 }} gap={8}>
                 {filteredMembers.map((member) => (
                   <Box
                     key={member.id}
@@ -456,21 +442,16 @@ const ViewMembers: React.FC = () => {
                     rounded={"xl"}
                     boxShadow={"lg"}
                   >
-                    <Stack spacing={4}>
+                    <Stack gap={4}>
                       <Flex justify="space-between" alignItems="center">
                         <Flex align="center">
-                          <Avatar
-                            size="md"
-                            name={member.name}
-                            src={member.avatarUrl}
-                            mr={3}
-                          />
+                          <Avatar.Root size="md" mr={3}><Avatar.Fallback name={member.name} /><Avatar.Image src={member.avatarUrl} /></Avatar.Root>
                           <Text fontWeight="bold">{member.name}</Text>
                         </Flex>
                         <Can perm="members.manage">
                           <Button
                             variant="outline"
-                            colorScheme="blue"
+                            colorPalette="blue"
                             onClick={() => {
                               const pagePath = convertParamsToString(
                                 PROTECTED_PATHS.UPDATE_MEMBER,
@@ -486,7 +467,7 @@ const ViewMembers: React.FC = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            colorScheme="teal"
+                            colorPalette="teal"
                             onClick={() =>
                               navigate(
                                 convertParamsToString(

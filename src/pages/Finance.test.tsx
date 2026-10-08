@@ -95,7 +95,7 @@ const setOrg = (id: string, permissions: PermissionKey[] | "owner") =>
 
 const renderFinance = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <Finance />
       </QueryClientProvider>

@@ -26,7 +26,7 @@ const InsightGrid = ({
   followedUpIds,
   onAddFollowUp,
 }: InsightGridProps) => (
-  <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+  <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
     {insights.map((insight) => (
       <AttendanceInsightCard
         key={insight.memberId}

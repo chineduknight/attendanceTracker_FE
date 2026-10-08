@@ -110,19 +110,21 @@ const MemberAnalyticsPage: React.FC = () => {
         <Flex justify="flex-end" align="center" flexWrap="wrap" gap={2} mb={3}>
           <Flex gap={2} flexWrap="wrap">
             <Button
-              leftIcon={<FaFileExcel />} onClick={() => refetchExcel()}
-              isLoading={isExportingExcel} isDisabled={!hasData}
-              bg="green.500" color="white" _hover={{ bg: "green.600" }}
-            >
-              Export Excel
-            </Button>
+              onClick={() => refetchExcel()}
+              loading={isExportingExcel}
+              disabled={!hasData}
+              bg="green.500"
+              color="white"
+              _hover={{ bg: "green.600" }}><FaFileExcel />Export Excel
+                          </Button>
             <Button
-              leftIcon={<FaFilePdf />} onClick={() => refetchPdf()}
-              isLoading={isExportingPdf} isDisabled={!hasData}
-              bg="red.500" color="white" _hover={{ bg: "red.600" }}
-            >
-              Export PDF
-            </Button>
+              onClick={() => refetchPdf()}
+              loading={isExportingPdf}
+              disabled={!hasData}
+              bg="red.500"
+              color="white"
+              _hover={{ bg: "red.600" }}><FaFilePdf />Export PDF
+                          </Button>
           </Flex>
         </Flex>
 

@@ -43,25 +43,25 @@ const PendingInvitesTab = ({ organisationId }: Props) => {
         No emails are sent yet. Share the org name with the person and ask them to sign up (or set their email) with this exact address — they'll appear as {withArticle(lowerTerm(terms.officerSingular))} automatically.
       </Text>
       <Box overflowX="auto">
-        <Table size="sm">
-          <Thead><Tr><Th>Email</Th><Th>Role</Th><Th></Th></Tr></Thead>
-          <Tbody>
+        <Table.Root size="sm">
+          <Table.Header><Table.Row><Table.ColumnHeader>Email</Table.ColumnHeader><Table.ColumnHeader>Role</Table.ColumnHeader><Table.ColumnHeader></Table.ColumnHeader></Table.Row></Table.Header>
+          <Table.Body>
             {invites.map((inv) => (
-              <Tr key={inv.id}>
-                <Td>{inv.email}</Td>
-                <Td><Badge>{inv.roleName}</Badge></Td>
-                <Td>
+              <Table.Row key={inv.id}>
+                <Table.Cell>{inv.email}</Table.Cell>
+                <Table.Cell><Badge>{inv.roleName}</Badge></Table.Cell>
+                <Table.Cell>
                   <Can perm="officers.manage">
-                    <Button size="xs" colorScheme="red" onClick={() => revoke(inv)}>Revoke</Button>
+                    <Button size="xs" colorPalette="red" onClick={() => revoke(inv)}>Revoke</Button>
                   </Can>
-                </Td>
-              </Tr>
+                </Table.Cell>
+              </Table.Row>
             ))}
             {invites.length === 0 && (
-              <Tr><Td colSpan={3}><Text color="gray.500">No pending invites.</Text></Td></Tr>
+              <Table.Row><Table.Cell colSpan={3}><Text color="gray.500">No pending invites.</Text></Table.Cell></Table.Row>
             )}
-          </Tbody>
-        </Table>
+          </Table.Body>
+        </Table.Root>
       </Box>
     </Box>
   );

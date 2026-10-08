@@ -1,8 +1,4 @@
-import {
-  Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton,
-  ModalBody, ModalFooter, FormControl, FormLabel, FormErrorMessage,
-  Button, Stack,
-} from "@chakra-ui/react";
+import { Button, Stack, Field, Dialog, Portal } from "@chakra-ui/react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { toast } from "react-toastify";
 import PasswordInput from "components/PasswordInput";
@@ -77,68 +73,78 @@ const ChangePasswordModal = ({ isOpen, onClose }: ChangePasswordModalProps) => {
     });
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} isCentered>
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>Change password</ModalHeader>
-        <ModalCloseButton />
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <ModalBody>
-            <Stack spacing={4}>
-              <FormControl isInvalid={!!errors.currentPassword}>
-                <FormLabel>Current password</FormLabel>
-                <PasswordInput
-                  autoComplete="current-password"
-                  {...register("currentPassword", {
-                    required: "Current password is required",
-                  })}
-                />
-                <FormErrorMessage>{errors.currentPassword?.message}</FormErrorMessage>
-              </FormControl>
+    <Dialog.Root open={isOpen} placement='center' onOpenChange={e => {
+      if (!e.open) {
+        handleClose();
+      }
+    }}>
+      <Portal>
 
-              <FormControl isInvalid={!!errors.newPassword}>
-                <FormLabel>New password</FormLabel>
-                <PasswordInput
-                  autoComplete="new-password"
-                  {...register("newPassword", {
-                    required: "New password is required",
-                    minLength: {
-                      value: PASSWORD_MIN_LENGTH,
-                      message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
-                    },
-                    validate: (value) =>
-                      value !== watch("currentPassword") ||
-                      "New password must be different from your current password",
-                  })}
-                />
-                <FormErrorMessage>{errors.newPassword?.message}</FormErrorMessage>
-              </FormControl>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>Change password</Dialog.Header>
+            <Dialog.CloseTrigger />
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <Dialog.Body>
+                <Stack gap={4}>
+                  <Field.Root invalid={!!errors.currentPassword}>
+                    <Field.Label>Current password</Field.Label>
+                    <PasswordInput
+                      autoComplete="current-password"
+                      {...register("currentPassword", {
+                        required: "Current password is required",
+                      })}
+                    />
+                    <Field.ErrorText>{errors.currentPassword?.message}</Field.ErrorText>
+                  </Field.Root>
 
-              <FormControl isInvalid={!!errors.confirmPassword}>
-                <FormLabel>Confirm new password</FormLabel>
-                <PasswordInput
-                  autoComplete="new-password"
-                  {...register("confirmPassword", {
-                    required: "Please confirm your new password",
-                    validate: (value) =>
-                      value === watch("newPassword") || "Passwords do not match",
-                  })}
-                />
-                <FormErrorMessage>{errors.confirmPassword?.message}</FormErrorMessage>
-              </FormControl>
-            </Stack>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={handleClose} isDisabled={isLoading}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" isLoading={isLoading}>
-              Update password
-            </Button>
-          </ModalFooter>
-        </form>
-      </ModalContent>
-    </Modal>
+                  <Field.Root invalid={!!errors.newPassword}>
+                    <Field.Label>New password</Field.Label>
+                    <PasswordInput
+                      autoComplete="new-password"
+                      {...register("newPassword", {
+                        required: "New password is required",
+                        minLength: {
+                          value: PASSWORD_MIN_LENGTH,
+                          message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+                        },
+                        validate: (value) =>
+                          value !== watch("currentPassword") ||
+                          "New password must be different from your current password",
+                      })}
+                    />
+                    <Field.ErrorText>{errors.newPassword?.message}</Field.ErrorText>
+                  </Field.Root>
+
+                  <Field.Root invalid={!!errors.confirmPassword}>
+                    <Field.Label>Confirm new password</Field.Label>
+                    <PasswordInput
+                      autoComplete="new-password"
+                      {...register("confirmPassword", {
+                        required: "Please confirm your new password",
+                        validate: (value) =>
+                          value === watch("newPassword") || "Passwords do not match",
+                      })}
+                    />
+                    <Field.ErrorText>{errors.confirmPassword?.message}</Field.ErrorText>
+                  </Field.Root>
+                </Stack>
+              </Dialog.Body>
+              <Dialog.Footer>
+                <Button variant="ghost" mr={3} onClick={handleClose} disabled={isLoading}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" loading={isLoading}>
+                  Update password
+                </Button>
+              </Dialog.Footer>
+            </form>
+          </Dialog.Content>
+        </Dialog.Positioner>
+
+      </Portal>
+    </Dialog.Root>
   );
 };
 

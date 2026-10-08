@@ -1,11 +1,4 @@
-import {
-  Button,
-  Flex,
-  FormControl,
-  FormLabel,
-  Input,
-  Select,
-} from "@chakra-ui/react";
+import { Button, Flex, Input, NativeSelect, Field } from "@chakra-ui/react";
 import { useTerms } from "hooks/useOrgPresentation";
 import { ALL_STATUSES } from "helpers/welfareReview";
 
@@ -48,14 +41,14 @@ const WelfareReviewControls = ({
       align="flex-end"
       mb={4}
     >
-      <FormControl
+      <Field.Root
         flex={{ base: "1.6 1 0", sm: "0 0 auto" }}
         minW={0}
         w="auto"
       >
-        <FormLabel htmlFor="welfare-as-of" fontSize="sm" mb={1}>
+        <Field.Label htmlFor="welfare-as-of" fontSize="sm" mb={1}>
           Review as of
-        </FormLabel>
+        </Field.Label>
         <Flex gap={2}>
           {/* md (16px) on phones: iOS Safari zooms into any smaller input. */}
           <Input
@@ -67,43 +60,45 @@ const WelfareReviewControls = ({
             w={{ base: "full", sm: "auto" }}
             max={maxDate}
             value={asOf}
-            onChange={(event) => onAsOfChange(event.target.value)}
+            onValueChange={(event) => onAsOfChange(event.target.value)}
           />
           <Button
             size={{ base: "md", md: "sm" }}
             variant="outline"
             flexShrink={0}
             onClick={onToday}
-            isDisabled={isToday}
+            disabled={isToday}
           >
             Today
           </Button>
         </Flex>
-      </FormControl>
+      </Field.Root>
 
       {statusOptions.length > 0 && (
-        <FormControl
+        <Field.Root
           flex={{ base: "1 1 0", sm: "0 0 auto" }}
           minW={0}
           w="auto"
         >
-          <FormLabel htmlFor="welfare-status" fontSize="sm" mb={1}>
+          <Field.Label htmlFor="welfare-status" fontSize="sm" mb={1}>
             {`${terms.memberSingular} status`}
-          </FormLabel>
-          <Select
-            id="welfare-status"
-            size={{ base: "md", md: "sm" }}
-            value={status}
-            onChange={(event) => onStatusChange(event.target.value)}
-          >
-            <option value={ALL_STATUSES}>All</option>
-            {statusOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </Select>
-        </FormControl>
+          </Field.Label>
+          <NativeSelect.Root>
+            <NativeSelect.Field
+              id="welfare-status"
+              size={{ base: "md", md: "sm" }}
+              value={status}
+              onValueChange={(event) => onStatusChange(event.target.value)}>
+              <option value={ALL_STATUSES}>All</option>
+              {statusOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </NativeSelect.Field>
+            <NativeSelect.Indicator />
+          </NativeSelect.Root>
+        </Field.Root>
       )}
     </Flex>
   );

@@ -40,7 +40,7 @@ const selectOrg = (id: string) =>
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/user-model"]}>
           <Routes>

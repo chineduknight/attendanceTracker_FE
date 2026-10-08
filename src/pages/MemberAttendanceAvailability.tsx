@@ -1,17 +1,15 @@
 import { useMemo, useState } from "react";
 import {
   Alert,
-  AlertIcon,
   Box,
   Button,
-  FormControl,
-  FormLabel,
   Heading,
   Input,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
+  Field,
 } from "@chakra-ui/react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -145,7 +143,7 @@ const MemberAttendanceAvailability = () => {
           </Button>
           <Button
             size="sm"
-            colorScheme="red"
+            colorPalette="red"
             variant="outline"
             onClick={() => remove(period)}
           >
@@ -159,7 +157,7 @@ const MemberAttendanceAvailability = () => {
   return (
     <Box minH="100vh" bg="gray.50" px={{ base: 4, md: 8 }} py={6}>
       <Button
-        variant="link"
+        variant='plain'
         mb={4}
         onClick={() => navigate(PROTECTED_PATHS.VIEW_MEMBER)}
       >
@@ -174,53 +172,53 @@ const MemberAttendanceAvailability = () => {
         {lowerTerm(terms.attendancePlural).toLowerCase()} in an unavailable
         period.
       </Text>
-      <Alert status="info" mb={6}>
-        <AlertIcon />
+      <Alert.Root status="info" mb={6}>
+        <Alert.Indicator />
         Availability affects {lowerTerm(terms.attendancePlural)} created after
         it is saved. Existing {lowerTerm(terms.attendancePlural)} are not
         recalculated.
-      </Alert>
+      </Alert.Root>
 
       <Can perm="attendance.manage">
         <Box bg="white" borderRadius="lg" p={5} mb={8} boxShadow="sm">
           <Heading size="md" mb={4}>
             {editing ? "Edit unavailable period" : "Add unavailable period"}
           </Heading>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl>
-              <FormLabel>Start date</FormLabel>
+          <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+            <Field.Root>
+              <Field.Label>Start date</Field.Label>
               <Input
                 type="date"
                 value={form.startDate}
-                onChange={(event) =>
+                onValueChange={(event) =>
                   setForm({ ...form, startDate: event.target.value })
                 }
               />
-            </FormControl>
-            <FormControl>
-              <FormLabel>End date</FormLabel>
+            </Field.Root>
+            <Field.Root>
+              <Field.Label>End date</Field.Label>
               <Input
                 type="date"
                 value={form.endDate}
-                onChange={(event) =>
+                onValueChange={(event) =>
                   setForm({ ...form, endDate: event.target.value })
                 }
               />
-            </FormControl>
+            </Field.Root>
           </SimpleGrid>
-          <FormControl mt={4}>
-            <FormLabel>Reason (optional)</FormLabel>
+          <Field.Root mt={4}>
+            <Field.Label>Reason (optional)</Field.Label>
             <Textarea
               value={form.reason}
               maxLength={200}
-              onChange={(event) =>
+              onValueChange={(event) =>
                 setForm({ ...form, reason: event.target.value })
               }
               placeholder="Travel, examinations, work assignment..."
             />
-          </FormControl>
+          </Field.Root>
           <Stack direction="row" mt={4}>
-            <Button colorScheme="blue" onClick={submit} isLoading={isSaving}>
+            <Button colorPalette="blue" onClick={submit} loading={isSaving}>
               {editing ? "Save changes" : "Add period"}
             </Button>
             {editing && <Button onClick={resetForm}>Cancel</Button>}
@@ -229,10 +227,10 @@ const MemberAttendanceAvailability = () => {
       </Can>
 
       {isError && (
-        <Alert status="error" mb={5}>
-          <AlertIcon />
+        <Alert.Root status="error" mb={5}>
+          <Alert.Indicator />
           Unable to load {lowerTerm(terms.attendanceSingular)} availability.
-        </Alert>
+        </Alert.Root>
       )}
       {isLoading && (
         <Text>
@@ -248,7 +246,7 @@ const MemberAttendanceAvailability = () => {
         </Box>
       )}
       {!isLoading && !isError && periods.length > 0 && (
-        <Stack spacing={6}>
+        <Stack gap={6}>
           {current.length > 0 && (
             <Box>
               <Heading size="sm" mb={3}>

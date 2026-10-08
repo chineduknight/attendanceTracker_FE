@@ -1,17 +1,5 @@
-import {
-  Flex,
-  Box,
-  FormControl,
-  FormLabel,
-  Input,
-  Checkbox,
-  Stack,
-  Link,
-  Button,
-  Heading,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Flex, Box, Input, Checkbox, Stack, Link, Button, Heading, Text, Field } from "@chakra-ui/react";
+import { useColorModeValue } from "../components/ui/color-mode";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import PasswordInput from "components/PasswordInput";
@@ -46,7 +34,7 @@ const Login = () => {
       justify={"center"}
       bg={useColorModeValue("gray.50", "gray.800")}
     >
-      <Stack spacing={8} mx={"auto"} maxW={"lg"} pb={12} px={6}>
+      <Stack gap={8} mx={"auto"} maxW={"lg"} pb={12} px={6}>
         <Stack align={"center"}>
           <Heading fontSize={"4xl"}>Sign in to your account</Heading>
           <Text fontSize={"lg"} color={"gray.600"}>
@@ -60,42 +48,37 @@ const Login = () => {
           p={8}
         >
           <form onSubmit={handleSubmit}>
-            <Stack spacing={4}>
-              <FormControl id="text">
-                <FormLabel>Username or email</FormLabel>
+            <Stack gap={4}>
+              <Field.Root id="text">
+                <Field.Label>Username or email</Field.Label>
                 <Input
                   type="text"
                   autoComplete="username"
-                  onChange={(e) => setUserName(e.target.value)}
+                  onValueChange={(e) => setUserName(e.target.value)}
                 />
-              </FormControl>
-              <FormControl id="password">
-                <FormLabel>Password</FormLabel>
+              </Field.Root>
+              <Field.Root id="password">
+                <Field.Label>Password</Field.Label>
                 <PasswordInput
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                 />
-              </FormControl>
-              <Stack spacing={10}>
+              </Field.Root>
+              <Stack gap={10}>
                 <Stack
                   direction={{ base: "column", sm: "row" }}
                   align={"start"}
                   justify={"space-between"}
                 >
-                  <Checkbox>Remember me</Checkbox>
-                  <Link
-                    as={RouterLink}
-                    to={PUBLIC_PATHS.FORGOT_PASSWORD}
-                    color={"blue.400"}
-                  >
-                    Forgot password?
-                  </Link>
+                  <Checkbox.Root><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>Remember me</Checkbox.Label></Checkbox.Root>
+                  <Link color={"blue.400"} asChild><RouterLink to={PUBLIC_PATHS.FORGOT_PASSWORD}>Forgot password?
+                                      </RouterLink></Link>
                 </Stack>
                 <Button
                   bg={"blue.400"}
                   color={"white"}
                   type="submit"
-                  isLoading={isLoading}
+                  loading={isLoading}
                   _hover={{
                     bg: "blue.500",
                   }}
@@ -107,9 +90,8 @@ const Login = () => {
           </form>
           <Text mt={4} textAlign="center" fontSize="sm">
             New here?{" "}
-            <Link as={RouterLink} to={PUBLIC_PATHS.SIGN_UP} color="blue.400">
-              Create an account
-            </Link>
+            <Link color="blue.400" asChild><RouterLink to={PUBLIC_PATHS.SIGN_UP}>Create an account
+                          </RouterLink></Link>
           </Text>
         </Box>
       </Stack>

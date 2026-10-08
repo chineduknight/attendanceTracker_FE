@@ -46,7 +46,7 @@ const DateRangeControls: React.FC<DateRangeControlsProps> = ({
           return (
             <Button
               key={preset.label} size="sm"
-              variant={isActive ? "solid" : "outline"} colorScheme="blue"
+              variant={isActive ? "solid" : "outline"} colorPalette="blue"
               aria-pressed={isActive} onClick={() => applyPreset(preset)}
             >
               {preset.label}

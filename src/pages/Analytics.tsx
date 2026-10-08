@@ -1,19 +1,6 @@
 import React, { useState, useMemo } from "react";
-import {
-  Box,
-  Flex,
-  Button,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Badge,
-  Spinner,
-  useColorModeValue,
-  Text,
-} from "@chakra-ui/react";
+import { useColorModeValue } from "../components/ui/color-mode";
+import { Box, Flex, Button, Table, Thead, Tbody, Tr, Th, Td, Badge, Spinner, Text } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { useNavigate } from "react-router-dom";
@@ -297,27 +284,21 @@ const AttendanceAnalyticsPage: React.FC = () => {
         <>
           <Flex mb={3} mt={2} gap={2} justifyContent="flex-end" flexWrap="wrap">
             <Button
-              leftIcon={<FaFileExcel />}
               onClick={() => refetchExcel()}
-              isLoading={isExportingExcel}
-              isDisabled={!canRunQuery}
+              loading={isExportingExcel}
+              disabled={!canRunQuery}
               bg="green.500"
               color="white"
-              _hover={{ bg: "green.600" }}
-            >
-              Export Excel
-            </Button>
+              _hover={{ bg: "green.600" }}><FaFileExcel />Export Excel
+                          </Button>
             <Button
-              leftIcon={<FaFilePdf />}
               onClick={() => refetchPdf()}
-              isLoading={isExportingPdf}
-              isDisabled={!canRunQuery}
+              loading={isExportingPdf}
+              disabled={!canRunQuery}
               bg="red.500"
               color="white"
-              _hover={{ bg: "red.600" }}
-            >
-              Export PDF
-            </Button>
+              _hover={{ bg: "red.600" }}><FaFilePdf />Export PDF
+                          </Button>
           </Flex>
           {/* Date range presets + selectors + status filter + search */}
           <DateRangeControls
@@ -364,9 +345,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
                   />
                 </Box>
                 <Button
-                  colorScheme="blue"
+                  colorPalette="blue"
                   onClick={handleSearch}
-                  isDisabled={!canRunQuery}
+                  disabled={!canRunQuery}
                   w={{ base: "100%", md: "auto" }}
                 >
                   Search
@@ -404,7 +385,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
                 <Flex gap={4} flexWrap="wrap">
                   {legend.map((status) => (
                     <Flex key={status.key} align="center" gap={1}>
-                      <Badge colorScheme={status.color}>
+                      <Badge colorPalette={status.color}>
                         {status.shortLabel}
                       </Badge>
                       <Text fontSize="sm">{status.label}</Text>
@@ -414,13 +395,13 @@ const AttendanceAnalyticsPage: React.FC = () => {
               </Flex>
 
               <Box overflowX="auto">
-                <Table variant="striped" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th isNumeric>SN</Th>
-                      <Th>Name</Th>
+                <Table.Root variant="striped" size="sm">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeader textAlign='end'>SN</Table.ColumnHeader>
+                      <Table.ColumnHeader>Name</Table.ColumnHeader>
                       {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                        <Th
+                        <Table.ColumnHeader
                           key={behavior}
                           textAlign="center"
                           verticalAlign="bottom"
@@ -428,20 +409,20 @@ const AttendanceAnalyticsPage: React.FC = () => {
                           <Box as="span" sx={VERTICAL_LABEL_SX}>
                             {BEHAVIOR_META[behavior].label}
                           </Box>
-                        </Th>
+                        </Table.ColumnHeader>
                       ))}
                       {dateKeys.map((d) => (
-                        <Th key={d} textAlign="center" verticalAlign="bottom">
+                        <Table.ColumnHeader key={d} textAlign="center" verticalAlign="bottom">
                           <Box as="span" sx={VERTICAL_LABEL_SX}>
                             {formatDayHeader(d)}
                           </Box>
-                        </Th>
+                        </Table.ColumnHeader>
                       ))}
-                    </Tr>
-                  </Thead>
-                  <Tbody>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
                     {rows.map((row, index) => (
-                      <Tr
+                      <Table.Row
                         key={row.memberId}
                         onClick={() =>
                           row.memberId && goToMemberAnalytics(row.memberId)
@@ -467,22 +448,22 @@ const AttendanceAnalyticsPage: React.FC = () => {
                           }
                         }}
                       >
-                        <Td isNumeric>{index + 1}</Td>
-                        <Td>{row.name}</Td>
+                        <Table.Cell textAlign='end'>{index + 1}</Table.Cell>
+                        <Table.Cell>{row.name}</Table.Cell>
 
                         {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                          <Td key={behavior} textAlign="center">
-                            <Badge colorScheme={BEHAVIOR_META[behavior].color}>
+                          <Table.Cell key={behavior} textAlign="center">
+                            <Badge colorPalette={BEHAVIOR_META[behavior].color}>
                               {behaviorCountOf(row, behavior)}
                             </Badge>
-                          </Td>
+                          </Table.Cell>
                         ))}
 
                         {dateKeys.map((d) => {
                           const key = row[d] as string | undefined;
                           if (!key) {
                             return (
-                              <Td key={d} textAlign="center">
+                              <Table.Cell key={d} textAlign="center">
                                 <Badge
                                   role="img"
                                   aria-label={NOT_ON_ROSTER(
@@ -494,25 +475,25 @@ const AttendanceAnalyticsPage: React.FC = () => {
                                 >
                                   N/A
                                 </Badge>
-                              </Td>
+                              </Table.Cell>
                             );
                           }
                           const status = statuses.resolve(key);
                           return (
-                            <Td key={d} textAlign="center">
+                            <Table.Cell key={d} textAlign="center">
                               <Badge
-                                colorScheme={status.color}
+                                colorPalette={status.color}
                                 title={status.label}
                               >
                                 {status.shortLabel}
                               </Badge>
-                            </Td>
+                            </Table.Cell>
                           );
                         })}
-                      </Tr>
+                      </Table.Row>
                     ))}
-                  </Tbody>
-                </Table>
+                  </Table.Body>
+                </Table.Root>
               </Box>
             </Box>
           )}

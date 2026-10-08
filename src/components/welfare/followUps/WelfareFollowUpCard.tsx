@@ -1,13 +1,5 @@
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  HStack,
-  Heading,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, HStack, Heading, Text } from "@chakra-ui/react";
+import { useColorModeValue } from "../../ui/color-mode";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
 import {
@@ -71,7 +63,7 @@ const WelfareFollowUpCard = ({
         <Heading size="sm" minW={0} overflowWrap="anywhere">
           {memberName}
         </Heading>
-        <Badge colorScheme="green" flexShrink={0}>
+        <Badge colorPalette="green" flexShrink={0}>
           Open
         </Badge>
       </Flex>
@@ -104,12 +96,12 @@ const WelfareFollowUpCard = ({
         {`Record date: ${followUpDateLabel(record.recordDate)}`}
       </Text>
 
-      <HStack spacing={2} wrap="wrap">
+      <HStack gap={2} wrap="wrap">
         {canManage && (
           <Button
             size={ACTION_SIZE}
             onClick={() => onEdit(record)}
-            isDisabled={isSaving}
+            disabled={isSaving}
           >
             Edit
           </Button>
@@ -119,7 +111,7 @@ const WelfareFollowUpCard = ({
             size={ACTION_SIZE}
             variant="outline"
             onClick={() => onCloseRecord(record)}
-            isDisabled={isSaving}
+            disabled={isSaving}
           >
             Close follow-up
           </Button>
@@ -130,7 +122,7 @@ const WelfareFollowUpCard = ({
           size={ACTION_SIZE}
           variant="ghost"
           onClick={() => onViewHistory(record)}
-          isDisabled={isSaving}
+          disabled={isSaving}
         >
           Member history
         </Button>

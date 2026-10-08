@@ -1,15 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Badge,
-  Button,
-  Flex,
-  FormControl,
-  FormHelperText,
-  FormLabel,
-  Select,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { Badge, Button, Flex, NativeSelect, Stack, Text, Field } from "@chakra-ui/react";
 import { confirmAlert } from "react-confirm-alert";
 import { toast } from "react-toastify";
 import { CategoryType } from "hooks/useCategories";
@@ -208,8 +198,8 @@ const AttendanceTemplatePicker = ({
   };
 
   return (
-    <Stack spacing={3}>
-      <FormControl id="attendanceTemplate">
+    <Stack gap={3}>
+      <Field.Root id="attendanceTemplate">
         {isError ? (
           <Text fontSize="sm" color="red.500">
             Templates could not be loaded. You can still fill in the details
@@ -222,30 +212,32 @@ const AttendanceTemplatePicker = ({
           </Text>
         ) : (
           <>
-            <FormLabel mb="0">Template</FormLabel>
-            <Select
-              placeholder={
-                isLoading ? "Loading templates…" : "Choose a template"
-              }
-              // A template deleted elsewhere drops out of the list; show no selection.
-              value={selected?.id ?? ""}
-              isDisabled={isLoading || isSaving}
-              onChange={(e) => onSelect(e.target.value)}
-            >
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {needsEligibility(template)
-                    ? `${template.name} (Requires eligibility)`
-                    : stalenessById.has(template.id)
-                      ? `${template.name} (Needs update)`
-                      : template.name}
-                </option>
-              ))}
-            </Select>
+            <Field.Label mb="0">Template</Field.Label>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                placeholder={
+                  isLoading ? "Loading templates…" : "Choose a template"
+                }
+                // A template deleted elsewhere drops out of the list; show no selection.
+                value={selected?.id ?? ""}
+                disabled={isLoading || isSaving}
+                onValueChange={(e) => onSelect(e.target.value)}>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {needsEligibility(template)
+                      ? `${template.name} (Requires eligibility)`
+                      : stalenessById.has(template.id)
+                        ? `${template.name} (Needs update)`
+                        : template.name}
+                  </option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
           </>
         )}
         {selected && setupFailed && (
-          <FormHelperText color="red.500">
+          <Field.HelperText color="red.500">
             {eligibilityEnabled
               ? `Templates can't be applied until ${lowerTerm(
                   terms.categoryPlural,
@@ -253,28 +245,28 @@ const AttendanceTemplatePicker = ({
               : `Templates can't be applied until ${lowerTerm(
                   terms.categoryPlural,
                 )} load.`}
-          </FormHelperText>
+          </Field.HelperText>
         )}
         {selectedNeedsEligibility && (
-          <FormHelperText>
-            <Badge colorScheme="purple" mr={2}>
+          <Field.HelperText>
+            <Badge colorPalette="purple" mr={2}>
               Requires eligibility
             </Badge>
             {`Uses ${lowerTerm(
               terms.attendanceSingular,
             )} eligibility. Enable eligibility in Organisation Settings to use this template.`}
-          </FormHelperText>
+          </Field.HelperText>
         )}
         {selectedStaleness && (
-          <FormHelperText>
-            <Badge colorScheme="orange" mr={2}>
+          <Field.HelperText>
+            <Badge colorPalette="orange" mr={2}>
               Needs update
             </Badge>
             {staleReason(selectedStaleness, terms)} Fix it below, then update the
             template.
-          </FormHelperText>
+          </Field.HelperText>
         )}
-      </FormControl>
+      </Field.Root>
 
       <Flex gap={2} flexWrap="wrap">
         {selected && (
@@ -282,9 +274,9 @@ const AttendanceTemplatePicker = ({
             <Button
               size="sm"
               variant="outline"
-              colorScheme="blue"
+              colorPalette="blue"
               onClick={() => apply(selected)}
-              isDisabled={!canApply}
+              disabled={!canApply}
             >
               Apply
             </Button>
@@ -292,7 +284,7 @@ const AttendanceTemplatePicker = ({
               size="sm"
               variant="outline"
               onClick={onUpdate}
-              isDisabled={isSaving || selectedNeedsEligibility}
+              disabled={isSaving || selectedNeedsEligibility}
             >
               Update template
             </Button>
@@ -300,9 +292,9 @@ const AttendanceTemplatePicker = ({
             <Button
               size="sm"
               variant="outline"
-              colorScheme="red"
+              colorPalette="red"
               onClick={onDelete}
-              isDisabled={isSaving}
+              disabled={isSaving}
             >
               Delete template
             </Button>
@@ -312,7 +304,7 @@ const AttendanceTemplatePicker = ({
           size="sm"
           variant="outline"
           onClick={onSaveAsNew}
-          isDisabled={isLoading || isSaving}
+          disabled={isLoading || isSaving}
         >
           Save as template
         </Button>

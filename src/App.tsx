@@ -20,7 +20,7 @@ const RenderDevTool = () => {
 
 const App = () => {
   return (
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <ToastContainer />
         <ErrorBoundary>

@@ -1,4 +1,6 @@
-import { Box, Center, Spinner, Text, VStack, useColorModeValue } from "@chakra-ui/react";
+import { Box, Center, Spinner, Text, VStack } from "@chakra-ui/react";
+
+import { useColorModeValue } from "./ui/color-mode";
 
 type LoadingSpinnerProps = {
   h?: string;
@@ -10,7 +12,7 @@ const LoadingSpinner = ({ h = "100vh", text = "Loading..." }: LoadingSpinnerProp
 
   return (
     <Center h={h} w="100%">
-      <VStack spacing={4}>
+      <VStack gap={4}>
         <Box position="relative" w="56px" h="56px">
           <Spinner
             position="absolute"
@@ -18,8 +20,8 @@ const LoadingSpinner = ({ h = "100vh", text = "Loading..." }: LoadingSpinnerProp
             left={0}
             w="56px"
             h="56px"
-            thickness="4px"
-            speed="0.85s"
+            borderWidth="4px"
+            animationDuration="0.85s"
             emptyColor="blue.100"
             color="blue.500"
           />
@@ -29,8 +31,8 @@ const LoadingSpinner = ({ h = "100vh", text = "Loading..." }: LoadingSpinnerProp
             left="10px"
             w="36px"
             h="36px"
-            thickness="3px"
-            speed="0.65s"
+            borderWidth="3px"
+            animationDuration="0.65s"
             emptyColor="teal.100"
             color="teal.400"
           />

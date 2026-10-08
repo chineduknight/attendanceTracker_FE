@@ -30,7 +30,7 @@ const WelfareFollowUpHistory = ({
   }
 
   return (
-    <Stack spacing={2}>
+    <Stack gap={2}>
       {records.map((record) => (
         <Box key={record.id} borderWidth="1px" borderRadius="md" px={3} py={2}>
           <Flex align="center" justify="space-between" gap={2}>
@@ -43,7 +43,7 @@ const WelfareFollowUpHistory = ({
                 variant="outline"
                 flexShrink={0}
                 onClick={() => onReopen(record)}
-                isDisabled={isSaving}
+                disabled={isSaving}
               >
                 Reopen follow-up
               </Button>

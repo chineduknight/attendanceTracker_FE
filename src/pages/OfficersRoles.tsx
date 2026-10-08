@@ -1,6 +1,5 @@
-import {
-  Box, Tabs, TabList, TabPanels, Tab, TabPanel, useColorModeValue,
-} from "@chakra-ui/react";
+import { Box, Tabs, TabList, TabPanels, Tab, TabPanel } from "@chakra-ui/react";
+import { useColorModeValue } from "../components/ui/color-mode";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import OfficersTab from "components/officers/OfficersTab";
@@ -21,18 +20,18 @@ const OfficersRolesContent = ({ organisationId }: ContentProps) => {
   return (
     <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
       <Box p={4}>
-        <Tabs variant="enclosed" colorScheme="blue">
-          <TabList>
+        <Tabs.Root variant='enclosed' colorPalette="blue">
+          <Tabs.List>
             <Tab>{terms.officerPlural}</Tab>
             <Tab>Pending Invites</Tab>
             <Tab>Roles</Tab>
-          </TabList>
+          </Tabs.List>
           <TabPanels>
             <TabPanel><OfficersTab organisationId={organisationId} /></TabPanel>
             <TabPanel><PendingInvitesTab organisationId={organisationId} /></TabPanel>
             <TabPanel><RolesTab organisationId={organisationId} /></TabPanel>
           </TabPanels>
-        </Tabs>
+        </Tabs.Root>
       </Box>
     </Box>
   );

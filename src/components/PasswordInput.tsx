@@ -21,9 +21,7 @@ const PasswordInput = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
           size="sm"
           tabIndex={-1}
           aria-label={show ? "Hide password" : "Show password"}
-          icon={show ? <FaEyeSlash /> : <FaEye />}
-          onClick={() => setShow((prev) => !prev)}
-        />
+          onClick={() => setShow((prev) => !prev)}>{show ? <FaEyeSlash /> : <FaEye />}</IconButton>
       </InputRightElement>
     </InputGroup>
   );

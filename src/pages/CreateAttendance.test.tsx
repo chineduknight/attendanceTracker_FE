@@ -86,7 +86,7 @@ const selectOrg = (id: string, { eligibility = false } = {}) =>
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/create"]}>
           <Routes>

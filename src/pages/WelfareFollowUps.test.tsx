@@ -203,7 +203,7 @@ const serve = (over: ServeOptions = {}) => {
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/welfare"]}>
           <Routes>

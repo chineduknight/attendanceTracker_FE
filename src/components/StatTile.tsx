@@ -1,4 +1,5 @@
-import { Box, Button, Flex, Text, useColorModeValue } from "@chakra-ui/react";
+import { Box, Button, Flex, Text } from "@chakra-ui/react";
+import { useColorModeValue } from "./ui/color-mode";
 import { IconType } from "react-icons";
 
 export interface StatTileProps {
@@ -48,11 +49,10 @@ const StatTile = ({
       <Flex align="center" gap={1.5} minW={0}>
         {Icon && (
           <Box
-            as={Icon}
             aria-hidden="true"
             color={isSolid ? "white" : accent}
             flexShrink={0}
-          />
+            asChild><Icon /></Box>
         )}
         <Text
           fontSize={{ base: "xs", md: "md" }}

@@ -36,7 +36,7 @@ const ADA = { id: "m1", name: "Ada", part: "Alto" };
 
 const renderAt = (path: string) =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>

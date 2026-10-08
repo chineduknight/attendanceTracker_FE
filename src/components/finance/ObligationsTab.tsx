@@ -1,25 +1,21 @@
 import { FormEvent, useState } from "react";
+import { useColorModeValue } from "../ui/color-mode";
 import {
   Badge,
   Box,
   Button,
   Flex,
-  FormControl,
-  FormErrorMessage,
-  FormHelperText,
-  FormLabel,
   IconButton,
   Input,
   InputGroup,
   InputLeftAddon,
   Menu,
-  MenuButton,
-  MenuItem,
-  MenuList,
   Progress,
   Stack,
   Text,
-  useColorModeValue,
+  Field,
+  Fieldset,
+  Portal,
 } from "@chakra-ui/react";
 import { FaChevronRight, FaEllipsisV, FaPen, FaPlus, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -70,8 +66,17 @@ const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
   if (!summary) return null;
   const pct = collectionPct(summary);
   return (
-    <Stack spacing={1}>
-      <Progress value={pct} size="xs" colorScheme="green" borderRadius="full" aria-label="Share collected" />
+    <Stack gap={1}>
+      <Progress.Root
+        value={pct}
+        size="xs"
+        colorPalette="green"
+        borderRadius="full"
+        aria-label="Share collected">
+        <Progress.Track>
+          <Progress.Range />
+        </Progress.Track>
+      </Progress.Root>
       <Text fontSize="xs" color={muted}>
         {`${formatMoney(summary.totalCollected)} of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}
       </Text>
@@ -134,98 +139,98 @@ const ObligationForm = ({
   };
 
   return (
-    <Stack as="form" spacing={4} onSubmit={submit} noValidate>
-      {!editing && (
-        <FormControl as="fieldset">
-          <FormLabel as="legend">Type</FormLabel>
-          <FilterChips<ObligationType>
-            label="Obligation type"
-            value={type}
-            onChange={setType}
-            options={[
-              { value: "dues", label: TYPE_LABEL.dues },
-              { value: "levy", label: TYPE_LABEL.levy },
-            ]}
-          />
-        </FormControl>
-      )}
-      <FormControl isInvalid={show(errors.name)}>
-        <FormLabel htmlFor="obligation-name">Name</FormLabel>
-        <Input
-          id="obligation-name"
-          placeholder={type === "dues" ? "e.g. 2026 Monthly Dues" : "e.g. Building Levy"}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <FormErrorMessage>{errors.name}</FormErrorMessage>
-        {editing && <FormHelperText>Amounts can't be changed once created.</FormHelperText>}
-      </FormControl>
-      {!editing && type === "dues" && (
-        <Flex gap={3}>
-          <FormControl isInvalid={show(errors.year)} flex="1">
-            <FormLabel htmlFor="obligation-year">Year</FormLabel>
-            <Input
-              id="obligation-year"
-              type="number"
-              inputMode="numeric"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
+    <Stack gap={4} asChild><form onSubmit={submit} noValidate>
+        {!editing && (
+          <Fieldset.Root>
+            <Fieldset.Legend>Type</Fieldset.Legend>
+            <FilterChips<ObligationType>
+              label="Obligation type"
+              value={type}
+              onChange={setType}
+              options={[
+                { value: "dues", label: TYPE_LABEL.dues },
+                { value: "levy", label: TYPE_LABEL.levy },
+              ]}
             />
-            <FormErrorMessage>{errors.year}</FormErrorMessage>
-          </FormControl>
-          <FormControl isInvalid={show(errors.perMonth)} flex="2">
-            <FormLabel htmlFor="obligation-per-month">Per month</FormLabel>
-            <InputGroup>
-              <InputLeftAddon>₦</InputLeftAddon>
+          </Fieldset.Root>
+        )}
+        <Field.Root invalid={show(errors.name)}>
+          <Field.Label htmlFor="obligation-name">Name</Field.Label>
+          <Input
+            id="obligation-name"
+            placeholder={type === "dues" ? "e.g. 2026 Monthly Dues" : "e.g. Building Levy"}
+            value={name}
+            onValueChange={(e) => setName(e.target.value)}
+          />
+          <Field.ErrorText>{errors.name}</Field.ErrorText>
+          {editing && <Field.HelperText>Amounts can't be changed once created.</Field.HelperText>}
+        </Field.Root>
+        {!editing && type === "dues" && (
+          <Flex gap={3}>
+            <Field.Root invalid={show(errors.year)} flex="1">
+              <Field.Label htmlFor="obligation-year">Year</Field.Label>
               <Input
-                id="obligation-per-month"
+                id="obligation-year"
                 type="number"
-                inputMode="decimal"
-                value={perMonth}
-                onChange={(e) => setPerMonth(e.target.value)}
+                inputMode="numeric"
+                value={year}
+                onValueChange={(e) => setYear(e.target.value)}
               />
-            </InputGroup>
-            <FormErrorMessage>{errors.perMonth}</FormErrorMessage>
-          </FormControl>
-        </Flex>
-      )}
-      {!editing && type === "levy" && (
-        <Flex gap={3} direction={{ base: "column", sm: "row" }}>
-          <FormControl isInvalid={show(errors.amount)}>
-            <FormLabel htmlFor="obligation-amount">Amount</FormLabel>
-            <InputGroup>
-              <InputLeftAddon>₦</InputLeftAddon>
-              <Input
-                id="obligation-amount"
-                type="number"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </InputGroup>
-            <FormErrorMessage>{errors.amount}</FormErrorMessage>
-          </FormControl>
-          <FormControl isInvalid={show(errors.date)}>
-            <FormLabel htmlFor="obligation-date">Date</FormLabel>
-            <Input id="obligation-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            <FormErrorMessage>{errors.date}</FormErrorMessage>
-          </FormControl>
-        </Flex>
-      )}
-      {!editing && (
-        <Text fontSize="sm" color="gray.500">
-          Amounts and dates can't be changed after creating.
-        </Text>
-      )}
-      <Button
-        type="submit"
-        size="lg"
-        colorScheme="teal"
-        isLoading={create.isLoading || rename.isLoading}
-      >
-        {editing ? "Save name" : "Create obligation"}
-      </Button>
-    </Stack>
+              <Field.ErrorText>{errors.year}</Field.ErrorText>
+            </Field.Root>
+            <Field.Root invalid={show(errors.perMonth)} flex="2">
+              <Field.Label htmlFor="obligation-per-month">Per month</Field.Label>
+              <InputGroup>
+                <InputLeftAddon>₦</InputLeftAddon>
+                <Input
+                  id="obligation-per-month"
+                  type="number"
+                  inputMode="decimal"
+                  value={perMonth}
+                  onValueChange={(e) => setPerMonth(e.target.value)}
+                />
+              </InputGroup>
+              <Field.ErrorText>{errors.perMonth}</Field.ErrorText>
+            </Field.Root>
+          </Flex>
+        )}
+        {!editing && type === "levy" && (
+          <Flex gap={3} direction={{ base: "column", sm: "row" }}>
+            <Field.Root invalid={show(errors.amount)}>
+              <Field.Label htmlFor="obligation-amount">Amount</Field.Label>
+              <InputGroup>
+                <InputLeftAddon>₦</InputLeftAddon>
+                <Input
+                  id="obligation-amount"
+                  type="number"
+                  inputMode="decimal"
+                  value={amount}
+                  onValueChange={(e) => setAmount(e.target.value)}
+                />
+              </InputGroup>
+              <Field.ErrorText>{errors.amount}</Field.ErrorText>
+            </Field.Root>
+            <Field.Root invalid={show(errors.date)}>
+              <Field.Label htmlFor="obligation-date">Date</Field.Label>
+              <Input id="obligation-date" type="date" value={date} onValueChange={(e) => setDate(e.target.value)} />
+              <Field.ErrorText>{errors.date}</Field.ErrorText>
+            </Field.Root>
+          </Flex>
+        )}
+        {!editing && (
+          <Text fontSize="sm" color="gray.500">
+            Amounts and dates can't be changed after creating.
+          </Text>
+        )}
+        <Button
+          type="submit"
+          size="lg"
+          colorPalette="teal"
+          loading={create.isLoading || rename.isLoading}
+        >
+          {editing ? "Save name" : "Create obligation"}
+        </Button>
+      </form></Stack>
   );
 };
 
@@ -243,11 +248,10 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
   });
 
   return (
-    <Stack spacing={4}>
+    <Stack gap={4}>
       {canManage && (
-        <Button colorScheme="teal" leftIcon={<FaPlus />} onClick={() => setForm({ mode: "create" })}>
-          New obligation
-        </Button>
+        <Button colorPalette="teal" onClick={() => setForm({ mode: "create" })}><FaPlus />New obligation
+                  </Button>
       )}
 
       {obligations.length === 0 ? (
@@ -262,9 +266,6 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
             <GroupedListItem key={o.id} p={0}>
               <Flex align="center">
                 <Box
-                  as="button"
-                  type="button"
-                  onClick={() => onOpen(o.id)}
                   flex="1"
                   minW={0}
                   textAlign="left"
@@ -272,42 +273,49 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
                   py={3}
                   _hover={{ bg: hoverBg }}
                   _focusVisible={{ boxShadow: "outline", outline: "none" }}
-                >
-                  <Stack spacing={1.5}>
-                    <Flex align="center" gap={2}>
-                      <Text fontWeight="semibold" noOfLines={1}>
-                        {o.name}
+                  asChild><button type="button" onClick={() => onOpen(o.id)}>
+                    <Stack gap={1.5}>
+                      <Flex align="center" gap={2}>
+                        <Text fontWeight="semibold" lineClamp={1}>
+                          {o.name}
+                        </Text>
+                        <Badge colorPalette={o.type === "dues" ? "purple" : "orange"} flexShrink={0}>
+                          {o.type === "dues" ? "Dues" : "Levy"}
+                        </Badge>
+                      </Flex>
+                      <Text fontSize="sm" color={muted}>
+                        {describe(o)}
                       </Text>
-                      <Badge colorScheme={o.type === "dues" ? "purple" : "orange"} flexShrink={0}>
-                        {o.type === "dues" ? "Dues" : "Levy"}
-                      </Badge>
-                    </Flex>
-                    <Text fontSize="sm" color={muted}>
-                      {describe(o)}
-                    </Text>
-                    <SummaryLine obligation={o} />
-                  </Stack>
-                </Box>
+                      <SummaryLine obligation={o} />
+                    </Stack>
+                  </button></Box>
                 {canManage ? (
-                  <Menu placement="bottom-end">
-                    <MenuButton
-                      as={IconButton}
-                      aria-label={`More actions for ${o.name}`}
-                      icon={<FaEllipsisV />}
-                      variant="ghost"
-                      mr={1}
-                    />
-                    <MenuList>
-                      <MenuItem icon={<FaPen />} onClick={() => setForm({ mode: "rename", obligation: o })}>
-                        Rename
-                      </MenuItem>
-                      <MenuItem icon={<FaTrash />} color="red.500" onClick={() => setToDelete(o)}>
-                        Delete
-                      </MenuItem>
-                    </MenuList>
-                  </Menu>
+                  <Menu.Root positioning={{
+                    placement: 'bottom-end'
+                  }}>
+                    <Menu.Trigger asChild><IconButton
+                        aria-label={`More actions for ${o.name}`}
+                        icon={<FaEllipsisV />}
+                        variant="ghost"
+                        mr={1}></IconButton></Menu.Trigger>
+                    <Portal><Menu.Positioner><Menu.Content>
+                          <Menu.Item
+                            icon={<FaPen />}
+                            onSelect={() => setForm({ mode: "rename", obligation: o })}
+                            value='item-0'>
+                            Rename
+                          </Menu.Item>
+                          <Menu.Item
+                            icon={<FaTrash />}
+                            color="red.500"
+                            onSelect={() => setToDelete(o)}
+                            value='item-1'>
+                            Delete
+                          </Menu.Item>
+                        </Menu.Content></Menu.Positioner></Portal>
+                  </Menu.Root>
                 ) : (
-                  <Box as={FaChevronRight} color="gray.400" mr={4} aria-hidden="true" />
+                  <Box color="gray.400" mr={4} aria-hidden="true" asChild><FaChevronRight /></Box>
                 )}
               </Flex>
             </GroupedListItem>

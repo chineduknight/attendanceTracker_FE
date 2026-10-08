@@ -151,7 +151,7 @@ const renderDialog = (over: RenderOverrides = {}) => {
     isSaving: over.isSaving ?? false,
   };
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <WelfareFollowUpDialog {...props} />
       </QueryClientProvider>

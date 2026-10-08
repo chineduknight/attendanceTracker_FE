@@ -1,18 +1,4 @@
-import {
-  Badge,
-  Box,
-  Button,
-  Checkbox,
-  Flex,
-  FormControl,
-  FormErrorMessage,
-  FormHelperText,
-  FormLabel,
-  Input,
-  Select,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Checkbox, Flex, Input, NativeSelect, Stack, Text, Field } from "@chakra-ui/react";
 import { FaLock, FaTimesCircle } from "react-icons/fa";
 import { MEMBER_FIELD_TYPES } from "helpers/memberFields";
 import { EditorField, FieldErrors } from "helpers/memberModelEditor";
@@ -37,24 +23,17 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
   const id = field.reactKey;
   const keyLocked = saved || isPinned;
   return (
-    <Stack spacing={3} borderWidth="1px" borderRadius="md" p={4}>
+    <Stack gap={3} borderWidth="1px" borderRadius="md" p={4}>
       <Flex align="center" justify="space-between" gap={2}>
         <Flex align="center" gap={2} minW={0}>
-          <Text fontWeight="bold" noOfLines={1}>
+          <Text fontWeight="bold" lineClamp={1}>
             {field.label.trim() || "New field"}
           </Text>
-          <Badge colorScheme={saved ? "gray" : "green"}>{saved ? "Saved" : "New"}</Badge>
+          <Badge colorPalette={saved ? "gray" : "green"}>{saved ? "Saved" : "New"}</Badge>
         </Flex>
         {onRemove ? (
-          <Button
-            size="sm"
-            variant="link"
-            colorScheme="red"
-            leftIcon={<FaTimesCircle aria-hidden />}
-            onClick={onRemove}
-          >
-            Remove
-          </Button>
+          <Button size="sm" variant='plain' colorPalette="red" onClick={onRemove}><FaTimesCircle aria-hidden />Remove
+                      </Button>
         ) : (
           saved && (
             <Flex align="center" gap={1} color="gray.500" fontSize="xs">
@@ -65,76 +44,77 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
         )}
       </Flex>
 
-      <FormControl id={`${id}-label`} isRequired isInvalid={Boolean(errors?.label)}>
-        <FormLabel mb="1">Display label</FormLabel>
+      <Field.Root id={`${id}-label`} required invalid={Boolean(errors?.label)}>
+        <Field.Label mb="1">Display label</Field.Label>
         <Input
           value={field.label}
           placeholder="e.g. Voice Part"
-          onChange={(e) => onChange({ label: e.target.value })}
+          onValueChange={(e) => onChange({ label: e.target.value })}
         />
-        <FormErrorMessage>{errors?.label}</FormErrorMessage>
-      </FormControl>
+        <Field.ErrorText>{errors?.label}</Field.ErrorText>
+      </Field.Root>
 
-      <FormControl id={`${id}-key`} isRequired isInvalid={Boolean(errors?.name)}>
-        <FormLabel mb="1">Internal field key</FormLabel>
+      <Field.Root id={`${id}-key`} required invalid={Boolean(errors?.name)}>
+        <Field.Label mb="1">Internal field key</Field.Label>
         <Input
           value={field.name}
           placeholder="e.g. voice_part"
-          isReadOnly={keyLocked}
+          readOnly={keyLocked}
           bg={keyLocked ? "blackAlpha.50" : undefined}
-          onChange={(e) => onChange({ name: e.target.value, keyEdited: true })}
+          onValueChange={(e) => onChange({ name: e.target.value, keyEdited: true })}
         />
         {errors?.name ? (
-          <FormErrorMessage>{errors.name}</FormErrorMessage>
+          <Field.ErrorText>{errors.name}</Field.ErrorText>
         ) : (
-          <FormHelperText>{keyHelp}</FormHelperText>
+          <Field.HelperText>{keyHelp}</Field.HelperText>
         )}
-      </FormControl>
+      </Field.Root>
 
-      <FormControl id={`${id}-type`}>
-        <FormLabel mb="1">Field type</FormLabel>
-        <Select
-          value={field.type}
-          isDisabled={keyLocked}
-          onChange={(e) => onChange({ type: e.target.value })}
-        >
-          {MEMBER_FIELD_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </Select>
+      <Field.Root id={`${id}-type`}>
+        <Field.Label mb="1">Field type</Field.Label>
+        <NativeSelect.Root>
+          <NativeSelect.Field
+            value={field.type}
+            disabled={keyLocked}
+            onValueChange={(e) => onChange({ type: e.target.value })}>
+            {MEMBER_FIELD_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </NativeSelect.Field>
+          <NativeSelect.Indicator />
+        </NativeSelect.Root>
         {saved && !isPinned && (
-          <FormHelperText>A saved field's type can't be changed.</FormHelperText>
+          <Field.HelperText>A saved field's type can't be changed.</Field.HelperText>
         )}
-      </FormControl>
+      </Field.Root>
 
       {field.type === "option" && (
-        <FormControl id={`${id}-options`} isRequired isInvalid={Boolean(errors?.options)}>
-          <FormLabel mb="1">Options</FormLabel>
+        <Field.Root id={`${id}-options`} required invalid={Boolean(errors?.options)}>
+          <Field.Label mb="1">Options</Field.Label>
           <Input
             value={field.optionsText}
             placeholder="Soprano, Alto, Tenor, Bass"
-            onChange={(e) =>
+            onValueChange={(e) =>
               onChange({ optionsText: e.target.value, optionsEdited: true })
             }
           />
           {errors?.options ? (
-            <FormErrorMessage>{errors.options}</FormErrorMessage>
+            <Field.ErrorText>{errors.options}</Field.ErrorText>
           ) : (
-            <FormHelperText>Separate options with commas.</FormHelperText>
+            <Field.HelperText>Separate options with commas.</Field.HelperText>
           )}
-        </FormControl>
+        </Field.Root>
       )}
 
       <Box>
-        <Checkbox
-          isChecked={field.required}
-          isDisabled={isPinned}
-          onChange={(e) => onChange({ required: e.target.checked })}
-        >
-          Required
-        </Checkbox>
+        <Checkbox.Root
+          disabled={isPinned}
+          onCheckedChange={(e) => onChange({ required: e.target.checked })}
+          checked={field.required}
+        ><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>Required
+                    </Checkbox.Label></Checkbox.Root>
       </Box>
     </Stack>
   );

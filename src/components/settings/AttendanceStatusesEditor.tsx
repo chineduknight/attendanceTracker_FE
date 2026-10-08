@@ -4,18 +4,16 @@ import {
   Box,
   Button,
   Flex,
-  FormControl,
-  FormLabel,
   Heading,
   IconButton,
   Input,
-  ListItem,
   Radio,
-  Select,
+  NativeSelect,
   Stack,
   Switch,
   Text,
-  UnorderedList,
+  Field,
+  List,
 } from "@chakra-ui/react";
 import { FaArrowDown, FaArrowUp, FaTrash } from "react-icons/fa";
 import {
@@ -63,21 +61,21 @@ const AttendanceStatusesEditor = ({
   };
 
   return (
-    <Stack spacing={3} as="section" aria-labelledby="attendance-statuses-heading">
+    <Stack gap={3} as="section" aria-labelledby="attendance-statuses-heading">
       <Heading id="attendance-statuses-heading" size="sm">
         {`${terms.attendanceSingular} statuses`}
       </Heading>
       <Text fontSize="sm" color="gray.600">
         {`${terms.memberPlural} are marked with these statuses, in this order. Each status has a behavior that decides how analytics treat it:`}
       </Text>
-      <UnorderedList fontSize="sm" color="gray.600" spacing={1}>
+      <List.Root as='ul' fontSize="sm" color="gray.600" gap={1}>
         {ATTENDANCE_BEHAVIORS.map((behavior) => (
-          <ListItem key={behavior}>
+          <List.Item key={behavior}>
             <strong>{BEHAVIOR_META[behavior].label}:</strong>{" "}
             {behaviorDescription(behavior, terms.attendanceSingular)}
-          </ListItem>
+          </List.Item>
         ))}
-      </UnorderedList>
+      </List.Root>
 
       {rows.map((row, index) => (
         <Box
@@ -90,133 +88,130 @@ const AttendanceStatusesEditor = ({
         >
           <Flex justify="space-between" align="center" mb={2} gap={2}>
             <Flex align="center" gap={2} minW={0}>
-              <Badge colorScheme={row.color}>{row.shortLabel || "?"}</Badge>
-              <Text fontSize="xs" color="gray.500" noOfLines={1}>
+              <Badge colorPalette={row.color}>{row.shortLabel || "?"}</Badge>
+              <Text fontSize="xs" color="gray.500" lineClamp={1}>
                 key: {row.key}
               </Text>
             </Flex>
             <Flex gap={1}>
               <IconButton
                 aria-label={`Move ${row.label} up`}
-                icon={<FaArrowUp />}
                 size="xs"
-                isDisabled={isReadOnly || index === 0}
-                onClick={() => onChange(moveStatusRow(rows, index, -1))}
-              />
+                disabled={isReadOnly || index === 0}
+                onClick={() => onChange(moveStatusRow(rows, index, -1))}><FaArrowUp /></IconButton>
               <IconButton
                 aria-label={`Move ${row.label} down`}
-                icon={<FaArrowDown />}
                 size="xs"
-                isDisabled={isReadOnly || index === rows.length - 1}
-                onClick={() => onChange(moveStatusRow(rows, index, 1))}
-              />
+                disabled={isReadOnly || index === rows.length - 1}
+                onClick={() => onChange(moveStatusRow(rows, index, 1))}><FaArrowDown /></IconButton>
               {!row.persisted && !isReadOnly && (
                 <IconButton
                   aria-label={`Remove ${row.label}`}
-                  icon={<FaTrash />}
                   size="xs"
-                  colorScheme="red"
+                  colorPalette="red"
                   variant="ghost"
                   onClick={() =>
                     onChange(rows.filter((other) => other.key !== row.key))
-                  }
-                />
+                  }><FaTrash /></IconButton>
               )}
             </Flex>
           </Flex>
 
           <Flex gap={2} flexWrap="wrap">
-            <FormControl flex="2 1 140px">
-              <FormLabel fontSize="xs" mb={1}>
+            <Field.Root flex="2 1 140px">
+              <Field.Label fontSize="xs" mb={1}>
                 Label
-              </FormLabel>
+              </Field.Label>
               <Input
                 size="sm"
                 maxLength={MAX_STATUS_LABEL_LENGTH}
                 value={row.label}
-                isReadOnly={isReadOnly}
-                onChange={(e) => updateRow(row.key, { label: e.target.value })}
+                readOnly={isReadOnly}
+                onValueChange={(e) => updateRow(row.key, { label: e.target.value })}
               />
-            </FormControl>
-            <FormControl flex="1 1 70px">
-              <FormLabel fontSize="xs" mb={1}>
+            </Field.Root>
+            <Field.Root flex="1 1 70px">
+              <Field.Label fontSize="xs" mb={1}>
                 Short label
-              </FormLabel>
+              </Field.Label>
               <Input
                 size="sm"
                 maxLength={MAX_STATUS_SHORT_LABEL_LENGTH}
                 value={row.shortLabel}
-                isReadOnly={isReadOnly}
-                onChange={(e) =>
+                readOnly={isReadOnly}
+                onValueChange={(e) =>
                   updateRow(row.key, { shortLabel: e.target.value })
                 }
               />
-            </FormControl>
-            <FormControl flex="1 1 100px">
-              <FormLabel fontSize="xs" mb={1}>
+            </Field.Root>
+            <Field.Root flex="1 1 100px">
+              <Field.Label fontSize="xs" mb={1}>
                 Color
-              </FormLabel>
-              <Select
-                size="sm"
-                value={row.color}
-                isDisabled={isReadOnly}
-                onChange={(e) =>
-                  updateRow(row.key, {
-                    color: e.target.value as AttendanceStatusColor,
-                  })
-                }
-              >
-                {ATTENDANCE_STATUS_COLORS.map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl flex="1 1 110px">
-              <FormLabel fontSize="xs" mb={1}>
+              </Field.Label>
+              <NativeSelect.Root>
+                <NativeSelect.Field
+                  size="sm"
+                  value={row.color}
+                  disabled={isReadOnly}
+                  onValueChange={(e) =>
+                    updateRow(row.key, {
+                      color: e.target.value as AttendanceStatusColor,
+                    })
+                  }>
+                  {ATTENDANCE_STATUS_COLORS.map((color) => (
+                    <option key={color} value={color}>
+                      {color}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </Field.Root>
+            <Field.Root flex="1 1 110px">
+              <Field.Label fontSize="xs" mb={1}>
                 Behavior
-              </FormLabel>
-              <Select
-                size="sm"
-                value={row.behavior}
-                // Analytics history depends on it, so it is fixed once saved.
-                isDisabled={isReadOnly || row.persisted}
-                onChange={(e) =>
-                  updateRow(row.key, {
-                    behavior: e.target.value as AttendanceBehavior,
-                  })
-                }
-              >
-                {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                  <option key={behavior} value={behavior}>
-                    {BEHAVIOR_META[behavior].label}
-                  </option>
-                ))}
-              </Select>
-            </FormControl>
+              </Field.Label>
+              <NativeSelect.Root>
+                <NativeSelect.Field
+                  size="sm"
+                  value={row.behavior}
+                  disabled={isReadOnly || row.persisted}
+                  onValueChange={(e) =>
+                    updateRow(row.key, {
+                      behavior: e.target.value as AttendanceBehavior,
+                    })
+                  }>
+                  {ATTENDANCE_BEHAVIORS.map((behavior) => (
+                    <option key={behavior} value={behavior}>
+                      {BEHAVIOR_META[behavior].label}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </Field.Root>
           </Flex>
 
           <Flex gap={6} mt={2}>
-            <FormControl display="flex" alignItems="center" w="auto">
-              <FormLabel fontSize="sm" mb={0} htmlFor={`active-${row.key}`}>
+            <Field.Root display="flex" alignItems="center" w="auto">
+              <Field.Label fontSize="sm" mb={0} htmlFor={`active-${row.key}`}>
                 Active
-              </FormLabel>
+              </Field.Label>
               <Switch
                 id={`active-${row.key}`}
-                isChecked={row.active}
-                isDisabled={isReadOnly}
-                onChange={(e) =>
+                checked={row.active}
+                disabled={isReadOnly}
+                onValueChange={(e) =>
                   updateRow(row.key, { active: e.target.checked })
                 }
               />
-            </FormControl>
+            </Field.Root>
             <Radio
               name="default-attendance-status"
               value={row.key}
-              isChecked={row.isDefault}
-              isDisabled={isReadOnly}
-              onChange={() => onChange(setDefaultStatus(rows, row.key))}
+              checked={row.isDefault}
+              disabled={isReadOnly}
+              onValueChange={() => onChange(setDefaultStatus(rows, row.key))}
             >
               <Text fontSize="sm">Default</Text>
             </Radio>
@@ -232,7 +227,7 @@ const AttendanceStatusesEditor = ({
             aria-label="New status label"
             maxLength={MAX_STATUS_LABEL_LENGTH}
             value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
+            onValueChange={(e) => setNewLabel(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -243,7 +238,7 @@ const AttendanceStatusesEditor = ({
           <Button
             size="sm"
             onClick={addRow}
-            isDisabled={!newLabel.trim() || rows.length >= MAX_ATTENDANCE_STATUSES}
+            disabled={!newLabel.trim() || rows.length >= MAX_ATTENDANCE_STATUSES}
           >
             Add status
           </Button>
@@ -255,17 +250,11 @@ const AttendanceStatusesEditor = ({
       </Text>
 
       {errors.length > 0 && (
-        <UnorderedList
-          role="alert"
-          fontSize="sm"
-          color="red.500"
-          spacing={1}
-          ml={4}
-        >
+        <List.Root as='ul' role="alert" fontSize="sm" color="red.500" gap={1} ml={4}>
           {errors.map((error) => (
-            <ListItem key={error}>{error}</ListItem>
+            <List.Item key={error}>{error}</List.Item>
           ))}
-        </UnorderedList>
+        </List.Root>
       )}
     </Stack>
   );

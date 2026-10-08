@@ -1,20 +1,17 @@
 import { useRef, useState } from "react";
+import { useColorModeValue } from "../components/ui/color-mode";
 import {
   Box,
   Flex,
   Button,
   Stack,
-  FormControl,
-  FormLabel,
-  FormErrorMessage,
-  FormHelperText,
   Input,
   Switch,
   Avatar,
-  Divider,
   Heading,
   Text,
-  useColorModeValue,
+  Separator,
+  Field,
 } from "@chakra-ui/react";
 import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
@@ -216,7 +213,7 @@ const OrganisationSettings = () => {
           <Flex align="center" justify="center">
             <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>
               <Stack
-                spacing={4}
+                gap={4}
                 w="full"
                 maxW="lg"
                 bg={cardBg}
@@ -226,8 +223,8 @@ const OrganisationSettings = () => {
                 my={12}
                 mx="auto"
               >
-                <FormControl isInvalid={Boolean(errors.name)} isRequired>
-                  <FormLabel>Organisation Name</FormLabel>
+                <Field.Root invalid={Boolean(errors.name)} required>
+                  <Field.Label>Organisation Name</Field.Label>
                   <Input
                     placeholder="Seat of wisdom presidium"
                     {...register("name", {
@@ -235,20 +232,17 @@ const OrganisationSettings = () => {
                         v.trim().length > 0 || "Name is required",
                     })}
                   />
-                  <FormErrorMessage>{errors.name?.message}</FormErrorMessage>
-                </FormControl>
+                  <Field.ErrorText>{errors.name?.message}</Field.ErrorText>
+                </Field.Root>
 
-                <FormControl isInvalid={Boolean(errors.image)}>
-                  <FormLabel>Logo URL</FormLabel>
+                <Field.Root invalid={Boolean(errors.image)}>
+                  <Field.Label>Logo URL</Field.Label>
                   <Flex align="center" gap={3}>
-                    <Avatar
-                      name={watch("name")}
-                      src={watch("image")}
+                    <Avatar.Root
                       size="md"
                       bg={watch("image") ? "white" : undefined}
                       borderWidth="2px"
-                      borderColor="blue.400"
-                    />
+                      borderColor="blue.400"><Avatar.Fallback name={watch("name")} /><Avatar.Image src={watch("image")} /></Avatar.Root>
                     <Input
                       placeholder="https://cdn.example.com/logo.png"
                       {...register("image", {
@@ -259,23 +253,23 @@ const OrganisationSettings = () => {
                       })}
                     />
                   </Flex>
-                  <FormErrorMessage>{errors.image?.message}</FormErrorMessage>
-                </FormControl>
+                  <Field.ErrorText>{errors.image?.message}</Field.ErrorText>
+                </Field.Root>
 
-                <Divider />
+                <Separator />
                 <Heading size="sm">{`${terms.attendanceSingular} settings`}</Heading>
 
-                <FormControl display="flex" alignItems="center">
-                  <FormLabel mb="0">{`Collapse ${lowerTerm(
+                <Field.Root display="flex" alignItems="center">
+                  <Field.Label mb="0">{`Collapse ${lowerTerm(
                     terms.attendanceSingular,
-                  )} by day`}</FormLabel>
+                  )} by day`}</Field.Label>
                   <Switch {...register("collapseAttendanceByDay")} />
-                </FormControl>
+                </Field.Root>
 
-                <FormControl isInvalid={Boolean(errors.maxAttendanceEdits)}>
-                  <FormLabel>{`Max ${lowerTerm(
+                <Field.Root invalid={Boolean(errors.maxAttendanceEdits)}>
+                  <Field.Label>{`Max ${lowerTerm(
                     terms.attendanceSingular,
-                  )} edits`}</FormLabel>
+                  )} edits`}</Field.Label>
                   <Input
                     type="number"
                     placeholder={`${DEFAULT_MAX_EDITS} (default)`}
@@ -289,30 +283,30 @@ const OrganisationSettings = () => {
                       },
                     })}
                   />
-                  <FormHelperText>
+                  <Field.HelperText>
                     0 disables editing for all records. Leave blank to use the
                     default ({DEFAULT_MAX_EDITS}).
-                  </FormHelperText>
-                  <FormErrorMessage>
+                  </Field.HelperText>
+                  <Field.ErrorText>
                     {errors.maxAttendanceEdits?.message}
-                  </FormErrorMessage>
-                </FormControl>
+                  </Field.ErrorText>
+                </Field.Root>
 
                 {eligibilitySettingSupported && (
-                  <FormControl>
+                  <Field.Root>
                     <Flex align="center" justify="space-between" gap={3}>
-                      <FormLabel htmlFor="attendanceEligibilityEnabled" mb="0">
+                      <Field.Label htmlFor="attendanceEligibilityEnabled" mb="0">
                         {`Use ${lowerTerm(
                           terms.attendanceSingular,
                         )} eligibility rules`}
-                      </FormLabel>
+                      </Field.Label>
                       <Switch
                         id="attendanceEligibilityEnabled"
-                        isDisabled={!canManage}
+                        disabled={!canManage}
                         {...register("attendanceEligibilityEnabled")}
                       />
                     </Flex>
-                    <FormHelperText>
+                    <Field.HelperText>
                       {`Allow ${lowerTerm(
                         terms.officerPlural,
                       )} to choose which ${lowerTerm(
@@ -322,12 +316,12 @@ const OrganisationSettings = () => {
                       )}.`}{" "}
                       Useful for sectional rehearsals, committees and other
                       restricted sessions.
-                    </FormHelperText>
-                  </FormControl>
+                    </Field.HelperText>
+                  </Field.Root>
                 )}
 
 
-                <Divider />
+                <Separator />
                 <AttendanceStatusesEditor
                   rows={statusRows}
                   onChange={onStatusRowsChange}
@@ -337,7 +331,7 @@ const OrganisationSettings = () => {
 
                 {welfareSettingsSupported && (
                   <>
-                    <Divider />
+                    <Separator />
                     <Box>
                       <Heading size="sm">Welfare &amp; Engagement</Heading>
                       <Text fontSize="sm" color="gray.500">
@@ -347,19 +341,19 @@ const OrganisationSettings = () => {
                       </Text>
                     </Box>
 
-                    <FormControl
-                      isInvalid={Boolean(errors.welfareReviewWindowDays)}
+                    <Field.Root
+                      invalid={Boolean(errors.welfareReviewWindowDays)}
                     >
-                      <FormLabel>Review window (days)</FormLabel>
+                      <Field.Label>Review window (days)</Field.Label>
                       <Input
                         type="number"
-                        isReadOnly={!canManage}
+                        readOnly={!canManage}
                         placeholder={`${DEFAULT_WELFARE_REVIEW_WINDOW_DAYS} (default)`}
                         {...register("welfareReviewWindowDays", {
                           validate: (v) => welfareReviewWindowError(v) ?? true,
                         })}
                       />
-                      <FormHelperText>
+                      <Field.HelperText>
                         Presence Pro compares the most recent period with the
                         immediately preceding period of the same length.
                         <br />
@@ -369,24 +363,24 @@ const OrganisationSettings = () => {
                         <br />
                         Frequent meetings: 7–14 days. Monthly meetings: around
                         30 days.
-                      </FormHelperText>
-                      <FormErrorMessage>
+                      </Field.HelperText>
+                      <Field.ErrorText>
                         {errors.welfareReviewWindowDays?.message}
-                      </FormErrorMessage>
-                    </FormControl>
+                      </Field.ErrorText>
+                    </Field.Root>
                   </>
                 )}
 
                 {presentationSupported && (
                   <>
-                    <Divider />
+                    <Separator />
                     <TerminologySettings
                       register={register}
                       errors={errors}
                       isReadOnly={!canManage}
                     />
 
-                    <Divider />
+                    <Separator />
                     <FeatureVisibilitySettings
                       register={register}
                       errors={errors}
@@ -396,7 +390,7 @@ const OrganisationSettings = () => {
                 )}
 
                 <Can perm="settings.manage">
-                  <Button variant="primary" type="submit" isLoading={isSaving}>
+                  <Button variant="primary" type="submit" loading={isSaving}>
                     Save
                   </Button>
                 </Can>

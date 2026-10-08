@@ -1,10 +1,6 @@
-import {
-  List,
-  ListItem,
-  ListItemProps,
-  ListProps,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { List, ListItemProps, ListProps } from "@chakra-ui/react";
+
+import { useColorModeValue } from "./ui/color-mode";
 
 /**
  * One bordered container with divider rows — denser on a phone than a
@@ -13,7 +9,7 @@ import {
 export const GroupedList = (props: ListProps) => {
   const bg = useColorModeValue("white", "gray.700");
   return (
-    <List
+    <List.Root
       borderWidth="1px"
       borderRadius="lg"
       bg={bg}
@@ -26,7 +22,7 @@ export const GroupedList = (props: ListProps) => {
 export const GroupedListItem = (props: ListItemProps) => {
   const dividerColor = useColorModeValue("gray.100", "gray.600");
   return (
-    <ListItem
+    <List.Item
       px={{ base: 3, md: 5 }}
       py={{ base: 2, md: 3 }}
       borderTopColor={dividerColor}

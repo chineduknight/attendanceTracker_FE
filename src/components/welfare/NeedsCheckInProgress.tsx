@@ -62,30 +62,33 @@ const NeedsCheckInProgress = ({
           {`${progress.followedUp.length} of ${progress.all.length} followed up`}
         </Text>
         {/* The sentence above is the accessible value; the bar is visual. */}
-        <Progress
+        <Progress.Root
           aria-hidden="true"
           value={progress.followedUp.length}
           max={Math.max(progress.all.length, 1)}
           size="xs"
-          colorScheme="green"
-          borderRadius="full"
-        />
+          colorPalette="green"
+          borderRadius="full">
+          <Progress.Track>
+            <Progress.Range />
+          </Progress.Track>
+        </Progress.Root>
       </Box>
 
-      <Tabs
-        variant="soft-rounded"
-        colorScheme="orange"
+      <Tabs.Root
+        variant='subtle'
+        colorPalette="orange"
         size="sm"
-        index={VIEWS.indexOf(view)}
-        onChange={(index) => setView(VIEWS[index])}
+        value={VIEWS.indexOf(view)}
+        onValueChange={(index) => setView(VIEWS[index])}
         mb={4}
       >
-        <TabList flexWrap="wrap" gap={2}>
+        <Tabs.List flexWrap="wrap" gap={2}>
           <Tab>{`Pending ${progress.pending.length}`}</Tab>
           <Tab>{`Followed Up ${progress.followedUp.length}`}</Tab>
           <Tab>{`All ${progress.all.length}`}</Tab>
-        </TabList>
-      </Tabs>
+        </Tabs.List>
+      </Tabs.Root>
 
       {shown.length === 0 ? (
         <Text color="gray.500">

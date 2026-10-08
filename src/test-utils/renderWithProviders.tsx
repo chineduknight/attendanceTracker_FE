@@ -13,7 +13,7 @@ export const renderRoute = (
   path: string,
 ) =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>

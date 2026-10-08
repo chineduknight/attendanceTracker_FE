@@ -1,5 +1,6 @@
 import React from "react";
-import { Box, Flex, Text, Tooltip, Wrap, WrapItem } from "@chakra-ui/react";
+import { Box, Flex, Text, Wrap, WrapItem } from "@chakra-ui/react";
+import { Tooltip } from '@/components/ui/tooltip';
 import { format, parseISO } from "date-fns";
 import { MemberVerdict } from "components/analytics/memberAnalyticsTypes";
 import { AttendanceStatusConfig, solidColor } from "helpers/attendanceStatuses";
@@ -35,13 +36,13 @@ const AttendanceTimeline: React.FC<AttendanceTimelineProps> = ({ verdicts, statu
           <Text fontSize="xs" color="gray.500" textTransform="uppercase" letterSpacing="wider" mb={1}>
             {group.label}
           </Text>
-          <Wrap spacing="4px">
+          <Wrap gap="4px">
             {group.items.map((verdict, index) => {
               const status = statuses.resolve(verdict.status);
               return (
                 <WrapItem key={`${verdict.date}-${verdict.status}-${index}`}>
                   <Tooltip
-                    label={`${format(parseISO(verdict.date), FULL_DATE_FORMAT)} · ${status.label}`}
+                    content={`${format(parseISO(verdict.date), FULL_DATE_FORMAT)} · ${status.label}`}
                   >
                     <Box
                       data-cell="verdict" data-status={verdict.status}

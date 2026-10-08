@@ -5,7 +5,7 @@ import StreakCard from "components/analytics/StreakCard";
 
 it("shows the streak, rate, and the next-milestone cheer", () => {
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <StreakCard currentStreak={5} longestStreak={12} attendanceRate={85} />
     </ChakraProvider>,
   );

@@ -199,7 +199,7 @@ const LocationProbe = () => {
 
 const renderPage = (path = "/welfare") =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>

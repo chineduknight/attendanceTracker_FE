@@ -1,11 +1,5 @@
-import {
-  Box,
-  Flex,
-  Text,
-  useColorModeValue,
-  Button,
-  Stack,
-} from "@chakra-ui/react";
+import { Box, Flex, Text, Button, Stack } from "@chakra-ui/react";
+import { useColorModeValue } from "../components/ui/color-mode";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
@@ -178,7 +172,7 @@ const CreateAttendanceForm = ({
         bg={useColorModeValue("gray.50", "gray.800")}
       >
         <Stack
-          spacing={4}
+          gap={4}
           w={"full"}
           mt="5rem"
           maxW={"md"}
@@ -280,7 +274,7 @@ const CreateAttendanceForm = ({
             _hover={{ bg: "blue.500" }}
             fontWeight="bold"
             fontSize="15px"
-            isDisabled={
+            disabled={
               !membersLoaded ||
               !availabilityReady ||
               availabilityLoading ||

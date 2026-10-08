@@ -39,7 +39,6 @@ const AttendanceMemberRow = ({
   const row = (
     <Button
       as={onToggle ? "button" : "div"}
-      variant="unstyled"
       onClick={onToggle ? () => onToggle(memberId) : undefined}
       display="block"
       w="full"
@@ -52,12 +51,13 @@ const AttendanceMemberRow = ({
       bg={isFilled ? solidColor(status.color) : undefined}
       color={isFilled ? "white" : undefined}
       cursor={onToggle ? "pointer" : "default"}
+      unstyled
     >
       {/* Names lead on the left so a long roster scans like a list; the
           status sits in its own non-shrinking slot so a long name truncates
           instead of running into it. */}
       <Flex align="center" gap={3} minH="42px">
-        <Text flex="1" minW={0} textAlign="left" noOfLines={1}>
+        <Text flex="1" minW={0} textAlign="left" lineClamp={1}>
           {name}
         </Text>
         <Flex flexShrink={0} align="center" gap={1}>
@@ -65,7 +65,7 @@ const AttendanceMemberRow = ({
               quiet; marked rows name their status on the filled row. */}
           <Badge
             title={status.label}
-            colorScheme={isFilled ? status.color : "gray"}
+            colorPalette={isFilled ? status.color : "gray"}
             variant={isFilled ? "solid" : "subtle"}
             bg={isFilled ? "whiteAlpha.300" : undefined}
             fontWeight={isFilled ? "bold" : "medium"}
@@ -74,7 +74,7 @@ const AttendanceMemberRow = ({
           </Badge>
           {isManual && (
             <Badge
-              colorScheme="purple"
+              colorPalette="purple"
               variant="outline"
               bg={isFilled ? "white" : undefined}
             >

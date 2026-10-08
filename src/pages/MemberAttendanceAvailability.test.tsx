@@ -64,7 +64,7 @@ jest.mock("react-toastify", () => ({
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <MemoryRouter
         initialEntries={["/member/member-1/attendance-availability"]}
       >

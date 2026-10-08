@@ -40,9 +40,8 @@ const ModeChip = ({
     minH="44px"
     flexShrink={0}
     borderWidth="2px"
-    colorScheme={colorScheme}
+    colorPalette={colorScheme}
     variant={isSelected ? "solid" : "outline"}
-    leftIcon={isSelected ? <FaCheck aria-hidden /> : idleIcon}
     aria-pressed={isSelected}
     onClick={onClick}
     {...(isSelected && selectedBg
@@ -52,10 +51,7 @@ const ModeChip = ({
           _hover: { bg: selectedBg, opacity: 0.9 },
           _active: { bg: selectedBg },
         }
-      : {})}
-  >
-    {label}
-  </Button>
+      : {})}>{isSelected ? <FaCheck aria-hidden /> : idleIcon}{label}</Button>
 );
 
 /**

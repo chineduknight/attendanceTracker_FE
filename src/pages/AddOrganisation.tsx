@@ -1,13 +1,5 @@
-import {
-  Box,
-  useColorModeValue,
-  Flex,
-  Button,
-  FormControl,
-  FormLabel,
-  Input,
-  Stack,
-} from "@chakra-ui/react";
+import { Box, Flex, Button, Input, Stack, Field } from "@chakra-ui/react";
+import { useColorModeValue } from "../components/ui/color-mode";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
@@ -59,7 +51,7 @@ const AddOrganisation = () => {
       >
         <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>
           <Stack
-            spacing={4}
+            gap={4}
             w={"full"}
             maxW={"md"}
             bg={useColorModeValue("white", "gray.700")}
@@ -68,16 +60,16 @@ const AddOrganisation = () => {
             p={6}
             my={12}
           >
-            <FormControl id="email" isRequired>
-              <FormLabel>Organisation Name</FormLabel>
+            <Field.Root id="email" required>
+              <Field.Label>Organisation Name</Field.Label>
               <Input
                 placeholder="Seat of wisdom presidium"
                 _placeholder={{ color: "gray.500" }}
                 type="name"
                 {...register("name", { required: true })}
               />
-            </FormControl>
-            <Stack spacing={6}>
+            </Field.Root>
+            <Stack gap={6}>
               <Button variant="primary" type="submit">
                 Submit
               </Button>

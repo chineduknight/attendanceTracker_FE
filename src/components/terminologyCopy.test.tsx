@@ -43,7 +43,7 @@ const renderWithTerms = (ui: ReactElement, terminology: OrganisationTerminology)
     organisation: { ...EMPTY_ORG, id: "org1", isOwner: true, permissions: [], terminology },
   });
   return render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>{ui}</MemoryRouter>
       </QueryClientProvider>

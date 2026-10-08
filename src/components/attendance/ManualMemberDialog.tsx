@@ -1,20 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Button,
-  FormControl,
-  FormHelperText,
-  FormLabel,
-  Modal,
-  ModalBody,
-  ModalCloseButton,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalOverlay,
-  Select,
-  Text,
-  Textarea,
-} from "@chakra-ui/react";
+import { Button, NativeSelect, Text, Textarea, Field, Dialog, Portal } from "@chakra-ui/react";
 import ReactSelect, { SingleValue } from "react-select";
 import { AttendanceStatusConfig } from "helpers/attendanceStatuses";
 import {
@@ -73,9 +58,9 @@ const ManualMemberForm = ({
 
   return (
     <>
-      <ModalHeader>{`Add ${member} to this ${session}`}</ModalHeader>
-      <ModalCloseButton isDisabled={isSaving} />
-      <ModalBody>
+      <Dialog.Header>{`Add ${member} to this ${session}`}</Dialog.Header>
+      <Dialog.CloseTrigger disabled={isSaving} />
+      <Dialog.Body>
         <Text mb={2}>
           {`Use this only when the ${member} was not expected for this ${session} but physically attended.`}
         </Text>
@@ -84,10 +69,10 @@ const ManualMemberForm = ({
             terms.attendancePlural
           )}.`}
         </Text>
-        <FormControl isRequired mb={4}>
-          <FormLabel htmlFor="manual-member-select">
+        <Field.Root required mb={4}>
+          <Field.Label htmlFor="manual-member-select">
             {terms.memberSingular}
-          </FormLabel>
+          </Field.Label>
           <ReactSelect
             inputId="manual-member-select"
             classNamePrefix="manual-member"
@@ -107,58 +92,60 @@ const ManualMemberForm = ({
             menuPosition="fixed"
             styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
           />
-        </FormControl>
-        <FormControl isRequired mb={4}>
-          <FormLabel>{`${terms.attendanceSingular} status`}</FormLabel>
+        </Field.Root>
+        <Field.Root required mb={4}>
+          <Field.Label>{`${terms.attendanceSingular} status`}</Field.Label>
           {allowedStatuses.length ? (
-            <Select
-              value={status}
-              placeholder={allowedStatuses.length > 1 ? "Choose a status" : undefined}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              {allowedStatuses.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                value={status}
+                placeholder={allowedStatuses.length > 1 ? "Choose a status" : undefined}
+                onValueChange={(event) => setStatus(event.target.value)}>
+                {allowedStatuses.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
           ) : (
             <Text color="red.500" fontSize="sm">
               No active present status is configured for this organisation.
             </Text>
           )}
-        </FormControl>
-        <FormControl>
-          <FormLabel>Reason (optional)</FormLabel>
+        </Field.Root>
+        <Field.Root>
+          <Field.Label>Reason (optional)</Field.Label>
           <Textarea
             value={reason}
             maxLength={MANUAL_ADDITION_REASON_MAX}
-            onChange={(event) => setReason(event.target.value)}
+            onValueChange={(event) => setReason(event.target.value)}
             placeholder="Joined the sectional rehearsal"
           />
-          <FormHelperText>
+          <Field.HelperText>
             {`${reason.length}/${MANUAL_ADDITION_REASON_MAX} characters`}
-          </FormHelperText>
-        </FormControl>
-      </ModalBody>
-      <ModalFooter gap={3}>
+          </Field.HelperText>
+        </Field.Root>
+      </Dialog.Body>
+      <Dialog.Footer gap={3}>
         <Button
           variant="outline"
-          colorScheme="gray"
+          colorPalette="gray"
           onClick={onClose}
-          isDisabled={isSaving}
+          disabled={isSaving}
         >
           Cancel
         </Button>
         <Button
-          colorScheme="blue"
-          isDisabled={!canSubmit}
-          isLoading={isSaving}
+          colorPalette="blue"
+          disabled={!canSubmit}
+          loading={isSaving}
           onClick={() => canSubmit && onSubmit({ memberId, status, reason })}
         >
           {`Add ${member}`}
         </Button>
-      </ModalFooter>
+      </Dialog.Footer>
     </>
   );
 };
@@ -169,16 +156,26 @@ const ManualMemberForm = ({
  * whether the addition goes to the backend or into a new session's draft.
  */
 const ManualMemberDialog = ({ isOpen, ...formProps }: ManualMemberDialogProps) => (
-  <Modal
-    isOpen={isOpen}
-    onClose={formProps.isSaving ? () => undefined : formProps.onClose}
-    isCentered
+  <Dialog.Root
+    open={isOpen}
+    placement='center'
+    onOpenChange={e => {
+      if (!e.open) {
+        (formProps.isSaving ? () => undefined : formProps.onClose)();
+      }
+    }}
   >
-    <ModalOverlay />
-    <ModalContent>
-      <ManualMemberForm {...formProps} />
-    </ModalContent>
-  </Modal>
+    <Portal>
+
+      <Dialog.Backdrop />
+      <Dialog.Positioner>
+        <Dialog.Content>
+          <ManualMemberForm {...formProps} />
+        </Dialog.Content>
+      </Dialog.Positioner>
+
+    </Portal>
+  </Dialog.Root>
 );
 
 export default ManualMemberDialog;
