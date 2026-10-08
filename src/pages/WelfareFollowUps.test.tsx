@@ -228,6 +228,14 @@ const setOrg = (over: Partial<typeof EMPTY_ORG> = {}) =>
     },
   });
 
+/** Searches the react-select member picker and picks the named member. */
+const pickMember = async (name: string) => {
+  const input = screen.getByLabelText(/^Member/);
+  await waitFor(() => expect(input).not.toBeDisabled());
+  fireEvent.change(input, { target: { value: name } });
+  fireEvent.click(await screen.findByRole("option", { name }));
+};
+
 const callsTo = (part: string) =>
   mockGet.mock.calls.filter(([url]) => String(url).includes(part));
 
@@ -396,12 +404,8 @@ describe("<Welfare> follow-ups — access & privacy", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add welfare follow-up" }),
     );
-    await screen.findByRole("option", { name: "Ada Okafor" });
+    await pickMember("Ada Okafor");
     expect(callsTo("/organisations/org1/members").length).toBeGreaterThan(0);
-
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Bereavement" },
     });
@@ -698,10 +702,7 @@ describe("<Welfare> follow-ups — tenancy", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add welfare follow-up" }),
     );
-    await screen.findByRole("option", { name: "Ada Okafor" });
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
+    await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Org A draft" },
     });
@@ -730,10 +731,7 @@ describe("<Welfare> follow-ups — tenancy", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add welfare follow-up" }),
     );
-    await screen.findByRole("option", { name: "Ada Okafor" });
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
+    await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Org A draft" },
     });
@@ -781,10 +779,7 @@ describe("<Welfare> follow-ups — no side effects", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add welfare follow-up" }),
     );
-    await screen.findByRole("option", { name: "Ada Okafor" });
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
+    await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Bereavement" },
     });

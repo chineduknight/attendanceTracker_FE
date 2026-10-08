@@ -101,6 +101,7 @@ export const useWelfareFollowUps = (
     data: response,
     isLoading,
     isFetching,
+    isSuccess,
     isError,
   } = useQueryWrapper(listKey, url, {
     enabled: enabled && Boolean(organisationId),
@@ -167,6 +168,7 @@ export const useWelfareFollowUps = (
     followUps,
     isLoading,
     isFetching,
+    isSuccess,
     isError,
     create,
     update,

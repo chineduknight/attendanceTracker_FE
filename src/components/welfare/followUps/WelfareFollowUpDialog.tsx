@@ -20,6 +20,7 @@ import {
   Text,
   Textarea,
 } from "@chakra-ui/react";
+import ReactSelect, { SingleValue } from "react-select";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { useMembers } from "hooks/useMembers";
@@ -32,6 +33,7 @@ import { queryKeys } from "services/api/queryKeys";
 import { rbacRequest } from "services/api/request";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { lowerTerm } from "helpers/organisationPresentation";
+import { ALL_STATUSES, memberHasStatus } from "helpers/welfareReview";
 import { useTerms } from "hooks/useOrgPresentation";
 import { Officer } from "rbac/types";
 import ConfirmModal from "components/finance/ConfirmModal";
@@ -70,6 +72,10 @@ interface WelfareFollowUpDialogProps {
   asOf: string;
   /** officers.view — controls whether the general assignee picker is shown. */
   canManageAssignedOfficers: boolean;
+  /** Configured member-status options for narrowing the manual picker. */
+  memberStatusOptions?: readonly string[];
+  /** Initial picker scope (the Welfare status filter); All when omitted. */
+  defaultMemberStatus?: string;
   onClose: () => void;
   create: (
     payload: WelfareFollowUpCreatePayload,
@@ -100,6 +106,8 @@ const WelfareFollowUpDialog = ({
   request,
   asOf,
   canManageAssignedOfficers,
+  memberStatusOptions = [],
+  defaultMemberStatus = ALL_STATUSES,
   onClose,
   create,
   update,
@@ -134,6 +142,14 @@ const WelfareFollowUpDialog = ({
   const [assignedToUserId, setAssignedToUserId] = useState<string>(() =>
     request.mode === "edit" ? request.record.assignedTo?.id ?? "" : "",
   );
+  // Starts on the Welfare population, but All stays one click away so
+  // Welfare can record events for any member (e.g. a bereavement).
+  const [memberStatus, setMemberStatus] = useState<string>(() =>
+    defaultMemberStatus !== ALL_STATUSES &&
+    memberStatusOptions.includes(defaultMemberStatus)
+      ? defaultMemberStatus
+      : ALL_STATUSES,
+  );
   const [submitted, setSubmitted] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
@@ -142,6 +158,15 @@ const WelfareFollowUpDialog = ({
 
   const { organisationId } = request;
   const members = useMembers(organisationId, { enabled: isManualCreate });
+
+  const memberOptions = useMemo(
+    () =>
+      members.members
+        .filter((member) => memberHasStatus(member, memberStatus))
+        .map((member) => ({ value: member.id, label: member.name }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [members.members, memberStatus],
+  );
 
   // The officer list is only fetched when the officer holds officers.view —
   // a manage-only user without it must never call this endpoint (§25).
@@ -293,19 +318,60 @@ const WelfareFollowUpDialog = ({
                 <FormLabel htmlFor="follow-up-member">Member</FormLabel>
                 {isManualCreate ? (
                   <>
-                    <Select
-                      id="follow-up-member"
-                      placeholder="Select member"
-                      value={memberId}
-                      onChange={(event) => setMemberId(event.target.value)}
+                    <ReactSelect
+                      inputId="follow-up-member"
+                      classNamePrefix="follow-up-member"
+                      options={memberOptions}
+                      // Kept visible even if the scope changes after picking.
+                      value={
+                        memberId
+                          ? {
+                              value: memberId,
+                              label:
+                                members.members.find((m) => m.id === memberId)
+                                  ?.name ?? "",
+                            }
+                          : null
+                      }
+                      onChange={(
+                        selected: SingleValue<{ value: string; label: string }>,
+                      ) => setMemberId(selected?.value ?? "")}
+                      isLoading={members.isLoading}
                       isDisabled={members.isLoading}
-                    >
-                      {members.members.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name}
-                        </option>
-                      ))}
-                    </Select>
+                      placeholder={`Search ${lowerTerm(
+                        terms.memberPlural,
+                      )} by name`}
+                      noOptionsMessage={() =>
+                        members.isError
+                          ? `${terms.memberPlural} could not be loaded.`
+                          : `No matching ${lowerTerm(terms.memberPlural)}`
+                      }
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
+                      styles={{
+                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                      }}
+                    />
+                    {memberStatusOptions.length > 0 && (
+                      <Select
+                        aria-label={`Filter ${lowerTerm(
+                          terms.memberPlural,
+                        )} by status`}
+                        size="sm"
+                        mt={2}
+                        value={memberStatus}
+                        onChange={(event) =>
+                          setMemberStatus(event.target.value)
+                        }
+                      >
+                        <option value={ALL_STATUSES}>All statuses</option>
+                        {memberStatusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
                     {members.isError && (
                       <FormErrorMessage>
                         Could not load members. Close and try again.

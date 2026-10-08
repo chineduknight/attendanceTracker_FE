@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -115,6 +121,14 @@ const EDIT_REQUEST: WelfareFollowUpDialogRequest = {
   record: OPEN_RECORD,
 };
 
+/** Searches the react-select member picker and picks the named member. */
+const pickMember = async (name: string) => {
+  const input = screen.getByLabelText(/^Member/);
+  await waitFor(() => expect(input).not.toBeDisabled());
+  fireEvent.change(input, { target: { value: name } });
+  fireEvent.click(await screen.findByRole("option", { name }));
+};
+
 interface RenderOverrides {
   request?: WelfareFollowUpDialogRequest;
   canManageAssignedOfficers?: boolean;
@@ -198,10 +212,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
     const onClose = jest.fn();
     renderDialog({ create, onClose });
 
-    await screen.findByRole("option", { name: "Ada Okafor" });
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
+    await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Bereavement" },
     });
@@ -234,10 +245,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
     const create = jest.fn();
     renderDialog({ create });
 
-    await screen.findByRole("option", { name: "Ada Okafor" });
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
+    await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Family situation" },
     });
@@ -255,10 +263,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
     const create = jest.fn();
     renderDialog({ create });
 
-    await screen.findByRole("option", { name: "Ada Okafor" });
-    fireEvent.change(screen.getByLabelText(/^Member/), {
-      target: { value: "m1" },
-    });
+    await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
       target: { value: "Travelling" },
     });

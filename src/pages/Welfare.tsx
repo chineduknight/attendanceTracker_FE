@@ -1,11 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import {
-  Box,
-  Heading,
-  SimpleGrid,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Box, Heading, Text, useColorModeValue } from "@chakra-ui/react";
 import { format, isValid, parseISO } from "date-fns";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
@@ -16,11 +10,13 @@ import { useMemberModel } from "hooks/useMemberModel";
 import { useWelfareOverview } from "hooks/useWelfareOverview";
 import { useWelfareBirthdays } from "hooks/useWelfareBirthdays";
 import { useWelfareFollowUps } from "hooks/useWelfareFollowUps";
+import { useWelfareReviewDate } from "hooks/useWelfareReviewDate";
 import LoadingSpinner from "components/LoadingSpinner";
 import WelfareSummaryCards from "components/welfare/WelfareSummaryCards";
-import AttendanceInsightCard, {
-  InsightVariant,
-} from "components/welfare/AttendanceInsightCard";
+import WelfareReviewControls from "components/welfare/WelfareReviewControls";
+import InsightGrid from "components/welfare/InsightGrid";
+import NeedsCheckInProgress from "components/welfare/NeedsCheckInProgress";
+import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {
   CurrentlyAwaySection,
   ReturningSoonSection,
@@ -36,7 +32,12 @@ import WelfareFollowUpMemberHistory, {
 import { followUpPrefillReason } from "components/welfare/followUps/followUpPresentation";
 import { WelfareFollowUp } from "components/welfare/followUps/types";
 import { lowerTerm } from "helpers/organisationPresentation";
-import { hasDobDateField } from "helpers/birthday";
+import { hasDobDateField, localBusinessDate } from "helpers/birthday";
+import {
+  effectiveWelfareStatus,
+  statusesParam,
+  welfareStatusScope,
+} from "helpers/welfareReview";
 import {
   WelfareInsight,
   WelfareOverview,
@@ -90,37 +91,6 @@ const ReviewWindowPanel = ({ overview }: { overview: WelfareOverview }) => {
   );
 };
 
-const InsightGrid = ({
-  insights,
-  variant,
-  periods,
-  followUpCounts,
-  onAddFollowUp,
-}: {
-  insights: WelfareInsight[];
-  variant: InsightVariant;
-  periods: WelfareOverview["periods"];
-  /** Open follow-up counts by memberId (welfare.view only). */
-  followUpCounts?: Map<string, number>;
-  onAddFollowUp?: (insight: WelfareInsight, variant: InsightVariant) => void;
-}) => (
-  <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
-    {insights.map((insight) => (
-      <AttendanceInsightCard
-        key={insight.memberId}
-        insight={insight}
-        variant={variant}
-        previousFromDate={periods.previous.fromDate}
-        recentToDate={periods.recent.toDate}
-        openFollowUpCount={followUpCounts?.get(insight.memberId)}
-        onAddFollowUp={
-          onAddFollowUp ? () => onAddFollowUp(insight, variant) : undefined
-        }
-      />
-    ))}
-  </SimpleGrid>
-);
-
 /**
  * Phase 7A Welfare & Engagement: read-only insight derived entirely from the
  * backend. This page renders the backend's arrays as returned, exposes the
@@ -133,16 +103,46 @@ const Welfare = () => {
   const { isFeatureVisible } = useOrgPresentation();
   const pageBg = useColorModeValue("gray.50", "gray.800");
 
-  const { overview, isLoading, isError } = useWelfareOverview(organisationId);
+  const { asOf, isToday, setAsOf, resetToToday } = useWelfareReviewDate();
+
+  // The member model (members.view) supplies both the member-status scope and
+  // the birthday `dob` check. Without members.view no model request is made
+  // and the overview covers every status.
+  const canReadMemberModel = has("members.view");
+  const memberModel = useMemberModel(organisationId, {
+    enabled: canReadMemberModel,
+  });
+  const { fields } = memberModel;
+  const statusScope = useMemo(() => welfareStatusScope(fields), [fields]);
+  // Wait for the model so the first overview request already carries the
+  // Active default instead of fetching All and then refetching. A failed
+  // model read falls back to All rather than blocking Welfare.
+  const statusScopeReady = !canReadMemberModel || !memberModel.isLoading;
+
+  // The selection remembers which organisation it was made under, so a
+  // switch (or an option removed from the model) falls back to that
+  // organisation's Active default, or All.
+  const [statusSelection, setStatusSelection] = useState<{
+    organisationId: string;
+    value: string;
+  } | null>(null);
+  const status = effectiveWelfareStatus(
+    statusSelection,
+    organisationId,
+    statusScope,
+  );
+
+  const { overview, isLoading, isError } = useWelfareOverview(organisationId, {
+    asOf,
+    status: statusesParam(status),
+    enabled: statusScopeReady,
+  });
 
   // Birthdays are an optional, independent snapshot: they need members.view,
   // the birthdays module and a configured `dob` date field, and the Birthday
   // API is never called without all three.
   const birthdaysPermitted =
-    has("members.view") && isFeatureVisible("birthdays");
-  const { fields } = useMemberModel(organisationId, {
-    enabled: birthdaysPermitted,
-  });
+    canReadMemberModel && isFeatureVisible("birthdays");
   const showBirthdays = birthdaysPermitted && hasDobDateField(fields);
   const birthdays = useWelfareBirthdays(organisationId, {
     enabled: showBirthdays,
@@ -160,7 +160,10 @@ const Welfare = () => {
   // available to a Welfare manager without members.view.
   const canCreateManualFollowUp = canManageFollowUps && has("members.view");
 
+  // The follow-up list shares the review date so due/overdue state and
+  // Needs Check-in progress describe the same review as the overview.
   const followUps = useWelfareFollowUps(organisationId, {
+    asOf,
     enabled: canViewFollowUps,
   });
 
@@ -200,7 +203,8 @@ const Welfare = () => {
       memberId: insight.memberId,
       memberName: insight.name,
       sourceSignals: insight.signals,
-      sourceAsOf: overview.asOf,
+      // Progress matches on this exact review date.
+      sourceAsOf: asOf,
       reason: followUpPrefillReason(variant, insight),
     });
   };
@@ -223,6 +227,18 @@ const Welfare = () => {
     <RequirePermission perm="attendance.view">
       <Box minH="100vh" bg={pageBg}>
         <Box p={4} maxW="6xl" mx="auto">
+          <WelfareReviewControls
+            asOf={asOf}
+            isToday={isToday}
+            onAsOfChange={setAsOf}
+            onToday={resetToToday}
+            statusOptions={statusScope.options}
+            status={status}
+            onStatusChange={(value) =>
+              setStatusSelection({ organisationId, value })
+            }
+          />
+
           {isLoading && (
             <LoadingSpinner h="30vh" text="Loading Welfare & Engagement..." />
           )}
@@ -281,6 +297,23 @@ const Welfare = () => {
                       terms.memberPlural,
                     )} currently meet the check-in signals for this review window.`}
                   </EmptyState>
+                ) : canViewFollowUps && followUps.isSuccess ? (
+                  <NeedsCheckInProgress
+                    // A new organisation/review/scope starts on Pending.
+                    key={`${organisationId}:${asOf}:${status}`}
+                    attention={overview.attention}
+                    periods={overview.periods}
+                    asOf={asOf}
+                    followUps={followUps.followUps}
+                    openFollowUpCounts={openFollowUpCounts}
+                    onAddFollowUp={
+                      canManageFollowUps ? openInsightFollowUp : undefined
+                    }
+                  />
+                ) : canViewFollowUps && !followUps.isError ? (
+                  // Never show progress from another scope, or an
+                  // everyone-pending guess, while this review's records load.
+                  <EmptyState>Loading follow-up progress...</EmptyState>
                 ) : (
                   <InsightGrid
                     insights={overview.attention}
@@ -389,7 +422,10 @@ const Welfare = () => {
                       }`
                 }
                 request={followUpDialog}
-                asOf={followUps.asOf}
+                // The record date is when Welfare acted, not the review date.
+                asOf={localBusinessDate()}
+                memberStatusOptions={statusScope.options}
+                defaultMemberStatus={status}
                 canManageAssignedOfficers={has("officers.view")}
                 onClose={() => setFollowUpDialog(null)}
                 create={followUps.create}

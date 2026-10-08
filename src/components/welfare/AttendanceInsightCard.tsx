@@ -32,6 +32,11 @@ interface AttendanceInsightCardProps {
    * Presentation hint — it never suppresses the insight. Undefined hides it.
    */
   openFollowUpCount?: number;
+  /**
+   * Welfare has logged at least one follow-up linked to this review's signal.
+   * The attendance badge stays: the signal itself is still true.
+   */
+  followUpLogged?: boolean;
   /** Manage-only quick action; absent for view-only officers. */
   onAddFollowUp?: () => void;
 }
@@ -90,6 +95,7 @@ const AttendanceInsightCard = ({
   previousFromDate,
   recentToDate,
   openFollowUpCount,
+  followUpLogged = false,
   onAddFollowUp,
 }: AttendanceInsightCardProps) => {
   const terms = useTerms();
@@ -116,7 +122,15 @@ const AttendanceInsightCard = ({
   }).toString();
 
   return (
-    <Box borderWidth="1px" borderRadius="lg" p={4} bg={cardBg} h="full">
+    <Box
+      role="group"
+      aria-label={memberName}
+      borderWidth="1px"
+      borderRadius="lg"
+      p={4}
+      bg={cardBg}
+      h="full"
+    >
       <Flex
         align="center"
         justify="space-between"
@@ -127,10 +141,13 @@ const AttendanceInsightCard = ({
         <Badge colorScheme={colorScheme}>{label}</Badge>
       </Flex>
 
-      {followUpBadge && (
-        <Badge colorScheme="purple" mb={2}>
-          {followUpBadge}
-        </Badge>
+      {(followUpLogged || followUpBadge) && (
+        <Flex gap={2} wrap="wrap" mb={2}>
+          {followUpLogged && (
+            <Badge colorScheme="green">Follow-up logged</Badge>
+          )}
+          {followUpBadge && <Badge colorScheme="purple">{followUpBadge}</Badge>}
+        </Flex>
       )}
 
       {reasons.length > 0 && (
@@ -214,7 +231,7 @@ const AttendanceInsightCard = ({
         </Link>
         {onAddFollowUp && (
           <Button size="xs" variant="outline" onClick={onAddFollowUp}>
-            Add follow-up
+            {followUpLogged ? "Add another follow-up" : "Add follow-up"}
           </Button>
         )}
       </Flex>
