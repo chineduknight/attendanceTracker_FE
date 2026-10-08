@@ -519,12 +519,15 @@ const ViewMembers: React.FC = () => {
                           >
                             {member.name}
                           </Text>
-                          <Flex flexShrink={0} gap={1}>
+                          {/* Outlined, not ghost: on a card a borderless
+                              control stops reading as a button. */}
+                          <Flex flexShrink={0} gap={2}>
                             <Can perm="attendance.view">
                               <Button
-                                variant="ghost"
+                                variant="outline"
+                                size="sm"
                                 minH="44px"
-                                px={2}
+                                px={3}
                                 onClick={() =>
                                   navigate(
                                     convertParamsToString(
@@ -541,7 +544,8 @@ const ViewMembers: React.FC = () => {
                               <IconButton
                                 aria-label={`Edit ${member.name}`}
                                 icon={<FaPencilAlt />}
-                                variant="ghost"
+                                variant="outline"
+                                size="sm"
                                 minW="44px"
                                 minH="44px"
                                 onClick={() =>
