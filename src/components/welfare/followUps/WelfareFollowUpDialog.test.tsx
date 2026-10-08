@@ -9,7 +9,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import WelfareFollowUpDialog, {

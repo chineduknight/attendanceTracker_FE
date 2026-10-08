@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { Alert, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";

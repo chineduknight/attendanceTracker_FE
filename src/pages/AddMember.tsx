@@ -1,5 +1,5 @@
 import { Box, Flex, Checkbox, Button, Input, Stack, Heading, NativeSelect, Field } from "@chakra-ui/react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {

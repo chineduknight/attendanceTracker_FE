@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { Box, Heading, Text } from "@chakra-ui/react";
 import { format, isValid, parseISO } from "date-fns";
 import { toast } from "react-toastify";

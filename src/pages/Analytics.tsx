@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { Box, Flex, Button, Table, Thead, Tbody, Tr, Th, Td, Badge, Spinner, Text } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";

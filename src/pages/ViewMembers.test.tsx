@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewMembers from "pages/ViewMembers";
+import { system } from "styles/theme";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
@@ -82,7 +83,7 @@ describe("<ViewMembers> with custom terminology", () => {
       });
     });
     render(
-      <ChakraProvider>
+      <ChakraProvider value={system}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={["/members"]}>
             <Routes>

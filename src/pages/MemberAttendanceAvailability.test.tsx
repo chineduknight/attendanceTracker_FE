@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import MemberAttendanceAvailability from "pages/MemberAttendanceAvailability";

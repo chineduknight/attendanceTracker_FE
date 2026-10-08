@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import StreakCard from "components/analytics/StreakCard";
 
 it("shows the streak, rate, and the next-milestone cheer", () => {

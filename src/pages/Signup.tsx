@@ -1,5 +1,5 @@
 import { Flex, Box, Input, Stack, Button, Heading, Link, Field } from "@chakra-ui/react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import PasswordInput from "components/PasswordInput";

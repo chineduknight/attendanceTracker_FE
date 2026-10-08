@@ -1,5 +1,5 @@
 import { Box, Button, Heading, Grid } from "@chakra-ui/react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useNavigate } from "react-router-dom";
 import useGlobalStore from "zStore";
 import { useNavActions } from "hooks/useNavActions";

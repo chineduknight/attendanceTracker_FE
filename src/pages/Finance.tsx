@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import {
   Box,
   Button,

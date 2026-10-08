@@ -1,5 +1,5 @@
 import { Flex, Box, Input, Checkbox, Stack, Link, Button, Heading, Text, Field } from "@chakra-ui/react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import PasswordInput from "components/PasswordInput";

@@ -1,5 +1,5 @@
 import { Box, Flex, Button, Input, Stack, Field } from "@chakra-ui/react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";

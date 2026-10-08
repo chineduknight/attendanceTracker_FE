@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Flex, Text, Wrap, WrapItem } from "@chakra-ui/react";
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from "components/ui/tooltip";
 import { format, parseISO } from "date-fns";
 import { MemberVerdict } from "components/analytics/memberAnalyticsTypes";
 import { AttendanceStatusConfig, solidColor } from "helpers/attendanceStatuses";

@@ -1,6 +1,6 @@
 import { Box, Flex, Button, Input, Stack, Field } from "@chakra-ui/react";
 
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 
 import { useForm, SubmitHandler } from "react-hook-form";
 import useGlobalStore, { currentAttendanceType } from "zStore";

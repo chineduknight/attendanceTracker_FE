@@ -1,39 +1,24 @@
-import { createSystem, defaultConfig } from "@chakra-ui/react";
-import { ButtonStyles as Button } from "./components/buttonStyles";
+import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import { buttonRecipe } from "./components/buttonStyles";
 
-// custom themes in chakra UI
-// https://chakra-ui.com/docs/theming/customize-theme
-// https://www.easyreact.com/articles/chakra-ui-customisations
-
-const myTheme = createSystem(defaultConfig, {
+// https://chakra-ui.com/docs/theming/overview
+const config = defineConfig({
   theme: {
     tokens: {
       fonts: {
-        heading: {
-          value: "Palanquin",
-        },
-        body: {
-          value: "Palanquin",
-        },
+        heading: { value: "Palanquin" },
+        body: { value: "Palanquin" },
       },
-
       colors: {
-        primary: {
-          value: "#3182CE",
-        }, // blue.500 — the color every header already uses
-        primaryHover: {
-          value: "#2B6CB0",
-        }, // blue.600 — hover state for primary-colored surfaces
-        secondary: {
-          value: "#2FA07224",
-        },
+        primary: { value: "#3182CE" }, // blue.500 — the color every header already uses
+        primaryHover: { value: "#2B6CB0" }, // blue.600 — hover state for primary-colored surfaces
+        secondary: { value: "#2FA07224" },
       },
     },
-  },
-
-  components: {
-    Button, // Has to match to the name of the component
+    recipes: {
+      button: buttonRecipe,
+    },
   },
 });
 
-export default myTheme;
+export const system = createSystem(defaultConfig, config);

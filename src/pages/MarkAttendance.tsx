@@ -15,7 +15,7 @@ import {
   useDisclosure,
   Portal,
 } from "@chakra-ui/react";
-import { useColorModeValue } from "../components/ui/color-mode";
+import { useColorModeValue } from "components/ui/color-mode";
 import { FaSearch, FaPencilAlt, FaUserPlus } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
 import { convertParamsToString } from "helpers/stringManipulations";

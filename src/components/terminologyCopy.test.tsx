@@ -3,7 +3,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { ReactElement } from "react";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { DEFAULT_TERMINOLOGY, OrganisationTerminology } from "helpers/organisationPresentation";
