@@ -8,7 +8,7 @@
 > Runtime: Node 22  
 > Package manager: Yarn 1.22.22  
 > Framework: React 18 + TypeScript + Create React App  
-> UI: Chakra UI v2  
+> UI: Chakra UI v3 (with v2-parity theme overrides)  
 > Server state: TanStack React Query v4  
 > Client/global state: Zustand v4 with persistence  
 > Routing: React Router DOM v6.3  
@@ -228,7 +228,7 @@ The application roughly follows:
 
 ```text
 App
- ├─ ChakraProvider
+ ├─ Provider (components/ui/provider: ChakraProvider + colour mode)
  ├─ QueryClientProvider
  ├─ ToastContainer
  ├─ ErrorBoundary
@@ -1747,11 +1747,40 @@ Attendance status badges should retain text/accessible labels.
 
 # 52. Chakra UI conventions
 
-The project uses Chakra UI v2.
+The project uses Chakra UI v3 (migrated from v2). Write v3 APIs only:
+compound parts (`Dialog.Root`, `Field.Root`, `NativeSelect.Root`, `Tabs.Root`,
+`Menu.Root`, ...), `open`/`disabled`/`invalid` instead of `isOpen`/`isDisabled`,
+`colorPalette` instead of `colorScheme`, `gap` instead of `spacing`.
 
-Prefer existing primitives such as Box, Flex, Stack, Button, FormControl, Alert, Drawer, Tabs, Badge and Table.
+Theme:
 
-Use `useColorModeValue` when the surrounding page already supports light/dark presentation.
+- `src/styles/theme.ts` exports `system` (`createSystem`). Custom button
+  variants (`primary`, the default, plus `secondary`, `danger`, `logout`) are a
+  recipe; `yarn install` regenerates their types (`postinstall` typegen).
+- `src/styles/components/v2Parity.ts` keeps v2 sizes for headings, buttons,
+  fields and Container. Medium fields stay 16px so iOS does not zoom on focus.
+- Colour mode is forced to light in `components/ui/provider.tsx` until the
+  planned dark-mode pass. Import `useColorModeValue` from
+  `components/ui/color-mode`, not `@chakra-ui/react`.
+
+Shared wrappers in `src/components/ui` (use them instead of the raw parts):
+
+- `Switch` / `FormSwitch`: controlled; `FormSwitch` binds react-hook-form via
+  `useController`. Never `register` a switch: v3 does not follow `reset()`.
+  Put switches in a `Field.Root` beside a `Field.Label` with no id/htmlFor.
+- `NameAvatar`: initials on a name-derived colour, image when present.
+
+v3 traps that type-check but misbehave:
+
+- Inside a `Field.Root`, `NativeSelect` ignores its own `disabled`; put
+  `disabled` on the `Field.Root`.
+- `Dialog`/`Drawer.CloseTrigger` renders nothing without
+  `<CloseButton />`; header text belongs in `Dialog.Title`/`Drawer.Title`.
+- `Menu.Item` has no `icon` prop (put the icon in the children) and needs a
+  unique `value`, also inside `.map()`.
+- `aria-label` for a checkbox goes on `Checkbox.HiddenInput`, not the root.
+- Native inputs, textareas and `NativeSelect.Field` keep `onChange`;
+  `onValueChange`/`onCheckedChange` belong to Ark components only.
 
 Do not introduce a second component framework for one feature.
 
@@ -1879,6 +1908,16 @@ Test what the officer sees/does:
 - correct cache invalidated,
 - stale data does not overwrite local draft,
 - backend errors stay visible.
+
+## Chakra v3 in tests
+
+Render through `render` from `test-utils/render` (or `renderRoute`): v3
+components throw without a provider. Ark updates are asynchronous, so use
+the shared helpers instead of asserting straight after a click:
+`toggle()` for checkboxes/switches, `selectTab()` for tabs,
+`chooseMenuItem()` for menu items (press, then click), and `findBy*` for
+dialogs. Jest is CRA's Jest 27; `package.json` maps Ark's wildcard exports
+and transforms v3's ESM-only packages.
 
 ## Pure helpers
 
