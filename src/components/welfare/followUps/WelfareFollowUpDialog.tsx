@@ -443,11 +443,10 @@ const WelfareFollowUpDialog = ({
                   </Field.Root>
 
                   <Field.Root>
-                    <Field.Label htmlFor="follow-up-open">
+                    <Field.Label>
                       Keep open for follow-up
                     </Field.Label>
                     <Switch
-                      id="follow-up-open"
                       checked={keepOpen}
                       onCheckedChange={setKeepOpen}
                     />

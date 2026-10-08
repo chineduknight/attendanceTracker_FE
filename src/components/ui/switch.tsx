@@ -7,23 +7,24 @@ import {
 } from "react-hook-form";
 
 export interface SwitchProps
-  extends Omit<ChakraSwitch.RootProps, "checked" | "onCheckedChange"> {
-  /** Id of the underlying input, so a Field.Label htmlFor can target it. */
-  id?: string;
+  extends Omit<ChakraSwitch.RootProps, "checked" | "onCheckedChange" | "id"> {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }
 
-/** A controlled on/off switch with an accessible hidden checkbox input. */
+/**
+ * A controlled on/off switch. Place it in a Field.Root next to a Field.Label:
+ * the switch takes its input id and accessible name from the field, so no
+ * id/htmlFor pair is needed (overriding the ids leaves a dangling
+ * aria-labelledby on the hidden input).
+ */
 export const Switch = ({
-  id,
   checked,
   onCheckedChange,
   ...rootProps
 }: SwitchProps) => (
   <ChakraSwitch.Root
     {...rootProps}
-    ids={id ? { hiddenInput: id } : undefined}
     checked={checked}
     onCheckedChange={(details) => onCheckedChange(details.checked)}
   >

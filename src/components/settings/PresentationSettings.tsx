@@ -64,11 +64,10 @@ export const FeatureVisibilitySettings = ({ control, isReadOnly }: FeatureVisibi
     </Box>
     {OPTIONAL_FEATURES.map((feature) => (
       <Field.Root key={feature} display="flex" alignItems="center" justifyContent="space-between">
-        <Field.Label htmlFor={`feature-${feature}`} mb="0">
+        <Field.Label mb="0">
           {FEATURE_LABELS[feature]}
         </Field.Label>
         <FormSwitch
-          id={`feature-${feature}`}
           disabled={isReadOnly}
           control={control}
           name={`featureVisibility.${feature}`}

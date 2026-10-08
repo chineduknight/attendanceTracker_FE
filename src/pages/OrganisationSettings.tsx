@@ -296,13 +296,12 @@ const OrganisationSettings = () => {
                 {eligibilitySettingSupported && (
                   <Field.Root>
                     <Flex align="center" justify="space-between" gap={3}>
-                      <Field.Label htmlFor="attendanceEligibilityEnabled" mb="0">
+                      <Field.Label mb="0">
                         {`Use ${lowerTerm(
                           terms.attendanceSingular,
                         )} eligibility rules`}
                       </Field.Label>
                       <FormSwitch
-                        id="attendanceEligibilityEnabled"
                         disabled={!canManage}
                         control={control}
                         name="attendanceEligibilityEnabled"

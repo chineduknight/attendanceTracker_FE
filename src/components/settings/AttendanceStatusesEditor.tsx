@@ -200,11 +200,10 @@ const AttendanceStatusesEditor = ({
 
           <Flex gap={6} mt={2}>
             <Field.Root display="flex" alignItems="center" w="auto">
-              <Field.Label fontSize="sm" mb={0} htmlFor={`active-${row.key}`}>
+              <Field.Label fontSize="sm" mb={0}>
                 Active
               </Field.Label>
               <Switch
-                id={`active-${row.key}`}
                 checked={row.active}
                 disabled={isReadOnly}
                 onCheckedChange={(active) => updateRow(row.key, { active })}
