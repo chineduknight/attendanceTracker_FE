@@ -48,11 +48,17 @@ const StatTile = ({
     <>
       <Flex align="center" gap={1.5} minW={0}>
         {Icon && (
+          // A wrapping span, not asChild: react-icons components cannot take
+          // the ref asChild passes down.
           <Box
+            as="span"
+            display="inline-flex"
             aria-hidden="true"
             color={isSolid ? "white" : accent}
             flexShrink={0}
-            asChild><Icon /></Box>
+          >
+            <Icon />
+          </Box>
         )}
         <Text
           fontSize={{ base: "xs", md: "md" }}

@@ -12,7 +12,6 @@ import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
 
 type ProgressView = "pending" | "followedUp" | "all";
-const VIEWS: readonly ProgressView[] = ["pending", "followedUp", "all"];
 
 interface NeedsCheckInProgressProps {
   /** The backend's attention list for this review — never altered here. */
