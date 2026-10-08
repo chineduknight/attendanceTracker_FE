@@ -47,3 +47,9 @@ export const chooseMenuItem = async (item: HTMLElement) => {
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
   fireEvent.click(item);
 };
+
+/** Select a v3 tab and wait for the switch to apply (it is asynchronous). */
+export const selectTab = async (tab: HTMLElement) => {
+  fireEvent.click(tab);
+  await waitFor(() => expect(tab).toHaveAttribute("aria-selected", "true"));
+};
