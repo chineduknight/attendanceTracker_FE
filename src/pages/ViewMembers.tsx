@@ -19,6 +19,7 @@ import {
   MenuItem,
   Icon,
   Collapse,
+  Badge,
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
@@ -147,6 +148,10 @@ const ViewMembers: React.FC = () => {
   const cardBg = useColorModeValue("white", "gray.700");
   const borderColor = useColorModeValue("gray.200", "gray.600");
   const mutedColor = useColorModeValue("gray.500", "gray.400");
+  // The app's header blue is the page accent; no attendance statuses show
+  // here, so it cannot be mistaken for one.
+  const accentColor = useColorModeValue("blue.600", "blue.300");
+  const activeToggleBg = useColorModeValue("blue.50", "whiteAlpha.200");
 
   const { members, isLoading, isError } = useMembers(org.id);
   // Display labels only; filters, query params and saved columns keep storage keys.
@@ -163,6 +168,10 @@ const ViewMembers: React.FC = () => {
         )
         .map((field) => ({ name: field.name, options: field.options ?? [] })),
     [modelFields]
+  );
+  const optionFieldNames = useMemo(
+    () => new Set(filterableFields.map((field) => field.name)),
+    [filterableFields]
   );
   const allExtraFields = useMemo(
     () => (members.length > 0 ? Object.keys(_.omit(members[0], HIDDEN_KEYS)) : []),
@@ -258,19 +267,19 @@ const ViewMembers: React.FC = () => {
 
   const memberTerm = (count: number) =>
     lowerTerm(count === 1 ? terms.memberSingular : terms.memberPlural);
-  const countText =
-    filteredMembers.length === members.length
-      ? `${members.length} ${memberTerm(members.length)}`
-      : `Showing ${filteredMembers.length} of ${members.length} ${memberTerm(
-          members.length
-        )}`;
+  const countNumber = (count: number) => (
+    <Text as="span" fontWeight="bold" color={accentColor}>
+      {count}
+    </Text>
+  );
+  const isNarrowed = filteredMembers.length !== members.length;
 
-  // Neutral page controls stay gray so they never read as a status colour.
   const actionButtons = (
     <Flex gap={2}>
       <Can perm="members.manage">
         <Button
           flex="1"
+          colorScheme="blue"
           onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}
           leftIcon={<FaUserPlus />}
         >
@@ -282,6 +291,7 @@ const ViewMembers: React.FC = () => {
           as={Button}
           flex="1"
           variant="outline"
+          colorScheme="blue"
           leftIcon={<FaFileExport />}
         >
           Export
@@ -343,6 +353,14 @@ const ViewMembers: React.FC = () => {
                 <Button
                   flex="1"
                   variant="outline"
+                  colorScheme="blue"
+                  // Stays filled while any filter applies, so a narrowed
+                  // list is obvious even with the panel closed.
+                  bg={
+                    openPanel === "filters" || activeFilters.length > 0
+                      ? activeToggleBg
+                      : undefined
+                  }
                   leftIcon={<FaFilter />}
                   aria-expanded={openPanel === "filters"}
                   onClick={() => togglePanel("filters")}
@@ -355,6 +373,8 @@ const ViewMembers: React.FC = () => {
               <Button
                 flex="1"
                 variant="outline"
+                colorScheme="blue"
+                bg={openPanel === "fields" ? activeToggleBg : undefined}
                 leftIcon={<FaColumns />}
                 aria-expanded={openPanel === "fields"}
                 onClick={() => togglePanel("fields")}
@@ -483,8 +503,18 @@ const ViewMembers: React.FC = () => {
             </Box>
             {/* The list scrolls with the page rather than in a nested box. */}
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
-              <Text fontSize="sm" color={mutedColor} mb={2}>
-                {countText}
+              <Text fontSize="sm" color={mutedColor} mb={2} role="status">
+                {isNarrowed ? (
+                  <>
+                    Showing {countNumber(filteredMembers.length)} of{" "}
+                    {countNumber(members.length)}{" "}
+                    {memberTerm(members.length)}
+                  </>
+                ) : (
+                  <>
+                    {countNumber(members.length)} {memberTerm(members.length)}
+                  </>
+                )}
               </Text>
               {filteredMembers.length === 0 ? (
                 <Text fontWeight="bold" mt="4" ml="1">
@@ -525,6 +555,7 @@ const ViewMembers: React.FC = () => {
                             <Can perm="attendance.view">
                               <Button
                                 variant="outline"
+                                colorScheme="teal"
                                 size="sm"
                                 minH="44px"
                                 px={3}
@@ -545,6 +576,7 @@ const ViewMembers: React.FC = () => {
                                 aria-label={`Edit ${member.name}`}
                                 icon={<FaPencilAlt />}
                                 variant="outline"
+                                colorScheme="blue"
                                 size="sm"
                                 minW="44px"
                                 minH="44px"
@@ -567,16 +599,38 @@ const ViewMembers: React.FC = () => {
                             spacingY={2}
                             mt={2}
                           >
-                            {fields.map((key) => (
-                              <Box key={key} minW={0}>
-                                <Text fontSize="xs" color={mutedColor}>
-                                  {labelFor(key)}
-                                </Text>
-                                <Text fontSize="sm" wordBreak="break-word">
-                                  {formatFieldValue(member[key])}
-                                </Text>
-                              </Box>
-                            ))}
+                            {fields.map((key) => {
+                              const value = formatFieldValue(member[key]);
+                              // Option values are a fixed set, so they read
+                              // as tags; free text stays plain.
+                              const asTag =
+                                optionFieldNames.has(key) && value !== "—";
+                              return (
+                                <Box key={key} minW={0}>
+                                  <Text fontSize="xs" color={mutedColor}>
+                                    {labelFor(key)}
+                                  </Text>
+                                  {asTag ? (
+                                    <Badge
+                                      colorScheme="blue"
+                                      variant="subtle"
+                                      textTransform="none"
+                                      fontSize="sm"
+                                      fontWeight="medium"
+                                      maxW="full"
+                                      whiteSpace="normal"
+                                      wordBreak="break-word"
+                                    >
+                                      {value}
+                                    </Badge>
+                                  ) : (
+                                    <Text fontSize="sm" wordBreak="break-word">
+                                      {value}
+                                    </Text>
+                                  )}
+                                </Box>
+                              );
+                            })}
                           </SimpleGrid>
                         )}
                       </Box>

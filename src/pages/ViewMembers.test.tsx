@@ -158,19 +158,22 @@ describe("<ViewMembers> at phone width", () => {
     const search = screen.getByPlaceholderText("Search member");
     fireEvent.change(search, { target: { value: "bay" } });
     expect(screen.queryByText("Ada")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 2 members")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 2 members");
 
     fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
 
     expect(search).toHaveValue("");
     expect(screen.getByText("Ada")).toBeInTheDocument();
-    expect(screen.getByText("2 members")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("2 members");
   });
 
   it("shows field labels, never storage keys, on each card", async () => {
     renderPage();
     await screen.findByText("Ada");
     expect(screen.getAllByText("Voice Part")).toHaveLength(2);
+    // Option values render as tags, free text as plain text.
+    expect(screen.getByText("soprano")).toHaveClass("chakra-badge");
+    expect(screen.getByText("0801")).not.toHaveClass("chakra-badge");
     expect(screen.queryByText("part")).not.toBeInTheDocument();
   });
 
