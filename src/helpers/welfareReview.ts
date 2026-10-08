@@ -142,3 +142,25 @@ export const attentionProgress = (
   });
   return { all: attention, pending, followedUp, followedUpIds };
 };
+
+export interface WelfareBirthdayPresentation {
+  /** True only when the whole range starts today or later. */
+  isUpcoming: boolean;
+  /** Shared by the snapshot heading/region and the summary tile. */
+  label: "Upcoming Birthdays" | "Birthdays in Review Range";
+}
+
+/**
+ * Presentation for the Welfare birthday snapshot. The review date picks the
+ * queried range; the officer's real local today only decides how it is
+ * described. A range that starts before today (wholly past or straddling
+ * today) is a review range, never "upcoming", and gets no relative labels.
+ * YYYY-MM-DD compares correctly as a string.
+ */
+export const welfareBirthdayPresentation = (
+  fromDate: string,
+  today: string
+): WelfareBirthdayPresentation =>
+  fromDate >= today
+    ? { isUpcoming: true, label: "Upcoming Birthdays" }
+    : { isUpcoming: false, label: "Birthdays in Review Range" };

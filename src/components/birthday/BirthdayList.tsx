@@ -15,6 +15,11 @@ interface BirthdayListProps {
   range: BirthdayRange;
   /** The local business date used for Today/Tomorrow/In N days labels. */
   asOf: string;
+  /**
+   * Today/Tomorrow/In N days labels and the today accent. Defaults on; the
+   * Welfare snapshot turns it off for a review range that began in the past.
+   */
+  showRelativeLabels?: boolean;
   emptyState: string;
 }
 
@@ -29,6 +34,7 @@ const BirthdayList = ({
   members,
   range,
   asOf,
+  showRelativeLabels = true,
   emptyState,
 }: BirthdayListProps) => {
   const terms = useTerms();
@@ -45,10 +51,11 @@ const BirthdayList = ({
         const display = occurrence
           ? birthdayDisplayDate(occurrence)
           : member.dob ?? "";
-        const relative = occurrence
-          ? birthdayRelativeLabel(occurrence, asOf)
-          : null;
-        const isToday = occurrence === asOf;
+        const relative =
+          showRelativeLabels && occurrence
+            ? birthdayRelativeLabel(occurrence, asOf)
+            : null;
+        const isToday = showRelativeLabels && occurrence === asOf;
         return (
           <GroupedListItem
             key={member._id ?? `${member.name ?? "member"}-${index}`}

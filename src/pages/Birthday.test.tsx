@@ -216,6 +216,19 @@ describe("<Birthday> proactive experience", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps relative labels and the today accent on the list rows", async () => {
+    renderPage();
+    await screen.findByText("Ada Okafor");
+    const row = (name: string) =>
+      screen
+        .getAllByRole("listitem")
+        .find((item) => within(item).queryByText(name) !== null);
+    expect(row("Ada Okafor")).toHaveTextContent("Today");
+    expect(row("Ada Okafor")).toHaveTextContent("🎂");
+    expect(row("Chika Obi")).toHaveTextContent("In 2 days");
+    expect(row("Grace Eze")).toHaveTextContent("In 9 days");
+  });
+
   it("narrows the list to today when the Today card is clicked", async () => {
     renderPage();
     await screen.findByText("Ada Okafor");

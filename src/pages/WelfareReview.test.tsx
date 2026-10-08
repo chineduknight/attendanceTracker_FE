@@ -9,7 +9,7 @@ import {
 import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { addDays, format } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import theme from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -147,6 +147,8 @@ interface Org {
   attention?: ReturnType<typeof insight>[];
   followUps?: WelfareFollowUp[];
   members?: unknown[];
+  /** Birthday rows keyed by the requested startDate. */
+  birthdays?: Record<string, { name: string; occurrenceDate: string }[]>;
 }
 
 let orgs: Record<string, Org>;
@@ -167,6 +169,22 @@ const serve = () =>
     }
     if (value.includes("/model")) {
       return Promise.resolve({ data: org.model ?? statusModel(null) });
+    }
+    if (value.includes("/members/birthday")) {
+      const from =
+        new URL(value, "http://x").searchParams.get("startDate") ?? "";
+      const rows = org.birthdays?.[from] ?? [];
+      return Promise.resolve({
+        data: {
+          data: {
+            count: rows.length,
+            members: rows.map(({ name, occurrenceDate }) => ({
+              name,
+              birthdayOccurrence: { month: 0, day: 0, occurrenceDate },
+            })),
+          },
+        },
+      });
     }
     if (value.includes("/members")) {
       return Promise.resolve({ data: { data: org.members ?? MANY_MEMBERS } });
@@ -719,5 +737,163 @@ describe("<Welfare> review tenancy", () => {
       ).not.toBeInTheDocument()
     );
     expect(mockPost).not.toHaveBeenCalled();
+  });
+});
+
+describe("<Welfare> birthday snapshot follows the review date", () => {
+  const DOB_MODEL = {
+    data: {
+      fields: [
+        { name: "name", type: "text" },
+        { name: "dob", type: "date" },
+      ],
+    },
+  };
+  const UPCOMING = "Upcoming Birthdays";
+  const REVIEW_RANGE = "Birthdays in Review Range";
+  const shift = (value: string, days: number) =>
+    format(addDays(parseISO(value), days), "yyyy-MM-dd");
+  // Starts before real today but its +7 range runs past it.
+  const STRADDLE = shift(TODAY, -3);
+  const EMPTY_REVIEW = "2026-09-01";
+  const birthdayRanges = () =>
+    callsTo("/members/birthday").map(([url]) => {
+      const params = new URL(String(url), "http://x").searchParams;
+      return `${params.get("startDate")}→${params.get("endDate")}`;
+    });
+  const birthdayRegion = (label: string) =>
+    within(screen.getByRole("region", { name: label }));
+  const expectNoRelativeLabels = (label: string) => {
+    expect(birthdayRegion(label).queryByText("Today")).toBeNull();
+    expect(birthdayRegion(label).queryByText("Tomorrow")).toBeNull();
+    expect(birthdayRegion(label).queryByText(/^In \d+ days$/)).toBeNull();
+  };
+
+  beforeEach(() => {
+    orgs.org1.model = DOB_MODEL;
+    orgs.org2.model = DOB_MODEL;
+    orgs.org1.birthdays = {
+      [TODAY]: [
+        { name: "Today Person", occurrenceDate: TODAY },
+        { name: "Later Person", occurrenceDate: shift(TODAY, 4) },
+      ],
+      [PAST_REVIEW]: [
+        { name: "Past One", occurrenceDate: "2026-10-01" },
+        { name: "Past Two", occurrenceDate: "2026-10-03" },
+      ],
+      [STRADDLE]: [
+        { name: "Before Today", occurrenceDate: shift(TODAY, -1) },
+        { name: "On Today", occurrenceDate: TODAY },
+        { name: "After Today", occurrenceDate: shift(TODAY, 2) },
+      ],
+    };
+  });
+
+  it("calls a today review upcoming, with relative labels, on the tile and section alike", async () => {
+    renderPage();
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+    expect(birthdayRanges()).toEqual([`${TODAY}→${shift(TODAY, 7)}`]);
+    expect(within(summaryTile(UPCOMING)).getByText("2")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: UPCOMING })).toBeInTheDocument();
+    expect(birthdayRegion(UPCOMING).getByText("Today")).toBeInTheDocument();
+    expect(birthdayRegion(UPCOMING).getByText("In 4 days")).toBeInTheDocument();
+    expect(screen.queryByText(REVIEW_RANGE)).toBeNull();
+  });
+
+  it("keeps an entirely past pinned review, labelled as a review range without relative wording", async () => {
+    renderPage(`/welfare?asOf=${PAST_REVIEW}`);
+    expect(await screen.findByText("Past One")).toBeInTheDocument();
+    expect(birthdayRanges()).toEqual(["2026-09-30→2026-10-07"]);
+    expect(
+      screen.getByRole("heading", { name: REVIEW_RANGE })
+    ).toBeInTheDocument();
+    expect(
+      birthdayRegion(REVIEW_RANGE).getByText("30 Sep – 7 Oct")
+    ).toBeInTheDocument();
+    // The historical count is retained, under the same label as the section.
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("2")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Past Two")).toBeInTheDocument();
+    expect(screen.getByText("Thu, 1 Oct")).toBeInTheDocument();
+    expect(screen.queryByText(UPCOMING)).toBeNull();
+    expectNoRelativeLabels(REVIEW_RANGE);
+  });
+
+  it("treats a review that straddles today as a review range and suppresses relative labels", async () => {
+    renderPage(`/welfare?asOf=${STRADDLE}`);
+    expect(await screen.findByText("After Today")).toBeInTheDocument();
+    expect(birthdayRanges()).toEqual([`${STRADDLE}→${shift(STRADDLE, 7)}`]);
+    expect(
+      screen.getByRole("heading", { name: REVIEW_RANGE })
+    ).toBeInTheDocument();
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("3")
+    ).toBeInTheDocument();
+    expect(
+      birthdayRegion(REVIEW_RANGE).getByText(
+        `${format(parseISO(STRADDLE), "d MMM")} – ${format(
+          parseISO(shift(STRADDLE, 7)),
+          "d MMM"
+        )}`
+      )
+    ).toBeInTheDocument();
+    // Dates still render; only the relative wording is dropped.
+    expect(
+      birthdayRegion(REVIEW_RANGE).getByText(
+        format(parseISO(TODAY), "EEE, d MMM")
+      )
+    ).toBeInTheDocument();
+    expectNoRelativeLabels(REVIEW_RANGE);
+  });
+
+  it("shows the shared empty state for an empty past review without hiding the section", async () => {
+    renderPage(`/welfare?asOf=${EMPTY_REVIEW}`);
+    expect(
+      await screen.findByText("No birthdays in this review range.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: REVIEW_RANGE })
+    ).toBeInTheDocument();
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("0")
+    ).toBeInTheDocument();
+  });
+
+  it("requests the new range when the review date changes, and Today restores it", async () => {
+    renderPage();
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+    expect(within(summaryTile(UPCOMING)).getByText("2")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Review as of"), {
+      target: { value: PAST_REVIEW },
+    });
+    expect(await screen.findByText("Past Two")).toBeInTheDocument();
+    expect(screen.queryByText("Today Person")).toBeNull();
+    expect(
+      within(summaryTile(REVIEW_RANGE)).getByText("2")
+    ).toBeInTheDocument();
+    expect(birthdayRanges()).toContain("2026-09-30→2026-10-07");
+
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+    expect(screen.queryByText("Past Two")).toBeNull();
+    expect(within(summaryTile(UPCOMING)).getByText("2")).toBeInTheDocument();
+    expect(birthdayRanges()[0]).toBe(`${TODAY}→${shift(TODAY, 7)}`);
+  });
+
+  it("never shows another organisation's birthdays after a switch", async () => {
+    orgs.org2.birthdays = {
+      [TODAY]: [{ name: "Org B Birthday", occurrenceDate: TODAY }],
+    };
+    renderPage();
+    expect(await screen.findByText("Today Person")).toBeInTheDocument();
+
+    act(() => setOrg({ id: "org2" }));
+    expect(await screen.findByText("Org B Birthday")).toBeInTheDocument();
+    expect(screen.queryByText("Today Person")).toBeNull();
+    expect(
+      callsTo("/organisations/org2/members/birthday").length
+    ).toBeGreaterThan(0);
   });
 });

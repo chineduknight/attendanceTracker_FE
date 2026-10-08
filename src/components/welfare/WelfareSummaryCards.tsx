@@ -18,9 +18,10 @@ interface WelfareSummaryCardsProps {
   summary: WelfareOverview["summary"];
   /**
    * Only present once birthdays are permitted, configured and loaded — a
-   * failed birthday query must never look like "0 birthdays".
+   * failed birthday query must never look like "0 birthdays". The label is
+   * the same one the birthday section uses.
    */
-  birthdayCount?: number | null;
+  birthdayTile?: { count: number; label: string } | null;
 }
 
 interface Tile {
@@ -38,7 +39,7 @@ interface Tile {
  */
 const WelfareSummaryCards = ({
   summary,
-  birthdayCount,
+  birthdayTile,
 }: WelfareSummaryCardsProps) => {
   const tiles: Tile[] = [
     {
@@ -70,11 +71,11 @@ const WelfareSummaryCards = ({
       accent: "teal.500",
     },
   ];
-  if (birthdayCount != null) {
+  if (birthdayTile) {
     tiles.push({
       section: "birthdays",
-      label: "Birthdays This Week",
-      value: birthdayCount,
+      label: birthdayTile.label,
+      value: birthdayTile.count,
       icon: FaBirthdayCake,
       accent: "pink.500",
     });

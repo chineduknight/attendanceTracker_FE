@@ -36,6 +36,7 @@ import { hasDobDateField, localBusinessDate } from "helpers/birthday";
 import {
   effectiveWelfareStatus,
   statusesParam,
+  welfareBirthdayPresentation,
   welfareStatusScope,
 } from "helpers/welfareReview";
 import {
@@ -147,16 +148,26 @@ const Welfare = () => {
 
   // Birthdays are an optional, independent snapshot: they need members.view,
   // the birthdays module and a configured `dob` date field, and the Birthday
-  // API is never called without all three.
+  // API is never called without all three. The snapshot follows the review
+  // date (review date through +7), not the browser's today.
   const birthdaysPermitted =
     canReadMemberModel && isFeatureVisible("birthdays");
   const showBirthdays = birthdaysPermitted && hasDobDateField(fields);
   const birthdays = useWelfareBirthdays(organisationId, {
     enabled: showBirthdays,
+    asOf,
   });
+  // Real local today only decides the wording (upcoming vs review range), once,
+  // so the tile, heading and relative labels can never disagree.
+  const birthdayPresentation = welfareBirthdayPresentation(
+    birthdays.fromDate,
+    today,
+  );
   // A failed birthday query hides its card rather than showing a fake zero.
-  const birthdayCount =
-    showBirthdays && birthdays.isSuccess ? birthdays.members.length : null;
+  const birthdayTile =
+    showBirthdays && birthdays.isSuccess
+      ? { count: birthdays.members.length, label: birthdayPresentation.label }
+      : null;
 
   // Phase 7C: private follow-ups are separately permissioned. Without
   // welfare.view no follow-up request is made and no note text can render.
@@ -262,7 +273,7 @@ const Welfare = () => {
               <ReviewWindowCaption overview={overview} />
               <WelfareSummaryCards
                 summary={overview.summary}
-                birthdayCount={birthdayCount}
+                birthdayTile={birthdayTile}
               />
 
               {canViewFollowUps && (
@@ -392,7 +403,8 @@ const Welfare = () => {
                     fromDate: birthdays.fromDate,
                     toDate: birthdays.toDate,
                   }}
-                  asOf={birthdays.asOf}
+                  today={today}
+                  presentation={birthdayPresentation}
                   isFetching={birthdays.isFetching}
                   isError={birthdays.isError}
                 />
@@ -410,7 +422,8 @@ const Welfare = () => {
                   fromDate: birthdays.fromDate,
                   toDate: birthdays.toDate,
                 }}
-                asOf={birthdays.asOf}
+                today={today}
+                presentation={birthdayPresentation}
                 isFetching={birthdays.isFetching}
                 isError={birthdays.isError}
               />

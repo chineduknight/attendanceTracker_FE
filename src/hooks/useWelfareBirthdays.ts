@@ -1,20 +1,18 @@
 import { useMemo } from "react";
-import { addDays } from "date-fns";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import { orgRequest } from "services/api/request";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { BirthdayMember, localBusinessDate } from "helpers/birthday";
+import { BirthdayMember, birthdayRangeForPreset } from "helpers/birthday";
 import { buildBirthdayQueryString } from "hooks/useBirthdays";
-
-/** Phase 7A snapshot window: today through the next 7 days. */
-export const WELFARE_BIRTHDAY_SNAPSHOT_DAYS = 7;
 
 const NO_MEMBERS: BirthdayMember[] = [];
 
 /**
- * The existing Birthday API, scoped to the Welfare snapshot window. The
- * backend wraps years, so the frontend only sends today and today + 7.
+ * The existing Birthday API, scoped to the Welfare snapshot window: the
+ * selected review date through review date + 7, inclusive (the shared `next7`
+ * preset). The caller supplies `asOf` so the snapshot follows the pinned
+ * Welfare review rather than the browser's today; the backend wraps years.
  *
  * Only enabled once the caller has confirmed `members.view`, the birthdays
  * module is visible and the member model configures a `dob` date field — the
@@ -23,11 +21,11 @@ const NO_MEMBERS: BirthdayMember[] = [];
  */
 export const useWelfareBirthdays = (
   organisationId: string,
-  { enabled }: { enabled: boolean },
+  { enabled, asOf }: { enabled: boolean; asOf: string },
 ) => {
-  const asOf = localBusinessDate();
-  const toDate = localBusinessDate(
-    addDays(new Date(), WELFARE_BIRTHDAY_SNAPSHOT_DAYS),
+  const { fromDate, toDate } = useMemo(
+    () => birthdayRangeForPreset("next7", asOf),
+    [asOf],
   );
 
   const url = useMemo(() => {
@@ -35,21 +33,22 @@ export const useWelfareBirthdays = (
     const base = convertParamsToString(orgRequest.BIRTHDAY, {
       organisationId,
     });
-    return `${base}?${buildBirthdayQueryString(asOf, toDate, "")}`;
-  }, [organisationId, asOf, toDate]);
+    return `${base}?${buildBirthdayQueryString(fromDate, toDate, "")}`;
+  }, [organisationId, fromDate, toDate]);
 
+  // Keyed by organisation + range, so a new review date or organisation never
+  // presents the previous snapshot as the current review's result.
   const { data: response, isFetching, isError, isSuccess } = useQueryWrapper(
-    queryKeys.birthday.snapshot(organisationId, asOf, toDate),
+    queryKeys.birthday.snapshot(organisationId, fromDate, toDate),
     url,
-    { enabled: enabled && Boolean(organisationId) },
+    { enabled: enabled && Boolean(organisationId) && Boolean(asOf) },
   );
 
   const members: BirthdayMember[] = response?.data?.members ?? NO_MEMBERS;
   return {
     members,
-    fromDate: asOf,
+    fromDate,
     toDate,
-    asOf,
     isFetching,
     isError,
     isSuccess,
