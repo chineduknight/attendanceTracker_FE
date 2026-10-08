@@ -19,11 +19,14 @@ export interface PageContainerProps extends Omit<BoxProps, "width"> {
 /**
  * A page's outer frame: the page background (dark-safe), a readable content
  * width, the app's standard padding, and room for the iPhone home bar.
- * 100dvh, not 100vh: on iOS 100vh is taller than the visible screen while
- * Safari's toolbar shows.
+ *
+ * It does not size itself to the screen: it grows (flex="1") into the page
+ * area of a flex-column shell (ProtectedLayout) that owns 100dvh, so short
+ * pages fill the screen below the header without scrolling and long pages
+ * grow normally. Public routes need the same shell before they adopt it.
  */
 const PageContainer = ({ width = "content", children, ...contentProps }: PageContainerProps) => (
-  <Box as="main" minH="100dvh" bg="bg.subtle">
+  <Box as="main" flex="1" bg="bg.subtle">
     <Box
       maxW={WIDTHS[width]}
       mx="auto"
