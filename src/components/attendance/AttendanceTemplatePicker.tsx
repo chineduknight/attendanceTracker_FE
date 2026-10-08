@@ -199,7 +199,7 @@ const AttendanceTemplatePicker = ({
 
   return (
     <Stack gap={3}>
-      <Field.Root id="attendanceTemplate">
+      <Field.Root id="attendanceTemplate" disabled={isLoading || isSaving}>
         {isError ? (
           <Text fontSize="sm" color="red.500">
             Templates could not be loaded. You can still fill in the details
@@ -213,7 +213,7 @@ const AttendanceTemplatePicker = ({
         ) : (
           <>
             <Field.Label mb="0">Template</Field.Label>
-            <NativeSelect.Root disabled={isLoading || isSaving}>
+            <NativeSelect.Root>
               <NativeSelect.Field
                 placeholder={
                   isLoading ? "Loading templates…" : "Choose a template"

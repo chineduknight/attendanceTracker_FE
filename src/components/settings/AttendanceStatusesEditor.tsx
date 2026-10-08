@@ -154,11 +154,11 @@ const AttendanceStatusesEditor = ({
                 }
               />
             </Field.Root>
-            <Field.Root flex="1 1 100px">
+            <Field.Root flex="1 1 100px" disabled={isReadOnly}>
               <Field.Label fontSize="xs" mb={1}>
                 Color
               </Field.Label>
-              <NativeSelect.Root size="sm" disabled={isReadOnly}>
+              <NativeSelect.Root size="sm">
                 <NativeSelect.Field
                   value={row.color}
                   onChange={(e) =>
@@ -175,11 +175,11 @@ const AttendanceStatusesEditor = ({
                 <NativeSelect.Indicator />
               </NativeSelect.Root>
             </Field.Root>
-            <Field.Root flex="1 1 110px">
+            <Field.Root flex="1 1 110px" disabled={isReadOnly || row.persisted}>
               <Field.Label fontSize="xs" mb={1}>
                 Behavior
               </Field.Label>
-              <NativeSelect.Root size="sm" disabled={isReadOnly || row.persisted}>
+              <NativeSelect.Root size="sm">
                 <NativeSelect.Field
                   value={row.behavior}
                   onChange={(e) =>

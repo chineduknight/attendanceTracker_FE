@@ -1,5 +1,5 @@
 import { act, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { render } from "test-utils/render";
+import { render, toggle } from "test-utils/render";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
@@ -195,7 +195,7 @@ describe("<OrganisationSettings>", () => {
       manager();
       renderPage();
       const absent = await screen.findByTestId("status-row-absent");
-      fireEvent.click(within(absent).getByLabelText("Active"));
+      await toggle(within(absent).getByLabelText("Active"));
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
       const alert = await screen.findByRole("alert");
@@ -254,7 +254,7 @@ describe("<OrganisationSettings>", () => {
       );
 
       fireEvent.change(screen.getByLabelText(/Officer plural/), { target: { value: " Coordinators " } });
-      fireEvent.click(screen.getByLabelText("Finance"));
+      await toggle(screen.getByLabelText("Finance"));
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
       await waitFor(() => expect(mockPut).toHaveBeenCalled());
@@ -624,7 +624,7 @@ describe("<OrganisationSettings>", () => {
       // The PUT reply omits the field; the submitted value still applies.
       mockPut.mockResolvedValue({ data: { data: { id: "org1", name: "Org org1" } } });
       renderPage();
-      fireEvent.click(await screen.findByLabelText(LABEL));
+      await toggle(await screen.findByLabelText(LABEL));
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));

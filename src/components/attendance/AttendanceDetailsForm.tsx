@@ -64,9 +64,9 @@ const AttendanceDetailsForm = ({
         </NativeSelect.Root>
       </Field.Root>
 
-      <Field.Root id="subCategory">
+      <Field.Root id="subCategory" disabled={subCategories.length === 0}>
         <Field.Label mb="0">{terms.subCategorySingular}</Field.Label>
-        <NativeSelect.Root disabled={subCategories.length === 0}>
+        <NativeSelect.Root>
           <NativeSelect.Field
             placeholder="Select option"
             value={value.subCategoryId}
