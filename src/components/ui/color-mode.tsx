@@ -5,6 +5,11 @@ import { ClientOnly, IconButton, Skeleton, Span } from "@chakra-ui/react"
 import { ThemeProvider, useTheme } from "next-themes"
 import type { ThemeProviderProps } from "next-themes"
 import * as React from "react"
+import {
+  ColorModeSetup,
+  THEME_PREFERENCES,
+  ThemePreference,
+} from "config/colorMode"
 import { LuMoon, LuSun } from "react-icons/lu"
 
 export interface ColorModeProviderProps extends ThemeProviderProps {}
@@ -34,6 +39,30 @@ export function useColorMode(): UseColorModeReturn {
     setColorMode: setTheme,
     toggleColorMode,
   }
+}
+
+/**
+ * How colour mode runs in this tab (see config/colorMode). The provider sets
+ * it; the default keeps a bare ChakraProvider (tests) on forced light.
+ */
+export const ColorModeSetupContext = React.createContext<ColorModeSetup>({
+  mode: "forced-light",
+})
+
+/** Whether to offer the System/Light/Dark control (dark on, or previewing). */
+export function useColorModeControlsVisible() {
+  return React.useContext(ColorModeSetupContext).mode !== "forced-light"
+}
+
+/** The chosen preference (system/light/dark), not the resolved mode. */
+export function useThemePreference() {
+  const { theme, setTheme } = useTheme()
+  const preference: ThemePreference = THEME_PREFERENCES.includes(
+    theme as ThemePreference,
+  )
+    ? (theme as ThemePreference)
+    : "system"
+  return { preference, setPreference: setTheme }
 }
 
 export function useColorModeValue<T>(light: T, dark: T) {

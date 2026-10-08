@@ -19,7 +19,7 @@ import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
 import { confirmAlert } from "react-confirm-alert";
 import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -242,7 +242,7 @@ const AddOrUpdateMember = () => {
       </Flex>
       <>
         {isGettingMembers ? (
-          <LoadingSpinner h="40vh" />
+          <PageLoader h="40vh" />
         ) : (
           <Box>
             <Flex mt="40px" align={"center"} justify={"center"}>

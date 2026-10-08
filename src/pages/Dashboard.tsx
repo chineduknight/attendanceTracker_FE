@@ -20,10 +20,10 @@ const Dashboard = () => {
         gap={6}
         p={4}
       >
-        {actions.map(({ label, icon: Icon, colorScheme, path }) => (
+        {actions.map(({ label, icon: Icon, palette, path }) => (
           <Button
             key={path}
-            colorPalette={colorScheme}
+            colorPalette={palette}
             variant="outline"
             onClick={() => navigate(path)}><Icon />{label}</Button>
         ))}

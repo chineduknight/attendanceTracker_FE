@@ -12,7 +12,7 @@ import { useWelfareOverview } from "hooks/useWelfareOverview";
 import { useWelfareBirthdays } from "hooks/useWelfareBirthdays";
 import { useWelfareFollowUps } from "hooks/useWelfareFollowUps";
 import { useWelfareReviewDate } from "hooks/useWelfareReviewDate";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import WelfareSummaryCards from "components/welfare/WelfareSummaryCards";
 import WelfareReviewControls from "components/welfare/WelfareReviewControls";
 import InsightGrid from "components/welfare/InsightGrid";
@@ -260,7 +260,7 @@ const Welfare = () => {
           />
 
           {isLoading && (
-            <LoadingSpinner h="30vh" text="Loading Welfare & Engagement..." />
+            <PageLoader h="30vh" label="Loading Welfare & Engagement..." />
           )}
 
           {!isLoading && isError && (

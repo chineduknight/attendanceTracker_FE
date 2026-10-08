@@ -20,7 +20,7 @@ import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from 
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { queryKeys } from "services/api/queryKeys";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import useGlobalStore from "zStore";
 import { Can } from "rbac/Can";
 import { Officer } from "rbac/types";
@@ -72,7 +72,7 @@ const OfficersTab = ({ organisationId }: Props) => {
       ],
     });
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <PageLoader />;
 
   return (
     <Box>

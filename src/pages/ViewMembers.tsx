@@ -42,7 +42,7 @@ import { useMemberModel } from "hooks/useMemberModel";
 import { MemberRecord, useMembers } from "hooks/useMembers";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { memberFieldLabeler } from "helpers/memberFields";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import TruncatedText from "components/TruncatedText";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -343,9 +343,9 @@ const ViewMembers: React.FC = () => {
       <Box px="4" pt="4" pb="8" maxW="container.xl" mx="auto">
         {actionButtons}
         {isLoading ? (
-          <LoadingSpinner
+          <PageLoader
             h="45vh"
-            text={`Loading ${lowerTerm(terms.memberPlural)}...`}
+            label={`Loading ${lowerTerm(terms.memberPlural)}...`}
           />
         ) : isError ? (
           <Box

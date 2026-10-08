@@ -3,7 +3,6 @@ import { useColorModeValue } from "../ui/color-mode";
 import {
   Box,
   Button,
-  Center,
   Flex,
   IconButton,
   Input,
@@ -12,7 +11,6 @@ import {
   Menu,
   Progress,
   NativeSelect,
-  Spinner,
   Stack,
   Text,
   Portal,
@@ -43,6 +41,7 @@ import { GroupedList, GroupedListItem } from "components/GroupedList";
 import FilterChips from "components/finance/FilterChips";
 import MemberPaymentSheet from "components/finance/MemberPaymentSheet";
 import { MonthStrip, StandingBadge } from "components/finance/ComplianceVisuals";
+import PageLoader from "components/PageLoader";
 
 interface CollectTabProps {
   organisationId: string;
@@ -197,9 +196,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
       </Flex>
 
       {isLoading && (
-        <Center py={10}>
-          <Spinner />
-        </Center>
+        <PageLoader h="30vh" label="Loading obligation..." />
       )}
       {isError && <Text color="red.500">Couldn't load this obligation. Please try again.</Text>}
 

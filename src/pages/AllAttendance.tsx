@@ -17,7 +17,7 @@ import {
 } from "helpers/attendanceEdits";
 import { FaPencilAlt } from "react-icons/fa";
 import { format } from "date-fns";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -108,9 +108,9 @@ const AllAttendance = () => {
         mx="auto"
       >
         {isLoading ? (
-          <LoadingSpinner
+          <PageLoader
             h="30vh"
-            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+            label={`Loading ${lowerTerm(terms.attendancePlural)}...`}
           />
         ) : allAttend.length ? (
           <>

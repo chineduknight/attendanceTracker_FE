@@ -33,7 +33,7 @@ import useGlobalStore from "zStore";
 import { confirmAlert } from "react-confirm-alert";
 import _ from "lodash";
 import { toast } from "react-toastify";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
@@ -591,9 +591,9 @@ const MarkAttendanceSession = () => {
           </Flex>
         </Flex>
         {isLoadingData ? (
-          <LoadingSpinner
+          <PageLoader
             h="45vh"
-            text={`Loading ${lowerTerm(terms.memberPlural)}...`}
+            label={`Loading ${lowerTerm(terms.memberPlural)}...`}
           />
         ) : rosterFailed ? (
           <Text mt="6" color="red.500">

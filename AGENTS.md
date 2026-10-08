@@ -1759,9 +1759,17 @@ Theme:
   recipe; `yarn install` regenerates their types (`postinstall` typegen).
 - `src/styles/components/v2Parity.ts` keeps v2 sizes for headings, buttons,
   fields and Container. Medium fields stay 16px so iOS does not zoom on focus.
-- Colour mode is forced to light in `components/ui/provider.tsx` until the
-  planned dark-mode pass. Import `useColorModeValue` from
+- Colour mode: `DARK_MODE_ENABLED` in `config/colorMode.ts` keeps users on
+  light until every page is dark-safe. `?theme=dark|light|system` previews a
+  mode for the current tab (and shows the System/Light/Dark control in the nav
+  drawer); `?theme=off` ends it. Import `useColorModeValue` from
   `components/ui/color-mode`, not `@chakra-ui/react`.
+- Prefer semantic tokens that flip with the mode (`bg`, `bg.panel`, `fg`,
+  `fg.muted`, `border`, `{palette}.fg`, `{palette}.solid`, `primary`) over
+  `white`, `black` or fixed `gray.*` shades.
+- `PageLoader` (`components/PageLoader`) is the one loading indicator for a
+  page, tab or section. Keep small inline spinners only for a refresh next to
+  results already on screen.
 
 Shared wrappers in `src/components/ui` (use them instead of the raw parts):
 
