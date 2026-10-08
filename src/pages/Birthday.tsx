@@ -487,7 +487,7 @@ const Birthday: React.FC = () => {
                   minW={0}
                   maxW={{ md: "180px" }}
                   value={customFrom}
-                  onValueChange={(event) => setCustomFrom(event.target.value)}
+                  onChange={(event) => setCustomFrom(event.target.value)}
                   placeholder="From date"
                   aria-label="From date"
                   max={customTo || undefined}
@@ -499,7 +499,7 @@ const Birthday: React.FC = () => {
                   minW={0}
                   maxW={{ md: "180px" }}
                   value={customTo}
-                  onValueChange={(event) => setCustomTo(event.target.value)}
+                  onChange={(event) => setCustomTo(event.target.value)}
                   placeholder="To date"
                   aria-label="To date"
                   min={customFrom || undefined}

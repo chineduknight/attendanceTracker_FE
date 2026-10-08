@@ -158,7 +158,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
           <NativeSelect.Field
             aria-label="Obligation"
             value={obligationId}
-            onValueChange={(e) => onObligationChange(e.target.value)}
+            onChange={(e) => onObligationChange(e.target.value)}
             bg={cardBg}
             fontWeight="semibold">
             {obligations.map((o) => (
@@ -263,7 +263,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                   placeholder={`Search ${memberPlural}`}
                   aria-label={`Search ${memberPlural}`}
                   value={search}
-                  onValueChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => setSearch(e.target.value)}
                   bg={cardBg}
                 />
               </InputGroup>
@@ -271,7 +271,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                 <NativeSelect.Field
                   aria-label="Sort"
                   value={sort}
-                  onValueChange={(e) => setSort(e.target.value as CollectSort)}
+                  onChange={(e) => setSort(e.target.value as CollectSort)}
                   bg={cardBg}
                   w={{ base: "40%", md: "48" }}
                   flexShrink={0}>

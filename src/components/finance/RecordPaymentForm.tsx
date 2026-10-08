@@ -47,7 +47,7 @@ const RecordPaymentForm = ({ obligation, row, isSaving, onRecord }: RecordPaymen
               min={0}
               placeholder="0"
               value={raw}
-              onValueChange={(e) => setRaw(e.target.value)}
+              onChange={(e) => setRaw(e.target.value)}
             />
           </InputGroup>
           {overBalance ? (

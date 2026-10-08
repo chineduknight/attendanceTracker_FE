@@ -40,7 +40,7 @@ const AttendanceDetailsForm = ({
           type="text"
           placeholder={`${terms.attendanceSingular} Name`}
           value={value.name}
-          onValueChange={(e) => onChange({ ...value, name: e.target.value })}
+          onChange={(e) => onChange({ ...value, name: e.target.value })}
         />
       </Field.Root>
 
@@ -50,7 +50,7 @@ const AttendanceDetailsForm = ({
           <NativeSelect.Field
             placeholder="Select option"
             value={value.categoryId}
-            onValueChange={(e) =>
+            onChange={(e) =>
               // Changing the category invalidates any previously chosen sub-category.
               onChange({ ...value, categoryId: e.target.value, subCategoryId: "" })
             }>

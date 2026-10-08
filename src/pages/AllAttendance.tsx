@@ -118,7 +118,7 @@ const AllAttendance = () => {
               <NativeSelect.Field
                 aria-label="Filter by analytics inclusion"
                 value={inclusionFilter}
-                onValueChange={(e) =>
+                onChange={(e) =>
                   setInclusionFilter(e.target.value as AnalyticsInclusionFilter)
                 }>
                 <option value="all">All</option>

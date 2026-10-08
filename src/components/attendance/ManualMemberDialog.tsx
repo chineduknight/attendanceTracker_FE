@@ -100,7 +100,7 @@ const ManualMemberForm = ({
               <NativeSelect.Field
                 value={status}
                 placeholder={allowedStatuses.length > 1 ? "Choose a status" : undefined}
-                onValueChange={(event) => setStatus(event.target.value)}>
+                onChange={(event) => setStatus(event.target.value)}>
                 {allowedStatuses.map((option) => (
                   <option key={option.key} value={option.key}>
                     {option.label}
@@ -120,7 +120,7 @@ const ManualMemberForm = ({
           <Textarea
             value={reason}
             maxLength={MANUAL_ADDITION_REASON_MAX}
-            onValueChange={(event) => setReason(event.target.value)}
+            onChange={(event) => setReason(event.target.value)}
             placeholder="Joined the sectional rehearsal"
           />
           <Field.HelperText>

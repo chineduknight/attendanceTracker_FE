@@ -307,7 +307,7 @@ const ViewMembers: React.FC = () => {
               <Input
                 placeholder="Search"
                 value={searchQuery}
-                onValueChange={handleSearch}
+                onChange={handleSearch}
                 mr={0}
                 maxW={{ base: "100%", md: "300px" }}
               />

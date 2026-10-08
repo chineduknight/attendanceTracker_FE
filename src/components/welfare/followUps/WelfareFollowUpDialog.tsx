@@ -413,7 +413,7 @@ const WelfareFollowUpDialog = ({
                       id="follow-up-date"
                       type="date"
                       value={recordDate}
-                      onValueChange={(event) => setRecordDate(event.target.value)}
+                      onChange={(event) => setRecordDate(event.target.value)}
                     />
                   </Field.Root>
 
@@ -423,7 +423,7 @@ const WelfareFollowUpDialog = ({
                       id="follow-up-reason"
                       value={reason}
                       maxLength={REASON_MAX_LENGTH}
-                      onValueChange={(event) => setReason(event.target.value)}
+                      onChange={(event) => setReason(event.target.value)}
                     />
                     <Field.ErrorText>Reason is required.</Field.ErrorText>
                   </Field.Root>
@@ -434,7 +434,7 @@ const WelfareFollowUpDialog = ({
                       id="follow-up-note"
                       value={note}
                       maxLength={NOTE_MAX_LENGTH}
-                      onValueChange={(event) => setNote(event.target.value)}
+                      onChange={(event) => setNote(event.target.value)}
                     />
                     <Field.HelperText>
                       Keep notes brief and relevant. Avoid storing unnecessary
@@ -463,7 +463,7 @@ const WelfareFollowUpDialog = ({
                         type="date"
                         min={recordDate}
                         value={nextFollowUpDate}
-                        onValueChange={(event) =>
+                        onChange={(event) =>
                           setNextFollowUpDate(event.target.value)
                         }
                       />
@@ -481,7 +481,7 @@ const WelfareFollowUpDialog = ({
                           <NativeSelect.Field
                             id="follow-up-assignee"
                             value={assignedToUserId}
-                            onValueChange={(event) =>
+                            onChange={(event) =>
                               setAssignedToUserId(event.target.value)
                             }>
                             <option value="">Unassigned</option>

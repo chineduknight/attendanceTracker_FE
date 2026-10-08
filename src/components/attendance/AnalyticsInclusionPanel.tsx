@@ -115,7 +115,7 @@ const AnalyticsInclusionPanel = ({
                 <Textarea
                   value={reason}
                   maxLength={ANALYTICS_EXCLUSION_REASON_MAX}
-                  onValueChange={(event) => setReason(event.target.value)}
+                  onChange={(event) => setReason(event.target.value)}
                   placeholder="Attendance was incompletely recorded"
                 />
                 <Field.HelperText>

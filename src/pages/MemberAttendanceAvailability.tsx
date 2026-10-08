@@ -190,7 +190,7 @@ const MemberAttendanceAvailability = () => {
               <Input
                 type="date"
                 value={form.startDate}
-                onValueChange={(event) =>
+                onChange={(event) =>
                   setForm({ ...form, startDate: event.target.value })
                 }
               />
@@ -200,7 +200,7 @@ const MemberAttendanceAvailability = () => {
               <Input
                 type="date"
                 value={form.endDate}
-                onValueChange={(event) =>
+                onChange={(event) =>
                   setForm({ ...form, endDate: event.target.value })
                 }
               />
@@ -211,7 +211,7 @@ const MemberAttendanceAvailability = () => {
             <Textarea
               value={form.reason}
               maxLength={200}
-              onValueChange={(event) =>
+              onChange={(event) =>
                 setForm({ ...form, reason: event.target.value })
               }
               placeholder="Travel, examinations, work assignment..."

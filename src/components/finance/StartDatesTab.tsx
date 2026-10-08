@@ -126,7 +126,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
           placeholder={`Search ${memberPlural}`}
           aria-label={`Search ${memberPlural}`}
           value={search}
-          onValueChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
           bg={cardBg}
         />
       </InputGroup>
@@ -227,7 +227,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
                 type="date"
                 aria-label="Start date for selected"
                 value={bulkDate}
-                onValueChange={(e) => setBulkDate(e.target.value)}
+                onChange={(e) => setBulkDate(e.target.value)}
               />
               <Button
                 colorPalette="purple"

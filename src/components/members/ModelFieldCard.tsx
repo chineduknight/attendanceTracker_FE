@@ -49,7 +49,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
         <Input
           value={field.label}
           placeholder="e.g. Voice Part"
-          onValueChange={(e) => onChange({ label: e.target.value })}
+          onChange={(e) => onChange({ label: e.target.value })}
         />
         <Field.ErrorText>{errors?.label}</Field.ErrorText>
       </Field.Root>
@@ -61,7 +61,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
           placeholder="e.g. voice_part"
           readOnly={keyLocked}
           bg={keyLocked ? "blackAlpha.50" : undefined}
-          onValueChange={(e) => onChange({ name: e.target.value, keyEdited: true })}
+          onChange={(e) => onChange({ name: e.target.value, keyEdited: true })}
         />
         {errors?.name ? (
           <Field.ErrorText>{errors.name}</Field.ErrorText>
@@ -96,7 +96,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
           <Input
             value={field.optionsText}
             placeholder="Soprano, Alto, Tenor, Bass"
-            onValueChange={(e) =>
+            onChange={(e) =>
               onChange({ optionsText: e.target.value, optionsEdited: true })
             }
           />

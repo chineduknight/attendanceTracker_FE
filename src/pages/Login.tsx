@@ -54,7 +54,7 @@ const Login = () => {
                 <Input
                   type="text"
                   autoComplete="username"
-                  onValueChange={(e) => setUserName(e.target.value)}
+                  onChange={(e) => setUserName(e.target.value)}
                 />
               </Field.Root>
               <Field.Root id="password">

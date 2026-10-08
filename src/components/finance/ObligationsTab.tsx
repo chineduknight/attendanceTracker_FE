@@ -160,7 +160,7 @@ const ObligationForm = ({
             id="obligation-name"
             placeholder={type === "dues" ? "e.g. 2026 Monthly Dues" : "e.g. Building Levy"}
             value={name}
-            onValueChange={(e) => setName(e.target.value)}
+            onChange={(e) => setName(e.target.value)}
           />
           <Field.ErrorText>{errors.name}</Field.ErrorText>
           {editing && <Field.HelperText>Amounts can't be changed once created.</Field.HelperText>}
@@ -174,7 +174,7 @@ const ObligationForm = ({
                 type="number"
                 inputMode="numeric"
                 value={year}
-                onValueChange={(e) => setYear(e.target.value)}
+                onChange={(e) => setYear(e.target.value)}
               />
               <Field.ErrorText>{errors.year}</Field.ErrorText>
             </Field.Root>
@@ -187,7 +187,7 @@ const ObligationForm = ({
                   type="number"
                   inputMode="decimal"
                   value={perMonth}
-                  onValueChange={(e) => setPerMonth(e.target.value)}
+                  onChange={(e) => setPerMonth(e.target.value)}
                 />
               </InputGroup>
               <Field.ErrorText>{errors.perMonth}</Field.ErrorText>
@@ -205,14 +205,14 @@ const ObligationForm = ({
                   type="number"
                   inputMode="decimal"
                   value={amount}
-                  onValueChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => setAmount(e.target.value)}
                 />
               </InputGroup>
               <Field.ErrorText>{errors.amount}</Field.ErrorText>
             </Field.Root>
             <Field.Root invalid={show(errors.date)}>
               <Field.Label htmlFor="obligation-date">Date</Field.Label>
-              <Input id="obligation-date" type="date" value={date} onValueChange={(e) => setDate(e.target.value)} />
+              <Input id="obligation-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
               <Field.ErrorText>{errors.date}</Field.ErrorText>
             </Field.Root>
           </Flex>

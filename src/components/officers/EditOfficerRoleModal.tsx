@@ -48,7 +48,7 @@ const EditOfficerRoleModal = ({ organisationId, officer, onClose }: Props) => {
               <Field.Root>
                 <Field.Label>Role</Field.Label>
                 <NativeSelect.Root>
-                  <NativeSelect.Field value={roleId} onValueChange={(e) => setRoleId(e.target.value)}>
+                  <NativeSelect.Field value={roleId} onChange={(e) => setRoleId(e.target.value)}>
                     {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </NativeSelect.Field>
                   <NativeSelect.Indicator />

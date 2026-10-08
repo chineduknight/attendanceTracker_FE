@@ -127,7 +127,7 @@ const AttendanceStatusesEditor = ({
                 maxLength={MAX_STATUS_LABEL_LENGTH}
                 value={row.label}
                 readOnly={isReadOnly}
-                onValueChange={(e) => updateRow(row.key, { label: e.target.value })}
+                onChange={(e) => updateRow(row.key, { label: e.target.value })}
               />
             </Field.Root>
             <Field.Root flex="1 1 70px">
@@ -139,7 +139,7 @@ const AttendanceStatusesEditor = ({
                 maxLength={MAX_STATUS_SHORT_LABEL_LENGTH}
                 value={row.shortLabel}
                 readOnly={isReadOnly}
-                onValueChange={(e) =>
+                onChange={(e) =>
                   updateRow(row.key, { shortLabel: e.target.value })
                 }
               />
@@ -227,7 +227,7 @@ const AttendanceStatusesEditor = ({
             aria-label="New status label"
             maxLength={MAX_STATUS_LABEL_LENGTH}
             value={newLabel}
-            onValueChange={(e) => setNewLabel(e.target.value)}
+            onChange={(e) => setNewLabel(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

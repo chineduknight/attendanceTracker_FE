@@ -60,7 +60,7 @@ const WelfareReviewControls = ({
             w={{ base: "full", sm: "auto" }}
             max={maxDate}
             value={asOf}
-            onValueChange={(event) => onAsOfChange(event.target.value)}
+            onChange={(event) => onAsOfChange(event.target.value)}
           />
           <Button
             size={{ base: "md", md: "sm" }}

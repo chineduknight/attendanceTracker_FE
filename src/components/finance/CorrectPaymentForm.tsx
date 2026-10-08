@@ -141,7 +141,7 @@ const CorrectPaymentForm = ({
                     max={amountPerMonth}
                     disabled={disabled}
                     value={valueOf(m.value)}
-                    onValueChange={(e) => setMonthValue(m.value, e.target.value)}
+                    onChange={(e) => setMonthValue(m.value, e.target.value)}
                   />
                 </Field.Root>
               );
@@ -165,7 +165,7 @@ const CorrectPaymentForm = ({
             inputMode="decimal"
             min={0}
             value={amountPaid}
-            onValueChange={(e) => setAmountPaid(e.target.value)}
+            onChange={(e) => setAmountPaid(e.target.value)}
           />
         </Field.Root>
       )}

@@ -36,7 +36,7 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
           type="date"
           size="lg"
           value={date}
-          onValueChange={(e) => setDate(e.target.value)}
+          onChange={(e) => setDate(e.target.value)}
         />
         <Field.HelperText>Dues and levies apply from this month onward.</Field.HelperText>
       </Field.Root>

@@ -63,7 +63,7 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
             <Dialog.Body>
               <Field.Root invalid={nameInvalid} mb={4}>
                 <Field.Label>Role name</Field.Label>
-                <Input value={name} onValueChange={(e) => { setName(e.target.value); setTouchedName(true); }} />
+                <Input value={name} onChange={(e) => { setName(e.target.value); setTouchedName(true); }} />
                 <Field.ErrorText>Name is required</Field.ErrorText>
               </Field.Root>
               {catalog && <PermissionGrid areas={catalog.areas} value={perms} onChange={setPerms} />}

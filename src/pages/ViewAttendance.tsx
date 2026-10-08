@@ -506,7 +506,7 @@ const Attendance = () => {
                   type="text"
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
                   value={searchQuery}
-                  onValueChange={handleSearch}
+                  onChange={handleSearch}
                   {...pinnedSearch.inputProps}
                 />
                 {searchQuery && (
