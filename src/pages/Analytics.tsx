@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useColorModeValue } from "components/ui/color-mode";
-import { Box, Flex, Button, Table, Thead, Tbody, Tr, Th, Td, Badge, Spinner, Text } from "@chakra-ui/react";
+import { Box, Flex, Button, Table,      Badge, Spinner, Text } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { useNavigate } from "react-router-dom";
@@ -395,7 +395,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
               </Flex>
 
               <Box overflowX="auto">
-                <Table.Root variant="striped" size="sm">
+                <Table.Root striped size="sm">
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeader textAlign='end'>SN</Table.ColumnHeader>

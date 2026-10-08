@@ -8,7 +8,7 @@ import {
   Flex,
   Input,
   InputGroup,
-  InputLeftElement,
+  
   Spinner,
   Stack,
   Text,
@@ -117,10 +117,10 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
         </Text>
       </Box>
 
-      <InputGroup>
-        <InputLeftElement pointerEvents="none" color="gray.400">
-          <FaSearch />
-        </InputLeftElement>
+      <InputGroup
+        startElement={<FaSearch />}
+        startElementProps={{ pointerEvents: "none", color: "gray.400" }}
+      >
         <Input
           type="search"
           placeholder={`Search ${memberPlural}`}

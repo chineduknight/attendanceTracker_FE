@@ -8,7 +8,7 @@ import {
   IconButton,
   Input,
   InputGroup,
-  InputLeftElement,
+  
   Menu,
   Progress,
   NativeSelect,
@@ -254,10 +254,10 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
 
           <Stack gap={2}>
             <Flex gap={2}>
-              <InputGroup>
-                <InputLeftElement pointerEvents="none" color="gray.400">
-                  <FaSearch />
-                </InputLeftElement>
+              <InputGroup
+                startElement={<FaSearch />}
+                startElementProps={{ pointerEvents: "none", color: "gray.400" }}
+              >
                 <Input
                   type="search"
                   placeholder={`Search ${memberPlural}`}

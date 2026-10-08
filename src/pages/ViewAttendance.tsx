@@ -6,8 +6,8 @@ import {
   Input,
   Heading,
   InputGroup,
-  InputLeftElement,
-  InputRightElement,
+  
+  
   IconButton,
   Icon,
   Container,
@@ -498,10 +498,19 @@ const Attendance = () => {
               py={2}
               mt="2"
             >
-              <InputGroup>
-                <InputLeftElement pointerEvents="none">
-                  <Icon color="gray.400" asChild><FaSearch /></Icon>
-                </InputLeftElement>
+              <InputGroup
+                startElement={<Icon color="gray.400" asChild><FaSearch /></Icon>}
+                startElementProps={{ pointerEvents: "none" }}
+                endElement={
+                  searchQuery ? (
+                      <IconButton
+                        aria-label="Clear search"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSearchQuery("")}><FiX /></IconButton>
+                  ) : undefined
+                }
+              >
                 <Input
                   type="text"
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
@@ -509,15 +518,6 @@ const Attendance = () => {
                   onChange={handleSearch}
                   {...pinnedSearch.inputProps}
                 />
-                {searchQuery && (
-                  <InputRightElement>
-                    <IconButton
-                      aria-label="Clear search"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}><FiX /></IconButton>
-                  </InputRightElement>
-                )}
               </InputGroup>
             </Box>
             {/* The roster scrolls with the page rather than in a nested box. */}

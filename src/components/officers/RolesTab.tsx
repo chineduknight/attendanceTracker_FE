@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Box, Button, Flex, HStack, Table, Thead, Tbody, Tr, Th, Td, Badge, Wrap, WrapItem,
+  Box, Button, Flex, HStack, Table,      Badge, Wrap, WrapItem,
 } from "@chakra-ui/react";
 import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";

@@ -6,8 +6,8 @@ import {
   Input,
   Heading,
   InputGroup,
-  InputLeftElement,
-  InputRightElement,
+  
+  
   IconButton,
   Icon,
   Container,
@@ -666,10 +666,19 @@ const MarkAttendanceSession = () => {
               py={2}
               mt="2"
             >
-              <InputGroup>
-                <InputLeftElement pointerEvents="none">
-                  <Icon color="gray.400" asChild><FaSearch /></Icon>
-                </InputLeftElement>
+              <InputGroup
+                startElement={<Icon color="gray.400" asChild><FaSearch /></Icon>}
+                startElementProps={{ pointerEvents: "none" }}
+                endElement={
+                  searchQuery ? (
+                      <IconButton
+                        aria-label="Clear search"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSearchQuery("")}><FiX /></IconButton>
+                  ) : undefined
+                }
+              >
                 <Input
                   type="text"
                   placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
@@ -677,15 +686,6 @@ const MarkAttendanceSession = () => {
                   onChange={handleSearch}
                   {...pinnedSearch.inputProps}
                 />
-                {searchQuery && (
-                  <InputRightElement>
-                    <IconButton
-                      aria-label="Clear search"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}><FiX /></IconButton>
-                  </InputRightElement>
-                )}
               </InputGroup>
             </Box>
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>

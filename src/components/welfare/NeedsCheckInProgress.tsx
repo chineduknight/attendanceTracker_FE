@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, Progress, Tab, TabList, Tabs, Text } from "@chakra-ui/react";
+import { Box, Progress, Tab,  Tabs, Text } from "@chakra-ui/react";
 import InsightGrid from "components/welfare/InsightGrid";
 import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {

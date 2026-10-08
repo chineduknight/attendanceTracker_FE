@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Button, Flex, Input, InputGroup, InputLeftAddon, Stack, Field } from "@chakra-ui/react";
+import { Button, Flex, Input, InputGroup,  Stack, Field } from "@chakra-ui/react";
 import { FaMoneyBillWave } from "react-icons/fa";
 import { formatMoney } from "helpers/financeConstants";
 import {
@@ -38,8 +38,7 @@ const RecordPaymentForm = ({ obligation, row, isSaving, onRecord }: RecordPaymen
     <Stack gap={3} asChild><form onSubmit={submit}>
         <Field.Root invalid={overBalance}>
           <Field.Label htmlFor="record-amount">Amount received</Field.Label>
-          <InputGroup size="lg">
-            <InputLeftAddon>₦</InputLeftAddon>
+          <InputGroup size="lg" startAddon="₦">
             <Input
               id="record-amount"
               type="number"

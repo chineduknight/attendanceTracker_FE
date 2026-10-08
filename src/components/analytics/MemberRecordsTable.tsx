@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Text } from "@chakra-ui/react";
+import { Box, Table,      Badge, Text } from "@chakra-ui/react";
 import { format, parseISO } from "date-fns";
 import { MemberRecord } from "components/analytics/memberAnalyticsTypes";
 import { AttendanceStatusConfig } from "helpers/attendanceStatuses";
@@ -16,7 +16,7 @@ const MemberRecordsTable: React.FC<MemberRecordsTableProps> = ({ records, status
   return (
     <Box bg="white" borderRadius="12px" border="1px solid" borderColor="gray.200" p={2} overflowX="auto">
       <Text fontSize="sm" fontWeight="semibold" p={2}>{`${terms.attendanceSingular} records`}</Text>
-      <Table.Root variant="striped" size="sm">
+      <Table.Root striped size="sm">
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeader textAlign='end'>SN</Table.ColumnHeader>

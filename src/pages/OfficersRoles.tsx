@@ -1,4 +1,4 @@
-import { Box, Tabs, TabList, TabPanels, Tab, TabPanel } from "@chakra-ui/react";
+import { Box, Tabs,  TabPanels, Tab, TabPanel } from "@chakra-ui/react";
 import { useColorModeValue } from "components/ui/color-mode";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";

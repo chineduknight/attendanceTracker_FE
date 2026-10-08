@@ -1,5 +1,5 @@
 import {
-  Box, Button, Table, Thead, Tbody, Tr, Th, Td, Text, Badge,
+  Box, Button, Table,      Text, Badge,
 } from "@chakra-ui/react";
 import { confirmAlert } from "react-confirm-alert";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";

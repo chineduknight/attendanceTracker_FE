@@ -8,7 +8,7 @@ import {
   IconButton,
   Input,
   InputGroup,
-  InputLeftAddon,
+  
   Menu,
   Progress,
   Stack,
@@ -180,8 +180,7 @@ const ObligationForm = ({
             </Field.Root>
             <Field.Root invalid={show(errors.perMonth)} flex="2">
               <Field.Label htmlFor="obligation-per-month">Per month</Field.Label>
-              <InputGroup>
-                <InputLeftAddon>₦</InputLeftAddon>
+              <InputGroup startAddon="₦">
                 <Input
                   id="obligation-per-month"
                   type="number"
@@ -198,8 +197,7 @@ const ObligationForm = ({
           <Flex gap={3} direction={{ base: "column", sm: "row" }}>
             <Field.Root invalid={show(errors.amount)}>
               <Field.Label htmlFor="obligation-amount">Amount</Field.Label>
-              <InputGroup>
-                <InputLeftAddon>₦</InputLeftAddon>
+              <InputGroup startAddon="₦">
                 <Input
                   id="obligation-amount"
                   type="number"

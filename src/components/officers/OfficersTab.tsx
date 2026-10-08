@@ -5,11 +5,11 @@ import {
   Flex,
   HStack,
   Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
+  
+  
+  
+  
+  
   Text,
   Badge,
   Wrap,
