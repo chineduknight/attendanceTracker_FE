@@ -500,3 +500,48 @@ describe("<Finance> load errors and phone targets", () => {
     }
   });
 });
+
+describe("<Finance> creating obligations", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+    serve([duesNow]);
+    api.post.mockResolvedValue({ data: { data: {} } });
+  });
+
+  it("shows dues with separators but posts a plain monthly amount", async () => {
+    renderFinance();
+    await openTab("Obligations");
+    fireEvent.click(await screen.findByRole("button", { name: "New obligation" }));
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Dues" } });
+    const perMonth = screen.getByLabelText("Per month");
+    fireEvent.change(perMonth, { target: { value: "2500" } });
+    expect(perMonth).toHaveValue("2,500");
+    fireEvent.click(screen.getByRole("button", { name: "Create obligation" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(api.post.mock.calls[0][1]).toMatchObject({ type: "dues", name: "Dues", amountPerMonth: 2500 });
+  });
+
+  it("posts a levy's amount as a number and its date as YYYY-MM-DD", async () => {
+    renderFinance();
+    await openTab("Obligations");
+    fireEvent.click(await screen.findByRole("button", { name: "New obligation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "One-off levy" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Robes" } });
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "15000" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: `${YEAR}-03-14` } });
+    fireEvent.click(screen.getByRole("button", { name: "Create obligation" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(api.post.mock.calls[0][1]).toMatchObject({
+      type: "levy",
+      name: "Robes",
+      amount: 15000,
+      date: `${YEAR}-03-14`,
+    });
+  });
+});

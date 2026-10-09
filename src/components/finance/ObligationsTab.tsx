@@ -1,5 +1,4 @@
 import { FormEvent, useState } from "react";
-import { useColorModeValue } from "../ui/color-mode";
 import {
   Badge,
   Box,
@@ -8,7 +7,6 @@ import {
   IconButton,
   Input,
   InputGroup,
-  
   Menu,
   Progress,
   Stack,
@@ -38,6 +36,9 @@ import { GroupedList, GroupedListItem } from "components/GroupedList";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
 import FinanceSheet from "components/finance/FinanceSheet";
 import FilterChips from "components/finance/FilterChips";
+import { AmountInput } from "components/ui/amount-input";
+import { DateField } from "components/ui/date-field";
+import { EmptyState } from "components/ui/states";
 
 interface ObligationsTabProps {
   organisationId: string;
@@ -61,7 +62,6 @@ const describe = (o: Obligation) =>
  * ("1 of 3 paid") would overstate who owes. Collect shows member states.
  */
 const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
-  const muted = useColorModeValue("gray.600", "gray.300");
   const summary = obligation.summary;
   if (!summary) return null;
   const pct = collectionPct(summary);
@@ -77,7 +77,7 @@ const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
           <Progress.Range />
         </Progress.Track>
       </Progress.Root>
-      <Text fontSize="xs" color={muted}>
+      <Text fontSize="xs" color="fg.muted">
         {`${formatMoney(summary.totalCollected)} of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}
       </Text>
     </Stack>
@@ -181,12 +181,10 @@ const ObligationForm = ({
             <Field.Root invalid={show(errors.perMonth)} flex="2">
               <Field.Label htmlFor="obligation-per-month">Per month</Field.Label>
               <InputGroup startAddon="₦">
-                <Input
+                <AmountInput
                   id="obligation-per-month"
-                  type="number"
-                  inputMode="decimal"
                   value={perMonth}
-                  onChange={(e) => setPerMonth(e.target.value)}
+                  onChange={setPerMonth}
                 />
               </InputGroup>
               <Field.ErrorText>{errors.perMonth}</Field.ErrorText>
@@ -198,25 +196,24 @@ const ObligationForm = ({
             <Field.Root invalid={show(errors.amount)}>
               <Field.Label htmlFor="obligation-amount">Amount</Field.Label>
               <InputGroup startAddon="₦">
-                <Input
+                <AmountInput
                   id="obligation-amount"
-                  type="number"
-                  inputMode="decimal"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={setAmount}
                 />
               </InputGroup>
               <Field.ErrorText>{errors.amount}</Field.ErrorText>
             </Field.Root>
             <Field.Root invalid={show(errors.date)}>
-              <Field.Label htmlFor="obligation-date">Date</Field.Label>
-              <Input id="obligation-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              {/* DateField takes its id from the Field, so no htmlFor here. */}
+              <Field.Label>Date</Field.Label>
+              <DateField value={date} onChange={setDate} />
               <Field.ErrorText>{errors.date}</Field.ErrorText>
             </Field.Root>
           </Flex>
         )}
         {!editing && (
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             Amounts and dates can't be changed after creating.
           </Text>
         )}
@@ -237,8 +234,6 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
   const canManage = usePermissions().has("finance.manage");
   const [form, setForm] = useState<FormRequest | null>(null);
   const [toDelete, setToDelete] = useState<Obligation | null>(null);
-  const muted = useColorModeValue("gray.600", "gray.300");
-  const hoverBg = useColorModeValue("gray.50", "whiteAlpha.100");
 
   const { mutate: remove } = useMutationWrapper(deleteRequest, () => {
     toast.success("Obligation deleted");
@@ -248,16 +243,21 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
   return (
     <Stack gap={4}>
       {canManage && (
-        <Button colorPalette="teal" onClick={() => setForm({ mode: "create" })}><FaPlus />New obligation
-                  </Button>
+        <Button colorPalette="teal" onClick={() => setForm({ mode: "create" })}>
+          <FaPlus />
+          New obligation
+        </Button>
       )}
 
       {obligations.length === 0 ? (
-        <Text color={muted} textAlign="center" py={8}>
-          {canManage
-            ? "No obligations yet. Create monthly dues or a one-off levy to start collecting."
-            : "No obligations yet."}
-        </Text>
+        <EmptyState
+          title="No obligations yet"
+          description={
+            canManage
+              ? "Create monthly dues or a one-off levy to start collecting."
+              : undefined
+          }
+        />
       ) : (
         <GroupedList>
           {obligations.map((o) => (
@@ -269,7 +269,7 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
                   textAlign="left"
                   px={{ base: 3, md: 5 }}
                   py={3}
-                  _hover={{ bg: hoverBg }}
+                  css={{ "@media (hover: hover)": { "&:hover": { bg: "bg.muted" } } }}
                   _focusVisible={{ boxShadow: "outline", outline: "none" }}
                   asChild><button type="button" onClick={() => onOpen(o.id)}>
                     <Stack gap={1.5}>
@@ -281,7 +281,7 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
                           {o.type === "dues" ? "Dues" : "Levy"}
                         </Badge>
                       </Flex>
-                      <Text fontSize="sm" color={muted}>
+                      <Text fontSize="sm" color="fg.muted">
                         {describe(o)}
                       </Text>
                       <SummaryLine obligation={o} />
@@ -294,25 +294,30 @@ const ObligationsTab = ({ organisationId, obligations, onOpen }: ObligationsTabP
                     <Menu.Trigger asChild><IconButton
                         aria-label={`More actions for ${o.name}`}
                         variant="ghost"
+                        minW="44px"
+                        h="44px"
+                        flexShrink={0}
                         mr={1}><FaEllipsisV /></IconButton></Menu.Trigger>
                     <Portal><Menu.Positioner><Menu.Content>
                           <Menu.Item
                             onSelect={() => setForm({ mode: "rename", obligation: o })}
-                            value='item-0'>
+                            minH="44px"
+                            value="rename">
                             <FaPen />
                             Rename
                           </Menu.Item>
                           <Menu.Item
-                            color="red.500"
+                            color="fg.error"
                             onSelect={() => setToDelete(o)}
-                            value='item-1'>
+                            minH="44px"
+                            value="delete">
                             <FaTrash />
                             Delete
                           </Menu.Item>
                         </Menu.Content></Menu.Positioner></Portal>
                   </Menu.Root>
                 ) : (
-                  <Box color="gray.400" mr={4} aria-hidden="true" asChild><FaChevronRight /></Box>
+                  <Box color="fg.subtle" mr={4} aria-hidden="true" asChild><FaChevronRight /></Box>
                 )}
               </Flex>
             </GroupedListItem>
