@@ -30,13 +30,13 @@ const NO_OBLIGATIONS: Obligation[] = [];
 
 export const useObligations = (organisationId: string) => {
   const url = convertParamsToString(financeRequest.LIST_OBLIGATIONS, { organisationId });
-  const { data, isLoading, isError } = useQueryWrapper(
+  const { data, isLoading, isError, error, refetch } = useQueryWrapper(
     queryKeys.finance.obligations(organisationId),
     url,
     { enabled: Boolean(organisationId) },
   );
   const obligations: Obligation[] = data?.data ?? NO_OBLIGATIONS;
-  return { obligations, isLoading, isError };
+  return { obligations, hasData: data !== undefined, isLoading, isError, error, refetch };
 };
 
 /**
@@ -53,13 +53,20 @@ export const useCompliance = (organisationId: string, obligationId: string) => {
         asOf,
       )
     : "";
-  const { data, isLoading, isError } = useQueryWrapper(
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQueryWrapper(
     queryKeys.finance.compliance(organisationId, obligationId, asOf),
     url,
     { enabled: Boolean(organisationId && obligationId) },
   );
   const compliance: ComplianceResponse | undefined = data?.data;
-  return { compliance, isLoading: Boolean(obligationId) && isLoading, isError };
+  return {
+    compliance,
+    isLoading: Boolean(obligationId) && isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  };
 };
 
 export type ExportFormat = "excel" | "pdf";

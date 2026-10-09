@@ -3,7 +3,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
-import { toggle } from "test-utils/render";
+import { generatedCss, toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
@@ -413,7 +413,7 @@ describe("arrears lens", () => {
     renderFinance();
     fireEvent.click(await memberRow("Ada"));
     fireEvent.click(await screen.findByRole("button", { name: /Clear arrears/ }));
-    expect(screen.getByLabelText("Amount received")).toHaveValue(500);
+    expect(screen.getByLabelText("Amount received")).toHaveValue("500");
   });
 
   it("hides the Behind chip and sort for a backend without arrears", async () => {
@@ -462,5 +462,185 @@ describe("organisation switching", () => {
     await openTab("Start dates");
     expect(await screen.findByLabelText("Select Chidi")).not.toBeChecked();
     expect(screen.queryByText(/members? selected$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("<Finance> load errors and phone targets", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+  });
+
+  it("says obligations failed to load (not 'nothing to collect') and retries", async () => {
+    api.get.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Finance service down" } } }),
+    );
+    renderFinance();
+    expect(await screen.findByText("Couldn't load obligations")).toBeInTheDocument();
+    expect(screen.getByText("Finance service down")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing to collect yet")).not.toBeInTheDocument();
+
+    serve([duesNow]);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Ada")).toBeInTheDocument();
+  });
+
+  it("gives the export menu and the tabs a 44px tap target", async () => {
+    serve([duesNow]);
+    renderFinance();
+    await screen.findByText("Ada");
+    for (const element of [
+      screen.getByRole("button", { name: "Export" }),
+      screen.getByRole("tab", { name: "Collect" }),
+    ]) {
+      expect(generatedCss(element)).toMatch(/min-height:\s*44px|height:\s*44px/);
+    }
+  });
+});
+
+describe("<Finance> creating obligations", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+    serve([duesNow]);
+    api.post.mockResolvedValue({ data: { data: {} } });
+  });
+
+  it("shows dues with separators but posts a plain monthly amount", async () => {
+    renderFinance();
+    await openTab("Obligations");
+    fireEvent.click(await screen.findByRole("button", { name: "New obligation" }));
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Dues" } });
+    const perMonth = screen.getByLabelText("Per month");
+    fireEvent.change(perMonth, { target: { value: "2500" } });
+    expect(perMonth).toHaveValue("2,500");
+    fireEvent.click(screen.getByRole("button", { name: "Create obligation" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(api.post.mock.calls[0][1]).toMatchObject({ type: "dues", name: "Dues", amountPerMonth: 2500 });
+  });
+
+  it("posts a levy's amount as a number and its date as YYYY-MM-DD", async () => {
+    renderFinance();
+    await openTab("Obligations");
+    fireEvent.click(await screen.findByRole("button", { name: "New obligation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "One-off levy" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Robes" } });
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "15000" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: `${YEAR}-03-14` } });
+    fireEvent.click(screen.getByRole("button", { name: "Create obligation" }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(api.post.mock.calls[0][1]).toMatchObject({
+      type: "levy",
+      name: "Robes",
+      amount: 15000,
+      date: `${YEAR}-03-14`,
+    });
+  });
+});
+
+describe("<Finance> start dates on phones", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org1", MANAGER);
+    serve([duesNow]);
+  });
+
+  it("reads a stored ISO start date by its calendar day", async () => {
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation((url: string) =>
+      url.includes("/members")
+        ? Promise.resolve({
+            data: { data: [{ id: "ada", name: "Ada", financialStartDate: `${YEAR}-01-01T00:00:00.000Z` }] },
+          })
+        : base(url),
+    );
+    renderFinance();
+    await openTab("Start dates");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit start date for Ada" }));
+    expect(await screen.findByLabelText("Financial start date")).toHaveValue(`Jan 1, ${YEAR}`);
+    // Unchanged until a different day is picked.
+    expect(screen.getByRole("button", { name: "Update start date" })).toBeDisabled();
+  });
+
+  it("hides the bulk bar while the search has focus, so the keyboard can't hide results", async () => {
+    renderFinance();
+    await openTab("Start dates");
+    await toggle(await screen.findByLabelText("Select Chidi"));
+    expect(screen.getByText("1 member selected")).toBeInTheDocument();
+
+    const search = screen.getByPlaceholderText("Search members");
+    fireEvent.focus(search);
+    expect(screen.queryByText("1 member selected")).not.toBeInTheDocument();
+    fireEvent.blur(search);
+    expect(screen.getByText("1 member selected")).toBeInTheDocument();
+  });
+});
+
+describe("<Finance> obligations load failure across tabs", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+  });
+
+  it("shows the load error on Obligations too, never a false empty state, and recovers both tabs", async () => {
+    api.get.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Finance service down" } } }),
+    );
+    renderFinance();
+    expect(await screen.findByText("Couldn't load obligations")).toBeInTheDocument();
+
+    await openTab("Obligations");
+    // The Collect panel animates out; wait until only the Obligations one is left.
+    await waitFor(() => expect(screen.getAllByText("Couldn't load obligations")).toHaveLength(1));
+    expect(within(screen.getByRole("tabpanel")).getByText("Finance service down")).toBeInTheDocument();
+    expect(screen.queryByText("No obligations yet")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New obligation" })).not.toBeInTheDocument();
+
+    serve([duesNow]);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(duesNow.name)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New obligation" })).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
+
+    // Collect reads the same recovered query: no second error, no refetch needed.
+    const calls = api.get.mock.calls.length;
+    await openTab("Collect");
+    expect(await screen.findByText("Ada")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("New obligation")).not.toBeInTheDocument());
+    expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
+    expect(
+      api.get.mock.calls.slice(calls).some(([url]) => /\/obligations$|\/obligations\?/.test(String(url))),
+    ).toBe(false);
+  });
+
+  it("keeps cached obligations on screen when a background refetch fails", async () => {
+    serve([duesNow]);
+    renderFinance();
+    await openTab("Obligations");
+    expect(await screen.findByText(duesNow.name)).toBeInTheDocument();
+
+    api.get.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Finance service down" } } }),
+    );
+    await act(async () => {
+      await queryClient.refetchQueries();
+    });
+
+    expect(screen.getByText(duesNow.name)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
   });
 });

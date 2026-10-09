@@ -46,7 +46,7 @@ test("a levy pre-fills its current total and confirms before overwriting", async
     row: { memberId: "m1", name: "Ada", accountable: true, paid: 4000 },
   });
   const input = screen.getByLabelText(/total amount paid/i);
-  expect(input).toHaveValue(4000);
+  expect(input).toHaveValue("4,000");
   fireEvent.change(input, { target: { value: "6000" } });
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectLevy).not.toHaveBeenCalled();
@@ -57,7 +57,7 @@ test("a levy pre-fills its current total and confirms before overwriting", async
 test("locks paid months, pre-fills them, and gates entry sequentially", () => {
   setup({ row: paidJanToMar });
   expect(screen.getByLabelText("Jan")).toBeDisabled();
-  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+  expect(screen.getByLabelText("Jan")).toHaveValue("500");
   expect(screen.getByLabelText("Apr")).toBeEnabled();
   expect(screen.getByLabelText("May")).toBeDisabled();
 
@@ -81,7 +81,7 @@ test("locks every month when nothing is due this year", () => {
 test("a month accepts no more than the monthly amount", () => {
   setup();
   fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "9999" } });
-  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+  expect(screen.getByLabelText("Jan")).toHaveValue("500");
 });
 
 test("clearing the boundary month relocks the next and reopens the previous one", () => {
@@ -98,11 +98,11 @@ test("clearing the boundary month relocks the next and reopens the previous one"
 test("Fill all and Clear all set every accountable month", () => {
   setup();
   fireEvent.click(screen.getByText("Fill all"));
-  expect(screen.getByLabelText("Jan")).toHaveValue(500);
-  expect(screen.getByLabelText("Dec")).toHaveValue(500);
+  expect(screen.getByLabelText("Jan")).toHaveValue("500");
+  expect(screen.getByLabelText("Dec")).toHaveValue("500");
 
   fireEvent.click(screen.getByText("Clear all"));
-  expect(screen.getByLabelText("Jan")).toHaveValue(null);
+  expect(screen.getByLabelText("Jan")).toHaveValue("");
   expect(screen.getByLabelText("Jan")).toBeEnabled();
   expect(screen.getByLabelText("Feb")).toBeDisabled();
 });

@@ -1,17 +1,13 @@
 import { useMemo, useState } from "react";
-import { useColorModeValue } from "../ui/color-mode";
 import {
   Box,
   Button,
   Checkbox,
   Flex,
-  Input,
-  InputGroup,
-  
   Stack,
   Text,
 } from "@chakra-ui/react";
-import { FaChevronRight, FaSearch } from "react-icons/fa";
+import { FaChevronRight } from "react-icons/fa";
 import { toast } from "react-toastify";
 import {
   formatBusinessDate,
@@ -32,6 +28,10 @@ import FilterChips from "components/finance/FilterChips";
 import FinanceSheet from "components/finance/FinanceSheet";
 import StartDateForm from "components/finance/StartDateForm";
 import PageLoader from "components/PageLoader";
+import PinnedSearchBar from "components/PinnedSearchBar";
+import { DateField } from "components/ui/date-field";
+import { EmptyState } from "components/ui/states";
+import { usePinnedSearch } from "hooks/usePinnedSearch";
 
 const FILTERS = Object.keys(START_DATE_FILTER_LABELS) as StartDateFilter[];
 
@@ -51,9 +51,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
   const [bulkDate, setBulkDate] = useState("");
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [editing, setEditing] = useState<FinanceMember | null>(null);
-  const cardBg = useColorModeValue("white", "gray.700");
-  const muted = useColorModeValue("gray.600", "gray.300");
-  const hoverBg = useColorModeValue("gray.50", "whiteAlpha.100");
+  const pinnedSearch = usePinnedSearch(search);
 
   const memberSingular = lowerTerm(terms.memberSingular);
   const memberPlural = lowerTerm(terms.memberPlural);
@@ -109,24 +107,18 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
     <Stack gap={4} pb={selected.size ? 28 : 0}>
       <Box>
         <Text fontWeight="semibold">{`${terms.memberSingular} start dates`}</Text>
-        <Text fontSize="sm" color={muted}>
+        <Text fontSize="sm" color="fg.muted">
           {`Dues and levies apply to a ${memberSingular} from their financial start date. ${terms.memberPlural} without one owe nothing.`}
         </Text>
       </Box>
 
-      <InputGroup
-        startElement={<FaSearch />}
-        startElementProps={{ pointerEvents: "none", color: "gray.400" }}
-      >
-        <Input
-          type="search"
-          placeholder={`Search ${memberPlural}`}
-          aria-label={`Search ${memberPlural}`}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          bg={cardBg}
-        />
-      </InputGroup>
+      <PinnedSearchBar
+        pinnedSearch={pinnedSearch}
+        value={search}
+        onChange={setSearch}
+        placeholder={`Search ${memberPlural}`}
+        mt={0}
+      />
       <FilterChips<StartDateFilter>
         label="Filter by start date"
         value={filter}
@@ -135,77 +127,94 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
       />
 
       {canManage && shown.length > 0 && (
-        <Checkbox.Root onCheckedChange={toggleAllShown} px={1} checked={allShownSelected}><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
+        <Checkbox.Root onCheckedChange={toggleAllShown} px={1} minH="44px" checked={allShownSelected}><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
           <Text fontSize="sm">{`Select all ${shown.length} shown`}</Text>
         </Checkbox.Label></Checkbox.Root>
       )}
 
-      {shown.length === 0 ? (
-        <Text color={muted} textAlign="center" py={8}>
-          {`No ${memberPlural} match your search or filter.`}
-        </Text>
-      ) : (
-        <GroupedList>
-          {shown.map((m) => {
-            const details = (
-              <Stack gap={0.5} flex="1" minW={0} textAlign="left">
-                <Text fontWeight="semibold" lineClamp={1}>
-                  {m.name}
-                </Text>
-                <Text fontSize="sm" color={m.financialStartDate ? muted : "orange.500"}>
-                  {m.financialStartDate
-                    ? `From ${formatBusinessDate(m.financialStartDate)}`
-                    : "No start date"}
-                </Text>
-              </Stack>
-            );
-            return (
-              <GroupedListItem key={m.id} p={0}>
-                <Flex align="center">
-                  {canManage && (
-                    <Checkbox.Root
-                      size="lg"
-                      pl={{ base: 3, md: 5 }}
-                      py={3}
-                      onCheckedChange={() => toggle(m.id)}
-                      checked={selected.has(m.id)}><Checkbox.HiddenInput aria-label={`Select ${m.name}`} /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Root>
-                  )}
-                  {canManage ? (
-                    <Flex
-                      align="center"
-                      flex="1"
-                      minW={0}
-                      gap={3}
-                      px={3}
-                      py={3}
-                      _hover={{ bg: hoverBg }}
-                      _focusVisible={{ boxShadow: "outline", outline: "none" }}
-                      aria-label={`Edit start date for ${m.name}`}
-                      asChild><button type="button" onClick={() => setEditing(m)}>
+      <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
+        {shown.length === 0 ? (
+          <EmptyState
+            title={`No ${memberPlural} match your search or filter`}
+            action={
+              (search || filter !== "all") && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("all");
+                  }}
+                >
+                  Show everyone
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <GroupedList>
+            {shown.map((m) => {
+              const details = (
+                <Stack gap={0.5} flex="1" minW={0} textAlign="left">
+                  <Text fontWeight="semibold" lineClamp={1}>
+                    {m.name}
+                  </Text>
+                  <Text fontSize="sm" color={m.financialStartDate ? "fg.muted" : "orange.fg"}>
+                    {m.financialStartDate
+                      ? `From ${formatBusinessDate(m.financialStartDate)}`
+                      : "No start date"}
+                  </Text>
+                </Stack>
+              );
+              return (
+                <GroupedListItem key={m.id} p={0}>
+                  <Flex align="center">
+                    {canManage && (
+                      <Checkbox.Root
+                        size="lg"
+                        pl={{ base: 3, md: 5 }}
+                        py={3}
+                        onCheckedChange={() => toggle(m.id)}
+                        checked={selected.has(m.id)}><Checkbox.HiddenInput aria-label={`Select ${m.name}`} /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Root>
+                    )}
+                    {canManage ? (
+                      <Flex
+                        align="center"
+                        flex="1"
+                        minW={0}
+                        gap={3}
+                        px={3}
+                        py={3}
+                        css={{ "@media (hover: hover)": { "&:hover": { bg: "bg.muted" } } }}
+                        _focusVisible={{ boxShadow: "outline", outline: "none" }}
+                        aria-label={`Edit start date for ${m.name}`}
+                        asChild><button type="button" onClick={() => setEditing(m)}>
+                          {details}
+                          <Box color="fg.subtle" aria-hidden="true" asChild><FaChevronRight /></Box>
+                        </button></Flex>
+                    ) : (
+                      <Flex px={{ base: 3, md: 5 }} py={3} flex="1" minW={0}>
                         {details}
-                        <Box color="gray.400" aria-hidden="true" asChild><FaChevronRight /></Box>
-                      </button></Flex>
-                  ) : (
-                    <Flex px={{ base: 3, md: 5 }} py={3} flex="1" minW={0}>
-                      {details}
-                    </Flex>
-                  )}
-                </Flex>
-              </GroupedListItem>
-            );
-          })}
-        </GroupedList>
-      )}
+                      </Flex>
+                    )}
+                  </Flex>
+                </GroupedListItem>
+              );
+            })}
+          </GroupedList>
+        )}
+      </Box>
 
-      {canManage && selected.size > 0 && (
+      {/* Hidden while searching: with the keyboard up it would cover results. */}
+      {canManage && selected.size > 0 && !pinnedSearch.isFocused && (
         <Box
           position="fixed"
           bottom={0}
           left={0}
           right={0}
           zIndex="sticky"
-          bg={cardBg}
+          bg="bg.panel"
           borderTopWidth="1px"
+          borderColor="border"
           boxShadow="lg"
           px={4}
           pt={3}
@@ -214,16 +223,15 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
           <Stack gap={2} maxW="lg" mx="auto">
             <Flex justify="space-between" align="center">
               <Text fontWeight="semibold">{`${selected.size} ${memberWord(selected.size)} selected`}</Text>
-              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              <Button size="sm" minH="44px" variant="ghost" onClick={() => setSelected(new Set())}>
                 Clear selection
               </Button>
             </Flex>
             <Flex gap={2}>
-              <Input
-                type="date"
+              <DateField
                 aria-label="Start date for selected"
                 value={bulkDate}
-                onChange={(e) => setBulkDate(e.target.value)}
+                onChange={setBulkDate}
               />
               <Button
                 colorPalette="purple"

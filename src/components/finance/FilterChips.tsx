@@ -16,6 +16,10 @@ interface FilterChipsProps<T extends string> {
 /**
  * One-tap filters with live counts. Scrolls sideways on a narrow phone
  * instead of wrapping into a tall block above the list.
+ *
+ * Chips look 32px tall but each takes a 44px tap: an invisible zone extends
+ * 6px above and below. The row pads 6px vertically (pulled back by margin)
+ * because its sideways scroll would otherwise clip the zones.
  */
 const FilterChips = <T extends string>({ label, options, value, onChange }: FilterChipsProps<T>) => (
   <Flex
@@ -23,7 +27,8 @@ const FilterChips = <T extends string>({ label, options, value, onChange }: Filt
     aria-label={label}
     gap={2}
     overflowX="auto"
-    pb={1}
+    py="6px"
+    my="-6px"
     mx={-1}
     px={1}
     css={{
@@ -39,6 +44,8 @@ const FilterChips = <T extends string>({ label, options, value, onChange }: Filt
           size="sm"
           borderRadius="full"
           flexShrink={0}
+          position="relative"
+          _before={{ content: '""', position: "absolute", insetInline: 0, insetBlock: "-6px" }}
           variant={isActive ? "solid" : "outline"}
           colorPalette={isActive ? "teal" : "gray"}
           aria-pressed={isActive}

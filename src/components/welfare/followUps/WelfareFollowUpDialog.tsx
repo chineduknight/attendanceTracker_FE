@@ -13,7 +13,9 @@ import {
   Portal,
 } from "@chakra-ui/react";
 import { Switch } from "components/ui/switch";
-import ReactSelect, { SingleValue } from "react-select";
+import { SingleValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
+import { DateField } from "components/ui/date-field";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { useMembers } from "hooks/useMembers";
@@ -316,17 +318,17 @@ const WelfareFollowUpDialog = ({
               <Dialog.Header><Dialog.Title>
                 {isEdit ? "Edit welfare follow-up" : "Add welfare follow-up"}
               </Dialog.Title></Dialog.Header>
-              <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+              <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
               <Dialog.Body>
                 <Stack gap={4}>
                   <Field.Root
                     invalid={submitted && !resolvedMemberId}
                     required
                   >
-                    <Field.Label htmlFor="follow-up-member">Member</Field.Label>
+                    <Field.Label htmlFor="follow-up-member">{terms.memberSingular}</Field.Label>
                     {isManualCreate ? (
                       <>
-                        <ReactSelect
+                        <ThemedSelect
                           inputId="follow-up-member"
                           classNamePrefix="follow-up-member"
                           options={memberOptions}
@@ -354,14 +356,11 @@ const WelfareFollowUpDialog = ({
                               ? `${terms.memberPlural} could not be loaded.`
                               : `No matching ${lowerTerm(terms.memberPlural)}`
                           }
-                          menuPortalTarget={document.body}
-                          menuPosition="fixed"
-                          styles={{
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
+                          // Full width: as wide as the fields below it.
+                          styles={{ container: (base) => ({ ...base, width: "100%" }) }}
                         />
                         {memberStatusOptions.length > 0 && (
-                          <NativeSelect.Root size="sm">
+                          <NativeSelect.Root>
                             <NativeSelect.Field
                               aria-label={`Filter ${lowerTerm(
                                 terms.memberPlural,
@@ -383,7 +382,7 @@ const WelfareFollowUpDialog = ({
                         )}
                         {members.isError && (
                           <Field.ErrorText>
-                            Could not load members. Close and try again.
+                            {`Could not load ${lowerTerm(terms.memberPlural)}. Close and try again.`}
                           </Field.ErrorText>
                         )}
                       </>
@@ -408,13 +407,8 @@ const WelfareFollowUpDialog = ({
                   </Field.Root>
 
                   <Field.Root required>
-                    <Field.Label htmlFor="follow-up-date">Date</Field.Label>
-                    <Input
-                      id="follow-up-date"
-                      type="date"
-                      value={recordDate}
-                      onChange={(event) => setRecordDate(event.target.value)}
-                    />
+                    <Field.Label>Date</Field.Label>
+                    <DateField value={recordDate} onChange={setRecordDate} />
                   </Field.Root>
 
                   <Field.Root invalid={submitted && !reason.trim()} required>
@@ -454,17 +448,12 @@ const WelfareFollowUpDialog = ({
 
                   {keepOpen && (
                     <Field.Root>
-                      <Field.Label htmlFor="follow-up-next-date">
-                        Next follow-up date
-                      </Field.Label>
-                      <Input
-                        id="follow-up-next-date"
-                        type="date"
-                        min={recordDate}
+                      <Field.Label>Next follow-up date</Field.Label>
+                      <DateField
                         value={nextFollowUpDate}
-                        onChange={(event) =>
-                          setNextFollowUpDate(event.target.value)
-                        }
+                        onChange={setNextFollowUpDate}
+                        min={recordDate || undefined}
+                        clearable
                       />
                       <Field.HelperText>
                         Optional — an open follow-up can have no date.
@@ -501,7 +490,8 @@ const WelfareFollowUpDialog = ({
                       )}
                       {!canManageAssignedOfficers && (
                         <Button
-                          size="xs"
+                          size="sm"
+                          minH="44px"
                           variant="outline"
                           mt={2}
                           onClick={() => setAssignedToUserId(currentUserId)}

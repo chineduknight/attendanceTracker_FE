@@ -1,5 +1,4 @@
 import { Box, Button, Flex, Text } from "@chakra-ui/react";
-import { useColorModeValue } from "./ui/color-mode";
 import { IconType } from "react-icons";
 
 export interface StatTileProps {
@@ -38,11 +37,9 @@ const StatTile = ({
   onClick,
   isPressed,
 }: StatTileProps) => {
-  const outlineBg = useColorModeValue("white", "gray.700");
-  const outlineLabel = useColorModeValue("gray.600", "gray.300");
   const isSolid = tone === "solid";
-  const bg = isSolid ? accent : outlineBg;
-  const labelColor = isSolid ? "whiteAlpha.900" : outlineLabel;
+  const bg = isSolid ? accent : "bg.panel";
+  const labelColor = isSolid ? "whiteAlpha.900" : "fg.muted";
 
   const content = (
     <>

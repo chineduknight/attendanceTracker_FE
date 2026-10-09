@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { CloseButton, Drawer, Portal } from "@chakra-ui/react";
+import { withSafeInset } from "styles/safeArea";
 
 interface FinanceSheetProps {
   isOpen: boolean;
@@ -25,7 +26,7 @@ const FinanceSheet = ({ isOpen, onClose, title, subtitle, children, footer }: Fi
       <Drawer.Backdrop />
       <Drawer.Positioner>
         <Drawer.Content borderTopRadius="xl" maxH="92vh" maxW={{ md: "lg" }} mx="auto">
-          <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+          <Drawer.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Drawer.CloseTrigger>
           {/* Stacked like v2: v3 drawer headers lay out in a row. */}
           <Drawer.Header
             pr={12}
@@ -36,14 +37,15 @@ const FinanceSheet = ({ isOpen, onClose, title, subtitle, children, footer }: Fi
           >
             <Drawer.Title>{title}</Drawer.Title>
             {subtitle && (
-              <Drawer.Description fontSize="sm" color="gray.500" mt={0.5}>
+              <Drawer.Description fontSize="sm" color="fg.muted" mt={0.5}>
                 {subtitle}
               </Drawer.Description>
             )}
           </Drawer.Header>
-          <Drawer.Body pb={footer ? 2 : 6}>{children}</Drawer.Body>
+          {/* Clear of the iPhone home bar when the sheet is the last thing on screen. */}
+          <Drawer.Body pb={footer ? 2 : withSafeInset("bottom", "1.5rem")}>{children}</Drawer.Body>
           {footer && (
-            <Drawer.Footer gap={3} pb={6} borderTopWidth="1px">
+            <Drawer.Footer gap={3} pb={withSafeInset("bottom", "1.5rem")} borderTopWidth="1px">
               {footer}
             </Drawer.Footer>
           )}

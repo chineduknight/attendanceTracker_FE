@@ -1,12 +1,5 @@
 import { useState } from "react";
-import { useColorModeValue } from "components/ui/color-mode";
-import {
-  Box,
-  Button,
-  Stack,
-  Tabs,
-  Text,
-} from "@chakra-ui/react";
+import { Button, Tabs } from "@chakra-ui/react";
 import CollectTab from "components/finance/CollectTab";
 import ObligationsTab from "components/finance/ObligationsTab";
 import StartDatesTab from "components/finance/StartDatesTab";
@@ -15,6 +8,8 @@ import { useObligations } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import useGlobalStore from "zStore";
 import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 
 const TABS = ["Collect", "Obligations", "Start dates"] as const;
 const COLLECT = 0;
@@ -24,34 +19,51 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   const canManage = usePermissions().has("finance.manage");
   const [tabIndex, setTabIndex] = useState(COLLECT);
   const [chosenId, setChosenId] = useState("");
-  const { obligations, isLoading } = useObligations(organisationId);
-  const tabBg = useColorModeValue("white", "gray.700");
-  const tabColor = useColorModeValue("gray.600", "gray.200");
+  const { obligations, hasData, isLoading, isError, error, refetch } =
+    useObligations(organisationId);
+  // A failed load is not "nothing set up yet": say so and offer a retry.
+  const loadFailed = isError && !hasData;
 
   // A chosen obligation that has since been deleted falls back to the default.
   const obligationId = obligations.some((o) => o.id === chosenId)
     ? chosenId
     : defaultObligationId(obligations);
 
-  const collect = () => {
+  // Both tabs read the one obligations query. Until it has data, neither
+  // may treat `[]` as "nothing set up": show the loader or the load error
+  // instead. Cached obligations survive a failed background refetch.
+  const obligationsGate = () => {
     if (isLoading) {
+      return <PageLoader h="30vh" label="Loading obligations..." />;
+    }
+    if (loadFailed) {
       return (
-        <PageLoader h="30vh" label="Loading obligations..." />
+        <ErrorState
+          title="Couldn't load obligations"
+          description={errorMessage(error)}
+          onRetry={() => refetch()}
+        />
       );
     }
+    return null;
+  };
+
+  const collect = () => {
+    const gate = obligationsGate();
+    if (gate) return gate;
     if (!obligations.length) {
       return (
-        <Stack align="center" textAlign="center" py={10} gap={3}>
-          <Text fontWeight="semibold">Nothing to collect yet</Text>
-          <Text fontSize="sm" color="gray.500">
-            Set up monthly dues or a one-off levy first.
-          </Text>
-          {canManage && (
-            <Button colorPalette="teal" onClick={() => setTabIndex(OBLIGATIONS)}>
-              Set up an obligation
-            </Button>
-          )}
-        </Stack>
+        <EmptyState
+          title="Nothing to collect yet"
+          description="Set up monthly dues or a one-off levy first."
+          action={
+            canManage && (
+              <Button colorPalette="teal" onClick={() => setTabIndex(OBLIGATIONS)}>
+                Set up an obligation
+              </Button>
+            )
+          }
+        />
       );
     }
     return (
@@ -65,8 +77,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   };
 
   return (
-    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
-      <Box maxW="3xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
+    <PageContainer width="content">
         {/* lazyMount + unmountOnExit = v2's isLazy: a tab mounts when opened and
             unmounts when left, so its local state resets as before. */}
         <Tabs.Root
@@ -78,15 +89,19 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
           lazyMount
           unmountOnExit
         >
-          <Tabs.List bg={tabBg} borderWidth="1px" borderRadius="full" p={1} mb={4}>
+          <Tabs.List bg="bg.panel" borderWidth="1px" borderColor="border" borderRadius="full" p={1} mb={4}>
             {TABS.map((label, index) => (
               <Tabs.Trigger
                 key={label}
                 value={String(index)}
                 fontSize="sm"
                 px={2}
-                py={1.5}
-                color={tabColor}
+                minH="44px"
+                borderRadius="full"
+                color="fg.muted"
+                // Selected: the solid accent, readable in both modes (the
+                // subtle teal is near-black in dark mode).
+                _selected={{ bg: "colorPalette.solid", color: "colorPalette.contrast" }}
               >
                 {label}
               </Tabs.Trigger>
@@ -96,6 +111,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
             {collect()}
           </Tabs.Content>
           <Tabs.Content value={String(OBLIGATIONS)} p={0}>
+            {obligationsGate() ?? (
               <ObligationsTab
                 organisationId={organisationId}
                 obligations={obligations}
@@ -104,13 +120,13 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
                   setTabIndex(COLLECT);
                 }}
               />
+            )}
           </Tabs.Content>
           <Tabs.Content value="2" p={0}>
             <StartDatesTab organisationId={organisationId} />
           </Tabs.Content>
         </Tabs.Root>
-      </Box>
-    </Box>
+    </PageContainer>
   );
 };
 

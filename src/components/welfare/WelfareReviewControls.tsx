@@ -1,4 +1,5 @@
-import { Button, Flex, Input, NativeSelect, Field } from "@chakra-ui/react";
+import { Box, Button, Flex, NativeSelect, Field } from "@chakra-ui/react";
+import { DateField } from "components/ui/date-field";
 import { useTerms } from "hooks/useOrgPresentation";
 import { ALL_STATUSES } from "helpers/welfareReview";
 
@@ -46,22 +47,13 @@ const WelfareReviewControls = ({
         minW={0}
         w="auto"
       >
-        <Field.Label htmlFor="welfare-as-of" fontSize="sm" mb={1}>
+        <Field.Label fontSize="sm" mb={1}>
           Review as of
         </Field.Label>
         <Flex gap={2}>
-          {/* md (16px) on phones: iOS Safari zooms into any smaller input. */}
-          <Input
-            id="welfare-as-of"
-            type="date"
-            size={{ base: "md", md: "sm" }}
-            flex={{ base: 1, sm: "initial" }}
-            minW={0}
-            w={{ base: "full", sm: "auto" }}
-            max={maxDate}
-            value={asOf}
-            onChange={(event) => onAsOfChange(event.target.value)}
-          />
+          <Box flex={{ base: 1, sm: "initial" }} minW={0} w={{ base: "full", sm: "11rem" }}>
+            <DateField value={asOf} max={maxDate} onChange={onAsOfChange} />
+          </Box>
           <Button
             size={{ base: "md", md: "sm" }}
             variant="outline"
