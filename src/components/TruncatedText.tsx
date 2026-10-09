@@ -51,6 +51,11 @@ const TruncatedText = ({ children, ...textProps }: TruncatedTextProps) => {
         role: "button",
         tabIndex: 0,
         cursor: "pointer",
+        // A one-line value is ~21px tall: pad it to a 44px tap and pull the
+        // layout back, so it looks the same. Padding, not a ::before zone:
+        // overflow:hidden would clip the zone.
+        py: "12px",
+        my: "-12px",
         "aria-expanded": isExpanded,
         onClick: toggle,
         onKeyDown: (event: React.KeyboardEvent) => {
