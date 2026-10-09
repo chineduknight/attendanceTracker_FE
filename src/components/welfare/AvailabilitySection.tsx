@@ -36,7 +36,7 @@ export const CurrentlyAwaySection = ({
         Currently Away
       </Heading>
       {items.length === 0 ? (
-        <Text color="gray.500">
+        <Text color="fg.muted">
           {`No ${lowerTerm(
             terms.memberPlural,
           )} are currently recorded as away.`}
@@ -53,13 +53,13 @@ export const CurrentlyAwaySection = ({
                   {`Returns: ${dateLabel(item.returnDate)}`}
                 </Text>
               </Flex>
-              <Text fontSize="sm" color="gray.500">
+              <Text fontSize="sm" color="fg.muted">
                 {`Away: ${dateLabel(item.startDate)} – ${dateLabel(
                   item.endDate,
                 )}`}
               </Text>
               {item.reason && item.reason.trim() !== "" && (
-                <Text fontSize="sm" color="gray.500">
+                <Text fontSize="sm" color="fg.muted">
                   {`Reason: ${item.reason.trim()}`}
                 </Text>
               )}
@@ -91,11 +91,11 @@ export const ReturningSoonSection = ({
       <Heading size="md" mb={1}>
         Returning Soon
       </Heading>
-      <Text fontSize="sm" color="gray.500" mb={3}>
+      <Text fontSize="sm" color="fg.muted" mb={3}>
         {`Returning in the next ${days} days`}
       </Text>
       {items.length === 0 ? (
-        <Text color="gray.500">
+        <Text color="fg.muted">
           {`No ${lowerTerm(terms.memberPlural)} are returning in the next ${days} days.`}
         </Text>
       ) : (

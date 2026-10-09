@@ -63,21 +63,21 @@ const WelfareFollowUpMemberHistory = ({
         <Drawer.Backdrop />
         <Drawer.Positioner>
           <Drawer.Content>
-            <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+            <Drawer.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Drawer.CloseTrigger>
             <Drawer.Header><Drawer.Title>Follow-up history</Drawer.Title></Drawer.Header>
             <Drawer.Body>
               <Text fontWeight="semibold" mb={4}>
                 {memberName}
               </Text>
 
-              {isLoading && <Text color="gray.500">Loading history...</Text>}
+              {isLoading && <Text color="fg.muted">Loading history...</Text>}
               {!isLoading && isError && (
-                <Text color="red.500">
+                <Text color="fg.error">
                   Follow-up history could not be loaded right now.
                 </Text>
               )}
               {!isLoading && !isError && ordered.length === 0 && (
-                <Text color="gray.500">{`No follow-ups recorded for this ${lowerTerm(
+                <Text color="fg.muted">{`No follow-ups recorded for this ${lowerTerm(
                   terms.memberSingular,
                 )} yet.`}</Text>
               )}
@@ -105,11 +105,11 @@ const WelfareFollowUpMemberHistory = ({
                     </Flex>
                     <Text fontWeight="medium">{record.reason}</Text>
                     {record.note && (
-                      <Text fontSize="sm" color="gray.600" mt={1}>
+                      <Text fontSize="sm" color="fg.muted" mt={1}>
                         {record.note}
                       </Text>
                     )}
-                    <Text fontSize="xs" color="gray.500" mt={1}>
+                    <Text fontSize="xs" color="fg.muted" mt={1}>
                       {record.createdBy?.name
                         ? `Logged by ${record.createdBy.name}`
                         : "Logged by unknown user"}

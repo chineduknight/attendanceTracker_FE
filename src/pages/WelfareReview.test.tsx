@@ -265,11 +265,14 @@ beforeEach(() => {
   serve();
 });
 
+/** The date picker shows a business date readably (e.g. "Oct 9, 2026"). */
+const shown = (businessDate: string) => format(parseISO(businessDate), "MMM d, yyyy");
+
 describe("<Welfare> review as-of date", () => {
   it("defaults to local today when the URL has no asOf, and writes it back", async () => {
     renderPage();
     await waitForProgress();
-    expect(screen.getByLabelText("Review as of")).toHaveValue(TODAY);
+    expect(screen.getByLabelText("Review as of")).toHaveValue(shown(TODAY));
     expect(screen.getByTestId("location")).toHaveTextContent(`asOf=${TODAY}`);
     expect(overviewCalls()[0]).toBe(`/welfare/org1/overview?asOf=${TODAY}`);
   });
@@ -277,7 +280,7 @@ describe("<Welfare> review as-of date", () => {
   it("respects a valid asOf from the URL (refresh-compatible)", async () => {
     renderPage(`/welfare?asOf=${PAST_REVIEW}`);
     await waitForProgress();
-    expect(screen.getByLabelText("Review as of")).toHaveValue(PAST_REVIEW);
+    expect(screen.getByLabelText("Review as of")).toHaveValue(shown(PAST_REVIEW));
     expect(overviewCalls()).toEqual([
       `/welfare/org1/overview?asOf=${PAST_REVIEW}`,
     ]);
@@ -309,8 +312,8 @@ describe("<Welfare> review as-of date", () => {
     renderPage(`/welfare?asOf=${PAST_REVIEW}`);
     await waitForProgress();
     const input = screen.getByLabelText("Review as of");
-    expect(input).toHaveAttribute("max", TODAY);
 
+    // DateField enforces the cap for typed dates too (no native max needed).
     const future = format(addDays(new Date(), 3), "yyyy-MM-dd");
     fireEvent.change(input, { target: { value: future } });
     expect(screen.getByTestId("location")).toHaveTextContent(
@@ -337,7 +340,7 @@ describe("<Welfare> review as-of date", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
     await waitFor(() =>
-      expect(screen.getByLabelText("Review as of")).toHaveValue(TODAY)
+      expect(screen.getByLabelText("Review as of")).toHaveValue(shown(TODAY))
     );
     expect(screen.getByTestId("location")).toHaveTextContent(`asOf=${TODAY}`);
     expect(screen.getByRole("button", { name: "Today" })).toBeDisabled();

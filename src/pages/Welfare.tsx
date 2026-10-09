@@ -1,5 +1,4 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { useColorModeValue } from "components/ui/color-mode";
 import { Box, Heading, Text } from "@chakra-ui/react";
 import { format, isValid, parseISO } from "date-fns";
 import { toast } from "react-toastify";
@@ -13,6 +12,8 @@ import { useWelfareBirthdays } from "hooks/useWelfareBirthdays";
 import { useWelfareFollowUps } from "hooks/useWelfareFollowUps";
 import { useWelfareReviewDate } from "hooks/useWelfareReviewDate";
 import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import { ErrorState, errorMessage } from "components/ui/states";
 import WelfareSummaryCards from "components/welfare/WelfareSummaryCards";
 import WelfareReviewControls from "components/welfare/WelfareReviewControls";
 import InsightGrid from "components/welfare/InsightGrid";
@@ -77,8 +78,9 @@ const Section = ({
   </Box>
 );
 
-const EmptyState = ({ children }: { children: ReactNode }) => (
-  <Text color="gray.500">{children}</Text>
+/** A short line inside a section: the shared EmptyState would push the next section down. */
+const SectionEmpty = ({ children }: { children: ReactNode }) => (
+  <Text color="fg.muted">{children}</Text>
 );
 
 /**
@@ -89,7 +91,7 @@ const ReviewWindowCaption = ({ overview }: { overview: WelfareOverview }) => {
   const days = overview.settings.reviewWindowDays;
   const { recent, previous } = overview.periods;
   return (
-    <Text fontSize="sm" color="gray.500" mb={3}>
+    <Text fontSize="sm" color="fg.muted" mb={3}>
       {`Review window: last ${days} days (${periodLabel(
         recent.fromDate,
       )} – ${periodLabel(recent.toDate)}) vs previous ${days} days (${periodLabel(
@@ -109,7 +111,6 @@ const Welfare = () => {
   const terms = useTerms();
   const { has } = usePermissions();
   const { isFeatureVisible } = useOrgPresentation();
-  const pageBg = useColorModeValue("gray.50", "gray.800");
 
   const { asOf, today, isToday, setAsOf, resetToToday } =
     useWelfareReviewDate();
@@ -141,11 +142,20 @@ const Welfare = () => {
     statusScope,
   );
 
-  const { overview, isLoading, isError } = useWelfareOverview(organisationId, {
+  const {
+    overview,
+    isLoading,
+    isError,
+    isFetching: isFetchingOverview,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useWelfareOverview(organisationId, {
     asOf,
     status: statusesParam(status),
     enabled: statusScopeReady,
   });
+  // Only a failure with nothing to show: a failed background refetch keeps the overview.
+  const overviewFailed = isError && !overview;
 
   // Birthdays are an optional, independent snapshot: they need members.view,
   // the birthdays module and a configured `dob` date field, and the Birthday
@@ -244,179 +254,162 @@ const Welfare = () => {
 
   return (
     <RequirePermission perm="attendance.view">
-      <Box minH="100vh" bg={pageBg}>
-        <Box p={4} maxW="6xl" mx="auto">
-          <WelfareReviewControls
-            asOf={asOf}
-            maxDate={today}
-            isToday={isToday}
-            onAsOfChange={setAsOf}
-            onToday={resetToToday}
-            statusOptions={statusScope.options}
-            status={status}
-            onStatusChange={(value) =>
-              setStatusSelection({ organisationId, value })
-            }
+      <PageContainer width="wide">
+        <WelfareReviewControls
+          asOf={asOf}
+          maxDate={today}
+          isToday={isToday}
+          onAsOfChange={setAsOf}
+          onToday={resetToToday}
+          statusOptions={statusScope.options}
+          status={status}
+          onStatusChange={(value) =>
+            setStatusSelection({ organisationId, value })
+          }
+        />
+
+        {isLoading && (
+          <PageLoader h="30vh" label="Loading Welfare & Engagement..." />
+        )}
+
+        {!isLoading && overviewFailed && (
+          <ErrorState
+            title="Couldn't load Welfare & Engagement"
+            description={errorMessage(overviewError)}
+            onRetry={() => refetchOverview()}
+            retrying={isFetchingOverview}
           />
+        )}
 
-          {isLoading && (
-            <PageLoader h="30vh" label="Loading Welfare & Engagement..." />
-          )}
+        {!isLoading && overview && (
+          <>
+            <ReviewWindowCaption overview={overview} />
+            <WelfareSummaryCards
+              summary={overview.summary}
+              birthdayTile={birthdayTile}
+            />
 
-          {!isLoading && isError && (
-            <Text color="red.500">
-              Error loading Welfare & Engagement insights.
-            </Text>
-          )}
-
-          {!isLoading && !isError && overview && (
-            <>
-              <ReviewWindowCaption overview={overview} />
-              <WelfareSummaryCards
-                summary={overview.summary}
-                birthdayTile={birthdayTile}
+            {canViewFollowUps && (
+              <WelfareFollowUpSection
+                key={organisationId}
+                summary={followUps.summary}
+                records={followUps.followUps}
+                asOf={followUps.asOf}
+                isLoading={followUps.isLoading}
+                isError={followUps.isError}
+                canManage={canManageFollowUps}
+                canCreateManualFollowUp={canCreateManualFollowUp}
+                isSaving={followUps.isSaving}
+                onAdd={() =>
+                  setFollowUpDialog({
+                    mode: "create",
+                    organisationId,
+                    manual: true,
+                  })
+                }
+                onEdit={(record) =>
+                  setFollowUpDialog({ mode: "edit", organisationId, record })
+                }
+                onCloseRecord={closeFollowUp}
+                onReopen={reopenFollowUp}
+                onViewHistory={(record) =>
+                  setMemberHistory({
+                    organisationId,
+                    memberId: record.memberId,
+                    memberName: record.member?.name ?? null,
+                  })
+                }
               />
+            )}
 
-              {canViewFollowUps && (
-                <WelfareFollowUpSection
-                  key={organisationId}
-                  summary={followUps.summary}
-                  records={followUps.followUps}
-                  asOf={followUps.asOf}
-                  isLoading={followUps.isLoading}
-                  isError={followUps.isError}
-                  canManage={canManageFollowUps}
-                  canCreateManualFollowUp={canCreateManualFollowUp}
-                  isSaving={followUps.isSaving}
-                  onAdd={() =>
-                    setFollowUpDialog({
-                      mode: "create",
-                      organisationId,
-                      manual: true,
-                    })
+            <Section title="Needs Check-in" target="attention">
+              {overview.attention.length === 0 ? (
+                <SectionEmpty>
+                  {`No ${lowerTerm(
+                    terms.memberPlural,
+                  )} currently meet the check-in signals for this review window.`}
+                </SectionEmpty>
+              ) : canViewFollowUps && followUps.isSuccess ? (
+                <NeedsCheckInProgress
+                  // A new organisation/review/scope starts on Pending.
+                  key={`${organisationId}:${asOf}:${status}`}
+                  attention={overview.attention}
+                  periods={overview.periods}
+                  asOf={asOf}
+                  followUps={followUps.followUps}
+                  openFollowUpCounts={openFollowUpCounts}
+                  onAddFollowUp={
+                    canManageFollowUps ? openInsightFollowUp : undefined
                   }
-                  onEdit={(record) =>
-                    setFollowUpDialog({ mode: "edit", organisationId, record })
+                />
+              ) : canViewFollowUps && !followUps.isError ? (
+                // Never show progress from another scope, or an
+                // everyone-pending guess, while this review's records load.
+                <SectionEmpty>Loading follow-up progress...</SectionEmpty>
+              ) : (
+                <InsightGrid
+                  insights={overview.attention}
+                  variant="attention"
+                  periods={overview.periods}
+                  followUpCounts={
+                    canViewFollowUps ? openFollowUpCounts : undefined
                   }
-                  onCloseRecord={closeFollowUp}
-                  onReopen={reopenFollowUp}
-                  onViewHistory={(record) =>
-                    setMemberHistory({
-                      organisationId,
-                      memberId: record.memberId,
-                      memberName: record.member?.name ?? null,
-                    })
+                  onAddFollowUp={
+                    canManageFollowUps ? openInsightFollowUp : undefined
                   }
                 />
               )}
+            </Section>
 
-              <Section title="Needs Check-in" target="attention">
-                {overview.attention.length === 0 ? (
-                  <EmptyState>
-                    {`No ${lowerTerm(
-                      terms.memberPlural,
-                    )} currently meet the check-in signals for this review window.`}
-                  </EmptyState>
-                ) : canViewFollowUps && followUps.isSuccess ? (
-                  <NeedsCheckInProgress
-                    // A new organisation/review/scope starts on Pending.
-                    key={`${organisationId}:${asOf}:${status}`}
-                    attention={overview.attention}
-                    periods={overview.periods}
-                    asOf={asOf}
-                    followUps={followUps.followUps}
-                    openFollowUpCounts={openFollowUpCounts}
-                    onAddFollowUp={
-                      canManageFollowUps ? openInsightFollowUp : undefined
-                    }
-                  />
-                ) : canViewFollowUps && !followUps.isError ? (
-                  // Never show progress from another scope, or an
-                  // everyone-pending guess, while this review's records load.
-                  <EmptyState>Loading follow-up progress...</EmptyState>
-                ) : (
-                  <InsightGrid
-                    insights={overview.attention}
-                    variant="attention"
-                    periods={overview.periods}
-                    followUpCounts={
-                      canViewFollowUps ? openFollowUpCounts : undefined
-                    }
-                    onAddFollowUp={
-                      canManageFollowUps ? openInsightFollowUp : undefined
-                    }
-                  />
-                )}
-              </Section>
-
-              <Section title="Communicated">
-                {overview.communicated.length === 0 ? (
-                  <EmptyState>
-                    {`No ${lowerTerm(
-                      terms.memberPlural,
-                    )} had a communicated reduction in physical presence for this comparison period.`}
-                  </EmptyState>
-                ) : (
-                  <InsightGrid
-                    insights={overview.communicated}
-                    variant="communicated"
-                    periods={overview.periods}
-                    followUpCounts={
-                      canViewFollowUps ? openFollowUpCounts : undefined
-                    }
-                    onAddFollowUp={
-                      canManageFollowUps ? openInsightFollowUp : undefined
-                    }
-                  />
-                )}
-              </Section>
-
-              <Section title="Encouragement" target="encouragement">
-                {overview.encouragement.length === 0 ? (
-                  <EmptyState>
-                    No major improvement signal yet for this comparison period.
-                  </EmptyState>
-                ) : (
-                  <InsightGrid
-                    insights={overview.encouragement}
-                    variant="encouragement"
-                    periods={overview.periods}
-                    followUpCounts={
-                      canViewFollowUps ? openFollowUpCounts : undefined
-                    }
-                    onAddFollowUp={
-                      canManageFollowUps ? openInsightFollowUp : undefined
-                    }
-                  />
-                )}
-              </Section>
-
-              <CurrentlyAwaySection items={overview.currentlyAway} />
-              <ReturningSoonSection
-                items={overview.returningSoon}
-                days={overview.settings.returningSoonDays}
-              />
-
-              {showBirthdays && (
-                <BirthdaySnapshot
-                  members={birthdays.members}
-                  range={{
-                    fromDate: birthdays.fromDate,
-                    toDate: birthdays.toDate,
-                  }}
-                  today={today}
-                  presentation={birthdayPresentation}
-                  isFetching={birthdays.isFetching}
-                  isError={birthdays.isError}
+            <Section title="Communicated">
+              {overview.communicated.length === 0 ? (
+                <SectionEmpty>
+                  {`No ${lowerTerm(
+                    terms.memberPlural,
+                  )} had a communicated reduction in physical presence for this comparison period.`}
+                </SectionEmpty>
+              ) : (
+                <InsightGrid
+                  insights={overview.communicated}
+                  variant="communicated"
+                  periods={overview.periods}
+                  followUpCounts={
+                    canViewFollowUps ? openFollowUpCounts : undefined
+                  }
+                  onAddFollowUp={
+                    canManageFollowUps ? openInsightFollowUp : undefined
+                  }
                 />
               )}
-            </>
-          )}
+            </Section>
 
-          {/* Independent query: an overview failure must not hide birthdays
-              that loaded fine. */}
-          {!isLoading && isError && showBirthdays && (
-            <Box mt={6}>
+            <Section title="Encouragement" target="encouragement">
+              {overview.encouragement.length === 0 ? (
+                <SectionEmpty>
+                  No major improvement signal yet for this comparison period.
+                </SectionEmpty>
+              ) : (
+                <InsightGrid
+                  insights={overview.encouragement}
+                  variant="encouragement"
+                  periods={overview.periods}
+                  followUpCounts={
+                    canViewFollowUps ? openFollowUpCounts : undefined
+                  }
+                  onAddFollowUp={
+                    canManageFollowUps ? openInsightFollowUp : undefined
+                  }
+                />
+              )}
+            </Section>
+
+            <CurrentlyAwaySection items={overview.currentlyAway} />
+            <ReturningSoonSection
+              items={overview.returningSoon}
+              days={overview.settings.returningSoonDays}
+            />
+
+            {showBirthdays && (
               <BirthdaySnapshot
                 members={birthdays.members}
                 range={{
@@ -428,43 +421,61 @@ const Welfare = () => {
                 isFetching={birthdays.isFetching}
                 isError={birthdays.isError}
               />
-            </Box>
-          )}
-
-          {/* The private follow-up editor only ever renders for the exact
-              organisation it was opened under — a switch unmounts it. */}
-          {followUpDialog &&
-            followUpDialog.organisationId === organisationId && (
-              <WelfareFollowUpDialog
-                key={
-                  followUpDialog.mode === "edit"
-                    ? `edit-${followUpDialog.record.id}`
-                    : `create-${
-                        followUpDialog.manual ? "manual" : followUpDialog.source
-                      }`
-                }
-                request={followUpDialog}
-                // The record date is when Welfare acted, not the review date.
-                asOf={localBusinessDate()}
-                memberStatusOptions={statusScope.options}
-                defaultMemberStatus={status}
-                canManageAssignedOfficers={has("officers.view")}
-                onClose={() => setFollowUpDialog(null)}
-                create={followUps.create}
-                update={followUps.update}
-                archive={followUps.archive}
-                isSaving={followUps.isSaving}
-              />
             )}
+          </>
+        )}
 
-          {memberHistory && memberHistory.organisationId === organisationId && (
-            <WelfareFollowUpMemberHistory
-              request={memberHistory}
-              onClose={() => setMemberHistory(null)}
+        {/* Independent query: an overview failure must not hide birthdays
+            that loaded fine. */}
+        {!isLoading && overviewFailed && showBirthdays && (
+          <Box mt={6}>
+            <BirthdaySnapshot
+              members={birthdays.members}
+              range={{
+                fromDate: birthdays.fromDate,
+                toDate: birthdays.toDate,
+              }}
+              today={today}
+              presentation={birthdayPresentation}
+              isFetching={birthdays.isFetching}
+              isError={birthdays.isError}
+            />
+          </Box>
+        )}
+
+        {/* The private follow-up editor only ever renders for the exact
+            organisation it was opened under — a switch unmounts it. */}
+        {followUpDialog &&
+          followUpDialog.organisationId === organisationId && (
+            <WelfareFollowUpDialog
+              key={
+                followUpDialog.mode === "edit"
+                  ? `edit-${followUpDialog.record.id}`
+                  : `create-${
+                      followUpDialog.manual ? "manual" : followUpDialog.source
+                    }`
+              }
+              request={followUpDialog}
+              // The record date is when Welfare acted, not the review date.
+              asOf={localBusinessDate()}
+              memberStatusOptions={statusScope.options}
+              defaultMemberStatus={status}
+              canManageAssignedOfficers={has("officers.view")}
+              onClose={() => setFollowUpDialog(null)}
+              create={followUps.create}
+              update={followUps.update}
+              archive={followUps.archive}
+              isSaving={followUps.isSaving}
             />
           )}
-        </Box>
-      </Box>
+
+        {memberHistory && memberHistory.organisationId === organisationId && (
+          <WelfareFollowUpMemberHistory
+            request={memberHistory}
+            onClose={() => setMemberHistory(null)}
+          />
+        )}
+      </PageContainer>
     </RequirePermission>
   );
 };

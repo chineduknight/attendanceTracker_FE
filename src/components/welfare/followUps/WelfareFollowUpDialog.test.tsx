@@ -7,10 +7,11 @@ import {
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
 import { toggle } from "test-utils/render";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import WelfareFollowUpDialog, {
@@ -181,7 +182,9 @@ beforeEach(() => {
 describe("WelfareFollowUpDialog — manual create", () => {
   it("defaults to the local today, keep-open OFF and shows the privacy helper", () => {
     const { create } = renderDialog();
-    expect(screen.getByLabelText(/^Date/)).toHaveValue(TODAY);
+    expect(screen.getByLabelText(/^Date/)).toHaveValue(
+      format(parseISO(TODAY), "MMM d, yyyy"),
+    );
     expect(screen.getByLabelText("Keep open for follow-up")).not.toBeChecked();
     expect(
       screen.getByText(/Keep notes brief and relevant\./),
@@ -355,12 +358,12 @@ describe("WelfareFollowUpDialog — edit", () => {
     const update = jest.fn();
     renderDialog({ request: EDIT_REQUEST, update });
 
-    expect(screen.getByLabelText(/^Date/)).toHaveValue("2026-10-05");
+    expect(screen.getByLabelText(/^Date/)).toHaveValue("Oct 5, 2026");
     expect(screen.getByLabelText(/^Reason/)).toHaveValue("Bereavement");
     expect(screen.getByLabelText("Note")).toHaveValue("Called the family.");
     expect(screen.getByLabelText("Keep open for follow-up")).toBeChecked();
     expect(screen.getByLabelText("Next follow-up date")).toHaveValue(
-      "2026-10-12",
+      "Oct 12, 2026",
     );
     expect(screen.getByText("Assigned to: Welfare II")).toBeInTheDocument();
 
@@ -498,5 +501,21 @@ describe("WelfareFollowUpDialog — in-flight state", () => {
     expect(
       screen.getByRole("button", { name: "Archive record" }),
     ).toBeDisabled();
+  });
+});
+
+describe("WelfareFollowUpDialog — terminology", () => {
+  it("labels the member picker with the organisation's own term", () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        owner: "owner-1",
+        terminology: { ...DEFAULT_TERMINOLOGY, memberSingular: "Chorister", memberPlural: "Choristers" },
+      },
+    });
+    renderDialog();
+    expect(screen.getByLabelText(/^Chorister/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Member$/)).not.toBeInTheDocument();
   });
 });

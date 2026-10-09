@@ -45,15 +45,15 @@ const BirthdaySnapshot = ({
     <Heading size="md" mb={1}>
       {presentation.label}
     </Heading>
-    <Text fontSize="sm" color="gray.500" mb={3}>
+    <Text fontSize="sm" color="fg.muted" mb={3}>
       {`${formatBirthdayRangeDate(range.fromDate)} – ${formatBirthdayRangeDate(
         range.toDate
       )}`}
     </Text>
     {isError && members.length === 0 ? (
-      <Text color="gray.500">Birthday data is unavailable right now.</Text>
+      <Text color="fg.muted">Birthday data is unavailable right now.</Text>
     ) : isFetching && members.length === 0 ? (
-      <Text color="gray.500">Loading birthdays...</Text>
+      <Text color="fg.muted">Loading birthdays...</Text>
     ) : (
       <BirthdayList
         members={members}

@@ -76,10 +76,10 @@ const WelfareFollowUpSection = ({
         Follow-ups
       </Heading>
 
-      {isLoading && <Text color="gray.500">Loading follow-ups...</Text>}
+      {isLoading && <Text color="fg.muted">Loading follow-ups...</Text>}
 
       {!isLoading && (isError || !summary) && (
-        <Text color="red.500">
+        <Text color="fg.error">
           Follow-up data could not be loaded right now.
         </Text>
       )}
@@ -94,11 +94,12 @@ const WelfareFollowUpSection = ({
 
           <Flex gap={2} wrap="wrap" mb={isListOpen ? 5 : 0}>
             {canCreateManualFollowUp && (
-              <Button size="sm" onClick={onAdd} disabled={isSaving}><FaPlus aria-hidden="true" />Add welfare follow-up
+              <Button size="sm" minH="44px" onClick={onAdd} disabled={isSaving}><FaPlus aria-hidden="true" />Add welfare follow-up
                               </Button>
             )}
             <Button
               size="sm"
+              minH="44px"
               variant="outline"
               aria-expanded={isListOpen}
               aria-controls={LIST_ID}
@@ -117,7 +118,7 @@ const WelfareFollowUpSection = ({
                 Open follow-ups
               </Heading>
               {openRecords.length === 0 ? (
-                <Text color="gray.500">No open follow-ups.</Text>
+                <Text color="fg.muted">No open follow-ups.</Text>
               ) : (
                 <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
                   {openRecords.map((record) => (

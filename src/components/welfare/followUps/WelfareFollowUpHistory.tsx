@@ -26,7 +26,7 @@ const WelfareFollowUpHistory = ({
   const terms = useTerms();
 
   if (records.length === 0) {
-    return <Text color="gray.500">No follow-up history yet.</Text>;
+    return <Text color="fg.muted">No follow-up history yet.</Text>;
   }
 
   return (
@@ -39,7 +39,8 @@ const WelfareFollowUpHistory = ({
             </Text>
             {canManage && (
               <Button
-                size={{ base: "sm", md: "xs" }}
+                size="sm"
+                minH="44px"
                 variant="outline"
                 flexShrink={0}
                 onClick={() => onReopen(record)}
@@ -54,7 +55,7 @@ const WelfareFollowUpHistory = ({
               `Unknown ${lowerTerm(terms.memberSingular)}`}
           </Text>
           <Text fontSize="sm">{record.reason}</Text>
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="fg.muted">
             {record.createdBy?.name
               ? `Logged by ${record.createdBy.name}`
               : "Logged by unknown user"}

@@ -83,14 +83,14 @@ const NeedsCheckInProgress = ({
         mb={4}
       >
         <Tabs.List flexWrap="wrap" gap={2}>
-          <Tabs.Trigger value="pending">{`Pending ${progress.pending.length}`}</Tabs.Trigger>
-          <Tabs.Trigger value="followedUp">{`Followed Up ${progress.followedUp.length}`}</Tabs.Trigger>
-          <Tabs.Trigger value="all">{`All ${progress.all.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="pending" minH="44px">{`Pending ${progress.pending.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="followedUp" minH="44px">{`Followed Up ${progress.followedUp.length}`}</Tabs.Trigger>
+          <Tabs.Trigger value="all" minH="44px">{`All ${progress.all.length}`}</Tabs.Trigger>
         </Tabs.List>
       </Tabs.Root>
 
       {shown.length === 0 ? (
-        <Text color="gray.500">
+        <Text color="fg.muted">
           {view === "pending"
             ? `All Needs Check-in ${lowerTerm(
                 terms.memberPlural,
