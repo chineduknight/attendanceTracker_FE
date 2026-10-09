@@ -127,6 +127,8 @@ describe("<ViewAttendance> load failure", () => {
     mockGet.mockImplementation(() => Promise.resolve({ data: { data: SESSION } }));
     renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
     await screen.findByText("Zara");
+    // The stored calendar day (UTC midnight), not a timezone-shifted one.
+    expect(screen.getByText("Tue 01 Sep 26")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "nobody" } });
     expect(screen.getByText("No member found")).toBeInTheDocument();

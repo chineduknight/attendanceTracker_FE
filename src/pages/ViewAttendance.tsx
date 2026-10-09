@@ -4,9 +4,7 @@ import {
   Text,
   Button,
   Heading,
-  Container,
 } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -33,6 +31,8 @@ import ReactSelect, { MultiValue } from "react-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import PinnedSearchBar from "components/PinnedSearchBar";
+import PageContainer from "components/layout/PageContainer";
+import { formatSessionDate } from "helpers/sessionDate";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
@@ -252,9 +252,8 @@ const Attendance = () => {
     [filteredMembers, statuses],
   );
 
-  const formattedDate = attendanceInfo?.date
-    ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
-    : "";
+  // The stored calendar day, never shifted by the device timezone.
+  const formattedDate = formatSessionDate(attendanceInfo?.date);
 
   const handleSendToWhatsapp = () => {
     const message = buildAttendanceShareMessage({
@@ -369,11 +368,9 @@ const Attendance = () => {
     });
     if (confirmed) deleteAttendance({ url: deleteUrl });
   };
-  const pageBg = useColorModeValue("gray.50", "gray.800");
 
   return (
-    <Box minH={"100vh"} bg={pageBg}>
-      <Container>
+    <PageContainer>
         {isLoadingAttendance ? (
           <PageLoader
             h="40vh"
@@ -392,11 +389,11 @@ const Attendance = () => {
           <>
             {/* Title first, date beneath it, so a long session name never
                 collides with the date on a narrow screen. */}
-            <Box mt="4">
+            <Box>
               <Heading fontSize="22px" lineClamp={2}>
                 {attendanceInfo?.name}
               </Heading>
-              <Text color="gray.600" mt={1}>
+              <Text color="fg.muted" mt={1}>
                 {formattedDate}
               </Text>
             </Box>
@@ -432,7 +429,7 @@ const Attendance = () => {
                   disabled={!canChangeRoster}
                   onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${memberTerm} to this ${session}`}</Button>
                 {!canChangeRoster && (
-                  <Text fontSize="sm" color="gray.500" mt={1}>
+                  <Text fontSize="sm" color="fg.muted" mt={1}>
                     {`No edits remain for this ${session}.`}
                   </Text>
                 )}
@@ -492,8 +489,6 @@ const Attendance = () => {
               value={searchQuery}
               onChange={setSearchQuery}
               placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-              // Matches this page's background until it moves to PageContainer.
-              bg={pageBg}
             />
             {/* The roster scrolls with the page rather than in a nested box. */}
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
@@ -546,15 +541,13 @@ const Attendance = () => {
             <Button
               onClick={handleDelete}
               loading={isDeleting}
-              bg="red.500"
-              color="white"
-              _hover={{ bg: "red.600" }}
+              variant="solid"
+              colorPalette="red"
               w="full"
               mt="4"
               mb="8"><FaTrash />{`Delete ${terms.attendanceSingular}`}</Button>
           </>
         )}
-      </Container>
 
       <ManualMemberDialog
         isOpen={isAddingMember}
@@ -589,7 +582,7 @@ const Attendance = () => {
         onClose={() => !isRemoving && setRemoving(null)}
       />
       {confirmDialog}
-    </Box>
+    </PageContainer>
   );
 };
 

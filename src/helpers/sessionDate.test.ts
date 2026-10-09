@@ -9,6 +9,11 @@ describe("session dates", () => {
     expect(parseSessionDate("2026-09-01T00:00:00.000Z")?.getDate()).toBe(1);
   });
 
+  it("reads a parsed UTC-midnight Date by its UTC day", () => {
+    expect(formatSessionDate(new Date("2026-09-01T00:00:00.000Z"))).toBe("Tue 01 Sep 26");
+    expect(formatSessionDate(new Date("invalid"))).toBe("");
+  });
+
   it("returns nothing for missing or invalid values", () => {
     expect(formatSessionDate(undefined)).toBe("");
     expect(formatSessionDate("not a date")).toBe("");
