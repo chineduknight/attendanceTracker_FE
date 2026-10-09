@@ -8,7 +8,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewMembers from "pages/ViewMembers";
 import { system } from "styles/theme";
 import { renderRoute } from "test-utils/renderWithProviders";
-import { toggle } from "test-utils/render";
+import { generatedCss, toggle } from "test-utils/render";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
@@ -106,9 +106,9 @@ describe("<ViewMembers> with custom terminology", () => {
       </ChakraProvider>
     );
     expect(
-      await screen.findByRole("button", { name: "Availability" })
+      await screen.findByRole("button", { name: /^Availability for/ })
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Availability" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Availability for/ }));
     expect(
       await screen.findByText("availability destination")
     ).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe("<ViewMembers> with custom terminology", () => {
     renderPage();
     await screen.findByText("Ada");
     expect(
-      screen.queryByRole("button", { name: "Availability" })
+      screen.queryByRole("button", { name: /^Availability for/ })
     ).not.toBeInTheDocument();
   });
 });
@@ -174,6 +174,42 @@ describe("<ViewMembers> at phone width", () => {
     expect(search).toHaveValue("");
     expect(screen.getByText("Ada")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("2 members");
+  });
+
+  it("says why nothing matches and offers to clear the search", async () => {
+    renderPage();
+    await screen.findByText("Ada");
+    fireEvent.change(screen.getByPlaceholderText("Search member"), {
+      target: { value: "zz" },
+    });
+    expect(screen.getByText("No members found")).toBeInTheDocument();
+    expect(screen.getByText('Nothing matches "zz".')).toBeInTheDocument();
+    // The bar's clear button and the empty state's both clear it.
+    const clearButtons = screen.getAllByRole("button", { name: "Clear search" });
+    expect(clearButtons).toHaveLength(2);
+    fireEvent.click(clearButtons[1]);
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+  });
+
+  it("offers to add the first member when there are none", async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/model"))
+        return Promise.resolve({ data: { data: { fields: MODEL_FIELDS } } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    renderPage();
+    expect(await screen.findByText("No members yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Add member/i }).length).toBe(2);
+  });
+
+  it("gives each card's actions a 44px tap target", async () => {
+    renderPage();
+    await screen.findByText("Ada");
+    for (const name of ["Availability for Ada", "Edit Ada"]) {
+      const css = generatedCss(screen.getByRole("button", { name }));
+      expect(css).toMatch(/min-width:\s*44px/);
+      expect(css).toMatch(/height:\s*44px/);
+    }
   });
 
   it("shows field labels, never storage keys, on each card", async () => {

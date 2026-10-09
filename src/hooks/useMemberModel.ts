@@ -15,7 +15,7 @@ export const useMemberModel = (
   }: { refetchOnWindowFocus?: boolean; enabled?: boolean } = {},
 ) => {
   const url = convertParamsToString(orgRequest.CONFIG_MODEL, { organisationId });
-  const { data, isLoading, isSuccess, isError, isFetchedAfterMount } = useQueryWrapper(
+  const { data, isLoading, isSuccess, isError, isFetchedAfterMount, error, refetch } = useQueryWrapper(
     queryKeys.memberModel(organisationId),
     url,
     { enabled: enabled && Boolean(organisationId), refetchOnWindowFocus },
@@ -29,5 +29,7 @@ export const useMemberModel = (
     isSuccess,
     isError,
     isFetchedAfterMount,
+    error,
+    refetch,
   };
 };

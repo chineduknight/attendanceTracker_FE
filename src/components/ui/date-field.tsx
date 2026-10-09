@@ -33,11 +33,13 @@ const useCoarsePointer = () => {
   return coarse;
 };
 
+// The clear ✕ is a 44px square at the input's right edge (the library's is
+// ~16px wide).
 const CLEAR_ICON_CSS = {
   "& .react-datepicker-wrapper": { width: "100%" },
   "& .react-datepicker__close-icon": {
-    top: 0, right: "0.5rem", marginRight: "0.5rem", height: "100%",
-    display: "flex", alignItems: "center", padding: 0,
+    top: 0, right: 0, height: "100%", minHeight: "44px", width: "44px",
+    display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
   },
   "& .react-datepicker__close-icon::after": {
     display: "block", backgroundColor: "transparent", color: "fg.muted",
@@ -113,7 +115,7 @@ export const DateField = ({
             aria-label={ariaLabel}
             autoComplete="off"
             inputMode={coarse ? "none" : undefined}
-            pr={clearable ? "2rem" : undefined}
+            pr={clearable ? "44px" : undefined}
           />
         }
         {...rangeProps}

@@ -11,7 +11,7 @@ import UserModel from "pages/UserModel";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
-import { toggle } from "test-utils/render";
+import { generatedCss, toggle } from "test-utils/render";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -69,6 +69,28 @@ describe("<UserModel>", () => {
       return Promise.resolve({ data: { data: { fields: models[org] ?? [] } } });
     });
     mockPost.mockImplementation(() => Promise.resolve({ data: { data: "ok" } }));
+  });
+
+  it("offers a retry when the model fails to load", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Model service down" } } }),
+    );
+    renderPage();
+    expect(await screen.findByText("Couldn't load the member model")).toBeInTheDocument();
+    expect(screen.getByText("Model service down")).toBeInTheDocument();
+
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: { fields: ORG_A } } }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findAllByLabelText(/Display label/)).toHaveLength(2);
+  });
+
+  it("gives an unsaved field's Remove a 44px tap target", async () => {
+    renderPage();
+    await screen.findAllByLabelText(/Display label/);
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    expect(generatedCss(screen.getByRole("button", { name: "Remove" }))).toMatch(
+      /min-height:\s*44px/,
+    );
   });
 
   it("locks a saved field's key and type, blocks removal and shows a fallback label", async () => {

@@ -1,4 +1,4 @@
-import { confirmInDialog } from "test-utils/render";
+import { confirmInDialog, generatedCss } from "test-utils/render";
 import {
   cleanup,
   fireEvent,
@@ -15,6 +15,8 @@ import MemberAttendanceAvailability from "pages/MemberAttendanceAvailability";
 
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
+const mockRefetch = jest.fn();
+let mockLoadFails = false;
 const mockArchive = jest.fn();
 const mockPeriods = [
   {
@@ -48,9 +50,10 @@ jest.mock("hooks/useMembers", () => ({
 }));
 jest.mock("hooks/useAttendanceAvailability", () => ({
   useAttendanceAvailabilityForMember: () => ({
-    periods: mockPeriods,
+    periods: mockLoadFails ? [] : mockPeriods,
     isLoading: false,
-    isError: false,
+    isError: mockLoadFails,
+    refetch: mockRefetch,
   }),
   useAttendanceAvailabilityMutations: () => ({
     create: mockCreate,
@@ -100,6 +103,25 @@ describe("<MemberAttendanceAvailability>", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    mockLoadFails = false;
+  });
+
+  it("offers a retry when the periods fail to load", () => {
+    mockLoadFails = true;
+    renderPage();
+    expect(screen.getByText("Couldn't load rehearsal availability")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  it("gives each period's Edit and Remove a 44px tap target", () => {
+    renderPage();
+    for (const button of [
+      ...screen.getAllByRole("button", { name: "Edit" }),
+      ...screen.getAllByRole("button", { name: "Remove" }),
+    ]) {
+      expect(generatedCss(button)).toMatch(/min-height:\s*44px/);
+    }
   });
 
   it("renders for attendance.view and uses local Current, Upcoming and Past groups", () => {

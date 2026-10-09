@@ -1,12 +1,9 @@
-import { SAFE_TOP } from "styles/safeArea";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Flex,
   Text,
   SimpleGrid,
-  Input,
-  InputGroup,
   IconButton,
   Button,
   Checkbox,
@@ -17,7 +14,6 @@ import {
   Badge,
   Portal,
 } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
 import { NameAvatar } from "components/ui/avatar";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { orgRequest } from "services";
@@ -33,15 +29,17 @@ import {
   FaFileExport,
   FaFilter,
   FaColumns,
-  FaSearch,
+  FaRegCalendarAlt,
 } from "react-icons/fa";
-import { FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { useMemberModel } from "hooks/useMemberModel";
 import { MemberRecord, useMembers } from "hooks/useMembers";
-import { ErrorState } from "components/ui/states";
+import { EmptyState, ErrorState } from "components/ui/states";
+import PageContainer from "components/layout/PageContainer";
+import PinnedSearchBar from "components/PinnedSearchBar";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import { memberFieldLabeler } from "helpers/memberFields";
 import PageLoader from "components/PageLoader";
@@ -129,14 +127,6 @@ const formatFieldValue = (value: unknown): string => {
   return text === "" ? "—" : text;
 };
 
-// Small on the card, but each still takes a 44px-tall tap: an invisible
-// zone extends past the visible edge (only 4px sideways, so neighbours
-// 8px apart never overlap).
-const compactTapTarget = {
-  position: "relative",
-  _before: { content: '""', position: "absolute", inset: "-6px -4px" },
-} as const;
-
 const openExport = (response: { data?: string }) => {
   if (response?.data) window.open(response.data, "_blank");
 };
@@ -153,14 +143,10 @@ const ViewMembers: React.FC = () => {
     readShownFields(org.id)
   );
 
-  const pageBg = useColorModeValue("gray.50", "gray.800");
-  const cardBg = useColorModeValue("white", "gray.700");
-  const borderColor = useColorModeValue("gray.200", "gray.600");
-  const mutedColor = useColorModeValue("gray.500", "gray.400");
   // The app's header blue is the page accent; no attendance statuses show
   // here, so it cannot be mistaken for one.
-  const accentColor = useColorModeValue("blue.600", "blue.300");
-  const activeToggleBg = useColorModeValue("blue.50", "whiteAlpha.200");
+  const accentColor = "blue.fg";
+  const activeToggleBg = "blue.subtle";
 
   const { members, isLoading, isError, refetch: refetchMembers } = useMembers(org.id);
   // Display labels only; filters, query params and saved columns keep storage keys.
@@ -266,11 +252,6 @@ const ViewMembers: React.FC = () => {
   const togglePanel = (panel: Exclude<OpenPanel, null>) =>
     setOpenPanel((current) => (current === panel ? null : panel));
 
-  const handleSearch = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) =>
-      setSearchQuery(event.target.value),
-    []
-  );
 
   const displayFields = (member: MemberRecord) =>
     shownFields.filter((key) => !HIDDEN_KEYS.includes(key) && key in member);
@@ -311,6 +292,7 @@ const ViewMembers: React.FC = () => {
             <Menu.Content zIndex="popover">
               <Menu.Item
                 value="excel"
+                minH="44px"
                 onSelect={() => exportMembers()}
                 disabled={exportUnavailable || isExportingMembers}
               >
@@ -323,6 +305,7 @@ const ViewMembers: React.FC = () => {
               </Menu.Item>
               <Menu.Item
                 value="pdf"
+                minH="44px"
                 onSelect={() => exportMembersPdf()}
                 disabled={exportUnavailable || isExportingMembersPdf}
               >
@@ -341,8 +324,7 @@ const ViewMembers: React.FC = () => {
   );
 
   return (
-    <Box minH={"100vh"} bg={pageBg}>
-      <Box px="4" pt="4" pb="8" maxW="container.xl" mx="auto">
+    <PageContainer width="wide">
         {actionButtons}
         {isLoading ? (
           <PageLoader
@@ -401,10 +383,10 @@ const ViewMembers: React.FC = () => {
               <Box
                 mt="2"
                 p="3"
-                bg={cardBg}
+                bg="bg.panel"
                 rounded="lg"
                 borderWidth="1px"
-                borderColor={borderColor}
+                borderColor="border"
               >
                 <Flex align="center" justify="space-between" mb={2}>
                   <Text fontWeight="bold">Filter by</Text>
@@ -412,9 +394,10 @@ const ViewMembers: React.FC = () => {
                     <Button
                       size="sm"
                       variant="plain"
-                      h="auto"
-                      px={0}
-                      color="blue.600"
+                      minH="44px"
+                      px={2}
+                      me={-2}
+                      color="blue.fg"
                       _hover={{ textDecoration: "underline" }}
                       onClick={() => setFilters({})}
                     >
@@ -435,18 +418,13 @@ const ViewMembers: React.FC = () => {
                         <Text fontSize="sm" fontWeight="bold" mb={1}>
                           {labelFor(field.name)}
                         </Text>
-                        <ReactSelect
+                        <ThemedSelect
                           isMulti
                           aria-label={`Filter by ${labelFor(field.name)}`}
                           placeholder="Any"
                           options={options}
                           value={selected}
                           closeMenuOnSelect={false}
-                          menuPortalTarget={document.body}
-                          menuPosition="fixed"
-                          styles={{
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
                           onChange={(values: MultiValue<SelectOption>) =>
                             setFilters((prev) => ({
                               ...prev,
@@ -466,10 +444,10 @@ const ViewMembers: React.FC = () => {
               <Box
                 mt="2"
                 p="3"
-                bg={cardBg}
+                bg="bg.panel"
                 rounded="lg"
                 borderWidth="1px"
-                borderColor={borderColor}
+                borderColor="border"
               >
                 <Text fontWeight="bold" mb={2}>
                   Show on each card
@@ -495,52 +473,16 @@ const ViewMembers: React.FC = () => {
             </Collapsible.Root>
             {/* Only the search bar is pinned: with the phone keyboard open,
                 anything taller would squeeze the results it is filtering. */}
-            <Box
-              ref={pinnedSearch.barRef}
-              position="sticky"
-              // Pins below the status bar in the installed app (0 elsewhere).
-              top={SAFE_TOP}
-              zIndex="sticky"
-              bg={pageBg}
-              mx={-4}
-              px={4}
-              py={2}
-              mt="2"
-            >
-              <InputGroup
-                maxW={{ md: "400px" }}
-                startElement={
-                  <Icon color="gray.400" asChild>
-                    <FaSearch />
-                  </Icon>
-                }
-                startElementProps={{ pointerEvents: "none" }}
-                endElement={
-                  searchQuery ? (
-                    <IconButton
-                      aria-label="Clear search"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}
-                    >
-                      <FiX />
-                    </IconButton>
-                  ) : undefined
-                }
-              >
-                <Input
-                  type="text"
-                  bg={cardBg}
-                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-                  value={searchQuery}
-                  onChange={handleSearch}
-                  {...pinnedSearch.inputProps}
-                />
-              </InputGroup>
-            </Box>
+            <PinnedSearchBar
+              pinnedSearch={pinnedSearch}
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+              maxW={{ md: "400px" }}
+            />
             {/* The list scrolls with the page rather than in a nested box. */}
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
-              <Text fontSize="sm" color={mutedColor} mb={2} role="status">
+              <Text fontSize="sm" color="fg.muted" mb={2} role="status">
                 {isNarrowed ? (
                   <>
                     Showing {countNumber(filteredMembers.length)} of{" "}
@@ -553,9 +495,39 @@ const ViewMembers: React.FC = () => {
                 )}
               </Text>
               {filteredMembers.length === 0 ? (
-                <Text fontWeight="bold" mt="4" ml="1">
-                  {`No ${lowerTerm(terms.memberPlural)} found`}
-                </Text>
+                members.length === 0 ? (
+                  <EmptyState
+                    title={`No ${lowerTerm(terms.memberPlural)} yet`}
+                    action={
+                      <Can perm="members.manage">
+                        <Button onClick={() => navigate(PROTECTED_PATHS.ADD_MEMBER)}>
+                          <FaUserPlus />
+                          {LABELS.addMember(terms)}
+                        </Button>
+                      </Can>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    title={`No ${lowerTerm(terms.memberPlural)} found`}
+                    description={
+                      searchQuery
+                        ? `Nothing matches "${searchQuery}".`
+                        : "Nothing matches these filters."
+                    }
+                    action={
+                      searchQuery ? (
+                        <Button variant="outline" onClick={() => setSearchQuery("")}>
+                          Clear search
+                        </Button>
+                      ) : activeFilters.length > 0 ? (
+                        <Button variant="outline" onClick={() => setFilters({})}>
+                          Clear filters
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )
               ) : (
                 <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={3}>
                   {filteredMembers.map((member) => {
@@ -563,11 +535,11 @@ const ViewMembers: React.FC = () => {
                     return (
                       <Box
                         key={member.id}
-                        bg={cardBg}
+                        bg="bg.panel"
                         p={3}
                         rounded="lg"
                         borderWidth="1px"
-                        borderColor={borderColor}
+                        borderColor="border"
                       >
                         {/* Name leads and truncates; the actions sit in a
                             non-shrinking slot so they never get squeezed. */}
@@ -589,11 +561,12 @@ const ViewMembers: React.FC = () => {
                               control stops reading as a button. */}
                           <Flex flexShrink={0} gap={2}>
                             <Can perm="attendance.view">
-                              <Button
+                              <IconButton
+                                aria-label={`Availability for ${member.name}`}
                                 variant="outline"
                                 colorPalette="teal"
-                                size="sm"
-                                {...compactTapTarget}
+                                minW="44px"
+                                h="44px"
                                 onClick={() =>
                                   navigate(
                                     convertParamsToString(
@@ -603,16 +576,16 @@ const ViewMembers: React.FC = () => {
                                   )
                                 }
                               >
-                                Availability
-                              </Button>
+                                <FaRegCalendarAlt />
+                              </IconButton>
                             </Can>
                             <Can perm="members.manage">
                               <IconButton
                                 aria-label={`Edit ${member.name}`}
                                 variant="outline"
                                 colorPalette="blue"
-                                size="sm"
-                                {...compactTapTarget}
+                                minW="44px"
+                                h="44px"
                                 onClick={() =>
                                   navigate(
                                     convertParamsToString(
@@ -642,7 +615,7 @@ const ViewMembers: React.FC = () => {
                                 optionFieldNames.has(key) && value !== "—";
                               return (
                                 <Box key={key} minW={0}>
-                                  <Text fontSize="xs" color={mutedColor}>
+                                  <Text fontSize="xs" color="fg.muted">
                                     {labelFor(key)}
                                   </Text>
                                   {asTag ? (
@@ -676,8 +649,7 @@ const ViewMembers: React.FC = () => {
             </Box>
           </>
         )}
-      </Box>
-    </Box>
+    </PageContainer>
   );
 };
 
