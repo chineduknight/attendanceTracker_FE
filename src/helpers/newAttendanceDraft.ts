@@ -150,11 +150,13 @@ export const discardNewAttendanceDraft = (
 
 /**
  * The working-state object for a resumed draft, shaped exactly like the
- * Continue payload Create Attendance stores (empty category values omitted).
+ * Continue payload Create Attendance stores (empty category values omitted),
+ * stamped with its organisation so it can never be marked under another one.
  */
 export const newAttendanceDraftToSession = (draft: NewAttendanceDraft) => ({
   name: draft.name,
   date: draft.date,
+  organisationId: draft.organisationId,
   ...(draft.categoryId ? { categoryId: draft.categoryId } : {}),
   ...(draft.subCategoryId ? { subCategoryId: draft.subCategoryId } : {}),
   eligibilityRules: draft.eligibilityRules,

@@ -133,6 +133,7 @@ describe("newAttendanceDraftToSession", () => {
     expect(newAttendanceDraftToSession(readNewAttendanceDraft(ORG)!)).toEqual({
       name: "Rehearsal",
       date: "2026-10-01",
+      organisationId: ORG,
       eligibilityRules: [],
     });
   });
@@ -142,6 +143,7 @@ describe("newAttendanceDraftToSession", () => {
     expect(newAttendanceDraftToSession(readNewAttendanceDraft(ORG)!)).toEqual({
       name: "Sunday Mass",
       date: "2026-10-01",
+      organisationId: ORG,
       categoryId: "c1",
       subCategoryId: "s1",
       eligibilityRules: [{ field: "part", values: ["soprano"] }],

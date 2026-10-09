@@ -579,6 +579,14 @@ describe("<MarkAttendance> quick marking", () => {
             id: "org2",
             attendanceStatuses: QUICK_STATUSES,
           },
+          // The same session continues across the switch; pin it here so a
+          // late callback from an earlier test's update load cannot stand in
+          // for it (a stale record would (correctly) be rejected as org1's).
+          currentAttendance: {
+            name: "Rehearsal",
+            date: "2026-10-01",
+            members: [],
+          },
         });
       });
       await screen.findByText("Bola");
@@ -1937,6 +1945,70 @@ describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create attendance" }));
     expect(await screen.findByText("create attendance")).toBeInTheDocument();
+  });
+
+  it("never marks a working session that belongs to another organisation", async () => {
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Foreign Sectional",
+        date: "2026-10-01",
+        organisationId: "orgOther",
+      },
+    });
+
+    renderAt("/mark");
+
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Foreign Sectional")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resumes the selected organisation's draft instead of a foreign working session", async () => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Foreign Sectional",
+        date: "2026-09-01",
+        organisationId: "orgOther",
+      },
+    });
+
+    renderAt("/mark");
+    await screen.findByText("Ada");
+
+    expect(
+      screen.getByRole("heading", { name: "Rehearsal" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Foreign Sectional")).not.toBeInTheDocument();
+    // The resumed draft replaces the foreign session as the working state.
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toMatchObject({
+        name: "Rehearsal",
+        organisationId: "org1",
+      }),
+    );
+  });
+
+  it("still marks a working session stamped with the selected organisation", async () => {
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Rehearsal",
+        date: "2026-10-01",
+        organisationId: "org1",
+      },
+    });
+
+    renderAt("/mark");
+    await screen.findByText("Ada");
+
+    expect(
+      screen.getByRole("heading", { name: "Rehearsal" }),
+    ).toBeInTheDocument();
+    expect(statusOf("Ada")).toBe("Absent");
   });
 
   it("keeps an edit in memory: no draft key is written or restored", async () => {

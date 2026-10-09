@@ -209,6 +209,7 @@ describe("<CreateAttendance> session templates", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Ad-hoc meeting",
       date: "2026-10-01",
+      organisationId: "orgA",
       eligibilityRules: [],
     });
   });
@@ -670,6 +671,7 @@ describe("<CreateAttendance> eligibility", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Rehearsal",
       date: "2026-10-01",
+      organisationId: "orgA",
       categoryId: "c1",
       eligibilityRules: [
         { field: "part", values: ["soprano"] },
@@ -996,6 +998,7 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Rehearsal",
       date: "2026-10-01",
+      organisationId: "orgA",
       categoryId: "c1",
       eligibilityRules: [{ field: "part", values: ["soprano"] }],
     });
@@ -1058,6 +1061,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Ad-hoc meeting",
       date: "2026-10-01",
+      organisationId: "orgA",
       eligibilityRules: [],
     });
   });
@@ -1340,6 +1344,7 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Ad-hoc meeting",
       date: "2026-10-01",
+      organisationId: "orgA",
       eligibilityRules: [],
     });
     expect(JSON.parse(localStorage.getItem(META_KEY) as string)).toEqual({
@@ -1386,9 +1391,9 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     await screen.findByText("Unfinished attendance");
 
     for (const name of ["Continue marking", "Discard and create new"]) {
-      expect(
-        generatedCss(screen.getByRole("button", { name })),
-      ).toMatch(/min-height:\s*44px/);
+      expect(generatedCss(screen.getByRole("button", { name }))).toMatch(
+        /min-height:\s*44px/,
+      );
     }
   });
 
@@ -1405,6 +1410,7 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Sunday Mass",
       date: "2026-10-01",
+      organisationId: "orgA",
       eligibilityRules: [],
     });
     // Mark Attendance reconciles these itself; Create Attendance must not
@@ -1460,6 +1466,32 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
       EMPTY_CURRENT_ATTENDANCE,
     );
     expect(localStorage.getItem("attendance-new-draft-orgB")).not.toBeNull();
+  });
+
+  it("does not clear a working session that belongs to another organisation", async () => {
+    seedDraft();
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Sunday Mass",
+        date: "2026-10-01",
+        organisationId: "orgB",
+        eligibilityRules: [],
+      },
+    });
+
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discard and create new" }),
+    );
+    await confirmInDialog("Discard");
+
+    expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+    // The foreign working session is not the discarded draft's to clear.
+    expect(useGlobalStore.getState().currentAttendance).toMatchObject({
+      name: "Sunday Mass",
+      organisationId: "orgB",
+    });
   });
 
   it("shows the draft only for its own organisation and keeps it through a switch", async () => {

@@ -163,19 +163,26 @@ const MarkAttendanceSession = () => {
   );
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
+  // The store keeps one working object, so its organisation decides whether it
+  // may be marked here: a session started (or resumed) for another organisation
+  // must never appear under the selected one. Legacy persisted states without
+  // the stamp cannot be attributed, so they keep the old permissive behaviour.
+  const workingBelongsToOrg =
+    hasWorkingSession(currentAttendance) &&
+    (!currentAttendance.organisationId ||
+      currentAttendance.organisationId === org.id);
   // The new-session working state is fixed at mount: nothing that happens
   // while marking (e.g. a successful submit clearing the store) may swap the
   // session under the officer's marks.
   const [workingSession] = useState<currentAttendanceType | null>(() =>
-    isUpdate || !hasWorkingSession(currentAttendance)
-      ? null
-      : currentAttendance,
+    isUpdate || !workingBelongsToOrg ? null : currentAttendance,
   );
-  // A direct visit or reload with an empty working store resumes the
-  // organisation's unfinished draft, if it has one. Read once: the metadata
-  // is cleared on submit and that must not resurrect a session from memory.
+  // A direct visit or reload whose working store is empty — or holds another
+  // organisation's session — resumes this organisation's unfinished draft, if
+  // it has one. Read once: the metadata is cleared on submit and that must not
+  // resurrect a session from memory.
   const [resumedSession] = useState<currentAttendanceType | null>(() => {
-    if (isUpdate || hasWorkingSession(currentAttendance)) return null;
+    if (isUpdate || workingBelongsToOrg) return null;
     const draft = readNewAttendanceDraft(org.id);
     return draft ? newAttendanceDraftToSession(draft) : null;
   });

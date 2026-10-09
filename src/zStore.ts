@@ -27,6 +27,13 @@ export type currentAttendanceType = {
   members?: Array<any>;
   /** New sessions only; `[]` means everyone is expected. */
   eligibilityRules?: AttendanceEligibilityRule[];
+  /**
+   * The organisation a NEW session's working state belongs to (stamped on
+   * Continue and when a draft is resumed). Absent on legacy persisted state
+   * and on edits, which cannot be attributed — readers treat a missing value
+   * as unknown, never as "another organisation".
+   */
+  organisationId?: string;
 };
 
 /**

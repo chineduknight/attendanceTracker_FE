@@ -155,6 +155,8 @@ const CreateAttendanceForm = ({
     const payload: currentAttendanceType = {
       name: details.name.trim(),
       date: details.date,
+      // Stamped so the working state can never be marked under another org.
+      organisationId,
       ...(details.categoryId ? { categoryId: details.categoryId } : {}),
       ...(details.subCategoryId
         ? { subCategoryId: details.subCategoryId }
@@ -190,12 +192,15 @@ const CreateAttendanceForm = ({
     });
     if (!confirmed) return;
     discardNewAttendanceDraft(organisationId, draft);
-    // The working state may still be pointing at the discarded draft — and
-    // must keep pointing at anything else that is not that same session.
-    if (
+    // The working state may still be pointing at the discarded draft — but
+    // must keep pointing at anything that is not that same session (another
+    // organisation's working session, or an untagged legacy one).
+    const workingIsThisDraft =
       currentAttendance.name === draft.name &&
-      currentAttendance.date === draft.date
-    ) {
+      currentAttendance.date === draft.date &&
+      (!currentAttendance.organisationId ||
+        currentAttendance.organisationId === organisationId);
+    if (workingIsThisDraft) {
       clearCurrentAttendance();
     }
     setDraft(null);
