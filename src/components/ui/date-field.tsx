@@ -48,6 +48,19 @@ const CLEAR_ICON_CSS = {
   "& .react-datepicker__close-icon:hover::after": { color: "fg" },
 } as const;
 
+// Positioned against the viewport, not the nearest scroll box: in a bottom
+// sheet or dialog body the calendar would otherwise open below the field,
+// be clipped by the sheet's scrolling body and never flip up into the room
+// above. Fixed + viewport boundaries let it flip or shift to stay on screen.
+const POPPER_PROPS = { strategy: "fixed" as const };
+const POPPER_MODIFIERS = [
+  {
+    name: "flip",
+    options: { rootBoundary: "viewport", fallbackPlacements: ["top-start", "bottom-start"] },
+  },
+  { name: "preventOverflow", options: { rootBoundary: "viewport", altAxis: true, padding: 8 } },
+];
+
 export interface DateFieldProps {
   /** "" or YYYY-MM-DD. */
   value: string;
@@ -105,6 +118,8 @@ export const DateField = ({
         minDate={toDate(min)}
         maxDate={toDate(max)}
         dateFormat="MMM d, yyyy"
+        popperProps={POPPER_PROPS}
+        popperModifiers={POPPER_MODIFIERS}
         placeholderText={placeholder}
         isClearable={clearable && !disabled}
         disabled={disabled}
