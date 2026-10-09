@@ -27,6 +27,27 @@ export type currentAttendanceType = {
   members?: Array<any>;
   /** New sessions only; `[]` means everyone is expected. */
   eligibilityRules?: AttendanceEligibilityRule[];
+  /**
+   * The organisation a NEW session's working state belongs to (stamped on
+   * Continue and when a draft is resumed). Absent on legacy persisted state
+   * and on edits, which cannot be attributed — readers treat a missing value
+   * as unknown, never as "another organisation".
+   */
+  organisationId?: string;
+};
+
+/**
+ * The canonical "no attendance in progress" value. Exported so pages can
+ * compare against it instead of rebuilding the object, and so clearing a
+ * finished draft leaves exactly one recognisable empty shape behind.
+ */
+export const EMPTY_CURRENT_ATTENDANCE: currentAttendanceType = {
+  name: "",
+  categoryId: "",
+  subCategoryId: "",
+  date: "",
+  members: [],
+  eligibilityRules: [],
 };
 
 export type UserType = {
@@ -100,6 +121,8 @@ interface GlobalStoreState {
   updateOrganisation: (organisation: OrganisationType) => void;
   currentAttendance: currentAttendanceType;
   updateCurrentAttendance: (attendance: currentAttendanceType) => void;
+  /** Back to EMPTY_CURRENT_ATTENDANCE, e.g. after a draft is finished. */
+  clearCurrentAttendance: () => void;
 }
 
 const globalStore = <F extends Function>(set: F) => ({
@@ -112,14 +135,21 @@ const globalStore = <F extends Function>(set: F) => ({
     set({ organisation });
   },
   currentAttendance: {
-    name: "",
-    categoryId: "",
-    subCategoryId: "",
-    date: "",
+    ...EMPTY_CURRENT_ATTENDANCE,
     members: [],
+    eligibilityRules: [],
   },
   updateCurrentAttendance: (currentAttendance: currentAttendanceType) => {
     set({ currentAttendance });
+  },
+  clearCurrentAttendance: () => {
+    set({
+      currentAttendance: {
+        ...EMPTY_CURRENT_ATTENDANCE,
+        members: [],
+        eligibilityRules: [],
+      },
+    });
   },
 });
 

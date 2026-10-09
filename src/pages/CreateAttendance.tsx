@@ -1,4 +1,4 @@
-import { Box, Flex, Text, Button, Stack } from "@chakra-ui/react";
+import { Box, Flex, Text, Button, Stack, Heading } from "@chakra-ui/react";
 import PageContainer from "components/layout/PageContainer";
 import { ErrorState } from "components/ui/states";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,8 @@ import useGlobalStore, { currentAttendanceType } from "zStore";
 import { queryClient } from "services/api/apiHelper";
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { useConfirm } from "components/ui/confirm-dialog";
+import { formatSessionDate } from "helpers/sessionDate";
 import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
@@ -34,6 +36,13 @@ import {
 } from "helpers/attendanceAvailability";
 import { lowerTerm, withArticle } from "helpers/organisationPresentation";
 import { todayBusinessDate } from "helpers/financeCompliance";
+import {
+  NewAttendanceDraft,
+  discardNewAttendanceDraft,
+  newAttendanceDraftToSession,
+  readNewAttendanceDraft,
+  writeNewAttendanceDraft,
+} from "helpers/newAttendanceDraft";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -53,13 +62,24 @@ const CreateAttendanceForm = ({
 }) => {
   const navigate = useNavigate();
   const terms = useTerms();
+  const session = lowerTerm(terms.attendanceSingular);
   const updateCurrentAttendance = useGlobalStore(
-    (state) => state.updateCurrentAttendance
+    (state) => state.updateCurrentAttendance,
+  );
+  const [currentAttendance, clearCurrentAttendance] = useGlobalStore(
+    (state) => [state.currentAttendance, state.clearCurrentAttendance],
+  );
+  const { confirm, confirmDialog } = useConfirm();
+  // The organisation's unfinished draft, read once per mount: this page only
+  // resolves it (continue or discard), never edits it. The component is keyed
+  // by organisation id, so switching organisations re-reads it.
+  const [draft, setDraft] = useState<NewAttendanceDraft | null>(() =>
+    readNewAttendanceDraft(organisationId),
   );
   // Off, the page behaves as if eligibility did not exist: no editor, no
   // member-field dependency, and every new session expects everyone.
   const eligibilityEnabled = useGlobalStore((state) =>
-    isAttendanceEligibilityEnabled(state.organisation)
+    isAttendanceEligibilityEnabled(state.organisation),
   );
   const {
     categories,
@@ -89,14 +109,14 @@ const CreateAttendanceForm = ({
   const activeRules = eligibilityEnabled ? eligibilityRules : NO_RULES;
   const optionFields = useMemo(
     () => eligibilityFields(memberFields),
-    [memberFields]
+    [memberFields],
   );
   const rawEligibleMembers = useMemo(
     () =>
       eligibilityEnabled
         ? filterEligibleMembers(members, activeRules)
         : members,
-    [activeRules, eligibilityEnabled, members]
+    [activeRules, eligibilityEnabled, members],
   );
   const rawEligibilityCount =
     eligibilityEnabled && membersLoaded ? rawEligibleMembers.length : null;
@@ -108,7 +128,7 @@ const CreateAttendanceForm = ({
       availabilityReady
         ? filterAvailableMembers(rawEligibleMembers, unavailableMemberIds)
         : [],
-    [availabilityReady, rawEligibleMembers, unavailableMemberIds]
+    [availabilityReady, rawEligibleMembers, unavailableMemberIds],
   );
   const finalExpectedCount = availabilityReady
     ? finalExpectedMembers.length
@@ -135,6 +155,8 @@ const CreateAttendanceForm = ({
     const payload: currentAttendanceType = {
       name: details.name.trim(),
       date: details.date,
+      // Stamped so the working state can never be marked under another org.
+      organisationId,
       ...(details.categoryId ? { categoryId: details.categoryId } : {}),
       ...(details.subCategoryId
         ? { subCategoryId: details.subCategoryId }
@@ -142,11 +164,92 @@ const CreateAttendanceForm = ({
       eligibilityRules: normalizeEligibilityRules(activeRules),
     };
     updateCurrentAttendance(payload);
+    // From here on the draft is real: it stays resumable (or discardable)
+    // until a successful create clears it. Just opening this page — or
+    // typing — never writes one.
+    writeNewAttendanceDraft(organisationId, payload);
     queryClient.invalidateQueries({
       queryKey: queryKeys.members(organisationId),
     });
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
+
+  // Restore the saved session exactly as Continue left it; Mark Attendance
+  // reconciles the persisted roster drafts itself.
+  const resumeDraft = () => {
+    if (!draft) return;
+    updateCurrentAttendance(newAttendanceDraftToSession(draft));
+    navigate(PROTECTED_PATHS.MARK_ATTENANCE);
+  };
+
+  const discardDraft = async () => {
+    if (!draft) return;
+    const confirmed = await confirm({
+      title: `Discard unfinished ${session}?`,
+      body: `"${draft.name}" and the marks saved with it will be lost. This can't be undone.`,
+      confirmLabel: "Discard",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    discardNewAttendanceDraft(organisationId, draft);
+    // The working state may still be pointing at the discarded draft — but
+    // must keep pointing at anything that is not that same session (another
+    // organisation's working session, or an untagged legacy one).
+    const workingIsThisDraft =
+      currentAttendance.name === draft.name &&
+      currentAttendance.date === draft.date &&
+      (!currentAttendance.organisationId ||
+        currentAttendance.organisationId === organisationId);
+    if (workingIsThisDraft) {
+      clearCurrentAttendance();
+    }
+    setDraft(null);
+  };
+
+  // An unfinished draft replaces the creation form: it must not be silently
+  // overwritten, so Continue and Discard are the only ways forward.
+  if (draft) {
+    return (
+      <PageContainer width="form">
+        <Stack
+          gap={5}
+          bg="bg.panel"
+          rounded="xl"
+          boxShadow="lg"
+          p={{ base: 4, md: 6 }}
+        >
+          <Box>
+            <Heading fontSize="22px">{`Unfinished ${session}`}</Heading>
+            <Text fontWeight="bold" fontSize="lg" mt={4} lineClamp={2}>
+              {draft.name}
+            </Text>
+            <Text color="fg.muted" mt={1}>
+              {formatSessionDate(draft.date)}
+            </Text>
+          </Box>
+          <Text>
+            {`You started marking this ${session} but haven't submitted it yet.`}
+          </Text>
+          <Stack gap={3}>
+            <Button w="full" size="lg" minH="44px" onClick={resumeDraft}>
+              Continue marking
+            </Button>
+            <Button
+              w="full"
+              size="lg"
+              minH="44px"
+              variant="outline"
+              colorPalette="gray"
+              onClick={discardDraft}
+            >
+              Discard and create new
+            </Button>
+          </Stack>
+        </Stack>
+        {confirmDialog}
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer width="form">
@@ -238,7 +341,7 @@ const CreateAttendanceForm = ({
             {!noEligibleMembers && (
               <Text fontSize="sm" color="fg.muted">
                 {`You can still continue and add ${withArticle(
-                  lowerTerm(terms.memberSingular)
+                  lowerTerm(terms.memberSingular),
                 )} who physically attended.`}
               </Text>
             )}

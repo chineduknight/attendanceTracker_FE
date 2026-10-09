@@ -7,8 +7,15 @@ import { useCallback, useRef, useState } from "react";
  * `commit`, which computes the next roster, renders it and writes that exact
  * array to `storageKey`, so the displayed roster and the persisted draft can
  * never diverge. `commit` runs `update` synchronously and returns its result.
+ *
+ * Pass `{ persist: false }` for an existing attendance's roster: an edit is
+ * abandoned unless it is submitted, so it stays in memory and never reads or
+ * writes a localStorage draft.
  */
-export function usePersistedRoster<T>(storageKey: string) {
+export function usePersistedRoster<T>(
+  storageKey: string,
+  { persist = true }: { persist?: boolean } = {},
+) {
   const [members, setMembers] = useState<T[]>([]);
   const latest = useRef<T[]>(members);
 
@@ -17,10 +24,10 @@ export function usePersistedRoster<T>(storageKey: string) {
       const next = update(latest.current);
       latest.current = next;
       setMembers(next);
-      localStorage.setItem(storageKey, JSON.stringify(next));
+      if (persist) localStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     },
-    [storageKey],
+    [storageKey, persist],
   );
 
   return [members, commit] as const;
