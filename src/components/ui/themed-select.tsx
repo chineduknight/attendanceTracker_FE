@@ -22,16 +22,47 @@ const themedStyles = <Option, IsMulti extends boolean, Group extends GroupBase<O
   placeholder: (base) => ({ ...base, color: token("fg.muted") }),
   singleValue: (base) => ({ ...base, color: token("fg") }),
   input: (base) => ({ ...base, color: token("fg") }),
-  multiValue: (base) => ({ ...base, background: token("bg.muted"), borderRadius: 4 }),
+  multiValue: (base) => ({
+    ...base,
+    background: token("bg.muted"),
+    borderRadius: 4,
+    alignItems: "center",
+  }),
   multiValueLabel: (base) => ({ ...base, color: token("fg"), fontSize: 14 }),
+  // The chip's ✕ is a real button; react-select's default is ~22x27. 44px
+  // square (the chip grows with it) so it can be tapped without hitting the
+  // control behind it.
   multiValueRemove: (base) => ({
     ...base,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
     color: token("fg.muted"),
     "&:hover": { background: token("red.subtle"), color: token("red.fg") },
   }),
   indicatorSeparator: (base) => ({ ...base, background: token("border") }),
-  dropdownIndicator: (base) => ({ ...base, color: token("fg.muted") }),
-  clearIndicator: (base) => ({ ...base, color: token("fg.muted") }),
+  // Clear-all and open-menu: 44px wide and as tall as the 44px control.
+  dropdownIndicator: (base) => ({
+    ...base,
+    minWidth: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "stretch",
+    // Over the control's 1px borders too, so the target is the full 44px.
+    marginBlock: -1,
+    color: token("fg.muted"),
+  }),
+  clearIndicator: (base) => ({
+    ...base,
+    minWidth: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "stretch",
+    // Over the control's 1px borders too, so the target is the full 44px.
+    marginBlock: -1,
+    color: token("fg.muted"),
+  }),
+  indicatorsContainer: (base) => ({ ...base, alignSelf: "stretch" }),
   menu: (base) => ({
     ...base,
     background: token("bg.panel"),

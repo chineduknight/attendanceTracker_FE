@@ -60,7 +60,7 @@ const ManualMemberForm = ({
   return (
     <>
       <Dialog.Header><Dialog.Title>{`Add ${member} to this ${session}`}</Dialog.Title></Dialog.Header>
-      <Dialog.CloseTrigger asChild><CloseButton size="sm" disabled={isSaving} /></Dialog.CloseTrigger>
+      <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" disabled={isSaving} /></Dialog.CloseTrigger>
       <Dialog.Body>
         <Text mb={2}>
           {`Use this only when the ${member} was not expected for this ${session} but physically attended.`}

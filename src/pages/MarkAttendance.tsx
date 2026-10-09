@@ -640,6 +640,7 @@ const MarkAttendanceSession = () => {
               <Button
                 mt="3"
                 size="sm"
+                minH="44px"
                 variant="outline"
                 onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${lowerTerm(terms.memberSingular)} to this ${session}`}</Button>
             )}
@@ -711,6 +712,8 @@ const MarkAttendanceSession = () => {
                       isManual && !isUpdate ? (
                         <Button
                           size="sm"
+                          minH="44px"
+                          minW="44px"
                           variant="ghost"
                           colorPalette="red"
                           aria-label={`Remove ${item.name} from this ${session}`}
@@ -792,7 +795,7 @@ const MarkAttendanceSession = () => {
             <Drawer.Backdrop />
             <Drawer.Positioner>
               <Drawer.Content>
-                <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
+                <Drawer.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Drawer.CloseTrigger>
                 <Drawer.Header><Drawer.Title>{`${terms.attendanceSingular} details`}</Drawer.Title></Drawer.Header>
                 <Drawer.Body>
                   <AttendanceDetailsForm

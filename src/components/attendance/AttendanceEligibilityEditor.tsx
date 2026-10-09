@@ -145,7 +145,7 @@ const AttendanceEligibilityEditor = ({
           </Text>
           {rules.length > 0 && (
             <Flex>
-              <Button size="sm" variant="outline" onClick={() => onChange([])}>
+              <Button size="sm" minH="44px" variant="outline" onClick={() => onChange([])}>
                 Clear eligibility
               </Button>
             </Flex>
