@@ -27,7 +27,8 @@ import {
   FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import PinnedSearchBar from "components/PinnedSearchBar";
@@ -400,15 +401,27 @@ const Attendance = () => {
             {/* Sharing the session just marked is the page's main job, so
                 Share leads as the solid action; Excel export is secondary. */}
             <Flex mt="3" gap={2}>
-              <Button flex="1" onClick={handleSendToWhatsapp}><FaShareAlt />Share
-                              </Button>
+              <Button flex="1" minH="44px" onClick={handleSendToWhatsapp}>
+                <FaShareAlt />
+                Share
+              </Button>
               <Button
                 flex="1"
+                minH="44px"
                 onClick={sendToExcel}
                 loading={isFetching}
                 variant="outline"
-                colorPalette="green"><FaFileExcel />Export to Excel
-                              </Button>
+                colorPalette="green"
+                // "Export to" is dropped on narrow phones so the label fits;
+                // the accessible name stays complete.
+                aria-label="Export to Excel"
+              >
+                <FaFileExcel />
+                <Box as="span" display={{ base: "none", sm: "inline" }}>
+                  Export to
+                </Box>
+                Excel
+              </Button>
             </Flex>
             {attendanceInfo && (
               <ExpectedRosterSummary
@@ -425,6 +438,7 @@ const Attendance = () => {
                 <Button
                   mt="3"
                   size="sm"
+                  minH="44px"
                   variant="outline"
                   disabled={!canChangeRoster}
                   onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${memberTerm} to this ${session}`}</Button>
@@ -442,12 +456,11 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            {/* Side by side even on a phone: each filter takes half the width,
-                so the placeholders stay short while aria-labels keep the
-                full wording. */}
-            <Flex mt="4" gap={2}>
+            {/* Stacked on phones (side by side, each half of 320px showed only
+                "A…"); side by side from sm up. */}
+            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
               <Box flex="1" minW={0}>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
@@ -456,25 +469,19 @@ const Attendance = () => {
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
                   }
                 />
               </Box>
               <Box flex="1" minW={0}>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))
                   }
@@ -518,6 +525,8 @@ const Attendance = () => {
                       <Can perm="attendance.manage">
                         <Button
                           size="sm"
+                          minH="44px"
+                          minW="44px"
                           variant="ghost"
                           colorPalette="red"
                           aria-label={`Remove ${item.member.name} from this ${session}`}
