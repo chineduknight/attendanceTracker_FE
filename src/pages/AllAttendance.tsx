@@ -33,6 +33,8 @@ import {
 
 type PersonRef = { id: string; name: string };
 
+const PAGE_SIZE = 25;
+
 type AttendanceType = AnalyticsInclusionFields & {
   name: string;
   createdAt: string;
@@ -74,6 +76,9 @@ const AllAttendance = () => {
 
   const [inclusionFilter, setInclusionFilter] =
     useState<AnalyticsInclusionFilter>("all");
+  // The API returns every session; render a page at a time so a long history
+  // stays quick to open and scroll (until the backend paginates).
+  const [shownCount, setShownCount] = useState(PAGE_SIZE);
   const visibleAttendance = useMemo(
     () =>
       allAttend
@@ -91,6 +96,19 @@ const AllAttendance = () => {
     [allAttend, inclusionFilter]
   );
 
+  // Month headings over the shown slice, newest first (already sorted).
+  const shownGroups = useMemo(() => {
+    const groups: { month: string; items: AttendanceType[] }[] = [];
+    visibleAttendance.slice(0, shownCount).forEach((attendance) => {
+      const month = formatSessionDate(attendance.date, "MMMM yyyy") || "Undated";
+      const last = groups[groups.length - 1];
+      if (last?.month === month) last.items.push(attendance);
+      else groups.push({ month, items: [attendance] });
+    });
+    return groups;
+  }, [visibleAttendance, shownCount]);
+  const remaining = visibleAttendance.length - shownCount;
+
   function handleNavigate(attendanceInfo) {
     const url = convertParamsToString(PROTECTED_PATHS.ATTENDANCE, {
       id: attendanceInfo.id,
@@ -100,7 +118,15 @@ const AllAttendance = () => {
 
   return (
     <PageContainer>
-      <Stack gap={4} bg="bg.panel" rounded="xl" boxShadow="lg" p={{ base: 4, md: 6 }}>
+      {/* A card from md up; on phones the rows sit straight on the page, so
+          a nested card doesn't eat the width the session names need. */}
+      <Stack
+        gap={4}
+        bg={{ md: "bg.panel" }}
+        rounded={{ md: "xl" }}
+        boxShadow={{ md: "lg" }}
+        p={{ base: 0, md: 6 }}
+      >
         {isLoading ? (
           <PageLoader
             h="30vh"
@@ -119,9 +145,10 @@ const AllAttendance = () => {
               <NativeSelect.Field
                 aria-label="Filter by analytics inclusion"
                 value={inclusionFilter}
-                onChange={(e) =>
-                  setInclusionFilter(e.target.value as AnalyticsInclusionFilter)
-                }>
+                onChange={(e) => {
+                  setInclusionFilter(e.target.value as AnalyticsInclusionFilter);
+                  setShownCount(PAGE_SIZE);
+                }}>
                 <option value="all">All</option>
                 <option value="included">Included in analytics</option>
                 <option value="excluded">Excluded from analytics</option>
@@ -133,91 +160,120 @@ const AllAttendance = () => {
                 title={`No ${lowerTerm(terms.attendanceSingular)} matches this filter.`}
               />
             )}
-            {visibleAttendance.map((attendance) => {
-              const editsRemaining = resolveEditsRemaining(attendance);
-              const editCount = resolveEditCount(attendance);
-              const canEdit = canEditAttendance(attendance);
-              const name = capitalizeFirstLetter(attendance.name);
-              return (
-                <Flex
-                  key={attendance.id}
-                  alignItems="center"
-                  gap={2}
-                  borderWidth="1px"
-                  borderColor="border"
-                  borderRadius="10px"
-                  _hover={{ bg: "bg.muted" }}
+            {shownGroups.map(({ month, items }) => (
+              <Stack key={month} gap={3} as="section" aria-label={month}>
+                <Text
+                  as="h2"
+                  fontSize="sm"
+                  fontWeight="semibold"
+                  color="fg.muted"
+                  textTransform="uppercase"
+                  letterSpacing="wide"
+                  pt={2}
                 >
-                  {/* The row's main area is one real button (keyboard and
-                      screen readers); Edit sits beside it, never inside. */}
-                  <Box
-                    as="button"
-                    onClick={() => handleNavigate(attendance)}
-                    flex="1"
-                    minW={0}
-                    textAlign="left"
-                    p="4"
-                    pe={canEdit ? 0 : 4}
-                    borderRadius="10px"
-                    cursor="pointer"
-                    _focusVisible={{ outline: "2px solid", outlineColor: "colorPalette.focusRing", outlineOffset: "2px" }}
-                    colorPalette="blue"
-                  >
-                    <Flex alignItems="center" gap={2} flexWrap="wrap">
-                      <Text fontWeight="semibold">{name}</Text>
-                      {editCount > 0 && (
-                        <Badge colorPalette="orange" fontSize="0.65rem">
-                          edited {editCount}×
-                        </Badge>
-                      )}
-                      {!isAnalyticsIncluded(attendance) && (
-                        <Badge variant="outline" colorPalette="gray" fontSize="0.65rem">
-                          Excluded from analytics
-                        </Badge>
-                      )}
-                    </Flex>
-                    {(attendance.category?.name || attendance.subCategory?.name) && (
-                      <Flex gap={2} mt={1} flexWrap="wrap">
-                        {attendance.category?.name && (
-                          <Badge colorPalette="purple">{attendance.category.name}</Badge>
-                        )}
-                        {attendance.subCategory?.name && (
-                          <Badge colorPalette="cyan">{attendance.subCategory.name}</Badge>
-                        )}
-                      </Flex>
-                    )}
-                    <Text fontSize="xs" color="fg.muted" mt={1}>
-                      {attendance.createdBy?.name && `by ${attendance.createdBy.name}, `}
-                      {formatSessionDate(attendance.date)},{" "}
-                      {format(new Date(attendance.createdAt), "hh:mm a")}
-                    </Text>
-                  </Box>
-                  {canEdit && (
-                    <Flex alignItems="center" gap={2} pe="4" flexShrink={0}>
-                      <Text fontSize="xs" color="fg.muted">
-                        {editsRemaining} left
-                      </Text>
-                      <IconButton
-                        aria-label={`Edit ${name}`}
-                        variant="outline"
+                  {month}
+                </Text>
+                {items.map((attendance) => {
+                  const editsRemaining = resolveEditsRemaining(attendance);
+                  const editCount = resolveEditCount(attendance);
+                  const canEdit = canEditAttendance(attendance);
+                  const name = capitalizeFirstLetter(attendance.name);
+                  return (
+                    <Flex
+                      key={attendance.id}
+                      alignItems="flex-start"
+                      bg="bg.panel"
+                      borderWidth="1px"
+                      borderColor="border"
+                      borderRadius="10px"
+                      // Hover tint only where there is a real hover: on touch
+                      // screens a tapped row otherwise stays grey.
+                      css={{ "@media (hover: hover)": { "&:hover": { background: "var(--chakra-colors-bg-muted)" } } }}
+                    >
+                      {/* The row's main area is one real button (keyboard and
+                          screen readers); Edit sits beside it, never inside. */}
+                      <Box
+                        as="button"
+                        onClick={() => handleNavigate(attendance)}
+                        flex="1"
+                        minW={0}
+                        textAlign="left"
+                        p="4"
+                        pe={canEdit ? 2 : 4}
+                        borderRadius="10px"
+                        cursor="pointer"
+                        _focusVisible={{ outline: "2px solid", outlineColor: "colorPalette.focusRing", outlineOffset: "2px" }}
                         colorPalette="blue"
-                        minW="44px"
-                        h="44px"
-                        onClick={() =>
-                          navigate(
-                            convertParamsToString(PROTECTED_PATHS.UPDATE_ATTENANCE, {
-                              attendanceId: attendance.id,
-                            }),
-                          )
-                        }
                       >
-                        <FaPencilAlt />
-                      </IconButton>
+                        <Text fontWeight="semibold" lineClamp={2}>
+                          {name}
+                        </Text>
+                        <Flex gap={1.5} mt={1.5} flexWrap="wrap">
+                          {attendance.category?.name && (
+                            <Badge colorPalette="purple">{attendance.category.name}</Badge>
+                          )}
+                          {attendance.subCategory?.name && (
+                            <Badge colorPalette="cyan">{attendance.subCategory.name}</Badge>
+                          )}
+                          {editCount > 0 && (
+                            <Badge colorPalette="orange">edited {editCount}×</Badge>
+                          )}
+                          {!isAnalyticsIncluded(attendance) && (
+                            <Badge variant="outline" colorPalette="gray">
+                              Excluded from analytics
+                            </Badge>
+                          )}
+                        </Flex>
+                        {/* The session's calendar day, then when it was recorded
+                            (sessions have no time of their own yet). */}
+                        <Text fontSize="xs" color="fg.muted" mt={1.5}>
+                          {formatSessionDate(attendance.date)}
+                          {" · recorded "}
+                          {format(new Date(attendance.createdAt), "h:mm a")}
+                          {attendance.createdBy?.name && ` by ${attendance.createdBy.name}`}
+                        </Text>
+                      </Box>
+                      {canEdit && (
+                        <Stack align="center" gap={1} pt="3" pe="3" flexShrink={0}>
+                          <IconButton
+                            aria-label={`Edit ${name}`}
+                            variant="outline"
+                            colorPalette="blue"
+                            minW="44px"
+                            h="44px"
+                            onClick={() =>
+                              navigate(
+                                convertParamsToString(PROTECTED_PATHS.UPDATE_ATTENANCE, {
+                                  attendanceId: attendance.id,
+                                }),
+                              )
+                            }
+                          >
+                            <FaPencilAlt />
+                          </IconButton>
+                          <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
+                            {editsRemaining} left
+                          </Text>
+                        </Stack>
+                      )}
                     </Flex>
-                  )}
-                </Flex>
-              );
-            })}
+                  );
+                })}
+              </Stack>
+            ))}
+            {remaining > 0 && (
+              <Button
+                variant="outline"
+                colorPalette="blue"
+                minH="44px"
+                onClick={() => setShownCount((count) => count + PAGE_SIZE)}
+              >
+                {`Show ${Math.min(remaining, PAGE_SIZE)} more`}
+                <Text as="span" color="fg.muted" fontWeight="normal">
+                  {`(${remaining} left)`}
+                </Text>
+              </Button>
+            )}
           </>
         ) : (
           <EmptyState

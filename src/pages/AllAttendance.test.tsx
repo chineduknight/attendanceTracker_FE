@@ -203,3 +203,54 @@ describe("<AllAttendance> rows, empty and error states", () => {
   });
 });
 
+describe("<AllAttendance> long histories", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    mockGet.mockReset();
+    useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1" } });
+  });
+
+  // 30 sessions: 1–30 Sep (newest first on screen) plus 2 in August.
+  const many = [
+    ...Array.from({ length: 28 }, (_, i) =>
+      ({ ...record(`s${i + 1}`, `Session ${i + 1}`, i + 1), date: `2026-09-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`, dateFormated: 100 + i }),
+    ),
+    { ...record("a1", "August one", 1), date: "2026-08-20T00:00:00.000Z", dateFormated: 50 },
+    { ...record("a2", "August two", 1), date: "2026-08-10T00:00:00.000Z", dateFormated: 40 },
+  ];
+
+  it("shows 25 at a time under month headings, and more on request", async () => {
+    mockGet.mockResolvedValue({ data: { data: many } });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+    await screen.findByText("Session 28");
+
+    expect(screen.getByRole("heading", { name: "September 2026" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "August 2026" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Session \d+/ })).toHaveLength(25);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 more (5 left)" }));
+    expect(screen.getByRole("heading", { name: "August 2026" })).toBeInTheDocument();
+    expect(screen.getByText("August two")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  it("says when a session was recorded and by whom", async () => {
+    mockGet.mockResolvedValue({
+      data: { data: [{ ...RECORDS[0], createdBy: { id: "u1", name: "knight" } }] },
+    });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+    expect(await screen.findByText(/Thu 01 Oct 26 · recorded \d{1,2}:\d{2} [AP]M by knight/)).toBeInTheDocument();
+  });
+
+  it("starts the shown slice again when the filter changes", async () => {
+    mockGet.mockResolvedValue({ data: { data: many } });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+    await screen.findByText("Session 28");
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 more (5 left)" }));
+    const filter = screen.getByLabelText("Filter by analytics inclusion");
+    fireEvent.change(filter, { target: { value: "included" } });
+    fireEvent.change(filter, { target: { value: "all" } });
+    expect(screen.getAllByRole("button", { name: /^(Session \d+|August)/ })).toHaveLength(25);
+  });
+});
+
