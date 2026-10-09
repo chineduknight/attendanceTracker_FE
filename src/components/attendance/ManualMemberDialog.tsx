@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { CloseButton, Button, NativeSelect, Text, Textarea, Field, Dialog, Portal } from "@chakra-ui/react";
-import ReactSelect, { SingleValue } from "react-select";
+import { SingleValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { AttendanceStatusConfig } from "helpers/attendanceStatuses";
 import {
   MANUAL_ADDITION_REASON_MAX,
@@ -59,7 +60,7 @@ const ManualMemberForm = ({
   return (
     <>
       <Dialog.Header><Dialog.Title>{`Add ${member} to this ${session}`}</Dialog.Title></Dialog.Header>
-      <Dialog.CloseTrigger asChild><CloseButton size="sm" disabled={isSaving} /></Dialog.CloseTrigger>
+      <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" disabled={isSaving} /></Dialog.CloseTrigger>
       <Dialog.Body>
         <Text mb={2}>
           {`Use this only when the ${member} was not expected for this ${session} but physically attended.`}
@@ -73,7 +74,7 @@ const ManualMemberForm = ({
           <Field.Label htmlFor="manual-member-select">
             {terms.memberSingular}
           </Field.Label>
-          <ReactSelect
+          <ThemedSelect
             inputId="manual-member-select"
             classNamePrefix="manual-member"
             options={options}
@@ -88,9 +89,6 @@ const ManualMemberForm = ({
                 ? `${terms.memberPlural} could not be loaded.`
                 : `No other ${lowerTerm(terms.memberPlural)} to add`
             }
-            menuPortalTarget={document.body}
-            menuPosition="fixed"
-            styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
           />
         </Field.Root>
         <Field.Root required mb={4}>

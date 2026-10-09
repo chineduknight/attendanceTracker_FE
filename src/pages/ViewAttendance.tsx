@@ -4,9 +4,7 @@ import {
   Text,
   Button,
   Heading,
-  Container,
 } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
 import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -29,10 +27,13 @@ import {
   FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
 import PinnedSearchBar from "components/PinnedSearchBar";
+import PageContainer from "components/layout/PageContainer";
+import { formatSessionDate } from "helpers/sessionDate";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
@@ -252,9 +253,8 @@ const Attendance = () => {
     [filteredMembers, statuses],
   );
 
-  const formattedDate = attendanceInfo?.date
-    ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
-    : "";
+  // The stored calendar day, never shifted by the device timezone.
+  const formattedDate = formatSessionDate(attendanceInfo?.date);
 
   const handleSendToWhatsapp = () => {
     const message = buildAttendanceShareMessage({
@@ -369,11 +369,9 @@ const Attendance = () => {
     });
     if (confirmed) deleteAttendance({ url: deleteUrl });
   };
-  const pageBg = useColorModeValue("gray.50", "gray.800");
 
   return (
-    <Box minH={"100vh"} bg={pageBg}>
-      <Container>
+    <PageContainer>
         {isLoadingAttendance ? (
           <PageLoader
             h="40vh"
@@ -392,26 +390,38 @@ const Attendance = () => {
           <>
             {/* Title first, date beneath it, so a long session name never
                 collides with the date on a narrow screen. */}
-            <Box mt="4">
+            <Box>
               <Heading fontSize="22px" lineClamp={2}>
                 {attendanceInfo?.name}
               </Heading>
-              <Text color="gray.600" mt={1}>
+              <Text color="fg.muted" mt={1}>
                 {formattedDate}
               </Text>
             </Box>
             {/* Sharing the session just marked is the page's main job, so
                 Share leads as the solid action; Excel export is secondary. */}
             <Flex mt="3" gap={2}>
-              <Button flex="1" onClick={handleSendToWhatsapp}><FaShareAlt />Share
-                              </Button>
+              <Button flex="1" minH="44px" onClick={handleSendToWhatsapp}>
+                <FaShareAlt />
+                Share
+              </Button>
               <Button
                 flex="1"
+                minH="44px"
                 onClick={sendToExcel}
                 loading={isFetching}
                 variant="outline"
-                colorPalette="green"><FaFileExcel />Export to Excel
-                              </Button>
+                colorPalette="green"
+                // "Export to" is dropped on narrow phones so the label fits;
+                // the accessible name stays complete.
+                aria-label="Export to Excel"
+              >
+                <FaFileExcel />
+                <Box as="span" display={{ base: "none", sm: "inline" }}>
+                  Export to
+                </Box>
+                Excel
+              </Button>
             </Flex>
             {attendanceInfo && (
               <ExpectedRosterSummary
@@ -428,11 +438,12 @@ const Attendance = () => {
                 <Button
                   mt="3"
                   size="sm"
+                  minH="44px"
                   variant="outline"
                   disabled={!canChangeRoster}
                   onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${memberTerm} to this ${session}`}</Button>
                 {!canChangeRoster && (
-                  <Text fontSize="sm" color="gray.500" mt={1}>
+                  <Text fontSize="sm" color="fg.muted" mt={1}>
                     {`No edits remain for this ${session}.`}
                   </Text>
                 )}
@@ -445,12 +456,11 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            {/* Side by side even on a phone: each filter takes half the width,
-                so the placeholders stay short while aria-labels keep the
-                full wording. */}
-            <Flex mt="4" gap={2}>
+            {/* Stacked on phones (side by side, each half of 320px showed only
+                "A…"); side by side from sm up. */}
+            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
               <Box flex="1" minW={0}>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
@@ -459,25 +469,19 @@ const Attendance = () => {
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
                   }
                 />
               </Box>
               <Box flex="1" minW={0}>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))
                   }
@@ -492,8 +496,6 @@ const Attendance = () => {
               value={searchQuery}
               onChange={setSearchQuery}
               placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-              // Matches this page's background until it moves to PageContainer.
-              bg={pageBg}
             />
             {/* The roster scrolls with the page rather than in a nested box. */}
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
@@ -523,6 +525,8 @@ const Attendance = () => {
                       <Can perm="attendance.manage">
                         <Button
                           size="sm"
+                          minH="44px"
+                          minW="44px"
                           variant="ghost"
                           colorPalette="red"
                           aria-label={`Remove ${item.member.name} from this ${session}`}
@@ -546,15 +550,13 @@ const Attendance = () => {
             <Button
               onClick={handleDelete}
               loading={isDeleting}
-              bg="red.500"
-              color="white"
-              _hover={{ bg: "red.600" }}
+              variant="solid"
+              colorPalette="red"
               w="full"
               mt="4"
               mb="8"><FaTrash />{`Delete ${terms.attendanceSingular}`}</Button>
           </>
         )}
-      </Container>
 
       <ManualMemberDialog
         isOpen={isAddingMember}
@@ -589,7 +591,7 @@ const Attendance = () => {
         onClose={() => !isRemoving && setRemoving(null)}
       />
       {confirmDialog}
-    </Box>
+    </PageContainer>
   );
 };
 

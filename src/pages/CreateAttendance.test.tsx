@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -534,14 +535,16 @@ describe("<CreateAttendance> eligibility", () => {
     fillDetails();
     expect(button("Continue")).toBeDisabled();
     rejectFresh(new Error("availability offline"));
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Attendance availability could not be loaded. Try again before continuing."
-        )
-      ).toBeInTheDocument()
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Attendance availability could not be loaded");
+    expect(alert).toHaveTextContent("Try again before continuing.");
     expect(button("Continue")).toBeDisabled();
+
+    // Try again re-checks availability for the same date.
+    mockGet.mockImplementation(baseGet);
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(button("Continue")).toBeEnabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
 

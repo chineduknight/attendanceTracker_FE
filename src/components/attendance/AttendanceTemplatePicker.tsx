@@ -263,6 +263,7 @@ const AttendanceTemplatePicker = ({
           <>
             <Button
               size="sm"
+              minH="44px"
               variant="outline"
               colorPalette="blue"
               onClick={() => apply(selected)}
@@ -272,6 +273,7 @@ const AttendanceTemplatePicker = ({
             </Button>
             <Button
               size="sm"
+              minH="44px"
               variant="outline"
               onClick={onUpdate}
               disabled={isSaving || selectedNeedsEligibility}
@@ -281,6 +283,7 @@ const AttendanceTemplatePicker = ({
 
             <Button
               size="sm"
+              minH="44px"
               variant="outline"
               colorPalette="red"
               onClick={onDelete}
@@ -292,6 +295,7 @@ const AttendanceTemplatePicker = ({
         )}
         <Button
           size="sm"
+          minH="44px"
           variant="outline"
           onClick={onSaveAsNew}
           disabled={isLoading || isSaving}

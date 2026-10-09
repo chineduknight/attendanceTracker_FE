@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { capitalizeFirstLetter } from "helpers/stringManipulations";
 import { memberFieldLabeler } from "helpers/memberFields";
 import {
@@ -114,7 +115,7 @@ const AttendanceEligibilityEditor = ({
                 <Text fontSize="sm" fontWeight="bold" mb={1}>
                   {label}
                 </Text>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`${
                     repeatedLabels.has(label) ? `${label} (${field.name})` : label
@@ -125,9 +126,6 @@ const AttendanceEligibilityEditor = ({
                     selected.includes(o.value.toLowerCase())
                   )}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(picked: MultiValue<ValueOption>) =>
                     onChange(
                       setRuleValues(
@@ -147,7 +145,7 @@ const AttendanceEligibilityEditor = ({
           </Text>
           {rules.length > 0 && (
             <Flex>
-              <Button size="sm" variant="outline" onClick={() => onChange([])}>
+              <Button size="sm" minH="44px" variant="outline" onClick={() => onChange([])}>
                 Clear eligibility
               </Button>
             </Flex>

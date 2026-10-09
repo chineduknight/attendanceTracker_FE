@@ -75,7 +75,7 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
           <Drawer.Positioner>
             <Drawer.Content>
               {/* Below the status bar/notch in the installed app. */}
-              <Drawer.CloseTrigger asChild top={withSafeInset("top", "0.5rem")}><CloseButton size="sm" /></Drawer.CloseTrigger>
+              <Drawer.CloseTrigger asChild top={withSafeInset("top", "0.5rem")}><CloseButton size="sm" minW="44px" minH="44px" /></Drawer.CloseTrigger>
               {/* Opens from the left: in landscape the notch can sit on that
                   side, so content is inset while the banner stays full bleed. */}
               <Drawer.Body p={0} pb={withSafeInset("bottom")}>

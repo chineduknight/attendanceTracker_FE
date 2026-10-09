@@ -47,7 +47,7 @@ export const ConfirmDialog = ({
             <Dialog.Title>{title}</Dialog.Title>
           </Dialog.Header>
           <Dialog.CloseTrigger asChild>
-            <CloseButton size="sm" />
+            <CloseButton size="sm" minW="44px" minH="44px" />
           </Dialog.CloseTrigger>
           <Dialog.Body>
             {typeof body === "string" ? <Text whiteSpace="pre-line">{body}</Text> : body}

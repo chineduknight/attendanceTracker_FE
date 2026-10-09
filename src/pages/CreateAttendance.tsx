@@ -1,5 +1,6 @@
 import { Box, Flex, Text, Button, Stack } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
+import PageContainer from "components/layout/PageContainer";
+import { ErrorState } from "components/ui/states";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
@@ -81,6 +82,7 @@ const CreateAttendanceForm = ({
     isFetching: availabilityFetching,
     isSuccess: availabilitySuccess,
     isError: availabilityFailed,
+    refetch: refetchAvailability,
   } = useAttendanceAvailabilityForDate(organisationId, details.date);
 
   // Rules entered while eligibility was on never leak into an Everyone session.
@@ -147,148 +149,139 @@ const CreateAttendanceForm = ({
   };
 
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
+    <PageContainer width="form">
       <Can perm="categories.manage">
-        <Flex>
+        <Flex gap={2} flexWrap="wrap" mb={4}>
           <Button
-            mt="4"
-            ml="2"
+            variant="outline"
+            colorPalette="blue"
             onClick={() => navigate(PROTECTED_PATHS.CATEGORY)}
           >
             {`Add ${terms.categorySingular}`}
           </Button>
           <Button
-            mt="4"
-            ml="6"
+            variant="outline"
+            colorPalette="blue"
             onClick={() => navigate(PROTECTED_PATHS.SUB_CATEGORY)}
           >
             {`Add ${terms.subCategorySingular}`}
           </Button>
         </Flex>
       </Can>
-      <Flex
-        align={"center"}
-        justify={"center"}
-        bg={useColorModeValue("gray.50", "gray.800")}
+      <Stack
+        gap={4}
+        bg="bg.panel"
+        rounded="xl"
+        boxShadow="lg"
+        p={{ base: 4, md: 6 }}
       >
-        <Stack
-          gap={4}
-          w={"full"}
-          mt="5rem"
-          maxW={"md"}
-          bg={useColorModeValue("white", "gray.700")}
-          rounded={"xl"}
-          boxShadow={"lg"}
-          p={6}
-        >
-          <AttendanceTemplatePicker
-            organisationId={organisationId}
-            details={details}
-            eligibilityRules={activeRules}
-            eligibilityEnabled={eligibilityEnabled}
-            categories={categories}
-            memberFields={memberFields}
-            setupLoaded={
-              categoriesLoaded && (!eligibilityEnabled || memberModelLoaded)
-            }
-            setupFailed={
-              categoriesFailed || (eligibilityEnabled && memberModelFailed)
-            }
-            onApply={applyTemplate}
+        <AttendanceTemplatePicker
+          organisationId={organisationId}
+          details={details}
+          eligibilityRules={activeRules}
+          eligibilityEnabled={eligibilityEnabled}
+          categories={categories}
+          memberFields={memberFields}
+          setupLoaded={
+            categoriesLoaded && (!eligibilityEnabled || memberModelLoaded)
+          }
+          setupFailed={
+            categoriesFailed || (eligibilityEnabled && memberModelFailed)
+          }
+          onApply={applyTemplate}
+        />
+        <AttendanceDetailsForm
+          value={details}
+          onChange={setDetails}
+          categories={categories}
+        />
+        {details.date && (availabilityLoading || availabilityFetching) && (
+          <Text color="fg.muted">
+            Checking {lowerTerm(terms.attendanceSingular)} availability...
+          </Text>
+        )}
+        {details.date && availabilityFailed && !availabilityFetching && (
+          <ErrorState
+            title={`${terms.attendanceSingular} availability could not be loaded`}
+            description="Try again before continuing."
+            onRetry={() => refetchAvailability()}
           />
-          <AttendanceDetailsForm
-            value={details}
-            onChange={setDetails}
-            categories={categories}
+        )}
+        {validDate && availabilityReady && unavailableExpectedCount > 0 && (
+          <Box borderWidth="1px" borderRadius="md" p={3}>
+            <Text fontWeight="bold">
+              {terms.attendanceSingular} availability
+            </Text>
+            <Text fontSize="sm">
+              {unavailableExpectedCount}{" "}
+              {unavailableExpectedCount === 1
+                ? lowerTerm(terms.memberSingular)
+                : lowerTerm(terms.memberPlural)}{" "}
+              {unavailableExpectedCount === 1 ? "is" : "are"} unavailable on
+              this date.
+            </Text>
+            <Text fontSize="sm">
+              Final expected roster: {finalExpectedCount}{" "}
+              {finalExpectedCount === 1
+                ? lowerTerm(terms.memberSingular)
+                : lowerTerm(terms.memberPlural)}
+              .
+            </Text>
+          </Box>
+        )}
+        {validDate && availabilityReady && finalExpectedCount === 0 && (
+          <Box>
+            <Text color="fg.error">
+              No {lowerTerm(terms.memberPlural)} are available for this{" "}
+              {lowerTerm(terms.attendanceSingular)}.
+            </Text>
+            {!noEligibleMembers && (
+              <Text fontSize="sm" color="fg.muted">
+                {`You can still continue and add ${withArticle(
+                  lowerTerm(terms.memberSingular)
+                )} who physically attended.`}
+              </Text>
+            )}
+          </Box>
+        )}
+        {eligibilityEnabled && (
+          <AttendanceEligibilityEditor
+            fields={optionFields}
+            fieldsStatus={
+              memberModelLoaded
+                ? "ready"
+                : memberModelFailed
+                ? "error"
+                : "loading"
+            }
+            rules={eligibilityRules}
+            onChange={setEligibilityRules}
+            expectedCount={rawEligibilityCount}
+            totalCount={members.length}
           />
-          {details.date && (availabilityLoading || availabilityFetching) && (
-            <Text color="gray.600">
-              Checking {lowerTerm(terms.attendanceSingular)} availability...
-            </Text>
-          )}
-          {details.date && availabilityFailed && (
-            <Text color="red.500">
-              {terms.attendanceSingular} availability could not be loaded. Try
-              again before continuing.
-            </Text>
-          )}
-          {validDate && availabilityReady && unavailableExpectedCount > 0 && (
-            <Box borderWidth="1px" borderRadius="md" p={3}>
-              <Text fontWeight="bold">
-                {terms.attendanceSingular} availability
-              </Text>
-              <Text fontSize="sm">
-                {unavailableExpectedCount}{" "}
-                {unavailableExpectedCount === 1
-                  ? lowerTerm(terms.memberSingular)
-                  : lowerTerm(terms.memberPlural)}{" "}
-                {unavailableExpectedCount === 1 ? "is" : "are"} unavailable on
-                this date.
-              </Text>
-              <Text fontSize="sm">
-                Final expected roster: {finalExpectedCount}{" "}
-                {finalExpectedCount === 1
-                  ? lowerTerm(terms.memberSingular)
-                  : lowerTerm(terms.memberPlural)}
-                .
-              </Text>
-            </Box>
-          )}
-          {validDate && availabilityReady && finalExpectedCount === 0 && (
-            <Box>
-              <Text color="red.500">
-                No {lowerTerm(terms.memberPlural)} are available for this{" "}
-                {lowerTerm(terms.attendanceSingular)}.
-              </Text>
-              {!noEligibleMembers && (
-                <Text fontSize="sm" color="gray.500">
-                  {`You can still continue and add ${withArticle(
-                    lowerTerm(terms.memberSingular)
-                  )} who physically attended.`}
-                </Text>
-              )}
-            </Box>
-          )}
-          {eligibilityEnabled && (
-            <AttendanceEligibilityEditor
-              fields={optionFields}
-              fieldsStatus={
-                memberModelLoaded
-                  ? "ready"
-                  : memberModelFailed
-                  ? "error"
-                  : "loading"
-              }
-              rules={eligibilityRules}
-              onChange={setEligibilityRules}
-              expectedCount={rawEligibilityCount}
-              totalCount={members.length}
-            />
-          )}
+        )}
 
-          <Button
-            w="full"
-            mt="40px"
-            bg={"blue.400"}
-            color={"white"}
-            _hover={{ bg: "blue.500" }}
-            fontWeight="bold"
-            fontSize="15px"
-            disabled={
-              !membersLoaded ||
-              !availabilityReady ||
-              availabilityLoading ||
-              availabilityFetching ||
-              availabilityFailed ||
-              noEligibleMembers
-            }
-            onClick={onContinue}
-          >
-            Continue
-          </Button>
-        </Stack>
-      </Flex>
-    </Box>
+        <Button
+          w="full"
+          mt="6"
+          size="lg"
+          variant="solid"
+          colorPalette="blue"
+          fontWeight="bold"
+          disabled={
+            !membersLoaded ||
+            !availabilityReady ||
+            availabilityLoading ||
+            availabilityFetching ||
+            availabilityFailed ||
+            noEligibleMembers
+          }
+          onClick={onContinue}
+        >
+          Continue
+        </Button>
+      </Stack>
+    </PageContainer>
   );
 };
 

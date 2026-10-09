@@ -78,6 +78,7 @@ const AnalyticsInclusionPanel = ({
         <Can perm="attendance.manage">
           <Button
             size="sm"
+            minH="44px"
             variant="outline"
             onClick={() => setIsConfirming(true)}
             disabled={isSaving}

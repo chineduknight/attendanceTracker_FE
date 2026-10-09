@@ -90,7 +90,7 @@ describe("<AppHeader>", () => {
         <AppHeader title="Category" />
       </MemoryRouter>
     );
-    expect(screen.getByLabelText("Account menu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Account menu"));
     expect(screen.getByText("Change password")).toBeInTheDocument();
   });
@@ -112,7 +112,8 @@ describe("<AppHeader>", () => {
       )
       .map((rule) => rule.cssText)
       .join(" ");
-    for (const side of ["top", "left", "right"]) {
+    expect(headerRules).toContain("calc(0.5rem + env(safe-area-inset-top))");
+    for (const side of ["left", "right"]) {
       expect(headerRules).toContain(`calc(1rem + env(safe-area-inset-${side}))`);
     }
   });
