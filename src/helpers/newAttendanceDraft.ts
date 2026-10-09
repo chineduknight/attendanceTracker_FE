@@ -54,13 +54,13 @@ export const newAttendanceDraftIdentity = (draft: {
 /** The expected-roster draft key for a new session. */
 export const expectedRosterDraftKey = (
   organisationId: string,
-  identity: string
+  identity: string,
 ): string => `attendance-draft-${organisationId}-${identity}`;
 
 /** The manual-additions draft key for a new session. */
 export const manualRosterDraftKey = (
   organisationId: string,
-  identity: string
+  identity: string,
 ): string => `attendance-manual-draft-${organisationId}-${identity}`;
 
 /**
@@ -70,7 +70,7 @@ export const manualRosterDraftKey = (
  * whose eligibility rules have quietly widened to Everyone.
  */
 export const readNewAttendanceDraft = (
-  organisationId: string
+  organisationId: string,
 ): NewAttendanceDraft | null => {
   const stored = localStorage.getItem(metadataKey(organisationId));
   if (!stored) return null;
@@ -115,7 +115,7 @@ export const readNewAttendanceDraft = (
  */
 export const writeNewAttendanceDraft = (
   organisationId: string,
-  session: NewAttendanceDraftSource
+  session: NewAttendanceDraftSource,
 ): void => {
   const draft: NewAttendanceDraft = {
     version: 1,
@@ -140,7 +140,7 @@ export const clearNewAttendanceDraft = (organisationId: string): void => {
  */
 export const discardNewAttendanceDraft = (
   organisationId: string,
-  draft: { date?: string | null; name?: string | null }
+  draft: { date?: string | null; name?: string | null },
 ): void => {
   const identity = newAttendanceDraftIdentity(draft);
   clearNewAttendanceDraft(organisationId);

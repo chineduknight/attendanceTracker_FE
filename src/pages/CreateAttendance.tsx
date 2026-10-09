@@ -64,22 +64,22 @@ const CreateAttendanceForm = ({
   const terms = useTerms();
   const session = lowerTerm(terms.attendanceSingular);
   const updateCurrentAttendance = useGlobalStore(
-    (state) => state.updateCurrentAttendance
+    (state) => state.updateCurrentAttendance,
   );
   const [currentAttendance, clearCurrentAttendance] = useGlobalStore(
-    (state) => [state.currentAttendance, state.clearCurrentAttendance]
+    (state) => [state.currentAttendance, state.clearCurrentAttendance],
   );
   const { confirm, confirmDialog } = useConfirm();
   // The organisation's unfinished draft, read once per mount: this page only
   // resolves it (continue or discard), never edits it. The component is keyed
   // by organisation id, so switching organisations re-reads it.
   const [draft, setDraft] = useState<NewAttendanceDraft | null>(() =>
-    readNewAttendanceDraft(organisationId)
+    readNewAttendanceDraft(organisationId),
   );
   // Off, the page behaves as if eligibility did not exist: no editor, no
   // member-field dependency, and every new session expects everyone.
   const eligibilityEnabled = useGlobalStore((state) =>
-    isAttendanceEligibilityEnabled(state.organisation)
+    isAttendanceEligibilityEnabled(state.organisation),
   );
   const {
     categories,
@@ -109,14 +109,14 @@ const CreateAttendanceForm = ({
   const activeRules = eligibilityEnabled ? eligibilityRules : NO_RULES;
   const optionFields = useMemo(
     () => eligibilityFields(memberFields),
-    [memberFields]
+    [memberFields],
   );
   const rawEligibleMembers = useMemo(
     () =>
       eligibilityEnabled
         ? filterEligibleMembers(members, activeRules)
         : members,
-    [activeRules, eligibilityEnabled, members]
+    [activeRules, eligibilityEnabled, members],
   );
   const rawEligibilityCount =
     eligibilityEnabled && membersLoaded ? rawEligibleMembers.length : null;
@@ -128,7 +128,7 @@ const CreateAttendanceForm = ({
       availabilityReady
         ? filterAvailableMembers(rawEligibleMembers, unavailableMemberIds)
         : [],
-    [availabilityReady, rawEligibleMembers, unavailableMemberIds]
+    [availabilityReady, rawEligibleMembers, unavailableMemberIds],
   );
   const finalExpectedCount = availabilityReady
     ? finalExpectedMembers.length
@@ -341,7 +341,7 @@ const CreateAttendanceForm = ({
             {!noEligibleMembers && (
               <Text fontSize="sm" color="fg.muted">
                 {`You can still continue and add ${withArticle(
-                  lowerTerm(terms.memberSingular)
+                  lowerTerm(terms.memberSingular),
                 )} who physically attended.`}
               </Text>
             )}
