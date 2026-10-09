@@ -586,3 +586,61 @@ describe("<Finance> start dates on phones", () => {
     expect(screen.getByText("1 member selected")).toBeInTheDocument();
   });
 });
+
+describe("<Finance> obligations load failure across tabs", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+  });
+
+  it("shows the load error on Obligations too, never a false empty state, and recovers both tabs", async () => {
+    api.get.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Finance service down" } } }),
+    );
+    renderFinance();
+    expect(await screen.findByText("Couldn't load obligations")).toBeInTheDocument();
+
+    await openTab("Obligations");
+    // The Collect panel animates out; wait until only the Obligations one is left.
+    await waitFor(() => expect(screen.getAllByText("Couldn't load obligations")).toHaveLength(1));
+    expect(within(screen.getByRole("tabpanel")).getByText("Finance service down")).toBeInTheDocument();
+    expect(screen.queryByText("No obligations yet")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New obligation" })).not.toBeInTheDocument();
+
+    serve([duesNow]);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(duesNow.name)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New obligation" })).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
+
+    // Collect reads the same recovered query: no second error, no refetch needed.
+    const calls = api.get.mock.calls.length;
+    await openTab("Collect");
+    expect(await screen.findByText("Ada")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("New obligation")).not.toBeInTheDocument());
+    expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
+    expect(
+      api.get.mock.calls.slice(calls).some(([url]) => /\/obligations$|\/obligations\?/.test(String(url))),
+    ).toBe(false);
+  });
+
+  it("keeps cached obligations on screen when a background refetch fails", async () => {
+    serve([duesNow]);
+    renderFinance();
+    await openTab("Obligations");
+    expect(await screen.findByText(duesNow.name)).toBeInTheDocument();
+
+    api.get.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Finance service down" } } }),
+    );
+    await act(async () => {
+      await queryClient.refetchQueries();
+    });
+
+    expect(screen.getByText(duesNow.name)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
+  });
+});

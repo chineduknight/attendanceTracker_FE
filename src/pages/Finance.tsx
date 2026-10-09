@@ -29,11 +29,12 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
     ? chosenId
     : defaultObligationId(obligations);
 
-  const collect = () => {
+  // Both tabs read the one obligations query. Until it has data, neither
+  // may treat `[]` as "nothing set up": show the loader or the load error
+  // instead. Cached obligations survive a failed background refetch.
+  const obligationsGate = () => {
     if (isLoading) {
-      return (
-        <PageLoader h="30vh" label="Loading obligations..." />
-      );
+      return <PageLoader h="30vh" label="Loading obligations..." />;
     }
     if (loadFailed) {
       return (
@@ -44,6 +45,12 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
         />
       );
     }
+    return null;
+  };
+
+  const collect = () => {
+    const gate = obligationsGate();
+    if (gate) return gate;
     if (!obligations.length) {
       return (
         <EmptyState
@@ -104,6 +111,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
             {collect()}
           </Tabs.Content>
           <Tabs.Content value={String(OBLIGATIONS)} p={0}>
+            {obligationsGate() ?? (
               <ObligationsTab
                 organisationId={organisationId}
                 obligations={obligations}
@@ -112,6 +120,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
                   setTabIndex(COLLECT);
                 }}
               />
+            )}
           </Tabs.Content>
           <Tabs.Content value="2" p={0}>
             <StartDatesTab organisationId={organisationId} />
