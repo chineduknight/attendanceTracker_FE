@@ -68,8 +68,8 @@ describe("terminology in finance and officer copy", () => {
   });
 
   it.each([
-    [DEFAULT_TERMINOLOGY, "No members yet."],
-    [SCHOOL, "No students yet."],
+    [DEFAULT_TERMINOLOGY, "No members yet"],
+    [SCHOOL, "No students yet"],
   ])("uses the member plural in the collect empty state", async (terms, message) => {
     renderWithTerms(
       <CollectTab
