@@ -23,7 +23,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
   const id = field.reactKey;
   const keyLocked = saved || isPinned;
   return (
-    <Stack gap={3} borderWidth="1px" borderRadius="md" p={4}>
+    <Stack gap={3} borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
       <Flex align="center" justify="space-between" gap={2}>
         <Flex align="center" gap={2} minW={0}>
           <Text fontWeight="bold" lineClamp={1}>
@@ -31,18 +31,29 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
           </Text>
           <Badge colorPalette={saved ? "gray" : "green"}>{saved ? "Saved" : "New"}</Badge>
         </Flex>
-        {onRemove ? (
-          <Button size="sm" variant='plain' colorPalette="red" onClick={onRemove}><FaTimesCircle aria-hidden />Remove
-                      </Button>
-        ) : (
-          saved && (
-            <Flex align="center" gap={1} color="gray.500" fontSize="xs">
-              <FaLock aria-hidden />
-              <Text>Saved fields can't be removed yet</Text>
-            </Flex>
-          )
+        {onRemove && (
+          <Button
+            size="sm"
+            variant="plain"
+            colorPalette="red"
+            minH="44px"
+            px={2}
+            me={-2}
+            flexShrink={0}
+            onClick={onRemove}
+          >
+            <FaTimesCircle aria-hidden />
+            Remove
+          </Button>
         )}
       </Flex>
+      {/* Under the header, so it never squeezes the field's name. */}
+      {saved && !onRemove && (
+        <Flex align="center" gap={1} color="fg.muted" fontSize="xs" mt={-1}>
+          <FaLock aria-hidden />
+          <Text>Saved fields can't be removed yet</Text>
+        </Flex>
+      )}
 
       <Field.Root id={`${id}-label`} required invalid={Boolean(errors?.label)}>
         <Field.Label mb="1">Display label</Field.Label>
@@ -60,7 +71,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
           value={field.name}
           placeholder="e.g. voice_part"
           readOnly={keyLocked}
-          bg={keyLocked ? "blackAlpha.50" : undefined}
+          bg={keyLocked ? "bg.muted" : undefined}
           onChange={(e) => onChange({ name: e.target.value, keyEdited: true })}
         />
         {errors?.name ? (
