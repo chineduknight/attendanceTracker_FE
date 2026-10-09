@@ -109,17 +109,9 @@ const readDraft = (storageKey: string): unknown => {
 };
 
 /**
- * A working session needs both a name and a date; either alone is a half
- * draft that must not be marked as if it were a session.
- */
-const hasWorkingSession = (
-  attendance: currentAttendanceType | null | undefined,
-): boolean => Boolean(attendance?.name?.trim() && attendance?.date);
-
-/**
- * Direct /mark-attendance with nothing to mark: no working session and no
- * unfinished draft for this organisation. Send the officer to start one
- * instead of showing an empty "untitled/undated" marking screen.
+ * Direct /mark-attendance with nothing to mark: no unfinished draft for this
+ * organisation. Send the officer to start one instead of showing an empty
+ * "untitled/undated" marking screen.
  */
 const NoUnfinishedSession = () => {
   const navigate = useNavigate();
@@ -149,9 +141,8 @@ const NoUnfinishedSession = () => {
 
 /**
  * Decides what this screen marks, then hands it to the roster: an edit always
- * marks the live stored record; a new session marks the working state, or —
- * when that is empty (a reload or a direct visit) — a draft restored from the
- * organisation's unfinished-draft metadata.
+ * marks the live stored record; a new session is authorized ONLY by the
+ * organisation's explicit unfinished-draft metadata.
  */
 const MarkAttendanceSession = () => {
   const [org, currentAttendance, updateCurrentAttendance] = useGlobalStore(
@@ -161,43 +152,37 @@ const MarkAttendanceSession = () => {
       state.updateCurrentAttendance,
     ],
   );
+  const clearCurrentAttendance = useGlobalStore(
+    (state) => state.clearCurrentAttendance,
+  );
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
-  // The store keeps one working object, so its organisation decides whether it
-  // may be marked here: a session started (or resumed) for another organisation
-  // must never appear under the selected one. Legacy persisted states without
-  // the stamp cannot be attributed, so they keep the old permissive behaviour.
-  const workingBelongsToOrg =
-    hasWorkingSession(currentAttendance) &&
-    (!currentAttendance.organisationId ||
-      currentAttendance.organisationId === org.id);
-  // The new-session working state is fixed at mount: nothing that happens
-  // while marking (e.g. a successful submit clearing the store) may swap the
-  // session under the officer's marks.
-  const [workingSession] = useState<currentAttendanceType | null>(() =>
-    isUpdate || !workingBelongsToOrg ? null : currentAttendance,
-  );
-  // A direct visit or reload whose working store is empty — or holds another
-  // organisation's session — resumes this organisation's unfinished draft, if
-  // it has one. Read once: the metadata is cleared on submit and that must not
-  // resurrect a session from memory.
-  const [resumedSession] = useState<currentAttendanceType | null>(() => {
-    if (isUpdate || workingBelongsToOrg) return null;
+  // A NEW session is authorized only by its explicit per-organisation draft
+  // metadata (written by Continue before navigating): the transient working
+  // state never authorizes marking, so a legacy persisted session — or an
+  // abandoned edit of an existing record — can never become a new attendance.
+  // Read once at mount: the metadata is cleared on submit and that must not
+  // resurrect a session from memory, and marking must not swap sessions.
+  const [newSession] = useState<currentAttendanceType | null>(() => {
+    if (isUpdate) return null;
     const draft = readNewAttendanceDraft(org.id);
     return draft ? newAttendanceDraftToSession(draft) : null;
   });
-  // A resumed draft becomes the working state too, so Submit and the Create
-  // Attendance discard flow both act on the same session.
+  // The draft becomes the working state too (transient convenience for Submit
+  // and the Create Attendance discard flow); a visit with no draft clears any
+  // stale transient session instead, so nothing else can act on it. Neither
+  // runs again while marking: the session above is fixed.
   useEffect(() => {
-    if (resumedSession) updateCurrentAttendance(resumedSession);
-  }, [resumedSession, updateCurrentAttendance]);
+    if (isUpdate) return;
+    if (newSession) updateCurrentAttendance(newSession);
+    else clearCurrentAttendance();
+  }, [isUpdate, newSession, updateCurrentAttendance, clearCurrentAttendance]);
 
   if (isUpdate) {
     return <MarkAttendanceRoster isUpdate session={currentAttendance} />;
   }
-  const session = workingSession ?? resumedSession;
-  if (!session) return <NoUnfinishedSession />;
-  return <MarkAttendanceRoster isUpdate={false} session={session} />;
+  if (!newSession) return <NoUnfinishedSession />;
+  return <MarkAttendanceRoster isUpdate={false} session={newSession} />;
 };
 
 /** The marking roster: expected members, manual additions, quick marks. */

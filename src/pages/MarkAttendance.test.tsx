@@ -121,10 +121,33 @@ const submitAndConfirm = async () => {
   );
 };
 
+/**
+ * The explicit per-organisation draft that now authorizes NEW-mode marking;
+ * Mark Attendance ignores the transient working state without it.
+ */
+const seedNewDraft = (
+  organisationId: string,
+  over: Record<string, unknown> = {},
+) =>
+  localStorage.setItem(
+    `attendance-new-draft-${organisationId}`,
+    JSON.stringify({
+      version: 1,
+      organisationId,
+      name: "Rehearsal",
+      date: "2026-10-01",
+      categoryId: null,
+      subCategoryId: null,
+      eligibilityRules: [],
+      ...over,
+    }),
+  );
+
 describe("<MarkAttendance> with configured statuses", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1");
     useGlobalStore.setState({
       organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES },
       currentAttendance: { name: "Rehearsal", date: "2026-10-01", members: [] },
@@ -311,6 +334,7 @@ describe("<MarkAttendance> quick marking", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1");
     mockPost.mockClear();
     useGlobalStore.setState({
       organisation: {
@@ -564,7 +588,7 @@ describe("<MarkAttendance> quick marking", () => {
       expect(undoButton()).not.toBeInTheDocument();
     });
 
-    it("and the quick-mark mode are reset by an organisation switch", async () => {
+    it("does not follow the session into another organisation, and resumes it fresh on return", async () => {
       await start();
       chooseMode("Present");
       fireEvent.click(
@@ -572,6 +596,7 @@ describe("<MarkAttendance> quick marking", () => {
       );
       expect(undoButton()).toBeInTheDocument();
 
+      // Away: org2 has no draft of its own, so org1's session must not follow.
       act(() => {
         useGlobalStore.setState({
           organisation: {
@@ -579,18 +604,23 @@ describe("<MarkAttendance> quick marking", () => {
             id: "org2",
             attendanceStatuses: QUICK_STATUSES,
           },
-          // The same session continues across the switch; pin it here so a
-          // late callback from an earlier test's update load cannot stand in
-          // for it (a stale record would (correctly) be rejected as org1's).
-          currentAttendance: {
-            name: "Rehearsal",
-            date: "2026-10-01",
-            members: [],
+        });
+      });
+      expect(
+        await screen.findByText("No attendance in progress"),
+      ).toBeInTheDocument();
+
+      // Back: the draft resumes, but with fresh UI state.
+      act(() => {
+        useGlobalStore.setState({
+          organisation: {
+            ...EMPTY_ORG,
+            id: "org1",
+            attendanceStatuses: QUICK_STATUSES,
           },
         });
       });
       await screen.findByText("Bola");
-
       expect(undoButton()).not.toBeInTheDocument();
       expect(
         within(modes()).getByRole("button", { name: "Cycle" }),
@@ -707,6 +737,10 @@ describe("<MarkAttendance> eligibility", () => {
     jest.clearAllMocks();
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1", {
+      name: "Sectional",
+      eligibilityRules: SOP_ALTO_ACTIVE,
+    });
     roster = ELIGIBILITY_ROSTER.map((m) => ({ ...m }));
     useGlobalStore.setState({
       // Stored rosters stay authoritative even after the organisation turns
@@ -758,13 +792,7 @@ describe("<MarkAttendance> eligibility", () => {
         { id: "m1", name: "Ada" },
         { id: "m2", name: "Bea" },
       ];
-      useGlobalStore.setState({
-        currentAttendance: {
-          name: "Sectional",
-          date: "2026-10-01",
-          eligibilityRules: [],
-        },
-      });
+      seedNewDraft("org1", { name: "Sectional", eligibilityRules: [] });
       mockGet.mockImplementation((url: string) => {
         if (url.includes("/members")) {
           return Promise.resolve({ data: { data: roster } });
@@ -798,13 +826,7 @@ describe("<MarkAttendance> eligibility", () => {
         { id: "m1", name: "Ada" },
         { id: "m2", name: "Bea" },
       ];
-      useGlobalStore.setState({
-        currentAttendance: {
-          name: "Sectional",
-          date: "2026-10-01",
-          eligibilityRules: [],
-        },
-      });
+      seedNewDraft("org1", { name: "Sectional", eligibilityRules: [] });
       let refreshPending = false;
       let resolveRefresh!: (value: unknown) => void;
       const refreshAvailability = new Promise((resolve) => {
@@ -853,13 +875,7 @@ describe("<MarkAttendance> eligibility", () => {
         { id: "m1", name: "Ada" },
         { id: "m2", name: "Bea" },
       ];
-      useGlobalStore.setState({
-        currentAttendance: {
-          name: "Sectional",
-          date: "2026-10-01",
-          eligibilityRules: [],
-        },
-      });
+      seedNewDraft("org1", { name: "Sectional", eligibilityRules: [] });
       let refreshPending = false;
       let rejectRefresh!: (error: Error) => void;
       const refreshAvailability = new Promise((_, reject) => {
@@ -1269,6 +1285,7 @@ describe("<MarkAttendance> with custom terminology", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1");
     useGlobalStore.setState({
       organisation: {
         ...EMPTY_ORG,
@@ -1386,6 +1403,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     jest.clearAllMocks();
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1", { eligibilityRules: SOPRANOS });
     unavailable = ["m4"];
     useGlobalStore.setState({
       organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES },
@@ -1947,7 +1965,39 @@ describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
     expect(await screen.findByText("create attendance")).toBeInTheDocument();
   });
 
-  it("never marks a working session that belongs to another organisation", async () => {
+  it("never resumes an untagged legacy working session without draft metadata", async () => {
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Old persisted session",
+        date: "2026-10-01",
+        eligibilityRules: [],
+      },
+    });
+
+    renderAt("/mark");
+
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Old persisted session")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    // Nothing was marked, so nothing was drafted.
+    expect(
+      Object.keys(localStorage).filter((k) =>
+        k.startsWith("attendance-draft-org1"),
+      ),
+    ).toEqual([]);
+    // The stale transient session is cleared, not kept as a phantom draft.
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toEqual(
+        EMPTY_CURRENT_ATTENDANCE,
+      ),
+    );
+  });
+
+  it("never resumes a session stamped for another organisation without draft metadata", async () => {
     useGlobalStore.setState({
       currentAttendance: {
         name: "Foreign Sectional",
@@ -1967,14 +2017,55 @@ describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("resumes the selected organisation's draft instead of a foreign working session", async () => {
-    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
-    useGlobalStore.setState({
-      currentAttendance: {
-        name: "Foreign Sectional",
+  it("never turns an abandoned update of an existing attendance into a new draft", async () => {
+    const { unmount } = renderAt("/mark/att1");
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("Late");
+    // The edit loaded the stored record into the transient working state…
+    expect(useGlobalStore.getState().currentAttendance.organisationId).toBe(
+      "org1",
+    );
+    unmount();
+
+    // …and leaving it must not make /mark-attendance treat it as a draft.
+    renderAt("/mark");
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Last Sunday")).not.toBeInTheDocument();
+    expect(
+      Object.keys(localStorage).filter((k) =>
+        k.startsWith("attendance-draft-org1"),
+      ),
+    ).toEqual([]);
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toEqual(
+        EMPTY_CURRENT_ATTENDANCE,
+      ),
+    );
+  });
+
+  it.each([
+    [
+      "an old untagged session",
+      { name: "Old Session", date: "2026-01-01", eligibilityRules: [] },
+    ],
+    [
+      "a foreign organisation's session",
+      {
+        name: "Foreign Session",
         date: "2026-09-01",
         organisationId: "orgOther",
       },
+    ],
+    [
+      "a previously loaded existing attendance",
+      { name: "Old Sectional", date: "2026-09-01", organisationId: "org1" },
+    ],
+  ])("explicit draft metadata wins over %s", async (_label, transient) => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    useGlobalStore.setState({
+      currentAttendance: transient as never,
     });
 
     renderAt("/mark");
@@ -1983,32 +2074,13 @@ describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
     expect(
       screen.getByRole("heading", { name: "Rehearsal" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Foreign Sectional")).not.toBeInTheDocument();
-    // The resumed draft replaces the foreign session as the working state.
+    // The resumed draft replaces the stale transient session.
     await waitFor(() =>
       expect(useGlobalStore.getState().currentAttendance).toMatchObject({
         name: "Rehearsal",
         organisationId: "org1",
       }),
     );
-  });
-
-  it("still marks a working session stamped with the selected organisation", async () => {
-    useGlobalStore.setState({
-      currentAttendance: {
-        name: "Rehearsal",
-        date: "2026-10-01",
-        organisationId: "org1",
-      },
-    });
-
-    renderAt("/mark");
-    await screen.findByText("Ada");
-
-    expect(
-      screen.getByRole("heading", { name: "Rehearsal" }),
-    ).toBeInTheDocument();
-    expect(statusOf("Ada")).toBe("Absent");
   });
 
   it("keeps an edit in memory: no draft key is written or restored", async () => {
