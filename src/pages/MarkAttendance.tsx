@@ -1,24 +1,16 @@
-import { SAFE_TOP } from "styles/safeArea";
-import { CloseButton,
+import {
+  CloseButton,
   Box,
   Flex,
   Text,
   Button,
-  Input,
   Heading,
-  InputGroup,
-  
-  
   IconButton,
-  Icon,
-  Container,
   Drawer,
   useDisclosure,
   Portal,
 } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
-import { FaSearch, FaPencilAlt, FaUserPlus } from "react-icons/fa";
-import { FiX } from "react-icons/fi";
+import { FaPencilAlt, FaUserPlus } from "react-icons/fa";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -35,6 +27,9 @@ import { useConfirm } from "components/ui/confirm-dialog";
 import _ from "lodash";
 import { toast } from "react-toastify";
 import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import PinnedSearchBar from "components/PinnedSearchBar";
+import { EmptyState, ErrorState } from "components/ui/states";
 import { useCategories } from "hooks/useCategories";
 import AttendanceDetailsForm, {
   AttendanceDetails,
@@ -316,7 +311,13 @@ const MarkAttendanceSession = () => {
     id: params.attendanceId as string,
   });
   // Query for fetching attendance details when updating
-  const { isLoading: isGettingAttendance } = useQueryWrapper(
+  const {
+    isLoading: isGettingAttendance,
+    isFetching: isFetchingAttendance,
+    isError: attendanceLoadErrored,
+    data: storedAttendance,
+    refetch: refetchAttendance,
+  } = useQueryWrapper(
     queryKeys.attendance(org.id, params.attendanceId),
     attendUrl,
     {
@@ -337,6 +338,13 @@ const MarkAttendanceSession = () => {
       !availabilityFetching;
   const rosterFailed =
     !isUpdate && !rosterReady && (membersFailed || availabilityFailed);
+  // An edit whose stored session never loaded: say so rather than showing an
+  // empty roster (Submit is already blocked on an empty roster).
+  const storedLoadFailed = isUpdate && attendanceLoadErrored && !storedAttendance;
+  // Retrying a failed load only refetches. Unlike Refresh in edit mode, it
+  // never discards a draft or reloads the page.
+  const retryRoster = () =>
+    void Promise.all([refetchMembers(), refetchAvailability()]);
 
   // A new session re-reads the roster but keeps its marks (e.g. after the
   // backend rejects a submit because the expected roster changed). An edit
@@ -352,10 +360,6 @@ const MarkAttendanceSession = () => {
     setRosterReady(false);
     void Promise.all([refetchMembers(), refetchAvailability()]);
   };
-
-  const handleSearch = useCallback((e) => {
-    setSearchQuery(e.target.value);
-  }, []);
 
   // A quick-mark mode only ever holds an active status; anything else is Cycle.
   const selectedStatus =
@@ -559,12 +563,9 @@ const MarkAttendanceSession = () => {
     if (confirmed) sendAttandanceToAPI();
   };
 
-  const pageBg = useColorModeValue("gray.50", "gray.800");
-
   return (
-    <Box minH={"100vh"} bg={pageBg}>
-      <Container>
-        <Flex alignItems="center" justifyContent="space-between" mt="4" gap={2}>
+    <PageContainer>
+        <Flex alignItems="center" justifyContent="space-between" gap={2}>
           <Heading fontSize="22px" lineClamp={1}>
             {`${terms.memberPlural} ${currentAttendance.name}`}
           </Heading>
@@ -588,14 +589,27 @@ const MarkAttendanceSession = () => {
             h="45vh"
             label={`Loading ${lowerTerm(terms.memberPlural)}...`}
           />
+        ) : storedLoadFailed ? (
+          <Box mt="8">
+            <ErrorState
+              title={`Couldn't load this ${lowerTerm(terms.attendanceSingular)}`}
+              onRetry={() => refetchAttendance()}
+              retrying={isFetchingAttendance}
+            />
+          </Box>
         ) : rosterFailed ? (
-          <Text mt="6" color="red.500">
-            {availabilityFailed
-              ? `${terms.attendanceSingular} availability could not be loaded. Use Refresh to try again.`
-              : `${terms.memberPlural} could not be loaded. Use Refresh to try again.`}
-          </Text>
+          <Box mt="8">
+            <ErrorState
+              title={
+                availabilityFailed
+                  ? `${terms.attendanceSingular} availability could not be loaded`
+                  : `${terms.memberPlural} could not be loaded`
+              }
+              onRetry={retryRoster}
+            />
+          </Box>
         ) : !isUpdate && (availabilityLoading || availabilityFetching) ? (
-          <Text mt="6" color="gray.600">
+          <Text mt="6" color="fg.muted">
             Checking {lowerTerm(terms.attendanceSingular)} availability...
           </Text>
         ) : (
@@ -638,7 +652,7 @@ const MarkAttendanceSession = () => {
               onUndo={undoBulkChange}
             />
             {filteredMembers.some((member) => manualIds.has(member.id)) && (
-              <Text mt="2" fontSize="sm" color="gray.500">
+              <Text mt="2" fontSize="sm" color="fg.muted">
                 {`${terms.memberPlural} added manually can only be marked with a present status${
                   manualRowsLocked ? ", so tapping them does nothing in this mode" : ""
                 }. Bulk actions to other statuses skip them.`}
@@ -648,47 +662,25 @@ const MarkAttendanceSession = () => {
             {/* Searching is how officers find people on a long roster, often
                 with the keyboard open, so only the search bar stays pinned —
                 anything taller would squeeze the results it is filtering. */}
-            <Box
-              ref={pinnedSearch.barRef}
-              position="sticky"
-              // Pins below the status bar in the installed app (0 elsewhere).
-              top={SAFE_TOP}
-              zIndex="sticky"
-              bg={pageBg}
-              mx={-4}
-              px={4}
-              py={2}
-              mt="2"
-            >
-              <InputGroup
-                startElement={<Icon color="gray.400" asChild><FaSearch /></Icon>}
-                startElementProps={{ pointerEvents: "none" }}
-                endElement={
-                  searchQuery ? (
-                      <IconButton
-                        aria-label="Clear search"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSearchQuery("")}><FiX /></IconButton>
-                  ) : undefined
-                }
-              >
-                <Input
-                  type="text"
-                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-                  value={searchQuery}
-                  onChange={handleSearch}
-                  {...pinnedSearch.inputProps}
-                />
-              </InputGroup>
-            </Box>
+            <PinnedSearchBar
+              pinnedSearch={pinnedSearch}
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+            />
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
               {filteredMembers.length === 0 && (
-                <Box mt="4">
-                  <Text ml="4" fontWeight="bold">
-                    {`No ${lowerTerm(terms.memberSingular)} found`}
-                  </Text>
-                </Box>
+                <EmptyState
+                  title={`No ${lowerTerm(terms.memberSingular)} found`}
+                  description={searchQuery ? `Nothing matches "${searchQuery}".` : undefined}
+                  action={
+                    searchQuery ? (
+                      <Button variant="outline" colorPalette="gray" onClick={() => setSearchQuery("")}>
+                        Clear search
+                      </Button>
+                    ) : undefined
+                  }
+                />
               )}
               {/* The roster scrolls with the page: a nested scroll box left a
                   few rows visible and fought the page for every swipe. */}
@@ -736,7 +728,7 @@ const MarkAttendanceSession = () => {
               px={4}
               pt={3}
               pb="calc(12px + env(safe-area-inset-bottom))"
-              bg={pageBg}
+              bg="bg.subtle"
               borderTopWidth="1px"
             >
               <Button
@@ -762,7 +754,6 @@ const MarkAttendanceSession = () => {
             </Flex>
           </>
         )}
-      </Container>
 
       {!isUpdate && (
         <ManualMemberDialog
@@ -815,7 +806,7 @@ const MarkAttendanceSession = () => {
         </Drawer.Root>
       )}
       {confirmDialog}
-    </Box>
+    </PageContainer>
   );
 };
 

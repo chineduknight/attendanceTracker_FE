@@ -955,12 +955,23 @@ describe("<MarkAttendance> eligibility", () => {
       jest.spyOn(console, "error").mockImplementation(() => undefined);
       mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
       renderAt("/mark");
-      expect(
-        await screen.findByText(
-          "Attendance availability could not be loaded. Use Refresh to try again."
-        )
-      ).toBeInTheDocument();
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Attendance availability could not be loaded");
       expect(screen.queryByText(/Expected roster/)).not.toBeInTheDocument();
+      (console.error as jest.Mock).mockRestore();
+    });
+
+    it("retries a failed roster load in place and keeps the new session", async () => {
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const working = mockGet.getMockImplementation();
+      mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
+      renderAt("/mark");
+      const alert = await screen.findByRole("alert");
+
+      mockGet.mockImplementation(working as (url: string) => Promise<unknown>);
+      fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("Ada")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       (console.error as jest.Mock).mockRestore();
     });
 
@@ -1054,6 +1065,29 @@ describe("<MarkAttendance> eligibility", () => {
       renderAt("/mark/att9");
       await screen.findByText("Ada");
     };
+
+    it("explains a stored session that failed to load and retries without touching the draft", async () => {
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const working = mockGet.getMockImplementation() as (url: string) => Promise<unknown>;
+      mockGet.mockImplementation((url: string) =>
+        url === "/attendance/org1/att9"
+          ? Promise.reject({ response: { status: 500, data: { error: "Server busy" } } })
+          : working(url)
+      );
+      renderAt("/mark/att9");
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Couldn't load this attendance");
+      // No empty roster and no Update button while nothing is loaded.
+      expect(screen.queryByText(/Expected roster/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
+
+      mockGet.mockImplementation(working);
+      fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("Ada")).toBeInTheDocument();
+      expect(rowNames()).toEqual(["Ada", "Bisi", "Dayo"]);
+      (console.error as jest.Mock).mockRestore();
+    });
 
     it("loads the stored roster unchanged, never re-filtering or adding members", async () => {
       await open();
@@ -1235,11 +1269,9 @@ describe("<MarkAttendance> with custom terminology", () => {
     jest.spyOn(console, "error").mockImplementation(() => undefined);
     mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
     renderAt("/mark");
-    expect(
-      await screen.findByText(
-        "Session availability could not be loaded. Use Refresh to try again."
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Session availability could not be loaded"
+    );
     (console.error as jest.Mock).mockRestore();
   });
 
