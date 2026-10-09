@@ -545,3 +545,44 @@ describe("<Finance> creating obligations", () => {
     });
   });
 });
+
+describe("<Finance> start dates on phones", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org1", MANAGER);
+    serve([duesNow]);
+  });
+
+  it("reads a stored ISO start date by its calendar day", async () => {
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation((url: string) =>
+      url.includes("/members")
+        ? Promise.resolve({
+            data: { data: [{ id: "ada", name: "Ada", financialStartDate: `${YEAR}-01-01T00:00:00.000Z` }] },
+          })
+        : base(url),
+    );
+    renderFinance();
+    await openTab("Start dates");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit start date for Ada" }));
+    expect(await screen.findByLabelText("Financial start date")).toHaveValue(`Jan 1, ${YEAR}`);
+    // Unchanged until a different day is picked.
+    expect(screen.getByRole("button", { name: "Update start date" })).toBeDisabled();
+  });
+
+  it("hides the bulk bar while the search has focus, so the keyboard can't hide results", async () => {
+    renderFinance();
+    await openTab("Start dates");
+    await toggle(await screen.findByLabelText("Select Chidi"));
+    expect(screen.getByText("1 member selected")).toBeInTheDocument();
+
+    const search = screen.getByPlaceholderText("Search members");
+    fireEvent.focus(search);
+    expect(screen.queryByText("1 member selected")).not.toBeInTheDocument();
+    fireEvent.blur(search);
+    expect(screen.getByText("1 member selected")).toBeInTheDocument();
+  });
+});

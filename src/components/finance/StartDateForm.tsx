@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Flex, Input, Stack, Field } from "@chakra-ui/react";
+import { Button, Flex, Stack, Field } from "@chakra-ui/react";
+import { DateField } from "components/ui/date-field";
 import { CLEAR_WARNING, formatBusinessDate, REALLOCATION_WARNING } from "helpers/financeCompliance";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
 
@@ -18,9 +19,11 @@ type Pending = { date: string | null };
  * critical finance actions, so both directions are confirmed first.
  */
 const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormProps) => {
-  const [date, setDate] = useState(current ?? "");
+  // The stored value is a business date; read its calendar day only.
+  const currentDay = current?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? "";
+  const [date, setDate] = useState(currentDay);
   const [pending, setPending] = useState<Pending | null>(null);
-  const unchanged = date === (current ?? "");
+  const unchanged = date === currentDay;
 
   const confirmBody = (target: Pending) =>
     target.date
@@ -30,14 +33,8 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
   return (
     <Stack gap={3}>
       <Field.Root>
-        <Field.Label htmlFor="financial-start-date">Financial start date</Field.Label>
-        <Input
-          id="financial-start-date"
-          type="date"
-          size="lg"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <Field.Label>Financial start date</Field.Label>
+        <DateField value={date} onChange={setDate} />
         <Field.HelperText>Dues and levies apply from this month onward.</Field.HelperText>
       </Field.Root>
       <Flex gap={3}>
