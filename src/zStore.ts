@@ -29,6 +29,20 @@ export type currentAttendanceType = {
   eligibilityRules?: AttendanceEligibilityRule[];
 };
 
+/**
+ * The canonical "no attendance in progress" value. Exported so pages can
+ * compare against it instead of rebuilding the object, and so clearing a
+ * finished draft leaves exactly one recognisable empty shape behind.
+ */
+export const EMPTY_CURRENT_ATTENDANCE: currentAttendanceType = {
+  name: "",
+  categoryId: "",
+  subCategoryId: "",
+  date: "",
+  members: [],
+  eligibilityRules: [],
+};
+
 export type UserType = {
   token: string;
   id: string;
@@ -100,6 +114,8 @@ interface GlobalStoreState {
   updateOrganisation: (organisation: OrganisationType) => void;
   currentAttendance: currentAttendanceType;
   updateCurrentAttendance: (attendance: currentAttendanceType) => void;
+  /** Back to EMPTY_CURRENT_ATTENDANCE, e.g. after a draft is finished. */
+  clearCurrentAttendance: () => void;
 }
 
 const globalStore = <F extends Function>(set: F) => ({
@@ -112,14 +128,21 @@ const globalStore = <F extends Function>(set: F) => ({
     set({ organisation });
   },
   currentAttendance: {
-    name: "",
-    categoryId: "",
-    subCategoryId: "",
-    date: "",
+    ...EMPTY_CURRENT_ATTENDANCE,
     members: [],
+    eligibilityRules: [],
   },
   updateCurrentAttendance: (currentAttendance: currentAttendanceType) => {
     set({ currentAttendance });
+  },
+  clearCurrentAttendance: () => {
+    set({
+      currentAttendance: {
+        ...EMPTY_CURRENT_ATTENDANCE,
+        members: [],
+        eligibilityRules: [],
+      },
+    });
   },
 });
 
