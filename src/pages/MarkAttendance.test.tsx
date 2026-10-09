@@ -1089,6 +1089,12 @@ describe("<MarkAttendance> eligibility", () => {
       (console.error as jest.Mock).mockRestore();
     });
 
+    it("titles the page with the session name and its date, without a member prefix", async () => {
+      await open();
+      expect(screen.getByRole("heading", { name: "Old Sectional" })).toBeInTheDocument();
+      expect(screen.getByText("Tue 01 Sep 26")).toBeInTheDocument();
+    });
+
     it("loads the stored roster unchanged, never re-filtering or adding members", async () => {
       await open();
       expect(rowNames()).toEqual(["Ada", "Bisi", "Dayo"]);

@@ -1,9 +1,6 @@
 import { memo, ReactNode } from "react";
 import { Badge, Box, Button, Flex, Text } from "@chakra-ui/react";
-import {
-  AttendanceStatusDefinition,
-  solidColor,
-} from "helpers/attendanceStatuses";
+import { AttendanceStatusDefinition } from "helpers/attendanceStatuses";
 
 interface AttendanceMemberRowProps {
   memberId: string;
@@ -47,9 +44,13 @@ const AttendanceMemberRow = ({
       pl="4"
       pr="2"
       border="1px solid"
-      borderColor={isFilled ? solidColor(status.color) : "green"}
-      bg={isFilled ? solidColor(status.color) : undefined}
-      color={isFilled ? "white" : undefined}
+      // Marked rows fill with the status colour and its theme contrast text
+      // (dark on yellow, white on green), readable in light and dark mode;
+      // untouched rows stay neutral so they never look like a status.
+      colorPalette={isFilled ? status.color : "gray"}
+      borderColor={isFilled ? "colorPalette.solid" : "border.emphasized"}
+      bg={isFilled ? "colorPalette.solid" : "bg.panel"}
+      color={isFilled ? "colorPalette.contrast" : "fg"}
       cursor={onToggle ? "pointer" : "default"}
       unstyled
     >
@@ -66,8 +67,13 @@ const AttendanceMemberRow = ({
           <Badge
             title={status.label}
             colorPalette={isFilled ? status.color : "gray"}
-            variant={isFilled ? "solid" : "subtle"}
-            bg={isFilled ? "whiteAlpha.300" : undefined}
+            variant={isFilled ? "outline" : "subtle"}
+            // On a filled row the badge is outlined in the row's own text
+            // colour, so it reads on every status colour.
+            color={isFilled ? "colorPalette.contrast" : undefined}
+            borderColor={isFilled ? "colorPalette.contrast" : undefined}
+            boxShadow={isFilled ? "none" : undefined}
+            borderWidth={isFilled ? "1px" : undefined}
             fontWeight={isFilled ? "bold" : "medium"}
           >
             {status.label}
@@ -76,7 +82,7 @@ const AttendanceMemberRow = ({
             <Badge
               colorPalette="purple"
               variant="outline"
-              bg={isFilled ? "white" : undefined}
+              bg={isFilled ? "bg.panel" : undefined}
             >
               {MANUAL_BADGE_LABEL}
             </Badge>
@@ -98,7 +104,7 @@ const AttendanceMemberRow = ({
         row
       )}
       {note && (
-        <Text fontSize="xs" color="gray.500" mt={1} px={1}>
+        <Text fontSize="xs" color="fg.muted" mt={1} px={1}>
           {note}
         </Text>
       )}

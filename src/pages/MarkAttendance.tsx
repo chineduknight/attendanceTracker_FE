@@ -28,6 +28,7 @@ import _ from "lodash";
 import { toast } from "react-toastify";
 import PageLoader from "components/PageLoader";
 import PageContainer from "components/layout/PageContainer";
+import { formatSessionDate } from "helpers/sessionDate";
 import PinnedSearchBar from "components/PinnedSearchBar";
 import { EmptyState, ErrorState } from "components/ui/states";
 import { useCategories } from "hooks/useCategories";
@@ -565,10 +566,18 @@ const MarkAttendanceSession = () => {
 
   return (
     <PageContainer>
-        <Flex alignItems="center" justifyContent="space-between" gap={2}>
-          <Heading fontSize="22px" lineClamp={1}>
-            {`${terms.memberPlural} ${currentAttendance.name}`}
-          </Heading>
+        <Flex alignItems="flex-start" justifyContent="space-between" gap={2}>
+          {/* The session name alone (the old "Members …" prefix left only
+              "Choristers…" visible on a phone), with its date beneath. In an
+              edit both follow the details drawer. */}
+          <Box minW={0}>
+            <Heading fontSize="22px" lineClamp={2}>
+              {isUpdate ? details.name : currentAttendance.name}
+            </Heading>
+            <Text color="fg.muted" mt={1}>
+              {formatSessionDate(isUpdate ? details.date : currentAttendance.date)}
+            </Text>
+          </Box>
           <Flex gap={2} alignItems="center" flexShrink={0}>
             {isUpdate && (
               <IconButton
@@ -577,9 +586,11 @@ const MarkAttendanceSession = () => {
                 )} details`}
                 variant="outline"
                 colorPalette="blue"
+                minW="44px"
+                h="44px"
                 onClick={detailsDrawer.onOpen}><FaPencilAlt /></IconButton>
             )}
-            <Button variant="outline" colorPalette="blue" onClick={onRefresh}>
+            <Button variant="outline" colorPalette="blue" minH="44px" onClick={onRefresh}>
               Refresh
             </Button>
           </Flex>
