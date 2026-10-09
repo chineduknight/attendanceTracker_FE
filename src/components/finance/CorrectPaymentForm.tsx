@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Flex, Input, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
+import { Button, Flex, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
+import { AmountInput } from "components/ui/amount-input";
 import { MONTHS, formatMoney } from "helpers/financeConstants";
 import { firstLiableMonth, paidOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
@@ -120,7 +121,7 @@ const CorrectPaymentForm = ({
     <Stack gap={3}>
       {isDues ? (
         <>
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             {`Fill months in order (up to ${formatMoney(amountPerMonth)} each). A month unlocks once the previous one is fully paid; clearing a month reopens the one before it.`}
           </Text>
           <SimpleGrid columns={{ base: 3, sm: 4 }} gap={2}>
@@ -131,27 +132,22 @@ const CorrectPaymentForm = ({
                   <Field.Label htmlFor={`month-${m.value}`} fontSize="sm" mb={1}>
                     {m.label}
                   </Field.Label>
-                  <Input
+                  <AmountInput
                     id={`month-${m.value}`}
                     aria-label={m.label}
-                    type="number"
-                    inputMode="decimal"
-                    size="sm"
-                    min={0}
-                    max={amountPerMonth}
                     disabled={disabled}
                     value={valueOf(m.value)}
-                    onChange={(e) => setMonthValue(m.value, e.target.value)}
+                    onChange={(raw) => setMonthValue(m.value, raw)}
                   />
                 </Field.Root>
               );
             })}
           </SimpleGrid>
           <Flex gap={2}>
-            <Button size="sm" variant="outline" colorPalette="blue" onClick={fillAll}>
+            <Button size="sm" minH="44px" variant="outline" colorPalette="blue" onClick={fillAll}>
               Fill all
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setMonthly({})}>
+            <Button size="sm" minH="44px" variant="outline" onClick={() => setMonthly({})}>
               Clear all
             </Button>
           </Flex>
@@ -159,13 +155,10 @@ const CorrectPaymentForm = ({
       ) : (
         <Field.Root>
           <Field.Label htmlFor="correct-amount-paid">Total amount paid</Field.Label>
-          <Input
+          <AmountInput
             id="correct-amount-paid"
-            type="number"
-            inputMode="decimal"
-            min={0}
             value={amountPaid}
-            onChange={(e) => setAmountPaid(e.target.value)}
+            onChange={setAmountPaid}
           />
         </Field.Root>
       )}

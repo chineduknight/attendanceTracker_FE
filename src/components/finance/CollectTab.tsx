@@ -1,13 +1,9 @@
 import { useMemo, useState } from "react";
-import { useColorModeValue } from "../ui/color-mode";
 import {
   Box,
   Button,
   Flex,
   IconButton,
-  Input,
-  InputGroup,
-  
   Menu,
   Progress,
   NativeSelect,
@@ -15,7 +11,7 @@ import {
   Text,
   Portal,
 } from "@chakra-ui/react";
-import { FaChevronRight, FaEllipsisV, FaFileExcel, FaFilePdf, FaSearch } from "react-icons/fa";
+import { FaChevronRight, FaEllipsisV, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { formatMoney } from "helpers/financeConstants";
 import {
   arrearsOf,
@@ -42,6 +38,9 @@ import FilterChips from "components/finance/FilterChips";
 import MemberPaymentSheet from "components/finance/MemberPaymentSheet";
 import { MonthStrip, StandingBadge } from "components/finance/ComplianceVisuals";
 import PageLoader from "components/PageLoader";
+import PinnedSearchBar from "components/PinnedSearchBar";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import { usePinnedSearch } from "hooks/usePinnedSearch";
 
 interface CollectTabProps {
   organisationId: string;
@@ -82,9 +81,6 @@ const MemberRow = ({
   obligation: Obligation;
   onOpen: () => void;
 }) => {
-  const muted = useColorModeValue("gray.600", "gray.300");
-  const behindColor = useColorModeValue("red.600", "red.300");
-  const hoverBg = useColorModeValue("gray.50", "whiteAlpha.100");
   const amount = amountLine(row);
   return (
     <GroupedListItem p={0}>
@@ -93,7 +89,7 @@ const MemberRow = ({
         textAlign="left"
         px={{ base: 3, md: 5 }}
         py={3}
-        _hover={{ bg: hoverBg }}
+        css={{ "@media (hover: hover)": { "&:hover": { bg: "bg.muted" } } }}
         _focusVisible={{ boxShadow: "outline", outline: "none" }}
         asChild><button type="button" onClick={onOpen}>
           <Flex align="center" gap={3}>
@@ -105,16 +101,16 @@ const MemberRow = ({
                 <StandingBadge row={row} />
               </Flex>
               {isDuesObligation(obligation) && row.accountable && <MonthStrip row={row} />}
-              <Flex justify="space-between" fontSize="sm" color={muted} gap={2}>
+              <Flex justify="space-between" fontSize="sm" color="fg.muted" gap={2}>
                 <Text>{standingLabel(row, obligation)}</Text>
                 {amount && (
-                  <Text fontWeight="medium" color={amount.isOverdue ? behindColor : muted}>
+                  <Text fontWeight="medium" color={amount.isOverdue ? "red.fg" : "fg.muted"}>
                     {amount.text}
                   </Text>
                 )}
               </Flex>
             </Stack>
-            <Box color="gray.400" flexShrink={0} aria-hidden="true" asChild><FaChevronRight /></Box>
+            <Box color="fg.subtle" flexShrink={0} aria-hidden="true" asChild><FaChevronRight /></Box>
           </Flex>
         </button></Box>
     </GroupedListItem>
@@ -132,11 +128,13 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
   const [filter, setFilter] = useState<CollectFilter>("all");
   const [sort, setSort] = useState<CollectSort>("name");
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
-  const { compliance, isLoading, isError } = useCompliance(organisationId, obligationId);
+  const { compliance, isLoading, isError, error, refetch, isRefetching } = useCompliance(
+    organisationId,
+    obligationId,
+  );
+  const pinnedSearch = usePinnedSearch(search);
   const excel = useComplianceExport(organisationId, obligationId, "excel");
   const pdf = useComplianceExport(organisationId, obligationId, "pdf");
-  const cardBg = useColorModeValue("white", "gray.700");
-  const muted = useColorModeValue("gray.600", "gray.300");
 
   const rows = useMemo(() => compliance?.rows ?? [], [compliance]);
   const counts = useMemo(() => filterCounts(rows), [rows]);
@@ -158,7 +156,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
             aria-label="Obligation"
             value={obligationId}
             onChange={(e) => onObligationChange(e.target.value)}
-            bg={cardBg}
+            bg="bg.panel"
             fontWeight="semibold">
             {obligations.map((o) => (
               <option key={o.id} value={o.id}>
@@ -174,20 +172,25 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
           <Menu.Trigger asChild><IconButton
               aria-label="Export"
               variant="outline"
-              bg={cardBg}
+              bg="bg.panel"
+              minW="44px"
+              h="44px"
+              flexShrink={0}
               disabled={!compliance}><FaEllipsisV /></IconButton></Menu.Trigger>
           <Portal><Menu.Positioner><Menu.Content>
                 <Menu.Item
                   onSelect={excel.run}
                   disabled={excel.isExporting}
-                  value='item-0'>
+                  minH="44px"
+                  value="excel">
                   <FaFileExcel />
                   {excel.isExporting ? "Exporting Excel…" : "Export Excel"}
                 </Menu.Item>
                 <Menu.Item
                   onSelect={pdf.run}
                   disabled={pdf.isExporting}
-                  value='item-1'>
+                  minH="44px"
+                  value="pdf">
                   <FaFilePdf />
                   {pdf.isExporting ? "Exporting PDF…" : "Export PDF"}
                 </Menu.Item>
@@ -198,19 +201,26 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
       {isLoading && (
         <PageLoader h="30vh" label="Loading obligation..." />
       )}
-      {isError && <Text color="red.500">Couldn't load this obligation. Please try again.</Text>}
+      {isError && !compliance && (
+        <ErrorState
+          title="Couldn't load this obligation"
+          description={errorMessage(error)}
+          onRetry={() => refetch()}
+          retrying={isRefetching}
+        />
+      )}
 
       {compliance && obligation && (
         <>
-          <Box bg={cardBg} borderWidth="1px" borderRadius="lg" p={4}>
-            <Text fontSize="sm" color={muted}>
+          <Box bg="bg.panel" borderWidth="1px" borderColor="border" borderRadius="lg" p={4}>
+            <Text fontSize="sm" color="fg.muted">
               {obligationTerms(obligation)}
             </Text>
             <Flex align="baseline" justify="space-between" mt={2} gap={2} wrap="wrap">
               <Text fontSize="2xl" fontWeight="bold" lineHeight="short">
                 {formatMoney(compliance.summary.totalCollected)}
               </Text>
-              <Text fontSize="sm" color={muted}>
+              <Text fontSize="sm" color="fg.muted">
                 {`collected · ${formatPct(collectionPct(compliance.summary))}`}
               </Text>
             </Flex>
@@ -225,15 +235,17 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                 <Progress.Range />
               </Progress.Track>
             </Progress.Root>
-            <Flex justify="space-between" fontSize="sm" color={muted} gap={2} wrap="wrap">
+            <Flex justify="space-between" fontSize="sm" color="fg.muted" gap={2} wrap="wrap">
               <Text>{`${formatMoney(compliance.summary.totalOutstanding)} left to collect`}</Text>
               <Text>{`${counts.paid} of ${counts.paid + counts.owing} paid in full`}</Text>
             </Flex>
             {compliance.summary.totalArrears !== undefined && (
               <Button
-                variant='plain'
+                variant="plain"
                 size="sm"
-                mt={2}
+                minH="44px"
+                px={0}
+                mt={1}
                 colorPalette={compliance.summary.totalArrears > 0 ? "red" : "teal"}
                 disabled={!compliance.summary.behindMembers}
                 onClick={() => {
@@ -248,29 +260,44 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
             )}
           </Box>
 
+          {/* Only the search bar pins (see PinnedSearchBar); sort and the
+              filter chips share the row below it. */}
           <Stack gap={2}>
-            <Flex gap={2}>
-              <InputGroup
-                startElement={<FaSearch />}
-                startElementProps={{ pointerEvents: "none", color: "gray.400" }}
-              >
-                <Input
-                  type="search"
-                  placeholder={`Search ${memberPlural}`}
-                  aria-label={`Search ${memberPlural}`}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  bg={cardBg}
+            <PinnedSearchBar
+              pinnedSearch={pinnedSearch}
+              value={search}
+              onChange={setSearch}
+              placeholder={`Search ${memberPlural}`}
+              mt={0}
+            />
+            <Flex gap={2} align="center">
+              <Box flex="1" minW={0}>
+                <FilterChips<CollectFilter>
+                  label="Filter by payment status"
+                  value={filter}
+                  onChange={setFilter}
+                  options={[
+                    { value: "all", label: "All", count: counts.all },
+                    ...(arrearsLens
+                      ? [{ value: "behind" as const, label: "Behind", count: counts.behind }]
+                      : []),
+                    {
+                      value: "owing",
+                      label: arrearsLens ? "Not paid in full" : "Owing",
+                      count: counts.owing,
+                    },
+                    { value: "paid", label: "Paid", count: counts.paid },
+                    { value: "not-set", label: "No start date", count: counts["not-set"] },
+                  ]}
                 />
-              </InputGroup>
-              <NativeSelect.Root>
+              </Box>
+              <NativeSelect.Root w="auto" flexShrink={0}>
                 <NativeSelect.Field
                   aria-label="Sort"
                   value={sort}
                   onChange={(e) => setSort(e.target.value as CollectSort)}
-                  bg={cardBg}
-                  w={{ base: "40%", md: "48" }}
-                  flexShrink={0}>
+                  bg="bg.panel"
+                  maxW={{ base: "9rem", md: "48" }}>
                   {sortOptions.map((key) => (
                     <option key={key} value={key}>
                       {COLLECT_SORT_LABELS[key]}
@@ -280,58 +307,44 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                 <NativeSelect.Indicator />
               </NativeSelect.Root>
             </Flex>
-            <FilterChips<CollectFilter>
-              label="Filter by payment status"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: "All", count: counts.all },
-                ...(arrearsLens
-                  ? [{ value: "behind" as const, label: "Behind", count: counts.behind }]
-                  : []),
-                {
-                  value: "owing",
-                  label: arrearsLens ? "Not paid in full" : "Owing",
-                  count: counts.owing,
-                },
-                { value: "paid", label: "Paid", count: counts.paid },
-                { value: "not-set", label: "No start date", count: counts["not-set"] },
-              ]}
-            />
           </Stack>
 
-          {shown.length === 0 ? (
-            <Stack align="center" py={8} gap={3} textAlign="center">
-              <Text color={muted}>
-                {rows.length === 0
-                  ? `No ${memberPlural} yet.`
-                  : `No ${memberPlural} match your search or filter.`}
-              </Text>
-              {(search || filter !== "all") && rows.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSearch("");
-                    setFilter("all");
-                  }}
-                >
-                  Show everyone
-                </Button>
-              )}
-            </Stack>
-          ) : (
-            <GroupedList>
-              {shown.map((row) => (
-                <MemberRow
-                  key={row.memberId}
-                  row={row}
-                  obligation={obligation}
-                  onOpen={() => setOpenMemberId(row.memberId)}
-                />
-              ))}
-            </GroupedList>
-          )}
+          <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
+            {shown.length === 0 ? (
+              <EmptyState
+                title={
+                  rows.length === 0
+                    ? `No ${memberPlural} yet`
+                    : `No ${memberPlural} match your search or filter`
+                }
+                action={
+                  (search || filter !== "all") &&
+                  rows.length > 0 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSearch("");
+                        setFilter("all");
+                      }}
+                    >
+                      Show everyone
+                    </Button>
+                  )
+                }
+              />
+            ) : (
+              <GroupedList>
+                {shown.map((row) => (
+                  <MemberRow
+                    key={row.memberId}
+                    row={row}
+                    obligation={obligation}
+                    onOpen={() => setOpenMemberId(row.memberId)}
+                  />
+                ))}
+              </GroupedList>
+            )}
+          </Box>
         </>
       )}
 

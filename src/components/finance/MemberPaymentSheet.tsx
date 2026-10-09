@@ -28,7 +28,7 @@ interface MemberPaymentSheetProps {
 
 const Figure = ({ label, value }: { label: string; value: string }) => (
   <Box>
-    <Text fontSize="xs" color="gray.500">
+    <Text fontSize="xs" color="fg.muted">
       {label}
     </Text>
     <Text fontWeight="bold">{value}</Text>
@@ -88,7 +88,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
         </SimpleGrid>
         {isDuesObligation(obligation) && mode === "record" && <MonthGrid row={row} />}
         {!isLiable(row) && (
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             Their financial start date is after this levy's date, so they don't owe it.
           </Text>
         )}
@@ -106,11 +106,11 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
                     onRecord={payments.record}
                   />
                 ) : (
-                  <Text fontSize="sm" color="gray.500">
+                  <Text fontSize="sm" color="fg.muted">
                     Nothing left to pay on this obligation.
                   </Text>
                 )}
-                <Button variant='plain' size="sm" alignSelf="center" onClick={() => setMode("correct")}>
+                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={() => setMode("correct")}>
                   Made a mistake? Correct the record
                 </Button>
               </>
@@ -124,7 +124,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
                   onCorrectDues={payments.correctDues}
                   onCorrectLevy={payments.correctLevy}
                 />
-                <Button variant='plain' size="sm" alignSelf="center" onClick={() => setMode("record")}>
+                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={() => setMode("record")}>
                   Back to record payment
                 </Button>
               </>

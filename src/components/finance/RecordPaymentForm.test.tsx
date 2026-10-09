@@ -25,7 +25,7 @@ const setup = () => {
 test("a quick amount fills the field and previews where it lands", () => {
   const { onRecord, input } = setup();
   fireEvent.click(screen.getByRole("button", { name: /3 months/ }));
-  expect(input).toHaveValue(1500);
+  expect(input).toHaveValue("1,500");
   expect(screen.getByText("Fills from Apr onwards — 3 months' worth.")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: /^Record/ }));

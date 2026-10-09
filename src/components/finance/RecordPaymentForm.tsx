@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
-import { Button, Flex, Input, InputGroup,  Stack, Field } from "@chakra-ui/react";
+import { Button, Flex, InputGroup, Stack, Field } from "@chakra-ui/react";
+import { AmountInput } from "components/ui/amount-input";
 import { FaMoneyBillWave } from "react-icons/fa";
 import { formatMoney } from "helpers/financeConstants";
 import {
@@ -39,15 +40,12 @@ const RecordPaymentForm = ({ obligation, row, isSaving, onRecord }: RecordPaymen
         <Field.Root invalid={overBalance}>
           <Field.Label htmlFor="record-amount">Amount received</Field.Label>
           <InputGroup startAddon="₦" startAddonProps={{ fontSize: "lg" }}>
-            <Input
+            <AmountInput
               size="lg"
               id="record-amount"
-              type="number"
-              inputMode="decimal"
-              min={0}
               placeholder="0"
               value={raw}
-              onChange={(e) => setRaw(e.target.value)}
+              onChange={setRaw}
             />
           </InputGroup>
           {overBalance ? (
@@ -62,6 +60,7 @@ const RecordPaymentForm = ({ obligation, row, isSaving, onRecord }: RecordPaymen
             <Button
               key={option.label}
               size="sm"
+              minH="44px"
               variant="outline"
               borderRadius="full"
               onClick={() => setRaw(String(option.amount))}

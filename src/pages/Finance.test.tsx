@@ -3,7 +3,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
-import { toggle } from "test-utils/render";
+import { generatedCss, toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
@@ -413,7 +413,7 @@ describe("arrears lens", () => {
     renderFinance();
     fireEvent.click(await memberRow("Ada"));
     fireEvent.click(await screen.findByRole("button", { name: /Clear arrears/ }));
-    expect(screen.getByLabelText("Amount received")).toHaveValue(500);
+    expect(screen.getByLabelText("Amount received")).toHaveValue("500");
   });
 
   it("hides the Behind chip and sort for a backend without arrears", async () => {
@@ -462,5 +462,41 @@ describe("organisation switching", () => {
     await openTab("Start dates");
     expect(await screen.findByLabelText("Select Chidi")).not.toBeChecked();
     expect(screen.queryByText(/members? selected$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("<Finance> load errors and phone targets", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+  });
+
+  it("says obligations failed to load (not 'nothing to collect') and retries", async () => {
+    api.get.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Finance service down" } } }),
+    );
+    renderFinance();
+    expect(await screen.findByText("Couldn't load obligations")).toBeInTheDocument();
+    expect(screen.getByText("Finance service down")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing to collect yet")).not.toBeInTheDocument();
+
+    serve([duesNow]);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Ada")).toBeInTheDocument();
+  });
+
+  it("gives the export menu and the tabs a 44px tap target", async () => {
+    serve([duesNow]);
+    renderFinance();
+    await screen.findByText("Ada");
+    for (const element of [
+      screen.getByRole("button", { name: "Export" }),
+      screen.getByRole("tab", { name: "Collect" }),
+    ]) {
+      expect(generatedCss(element)).toMatch(/min-height:\s*44px|height:\s*44px/);
+    }
   });
 });
