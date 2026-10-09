@@ -644,3 +644,40 @@ describe("<Finance> obligations load failure across tabs", () => {
     expect(screen.queryByText("Couldn't load obligations")).not.toBeInTheDocument();
   });
 });
+
+describe("<Finance> pinned search", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    complianceRows = ROWS;
+    complianceSummary = SUMMARY;
+    setOrg("org-a", MANAGER);
+    serve([duesNow]);
+  });
+
+  /** The sticky search bar wrapping this input. */
+  const stickyBarOf = (input: HTMLElement) => {
+    let element: HTMLElement | null = input;
+    while (element && !/position:\s*sticky/.test(generatedCss(element))) {
+      // The DOM tree is the behaviour here: a sticky bar is bounded by its parent.
+      // eslint-disable-next-line testing-library/no-node-access
+      element = element.parentElement;
+    }
+    return element;
+  };
+
+  it.each(["Collect", "Start dates"])(
+    "%s: the search bar's parent spans the list, so it stays pinned while scrolling",
+    async (tab) => {
+      renderFinance();
+      if (tab !== "Collect") await openTab(tab);
+      const row = await screen.findByText("Ada");
+      const bar = stickyBarOf(screen.getByPlaceholderText("Search members"));
+      expect(bar).not.toBeNull();
+      // A sticky element can't leave its parent: if the parent ends above
+      // the list, the bar scrolls away with it.
+      // eslint-disable-next-line testing-library/no-node-access
+      expect(bar!.parentElement).toContainElement(row);
+    },
+  );
+});

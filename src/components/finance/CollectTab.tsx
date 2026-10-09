@@ -261,53 +261,54 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
           </Box>
 
           {/* Only the search bar pins (see PinnedSearchBar); sort and the
-              filter chips share the row below it. */}
-          <Stack gap={2}>
-            <PinnedSearchBar
-              pinnedSearch={pinnedSearch}
-              value={search}
-              onChange={setSearch}
-              placeholder={`Search ${memberPlural}`}
-              mt={0}
-            />
-            <Flex gap={2} align="center">
-              <Box flex="1" minW={0}>
-                <FilterChips<CollectFilter>
-                  label="Filter by payment status"
-                  value={filter}
-                  onChange={setFilter}
-                  options={[
-                    { value: "all", label: "All", count: counts.all },
-                    ...(arrearsLens
-                      ? [{ value: "behind" as const, label: "Behind", count: counts.behind }]
-                      : []),
-                    {
-                      value: "owing",
-                      label: arrearsLens ? "Not paid in full" : "Owing",
-                      count: counts.owing,
-                    },
-                    { value: "paid", label: "Paid", count: counts.paid },
-                    { value: "not-set", label: "No start date", count: counts["not-set"] },
-                  ]}
-                />
-              </Box>
-              <NativeSelect.Root w="auto" flexShrink={0}>
-                <NativeSelect.Field
-                  aria-label="Sort"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as CollectSort)}
-                  bg="bg.panel"
-                  maxW={{ base: "9rem", md: "48" }}>
-                  {sortOptions.map((key) => (
-                    <option key={key} value={key}>
-                      {COLLECT_SORT_LABELS[key]}
-                    </option>
-                  ))}
-                </NativeSelect.Field>
-                <NativeSelect.Indicator />
-              </NativeSelect.Root>
-            </Flex>
-          </Stack>
+              filter chips share the row below it. The bar must be a direct
+              child of the tab's Stack: a sticky element cannot leave its
+              parent, so inside a small wrapper it scrolled away with it. */}
+          <PinnedSearchBar
+            pinnedSearch={pinnedSearch}
+            value={search}
+            onChange={setSearch}
+            placeholder={`Search ${memberPlural}`}
+            mt={0}
+            mb={-2}
+          />
+          <Flex gap={2} align="center">
+            <Box flex="1" minW={0}>
+              <FilterChips<CollectFilter>
+                label="Filter by payment status"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "all", label: "All", count: counts.all },
+                  ...(arrearsLens
+                    ? [{ value: "behind" as const, label: "Behind", count: counts.behind }]
+                    : []),
+                  {
+                    value: "owing",
+                    label: arrearsLens ? "Not paid in full" : "Owing",
+                    count: counts.owing,
+                  },
+                  { value: "paid", label: "Paid", count: counts.paid },
+                  { value: "not-set", label: "No start date", count: counts["not-set"] },
+                ]}
+              />
+            </Box>
+            <NativeSelect.Root w="auto" flexShrink={0}>
+              <NativeSelect.Field
+                aria-label="Sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as CollectSort)}
+                bg="bg.panel"
+                maxW={{ base: "9rem", md: "48" }}>
+                {sortOptions.map((key) => (
+                  <option key={key} value={key}>
+                    {COLLECT_SORT_LABELS[key]}
+                  </option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </Flex>
 
           <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
             {shown.length === 0 ? (
