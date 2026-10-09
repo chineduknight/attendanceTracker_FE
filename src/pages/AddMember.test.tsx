@@ -8,6 +8,7 @@ import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import AddMember from "pages/AddMember";
 import { PROTECTED_PATHS } from "routes/pagePath";
+import { queryKeys } from "services/api/queryKeys";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { toggle, confirmInDialog } from "test-utils/render";
 
@@ -323,6 +324,65 @@ describe("<AddMember> loading, dates and errors", () => {
     pending.forEach((respond) => respond());
     await refetching;
     expect(screen.getByLabelText(/Full Name/)).toHaveValue("Ada Lovelace");
+  });
+
+  it("seeds from the fresh member response, not a stale cached copy", async () => {
+    queryClient.setQueryData(queryKeys.memberModel("org1"), { data: MODEL });
+    queryClient.setQueryData(queryKeys.member("org1", "m1"), {
+      data: { id: "m1", name: "Old Ada", part: "Alto" },
+    });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: {
+          data: url.endsWith("/model") ? MODEL : { id: "m1", name: "Fresh Ada", part: "Soprano" },
+        },
+      }),
+    );
+    renderAt("/member/update/m1");
+
+    await waitFor(() => expect(screen.getByLabelText(/Full Name/)).toHaveValue("Fresh Ada"));
+    expect(screen.getByLabelText("Voice Part")).toHaveValue("Soprano");
+    const [, body] = await confirmSubmit();
+    expect(body).toMatchObject({ name: "Fresh Ada", part: "Soprano" });
+  });
+
+  it("won't edit a cached copy when the fresh request fails; Try again seeds the fresh one", async () => {
+    queryClient.setQueryData(queryKeys.memberModel("org1"), { data: MODEL });
+    queryClient.setQueryData(queryKeys.member("org1", "m1"), {
+      data: { id: "m1", name: "Old Ada", part: "Alto" },
+    });
+    mockGet.mockImplementation((url: string) =>
+      url.endsWith("/model")
+        ? Promise.resolve({ data: { data: MODEL } })
+        : Promise.reject({ response: { status: 500, data: { error: "Member service down" } } }),
+    );
+    renderAt("/member/update/m1");
+
+    expect(await screen.findByText("Couldn't load this member")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Old Ada")).not.toBeInTheDocument();
+
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: {
+          data: url.endsWith("/model") ? MODEL : { id: "m1", name: "Fresh Ada", part: "Soprano" },
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByLabelText(/Full Name/)).toHaveValue("Fresh Ada"));
+  });
+
+  it("refreshes the member's own cache after an update", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? MODEL : ADA } }),
+    );
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+    renderAt("/member/update/m1");
+    await waitFor(() => expect(screen.getByLabelText(/Full Name/)).toHaveValue("Ada"));
+    await confirmSubmit();
+    await screen.findByText("members list");
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.member("org1", "m1") });
+    invalidate.mockRestore();
   });
 
   it("shows a stored date in the date picker and submits it as YYYY-MM-DD", async () => {

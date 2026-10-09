@@ -16,7 +16,7 @@ import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
 import { Controller, useForm } from "react-hook-form";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
 import { useConfirm } from "components/ui/confirm-dialog";
@@ -59,25 +59,35 @@ const AddOrUpdateMember = () => {
   const memberQuery = useQueryWrapper(queryKeys.member(org.id, params.memberId), memberURL, {
     enabled: Boolean(org.id && params.memberId),
   });
-  const currentMember: MemberData = isUpdating ? memberQuery.data?.data ?? {} : {};
   const model = useMemberModel(org.id);
   const membersModel = model.fields as MemberModelField[];
 
   const { register, control, handleSubmit, reset } = useForm<FormData>();
-  // Seed the form once per member. A background refetch (e.g. returning to
-  // the app) must not reset what the officer has typed since.
-  const seededFor = useRef<string | null>(null);
+  // Seed the form once per member, from the first response fetched after
+  // this page opened. A cached copy (served first, then refetched) may
+  // predate the officer's last save; editing it would write old values back.
+  // Once seeded, background refetches (e.g. returning to the app) never
+  // reset what the officer has typed since.
+  const [seed, setSeed] = useState<{ memberId: string; values: FormData } | null>(null);
+  const seededFor = seed?.memberId ?? null;
+  // Inputs mount once seeded, so their defaults are the seeded snapshot,
+  // never a later refetch.
+  const currentMember: FormData = isUpdating && seed ? seed.values : {};
+  const freshMember =
+    memberQuery.isFetchedAfterMount && !memberQuery.isError
+      ? (memberQuery.data?.data as MemberData | undefined)
+      : undefined;
   useEffect(() => {
-    const member = memberQuery.data?.data as MemberData | undefined;
     if (!params.memberId) {
       // Update -> Add reuses this page: drop the previous member's values.
-      if (seededFor.current !== null) reset({});
-      seededFor.current = null;
+      if (seededFor !== null) {
+        reset({});
+        setSeed(null);
+      }
       return;
     }
-    if (!member || !model.hasData) return;
-    if (seededFor.current === params.memberId) return;
-    seededFor.current = params.memberId;
+    if (!freshMember || !model.hasData || seededFor === params.memberId) return;
+    const member = freshMember;
     const values = { ...member } as FormData;
     membersModel
       .filter((field) => field.type === "date")
@@ -85,7 +95,8 @@ const AddOrUpdateMember = () => {
         values[field.name] = dateValue(member[field.name]);
       });
     reset(values);
-  }, [memberQuery.data, params.memberId, model.hasData, membersModel, reset]);
+    setSeed({ memberId: params.memberId, values });
+  }, [freshMember, params.memberId, model.hasData, membersModel, reset, seededFor]);
 
   const onSuccess = () => {
     toast.success(
@@ -94,6 +105,11 @@ const AddOrUpdateMember = () => {
         : `${terms.memberSingular} added successfully`,
     );
     queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
+    // ["member", org, id] is not under ["members", org]: refresh it too, so
+    // reopening this member never starts from the pre-save copy.
+    if (params.memberId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
+    }
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
   };
 
@@ -122,6 +138,7 @@ const AddOrUpdateMember = () => {
     () => {
       toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
+      queryClient.removeQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
@@ -247,10 +264,12 @@ const AddOrUpdateMember = () => {
   };
 
   const memberLabel = lowerTerm(terms.memberSingular);
-  // Only the first load shows the loader: a background refetch keeps the
-  // form (and the officer's edits) on screen.
-  const memberLoading = isUpdating && memberQuery.isLoading;
-  const memberFailed = isUpdating && memberQuery.isError && !memberQuery.data;
+  // Until the form is seeded from a fresh response: an error (even with a
+  // cached copy, which may be out of date) or the loader. After that, a
+  // background refetch, failed or not, keeps the form and the officer's edits.
+  const seeded = seededFor === params.memberId;
+  const memberFailed = isUpdating && !seeded && memberQuery.isError;
+  const memberLoading = isUpdating && !seeded && !memberFailed;
   const modelFailed = model.isError && !model.hasData;
 
   const body = () => {
