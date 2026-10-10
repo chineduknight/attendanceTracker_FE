@@ -65,6 +65,8 @@ export const useBirthdays = (
     isFetching,
     isError,
     isSuccess,
+    error,
+    refetch,
   } = useQueryWrapper(
     queryKeys.birthday.list(organisationId, fromDate, toDate, statusesParam),
     url,
@@ -78,5 +80,5 @@ export const useBirthdays = (
   );
 
   const members: BirthdayMember[] = response?.data?.members ?? NO_MEMBERS;
-  return { members, isLoading, isFetching, isError, isSuccess };
+  return { members, isLoading, isFetching, isError, isSuccess, error, refetch };
 };

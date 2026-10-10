@@ -30,7 +30,7 @@ const DateRangeControls: React.FC<DateRangeControlsProps> = ({
           const isActive = activePreset === preset.label;
           return (
             <Button
-              key={preset.label} size="sm"
+              key={preset.label} size="sm" minH="44px"
               variant={isActive ? "solid" : "outline"} colorPalette="blue"
               aria-pressed={isActive} onClick={() => applyPreset(preset)}
             >

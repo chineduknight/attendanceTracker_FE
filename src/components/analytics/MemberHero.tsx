@@ -26,7 +26,9 @@ const MemberHero: React.FC<MemberHeroProps> = ({ name, fields }) => {
   return (
     <Flex
       align="center" gap={4} borderRadius="14px" p={5} color="white"
-      bgGradient="linear(135deg, purple.500, blue.500, cyan.400)"
+      // v3 gradient props: v2's bgGradient="linear(...)" string is silently
+      // ignored, which left white text on the page background.
+      bgGradient="to-br" gradientFrom="purple.500" gradientVia="blue.500" gradientTo="cyan.400"
       boxShadow="0 8px 20px rgba(59,130,246,.35)"
     >
       <Flex

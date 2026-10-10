@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { chooseMenuItem, render } from "test-utils/render";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { addDays, addMonths, endOfMonth, format, startOfMonth } from "date-fns";
+import { addDays, addMonths, endOfMonth, format, parseISO, startOfMonth } from "date-fns";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -24,6 +24,7 @@ const mockGet: jest.Mock = mockedAxios.get;
 
 const TODAY = format(new Date(), "yyyy-MM-dd");
 const dayOffset = (offset: number) => format(addDays(new Date(), offset), "yyyy-MM-dd");
+const shown = (businessDate: string) => format(parseISO(businessDate), "MMM d, yyyy");
 const displayAt = (offset: number) => format(addDays(new Date(), offset), "EEE, d MMM");
 const NEXT7_END = dayOffset(7);
 const NEXT30_END = dayOffset(30);
@@ -320,10 +321,16 @@ describe("<Birthday> proactive experience", () => {
     await chooseMoreRange("Custom");
     const from = screen.getByLabelText("From date");
     const to = screen.getByLabelText("To date");
-    // Seeded with the active range; make it invalid first.
-    expect((from as HTMLInputElement).value).toBe(TODAY);
-    expect((to as HTMLInputElement).value).toBe(NEXT30_END);
+    // Seeded with the active range.
+    expect(from).toHaveValue(shown(TODAY));
+    expect(to).toHaveValue(shown(NEXT30_END));
 
+    // An emptied date disables Apply.
+    fireEvent.change(to, { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+
+    // To refuses a date before From, so it stays empty and Apply stays off:
+    // an inverted range can't be applied.
     fireEvent.change(from, { target: { value: dayOffset(10) } });
     fireEvent.change(to, { target: { value: dayOffset(5) } });
     expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();

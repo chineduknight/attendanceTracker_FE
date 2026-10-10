@@ -1,5 +1,4 @@
 import { Box, Flex, Text } from "@chakra-ui/react";
-import { useColorModeValue } from "../ui/color-mode";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -39,10 +38,9 @@ const BirthdayList = ({
   emptyState,
 }: BirthdayListProps) => {
   const terms = useTerms();
-  const todayBg = useColorModeValue("pink.50", "whiteAlpha.100");
 
   if (members.length === 0) {
-    return <Text color="gray.500">{emptyState}</Text>;
+    return <Text color="fg.muted">{emptyState}</Text>;
   }
 
   return (
@@ -60,7 +58,7 @@ const BirthdayList = ({
         return (
           <GroupedListItem
             key={member._id ?? `${member.name ?? "member"}-${index}`}
-            bg={isToday ? todayBg : undefined}
+            bg={isToday ? "pink.subtle" : undefined}
             borderLeftWidth="3px"
             borderLeftColor={isToday ? "pink.400" : "transparent"}
           >
@@ -89,7 +87,7 @@ const BirthdayList = ({
                 {relative && (
                   <Text
                     fontSize={{ base: "xs", md: "sm" }}
-                    color={isToday ? "pink.500" : "gray.500"}
+                    color={isToday ? "pink.fg" : "fg.muted"}
                     fontWeight={isToday ? "semibold" : "normal"}
                   >
                     {relative}

@@ -1,20 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useColorModeValue } from "components/ui/color-mode";
 import {
   CloseButton,
   Box,
   Button,
   Drawer,
   Flex,
-  Input,
   Menu,
-  Spinner,
   Text,
   VStack,
   useDisclosure,
   Portal,
 } from "@chakra-ui/react";
 import {
+  FaBirthdayCake,
   FaCheck,
   FaChevronDown,
   FaCopy,
@@ -23,7 +21,7 @@ import {
   FaShareAlt,
   FaWhatsapp,
 } from "react-icons/fa";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { useMemberModel } from "hooks/useMemberModel";
@@ -49,6 +47,13 @@ import BirthdaySummaryCards, {
 } from "components/birthday/BirthdaySummaryCards";
 import BirthdayList from "components/birthday/BirthdayList";
 import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import { DateField } from "components/ui/date-field";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import { ThemedSelect } from "components/ui/themed-select";
+import { lowerTerm } from "helpers/organisationPresentation";
+import { useTerms } from "hooks/useOrgPresentation";
+import { withSafeInset } from "styles/safeArea";
 
 type StatusOption = { value: string; label: string };
 type ActivePreset = BirthdayPreset | "custom";
@@ -91,7 +96,7 @@ const getErrorMessage = (err: any, fallback: string): string => {
 const Birthday: React.FC = () => {
   const org = useGlobalStore((state) => state.organisation);
   const { open, onOpen, onClose } = useDisclosure();
-  const pageBg: string = useColorModeValue("gray.50", "gray.800");
+  const terms = useTerms();
   const today = localBusinessDate();
 
   // Proactive default: today → today + 30, no Find click required.
@@ -122,6 +127,8 @@ const Birthday: React.FC = () => {
     fields,
     hasData: modelLoaded,
     isError: modelError,
+    error: modelErrorDetail,
+    refetch: refetchModel,
   } = useMemberModel(org.id);
   const dobConfigured = hasDobDateField(fields);
 
@@ -374,215 +381,264 @@ const Birthday: React.FC = () => {
       .catch(() => toast.error("Failed to copy. Please try again."));
   };
 
+  const listBody = () => {
+    if (list.isFetching) return <PageLoader h="20vh" />;
+    if (list.isError) {
+      return (
+        <ErrorState
+          title="Couldn't load birthdays"
+          description={errorMessage(list.error)}
+          onRetry={() => list.refetch()}
+        />
+      );
+    }
+    if (!list.isSuccess) return null;
+    if (list.members.length === 0) {
+      return <EmptyState icon={<FaBirthdayCake />} title={emptyState} />;
+    }
+    return (
+      <BirthdayList
+        members={list.members}
+        range={range}
+        asOf={today}
+        emptyState={emptyState}
+      />
+    );
+  };
+
   return (
-    <Box minH="100vh" bg={pageBg}>
-      <Box maxW="5xl" mx="auto" px={{ base: 3, md: 6 }} py={{ base: 3, md: 6 }}>
-        {!modelLoaded && !modelError && <PageLoader h="40vh" />}
-        {modelError && (
-          <Text color="red.500">Error loading the member model.</Text>
-        )}
-        {modelLoaded && !dobConfigured && (
-          <Text>
-            Birthdays are unavailable because this organisation does not have a
-            date-of-birth field configured.
-          </Text>
-        )}
+    <PageContainer width="content">
+      {!modelLoaded && !modelError && <PageLoader h="40vh" />}
+      {modelError && (
+        <ErrorState
+          title={`Couldn't load the ${lowerTerm(terms.memberSingular)} fields`}
+          description={errorMessage(modelErrorDetail)}
+          onRetry={() => refetchModel()}
+        />
+      )}
+      {modelLoaded && !dobConfigured && (
+        <EmptyState
+          icon={<FaBirthdayCake />}
+          title="Birthdays are unavailable"
+          description="This organisation does not have a date-of-birth field configured."
+        />
+      )}
 
-        {modelLoaded && dobConfigured && (
-          <>
-            <Flex mb={3} align="center" justify="space-between" gap={3}>
-              <Box minW={0}>
-                <Text fontWeight="semibold" fontSize={{ base: "md", md: "xl" }}>
-                  Upcoming birthdays
-                </Text>
-                {/* The ACTIVE list range, not the backing 30-day snapshot. */}
-                <Text fontSize={{ base: "sm", md: "md" }} color="gray.500">
-                  {range.fromDate === range.toDate
-                    ? formatBirthdayRangeDate(range.fromDate)
-                    : `${formatBirthdayRangeDate(
-                        range.fromDate
-                      )} → ${formatBirthdayRangeDate(range.toDate)}`}
-                </Text>
-              </Box>
-              <Button
-                size={{ base: "sm", md: "md" }}
-                flexShrink={0}
-                onClick={onOpen}
-                disabled={list.members.length === 0 || list.isFetching}
-                colorPalette="gray"><FaShareAlt />Share
-                              </Button>
-            </Flex>
-
-            <BirthdaySummaryCards
-              summary={counts}
-              activePreset={activePreset}
-              onSelect={applyPreset}
-            />
-            {summary.isError && (
-              <Text fontSize="sm" color="gray.500" mt={2}>
-                Upcoming counts are unavailable right now.
+      {modelLoaded && dobConfigured && (
+        <>
+          <Flex mb={3} align="center" justify="space-between" gap={3}>
+            <Box minW={0}>
+              <Text fontWeight="semibold" fontSize={{ base: "md", md: "xl" }}>
+                Upcoming birthdays
               </Text>
-            )}
-
-            <Flex
-              mt={{ base: 3, md: 4 }}
-              mb={{ base: 3, md: 4 }}
-              gap={2}
-              align="center"
+              {/* The ACTIVE list range, not the backing 30-day snapshot. */}
+              <Text fontSize={{ base: "sm", md: "md" }} color="fg.muted">
+                {range.fromDate === range.toDate
+                  ? formatBirthdayRangeDate(range.fromDate)
+                  : `${formatBirthdayRangeDate(
+                      range.fromDate
+                    )} → ${formatBirthdayRangeDate(range.toDate)}`}
+              </Text>
+            </Box>
+            <Button
+              minH="44px"
+              flexShrink={0}
+              onClick={onOpen}
+              disabled={list.members.length === 0 || list.isFetching}
+              variant="outline"
+              colorPalette="gray"
             >
-              <Menu.Root positioning={{
-                placement: 'bottom-start'
-              }}>
-                <Menu.Trigger asChild><Button
-                    size={{ base: "sm", md: "md" }}
-                    flexShrink={0}
-                    colorPalette="pink"
-                    variant={activeMoreLabel ? "solid" : "outline"}
-                    aria-label={`More ranges${
-                      activeMoreLabel ? `, ${activeMoreLabel} selected` : ""
-                    }`}>
-                    {activeMoreLabel ?? "More"}
-                    <FaChevronDown /></Button></Menu.Trigger>
-                <Portal><Menu.Positioner><Menu.Content>
-                      {MORE_PRESETS.map(({ preset, label }) => (
-                        <Menu.Item
-                          key={preset}
-                          onSelect={() => applyPreset(preset)}
-                          value={preset}>
-                          {activePreset === preset ? <FaCheck /> : <Box w="1em" />}
-                          {label}
-                        </Menu.Item>
-                      ))}
-                      <Menu.Separator />
-                      <Menu.Item
-                        onSelect={startCustom}
-                        value="custom">
-                        {activePreset === "custom" ? <FaCheck /> : <Box w="1em" />}
-                        Custom
-                      </Menu.Item>
-                    </Menu.Content></Menu.Positioner></Portal>
-              </Menu.Root>
-              {statusOptions.length > 0 && (
-                <Box flex={1} minW={0} maxW={{ md: "320px" }}>
-                  <ReactSelect
-                    isMulti
-                    placeholder="Filter by status"
-                    options={statusSelectOptions}
-                    value={selectedStatusOptions}
-                    closeMenuOnSelect={false}
-                    onChange={handleStatusChange}
-                  />
-                </Box>
-              )}
-            </Flex>
+              <FaShareAlt />
+              Share
+            </Button>
+          </Flex>
 
-            {activePreset === "custom" && (
-              <Flex mb={3} gap={2} align="center">
-                <Input
-                  type="date"
-                  size={{ base: "sm", md: "md" }}
-                  flex={1}
-                  minW={0}
-                  maxW={{ md: "180px" }}
-                  value={customFrom}
-                  onChange={(event) => setCustomFrom(event.target.value)}
-                  placeholder="From date"
-                  aria-label="From date"
-                  max={customTo || undefined}
-                />
-                <Input
-                  type="date"
-                  size={{ base: "sm", md: "md" }}
-                  flex={1}
-                  minW={0}
-                  maxW={{ md: "180px" }}
-                  value={customTo}
-                  onChange={(event) => setCustomTo(event.target.value)}
-                  placeholder="To date"
-                  aria-label="To date"
-                  min={customFrom || undefined}
-                />
+          <BirthdaySummaryCards
+            summary={counts}
+            activePreset={activePreset}
+            onSelect={applyPreset}
+          />
+          {summary.isError && (
+            <Text fontSize="sm" color="fg.muted" mt={2}>
+              Upcoming counts are unavailable right now.
+            </Text>
+          )}
+
+          <Flex
+            mt={{ base: 3, md: 4 }}
+            mb={{ base: 3, md: 4 }}
+            gap={2}
+            align="center"
+            wrap={{ base: "wrap", md: "nowrap" }}
+          >
+            <Menu.Root positioning={{ placement: "bottom-start" }}>
+              <Menu.Trigger asChild>
                 <Button
-                  size={{ base: "sm", md: "md" }}
+                  minH="44px"
                   flexShrink={0}
                   colorPalette="pink"
-                  onClick={applyCustom}
-                  disabled={!customValid}
+                  variant={activeMoreLabel ? "solid" : "outline"}
+                  aria-label={`More ranges${
+                    activeMoreLabel ? `, ${activeMoreLabel} selected` : ""
+                  }`}
                 >
-                  Apply
+                  {activeMoreLabel ?? "More"}
+                  <FaChevronDown />
                 </Button>
-              </Flex>
+              </Menu.Trigger>
+              <Portal>
+                <Menu.Positioner>
+                  <Menu.Content>
+                    {MORE_PRESETS.map(({ preset, label }) => (
+                      <Menu.Item
+                        key={preset}
+                        minH="44px"
+                        onSelect={() => applyPreset(preset)}
+                        value={preset}
+                      >
+                        {activePreset === preset ? <FaCheck /> : <Box w="1em" />}
+                        {label}
+                      </Menu.Item>
+                    ))}
+                    <Menu.Separator />
+                    <Menu.Item minH="44px" onSelect={startCustom} value="custom">
+                      {activePreset === "custom" ? <FaCheck /> : <Box w="1em" />}
+                      Custom
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Positioner>
+              </Portal>
+            </Menu.Root>
+            {statusOptions.length > 0 && (
+              // Its own row on phones: beside More, a chosen status shrank
+              // to one letter next to the 44px remove/clear controls.
+              <Box flex={{ base: "1 1 100%", md: 1 }} minW={0} maxW={{ md: "320px" }}>
+                <ThemedSelect
+                  isMulti
+                  aria-label="Filter by status"
+                  placeholder="Filter by status"
+                  options={statusSelectOptions}
+                  value={selectedStatusOptions}
+                  closeMenuOnSelect={false}
+                  onChange={handleStatusChange}
+                />
+              </Box>
             )}
+          </Flex>
 
-            {list.isFetching && <Spinner />}
-            {!list.isFetching && list.isError && (
-              <Text color="red.500" mb={4}>
-                Error fetching birthday data.
-              </Text>
-            )}
-            {!list.isFetching && !list.isError && list.isSuccess && (
-              <BirthdayList
-                members={list.members}
-                range={range}
-                asOf={today}
-                emptyState={emptyState}
-              />
-            )}
-          </>
-        )}
-      </Box>
+          {activePreset === "custom" && (
+            // From/To share a row on phones; Apply goes under them so each
+            // date keeps room for "Oct 10, 2026".
+            <Flex mb={3} gap={2} align="center" wrap={{ base: "wrap", md: "nowrap" }}>
+              <Box flex="1 1 0" minW={0} maxW={{ md: "200px" }}>
+                <DateField
+                  value={customFrom}
+                  onChange={setCustomFrom}
+                  range={{ role: "start", start: customFrom, end: customTo }}
+                  max={customTo || undefined}
+                  placeholder="From date"
+                  aria-label="From date"
+                />
+              </Box>
+              <Box flex="1 1 0" minW={0} maxW={{ md: "200px" }}>
+                <DateField
+                  value={customTo}
+                  onChange={setCustomTo}
+                  range={{ role: "end", start: customFrom, end: customTo }}
+                  min={customFrom || undefined}
+                  placeholder="To date"
+                  aria-label="To date"
+                />
+              </Box>
+              <Button
+                minH="44px"
+                w={{ base: "100%", md: "auto" }}
+                flexShrink={0}
+                colorPalette="pink"
+                onClick={applyCustom}
+                disabled={!customValid}
+              >
+                Apply
+              </Button>
+            </Flex>
+          )}
+
+          {listBody()}
+        </>
+      )}
 
       {/* Share drawer */}
-      <Drawer.Root open={open} placement='bottom' onOpenChange={e => {
-        if (!e.open) {
-          onClose();
-        }
-      }}>
+      <Drawer.Root
+        open={open}
+        placement="bottom"
+        onOpenChange={(e) => {
+          if (!e.open) onClose();
+        }}
+      >
         <Portal>
-
           <Drawer.Backdrop />
           <Drawer.Positioner>
-            <Drawer.Content borderTopRadius="xl">
-              <Drawer.CloseTrigger asChild><CloseButton size="sm" /></Drawer.CloseTrigger>
-              <Drawer.Header><Drawer.Title>Share Birthdays</Drawer.Title></Drawer.Header>
-              <Drawer.Body pb={8}>
+            <Drawer.Content borderTopRadius="xl" maxW={{ md: "lg" }} mx="auto">
+              <Drawer.CloseTrigger asChild>
+                <CloseButton size="sm" minW="44px" minH="44px" />
+              </Drawer.CloseTrigger>
+              <Drawer.Header pr={12}>
+                <Drawer.Title>Share Birthdays</Drawer.Title>
+              </Drawer.Header>
+              {/* Clear of the iPhone home bar. */}
+              <Drawer.Body pb={withSafeInset("bottom", "2rem")}>
                 <VStack gap={3}>
                   <Button
                     w="100%"
                     size="lg"
-                    bg="green.500"
-                    color="white"
-                    _hover={{ bg: "green.600" }}
+                    variant="outline"
+                    colorPalette="green"
                     loading={isExportingExcel}
-                    onClick={() => refetchExcel()}><FaFileExcel />Export Excel
-                                  </Button>
+                    onClick={() => refetchExcel()}
+                  >
+                    <FaFileExcel />
+                    Export Excel
+                  </Button>
                   <Button
                     w="100%"
                     size="lg"
-                    bg="red.500"
-                    color="white"
-                    _hover={{ bg: "red.600" }}
+                    variant="outline"
+                    colorPalette="red"
                     loading={isExportingPdf}
-                    onClick={() => refetchPdf()}><FaFilePdf />Export PDF
-                                  </Button>
+                    onClick={() => refetchPdf()}
+                  >
+                    <FaFilePdf />
+                    Export PDF
+                  </Button>
+                  {/* WhatsApp's own brand green, the same in both modes. */}
                   <Button
                     w="100%"
                     size="lg"
                     bg="#25D366"
                     color="white"
                     _hover={{ bg: "#1ebe5d" }}
-                    onClick={handleWhatsApp}><FaWhatsapp />Share on WhatsApp
-                                  </Button>
-                  <Button w="100%" size="lg" colorPalette="gray" onClick={handleCopyToClipboard}><FaCopy />Copy to Clipboard
-                                  </Button>
+                    onClick={handleWhatsApp}
+                  >
+                    <FaWhatsapp />
+                    Share on WhatsApp
+                  </Button>
+                  <Button
+                    w="100%"
+                    size="lg"
+                    variant="outline"
+                    colorPalette="gray"
+                    onClick={handleCopyToClipboard}
+                  >
+                    <FaCopy />
+                    Copy to Clipboard
+                  </Button>
                 </VStack>
               </Drawer.Body>
             </Drawer.Content>
           </Drawer.Positioner>
-
         </Portal>
       </Drawer.Root>
-    </Box>
+    </PageContainer>
   );
 };
 
