@@ -9,12 +9,15 @@ import StreakCard from "components/analytics/StreakCard";
 describe("analytics gradient cards", () => {
   it("MemberHero paints a gradient behind its white text", () => {
     render(<MemberHero name="Ada Obi" fields={{ part: "soprano" }} />);
+    // The gradient sits on the card itself, which has no role or label.
+    // eslint-disable-next-line testing-library/no-node-access
     const card = screen.getByText("Ada Obi").parentElement!.parentElement!;
     expect(generatedCss(card)).toMatch(/linear-gradient/);
   });
 
   it("StreakCard paints a gradient behind its white text", () => {
     render(<StreakCard currentStreak={3} longestStreak={5} attendanceRate={80} />);
+    // eslint-disable-next-line testing-library/no-node-access
     const card = screen.getByText("current streak").parentElement!.parentElement!.parentElement!;
     expect(generatedCss(card)).toMatch(/linear-gradient/);
   });
