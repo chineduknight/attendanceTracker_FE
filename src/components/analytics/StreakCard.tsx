@@ -23,7 +23,8 @@ const StreakCard: React.FC<StreakCardProps> = ({ currentStreak, longestStreak, a
   return (
     <Box
       borderRadius="16px" p={5} color="white"
-      bgGradient="linear(135deg, purple.600, blue.600)"
+      // v3 gradient props (v2's "linear(...)" string is silently ignored).
+      bgGradient="to-br" gradientFrom="purple.600" gradientTo="blue.600"
       boxShadow="0 10px 24px rgba(107,70,193,.35)"
     >
       <Flex justify="space-between" align="center" gap={4} flexWrap="wrap">
@@ -35,7 +36,7 @@ const StreakCard: React.FC<StreakCardProps> = ({ currentStreak, longestStreak, a
         <RateRing rate={attendanceRate} />
       </Flex>
       <Box mt={4} h="14px" bg="whiteAlpha.300" borderRadius="999px" overflow="hidden">
-        <Box h="100%" width={`${percent}%`} borderRadius="999px" bgGradient="linear(90deg, yellow.400, orange.400)" />
+        <Box h="100%" width={`${percent}%`} borderRadius="999px" bgGradient="to-r" gradientFrom="yellow.400" gradientTo="orange.400" />
       </Box>
       <Flex justify="space-between" fontSize="xs" opacity={0.9} mt={1}>
         <Text>0</Text>
