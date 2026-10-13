@@ -4,6 +4,7 @@ import { authRequest } from "services";
 import { patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { MeResponse } from "rbac/types";
+import { emailRules } from "helpers/authFields";
 import { queryKeys } from "services/api/queryKeys";
 
 interface EmailInput { email: string; }
@@ -22,30 +23,21 @@ const SetEmailModal = () => {
     mutate({ url: authRequest.SET_EMAIL, data });
 
   return (
-    <Dialog.Root open={!!user.token && user.needsEmail} closeOnInteractOutside={false} placement='center' onOpenChange={e => {
-      if (!e.open)
-        {}
-    }}>
+    <Dialog.Root open={!!user.token && user.needsEmail} closeOnInteractOutside={false} placement='center' closeOnEscape={false}>
       <Portal>
 
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header><Dialog.Title>Add your email</Dialog.Title></Dialog.Header>
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form onSubmit={handleSubmit(onSubmit)} noValidate>
               <Dialog.Body>
-                <Text mb={3} fontSize="sm" color="gray.600">
+                <Text mb={3} fontSize="sm" color="fg.muted">
                   Set an email to unlock officer features and to redeem any pending invites.
                 </Text>
                 <Field.Root invalid={!!errors.email}>
                   <Field.Label>Email</Field.Label>
-                  <Input
-                    type="email"
-                    {...register("email", {
-                      required: "Email is required",
-                      pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: "Enter a valid email" },
-                    })}
-                  />
+                  <Input type="email" autoComplete="email" {...register("email", emailRules)} />
                   <Field.ErrorText>{errors.email?.message}</Field.ErrorText>
                 </Field.Root>
               </Dialog.Body>
