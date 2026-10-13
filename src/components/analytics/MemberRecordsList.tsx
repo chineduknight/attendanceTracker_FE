@@ -80,6 +80,7 @@ const MemberRecordsList: React.FC<MemberRecordsListProps> = ({ records, statuses
               textAlign="start"
               bg="bg.muted"
               _hover={{ bg: "bg.emphasized" }}
+              _focusVisible={{ outline: "2px solid", outlineColor: "blue.focusRing", outlineOffset: "-2px" }}
               aria-expanded={open}
               aria-controls={panelId}
               onClick={() => toggle(group.key)}
