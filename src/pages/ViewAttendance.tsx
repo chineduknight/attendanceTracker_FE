@@ -38,7 +38,7 @@ import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
-import { buildAttendanceShareMessage } from "helpers/attendanceShareMessage";
+import { buildAttendanceShareMessage, ShareMember } from "helpers/attendanceShareMessage";
 import {
   AttendanceEligibilityRule,
   eligibilityIssues,
@@ -86,6 +86,19 @@ type MemberType = StoredRosterEntry & {
   };
 };
 
+/**
+ * A stored roster row exactly as the attendance API returns it: `member` is
+ * null for entries whose profile can no longer be resolved.
+ */
+type StoredEntryRow = StoredRosterEntry & {
+  member: {
+    name: string;
+    status: string;
+    gender?: string;
+    part?: string;
+  } | null;
+};
+
 /** Reason and date of a manual addition, for anyone who can view the session. */
 const manualAdditionNote = (entry: MemberType): string | undefined => {
   if (!isManualEntry(entry)) return undefined;
@@ -101,6 +114,17 @@ const manualAdditionNote = (entry: MemberType): string | undefined => {
 type AttendanceInfoType = {
   name: string;
   date: Date;
+  /**
+   * `organisationId:attendanceId` of the session this snapshot was loaded
+   * for. Sharing refuses to run against any other session, so a switch in
+   * flight can never send the previous session's roster.
+   */
+  sessionKey: string;
+  /**
+   * The complete saved roster — resolved and unresolved entries, manual
+   * additions included — as the one source for share calculations.
+   */
+  shareRoster: ShareMember[];
   /**
    * Expected entries of the stored roster snapshot, including those whose
    * member profile no longer resolves — never recomputed from current members
@@ -139,6 +163,7 @@ const Attendance = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
+  const param = useParams();
   const onSuccess = (data) => {
     const {
       resolved: unsorted,
@@ -157,6 +182,22 @@ const Attendance = () => {
     setAttendanceInfo({
       name: data.data.name,
       date: data.data.date,
+      // Bound to the session it was loaded for, so a stale snapshot can never
+      // be shown or shared under a different session.
+      sessionKey: `${org.id}:${param.id}`,
+      // Sharing reads the stored roster itself — unresolved and manual
+      // entries included — never today's member list.
+      shareRoster: (data.data.attendance as StoredEntryRow[]).map((entry) => ({
+        attendanceStatus: entry.attendanceStatus,
+        member: entry.member
+          ? {
+              name: entry.member.name,
+              status: entry.member.status,
+              gender: entry.member.gender,
+              part: entry.member.part,
+            }
+          : null,
+      })),
       expectedCount,
       manualCount,
       rosterCount,
@@ -171,7 +212,9 @@ const Attendance = () => {
 
     setAllMembers(members);
   };
-  const param = useParams();
+  // The session identity the URL currently points at; a snapshot only counts
+  // once it was loaded for exactly this session.
+  const sessionKey = `${org.id}:${param.id}`;
   const url = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
     organisationId: org.id,
     id: param.id as string,
@@ -190,7 +233,11 @@ const Attendance = () => {
       refetchOnWindowFocus: false,
     },
   );
-  const isLoadingAttendance = isFetchingAttendance && allMembers.length === 0;
+  // A snapshot counts only for the session in the URL. Until one exists for
+  // that session, show the loader (or the load error) — never a previous
+  // session's roster, which could otherwise be shown or shared by mistake.
+  const snapshotIsCurrent = attendanceInfo?.sessionKey === sessionKey;
+  const isLoadingAttendance = !snapshotIsCurrent && !attendanceFailed;
 
   const { fields: memberFields, isSuccess: memberModelLoaded } = useMemberModel(
     org.id,
@@ -248,20 +295,38 @@ const Attendance = () => {
     );
   }, [allMembers, searchQuery, statusFilter, attendanceFilter]);
 
+  // Unfiltered, the tally describes the whole saved roster, so it adds the
+  // read-only entries whose profile no longer resolves — those rows are
+  // always on screen. While any search or filter is active the tally keeps
+  // describing exactly the rows that matched, as before.
+  const unfiltered =
+    searchQuery === "" &&
+    statusFilter.includes(ALL) &&
+    attendanceFilter.includes(ALL);
   const filteredCounts = useMemo(
-    () => statuses.countStatuses(filteredMembers.map((m) => m.attendanceStatus)),
-    [filteredMembers, statuses],
+    () =>
+      statuses.countStatuses([
+        ...filteredMembers.map((m) => m.attendanceStatus),
+        ...(unfiltered
+          ? (attendanceInfo?.unresolved ?? []).map((u) => u.attendanceStatus)
+          : []),
+      ]),
+    [filteredMembers, statuses, unfiltered, attendanceInfo?.unresolved],
   );
 
   // The stored calendar day, never shifted by the device timezone.
   const formattedDate = formatSessionDate(attendanceInfo?.date);
 
   const handleSendToWhatsapp = () => {
+    // Only the current session's complete stored snapshot may be shared; the
+    // button only renders with one loaded, and this guard keeps a race from
+    // sending another session's roster.
+    if (!attendanceInfo || attendanceInfo.sessionKey !== sessionKey) return;
     const message = buildAttendanceShareMessage({
       orgName: org.name,
-      sessionName: attendanceInfo?.name ?? "",
+      sessionName: attendanceInfo.name,
       formattedDate,
-      members: allMembers,
+      members: attendanceInfo.shareRoster,
       statuses,
       terminology: terms,
     });
@@ -377,7 +442,7 @@ const Attendance = () => {
             h="40vh"
             label={`Loading ${lowerTerm(terms.attendancePlural)}...`}
           />
-        ) : attendanceFailed && !attendanceInfo ? (
+        ) : attendanceFailed && !snapshotIsCurrent ? (
           <Box mt="8">
             <ErrorState
               title={`Couldn't load this ${lowerTerm(terms.attendanceSingular)}`}

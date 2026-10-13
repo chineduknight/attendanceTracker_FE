@@ -1,4 +1,8 @@
-import { isManualEntry, splitStoredRoster } from "helpers/storedRoster";
+import {
+  isManualEntry,
+  splitStoredRoster,
+  unresolvedMemberLabel,
+} from "helpers/storedRoster";
 
 const entry = (
   memberId: string,
@@ -41,5 +45,16 @@ describe("splitStoredRoster", () => {
     expect(isManualEntry({})).toBe(false);
     expect(isManualEntry({ manuallyAdded: false })).toBe(false);
     expect(isManualEntry({ manuallyAdded: true })).toBe(true);
+  });
+});
+
+describe("unresolvedMemberLabel", () => {
+  it("is a neutral placeholder in the organisation's own term", () => {
+    expect(unresolvedMemberLabel("Member")).toBe(
+      "Former member (profile unavailable)",
+    );
+    expect(unresolvedMemberLabel("Student")).toBe(
+      "Former student (profile unavailable)",
+    );
   });
 });

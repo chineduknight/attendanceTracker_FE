@@ -1,3 +1,5 @@
+import { lowerTerm } from "helpers/organisationPresentation";
+
 /** One entry of a saved attendance record's frozen roster. */
 export interface StoredRosterEntry {
   memberId: string;
@@ -22,6 +24,15 @@ export interface UnresolvedRosterEntry {
 /** Whether a stored entry is a manual one-session addition (missing → expected). */
 export const isManualEntry = (entry: Pick<StoredRosterEntry, "manuallyAdded">) =>
   entry.manuallyAdded === true;
+
+/**
+ * Neutral display label for a stored entry whose member profile no longer
+ * resolves. The read-only roster rows and the shared session report use the
+ * same wording, so an unavailable profile never gets an invented name — or a
+ * Bro/Sis title, whose gender cannot be known.
+ */
+export const unresolvedMemberLabel = (memberSingular: string): string =>
+  `Former ${lowerTerm(memberSingular)} (profile unavailable)`;
 
 /**
  * Splits a stored roster into entries whose member still resolves and those

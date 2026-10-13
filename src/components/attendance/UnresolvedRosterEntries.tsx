@@ -1,5 +1,8 @@
 import { Box, Text } from "@chakra-ui/react";
-import { UnresolvedRosterEntry } from "helpers/storedRoster";
+import {
+  UnresolvedRosterEntry,
+  unresolvedMemberLabel,
+} from "helpers/storedRoster";
 import { AttendanceStatusConfig } from "helpers/attendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -29,7 +32,7 @@ const UnresolvedRosterEntries = ({ entries, statuses }: UnresolvedRosterEntriesP
         <AttendanceMemberRow
           key={entry.memberId}
           memberId={entry.memberId}
-          name={`Former ${member} (profile unavailable)`}
+          name={unresolvedMemberLabel(terms.memberSingular)}
           status={statuses.resolve(entry.attendanceStatus)}
           isManual={entry.manuallyAdded}
         />
