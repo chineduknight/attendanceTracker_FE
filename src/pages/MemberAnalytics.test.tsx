@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import MemberAnalytics from "pages/MemberAnalytics";
@@ -53,10 +53,12 @@ describe("<MemberAnalytics>", () => {
     mockGet.mockImplementation(() => Promise.resolve({ data: { data: ANALYTICS } }));
   });
 
-  it("renders the export buttons and date controls", () => {
+  it("renders the export menu and date controls", async () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /Export Excel/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Export PDF/ })).toBeInTheDocument();
+    await screen.findByText("Ada Obi");
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    expect(await screen.findByRole("menuitem", { name: "Export Excel" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Export PDF" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("From date")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("To date")).toBeInTheDocument();
   });
