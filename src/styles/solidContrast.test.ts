@@ -1,4 +1,5 @@
-import { system } from "styles/theme";
+import { BRAND_BAR, system } from "styles/theme";
+import { MEMBER_HERO_GRADIENT } from "components/analytics/MemberHero";
 
 // White text on every palette's `.solid` fill must stay readable (WCAG AA,
 // 4.5:1): it is the fill behind solid buttons, badges, avatars, attendance
@@ -36,6 +37,29 @@ describe("solid palette fills", () => {
       expect(semanticHex(palette, "contrast", mode)).toBe("#ffffff");
       // ...and readable on it.
       expect(contrastWithWhite(hex)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
+describe("white text on brand and card colours", () => {
+  it.each(["light", "dark"] as const)("the %s-mode header bar (and its hover) carries white text at 4.5:1+", (mode) => {
+    expect(contrastWithWhite(BRAND_BAR[mode].base)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastWithWhite(BRAND_BAR[mode].hover)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("the member card keeps white text at 4.5:1+ along its whole gradient", () => {
+    const stops = [MEMBER_HERO_GRADIENT.from, MEMBER_HERO_GRADIENT.via, MEMBER_HERO_GRADIENT.to]
+      .map((token) => (system.token(`colors.${token}`) as string).toLowerCase());
+    const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+    const mix = (a: string, b: string, t: number) =>
+      `#${[0, 1, 2]
+        .map((i) => Math.round(channel(a, i) * (1 - t) + channel(b, i) * t).toString(16).padStart(2, "0"))
+        .join("")}`;
+    for (let segment = 0; segment < stops.length - 1; segment++) {
+      for (let step = 0; step <= 20; step++) {
+        const colour = mix(stops[segment], stops[segment + 1], step / 20);
+        expect(contrastWithWhite(colour)).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 });

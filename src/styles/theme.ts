@@ -13,7 +13,8 @@ import {
  * deepens it rather than lightening it. Also drives the browser theme-color.
  */
 export const BRAND_BAR = {
-  light: { base: "#3182CE", hover: "#2B6CB0" }, // blue.500 / blue.600
+  // blue.600 / blue.700 (v2): white title text is 5.4:1 (blue.500 was 4.0:1).
+  light: { base: "#2B6CB0", hover: "#2C5282" },
   dark: { base: "#2C5282", hover: "#2A4365" }, // blue.700 / blue.800
 } as const;
 
