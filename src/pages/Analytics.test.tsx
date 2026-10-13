@@ -12,6 +12,12 @@ jest.mock("services/api", () => ({
   default: { get: jest.fn() },
 }));
 
+const mockNavigate = jest.fn();
+jest.mock("react-router-dom", () => ({
+  ...jest.requireActual("react-router-dom"),
+  useNavigate: () => mockNavigate,
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockGet: jest.Mock = require("services/api").default.get;
 
@@ -84,8 +90,36 @@ describe("<Analytics> with configured statuses", () => {
     await screen.findByText("Ada");
   };
 
-  it("shows behavior totals from attendanceBehaviorCounts as semantic columns", async () => {
+  // Phones (and jsdom, which matches no breakpoint) open on the list.
+  const searchGrid = async () => {
     await search();
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    await screen.findByRole("table");
+  };
+
+  it("opens on a ranked list with the backend's behavior totals", async () => {
+    await search();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    const rows = screen.getAllByRole("button", { name: /View member analytics/ });
+    // Backend order, never re-ranked here.
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      "Ada: Present 1, Excused 0, Absent 1. View member analytics",
+      "Bola: Present 1, Excused 1, Absent 0. View member analytics",
+      "Chi: Present 1, Excused 0, Absent 0. View member analytics",
+    ]);
+  });
+
+  it("opens member analytics for the same range from a list row", async () => {
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: /^Bola:/ }));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/\/m2\?fromDate=2026-09-01&toDate=2026-09-30$/),
+    );
+  });
+
+  it("shows behavior totals from attendanceBehaviorCounts as semantic columns", async () => {
+    await searchGrid();
     ["Present", "Excused", "Absent"].forEach((label) =>
       expect(
         screen.getByRole("columnheader", { name: label })
@@ -101,7 +135,7 @@ describe("<Analytics> with configured statuses", () => {
   });
 
   it("renders exact status keys in date cells and a dynamic legend", async () => {
-    await search();
+    await searchGrid();
     expect(screen.getByTitle("Tardy")).toHaveTextContent("T");
     expect(screen.getByTitle("Remote")).toHaveTextContent("R");
     // Legend: every active status plus inactive Remote seen in results.
@@ -112,7 +146,7 @@ describe("<Analytics> with configured statuses", () => {
   });
 
   it("shows N/A for a session the member was not expected at", async () => {
-    await search();
+    await searchGrid();
     const chiCells = Array.from(
       (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll(
         "td"
@@ -182,6 +216,12 @@ describe("<Analytics> session summary", () => {
     await screen.findByText("Ada");
   };
 
+  const searchGrid = async () => {
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    await screen.findByRole("table");
+  };
+
   beforeEach(() => {
     queryClient.clear();
     mockGet.mockImplementation((url: string) =>
@@ -210,7 +250,7 @@ describe("<Analytics> session summary", () => {
   });
 
   it("renders no column, cell or legend entry for an excluded session", async () => {
-    await search();
+    await searchGrid();
     const headers = screen
       .getAllByRole("columnheader")
       .map((header) => header.textContent);
@@ -222,8 +262,16 @@ describe("<Analytics> session summary", () => {
     expect(adaCells).toHaveLength(6);
   });
 
-  it("keeps N/A for an off-roster member on an included session", async () => {
+  it("says a member on no included roster is not on any roster in the list", async () => {
     await search();
+    expect(screen.getByRole("button", { name: /^Chi:/ })).toHaveAccessibleName(
+      "Chi: not on any attendance roster. View member analytics"
+    );
+    expect(screen.getByText("Not on any attendance roster")).toBeInTheDocument();
+  });
+
+  it("keeps N/A for an off-roster member on an included session", async () => {
+    await searchGrid();
     const chiCells = Array.from(
       (screen.getByText("Chi").closest("tr") as HTMLElement).querySelectorAll("td")
     );
