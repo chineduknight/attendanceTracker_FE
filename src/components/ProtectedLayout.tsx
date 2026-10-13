@@ -5,6 +5,7 @@ import { PAGE_ROUTES, PageRouteConfig } from "routes/protectedRouteConfig";
 import { useSyncSelectedOrg } from "rbac/useSyncSelectedOrg";
 import { useTerms } from "hooks/useOrgPresentation";
 import { resolveText } from "config/presentationLabels";
+import { APP_NAME } from "config/app";
 
 const ProtectedLayout = () => {
   const location = useLocation();
@@ -27,7 +28,7 @@ const ProtectedLayout = () => {
   return (
     <Box minH="100dvh" display="flex" flexDirection="column" data-testid="app-shell">
       <AppHeader
-        title={current ? resolveText(current.title, terms) : "Attendance Tracker"}
+        title={current ? resolveText(current.title, terms) : APP_NAME}
         showBack={current?.showBack ?? true}
       />
       <Box

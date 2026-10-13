@@ -2,6 +2,7 @@ import { Navigate } from "react-router-dom";
 import WithSuspense from "components/HOC/WithSuspense";
 import { PUBLIC_PATHS, PROTECTED_PATHS } from "./pagePath";
 import { lazy } from "react";
+import { PublicNotFound } from "pages/NotFound";
 
 const Login = WithSuspense(lazy(() => import("pages/Login")));
 const Signup = WithSuspense(lazy(() => import("pages/Signup")));
@@ -23,7 +24,7 @@ const PUBLIC_ROUTES = [
       element: <Navigate to="/" />,
     };
   }),
-  { path: "*", element: <div>Page not found</div> },
+  { path: "*", element: <PublicNotFound /> },
 ];
 
 export default PUBLIC_ROUTES;

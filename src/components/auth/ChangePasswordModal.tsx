@@ -2,6 +2,7 @@ import { CloseButton, Button, Stack, Field, Dialog, Portal } from "@chakra-ui/re
 import { useForm, SubmitHandler } from "react-hook-form";
 import { toast } from "react-toastify";
 import PasswordInput from "components/PasswordInput";
+import { newPasswordRules } from "helpers/authFields";
 import { authRequest } from "services";
 import { patchRequest, useMutationWrapper } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_USER } from "zStore";
@@ -16,8 +17,6 @@ interface ChangePasswordInputs {
   newPassword: string;
   confirmPassword: string;
 }
-
-const PASSWORD_MIN_LENGTH = 6;
 
 const ChangePasswordModal = ({ isOpen, onClose }: ChangePasswordModalProps) => {
   const setUser = useGlobalStore((s) => s.setUser);
@@ -84,7 +83,7 @@ const ChangePasswordModal = ({ isOpen, onClose }: ChangePasswordModalProps) => {
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header><Dialog.Title>Change password</Dialog.Title></Dialog.Header>
-            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
             <form onSubmit={handleSubmit(onSubmit)}>
               <Dialog.Body>
                 <Stack gap={4}>
@@ -104,11 +103,7 @@ const ChangePasswordModal = ({ isOpen, onClose }: ChangePasswordModalProps) => {
                     <PasswordInput
                       autoComplete="new-password"
                       {...register("newPassword", {
-                        required: "New password is required",
-                        minLength: {
-                          value: PASSWORD_MIN_LENGTH,
-                          message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
-                        },
+                        ...newPasswordRules("New password is required"),
                         validate: (value) =>
                           value !== watch("currentPassword") ||
                           "New password must be different from your current password",
