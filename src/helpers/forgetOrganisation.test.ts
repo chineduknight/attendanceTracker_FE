@@ -86,6 +86,23 @@ describe("forgetOrganisation", () => {
     expect(useGlobalStore.getState().currentAttendance.name).toBe("");
   });
 
+  it("touches only the exact organisation when one id is a prefix of another", () => {
+    seedDevice("org1");
+    seedDevice("org10");
+    select("org10", "org10");
+    forgetOrganisation("org1");
+
+    expect(useGlobalStore.getState().organisation.id).toBe("org10");
+    expect(useGlobalStore.getState().currentAttendance.name).toBe("In progress");
+    expect(readNewAttendanceDraft("org10")).not.toBeNull();
+    expect(localStorage.getItem(expectedRosterDraftKey("org10", identity))).toBe("[]");
+    expect(localStorage.getItem(manualRosterDraftKey("org10", identity))).toBe("[]");
+    expect(localStorage.getItem(shownFieldsStorageKey("org10"))).toBe('["part"]');
+    expect(queryClient.getQueryData(queryKeys.members("org10"))).toEqual({ data: [] });
+    expect(readNewAttendanceDraft("org1")).toBeNull();
+    expect(localStorage.getItem(expectedRosterDraftKey("org1", identity))).toBeNull();
+  });
+
   it("removes roster drafts even when their draft metadata is already gone", () => {
     localStorage.removeItem("attendance-new-draft-orgA");
     select("orgB");
