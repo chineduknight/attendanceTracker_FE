@@ -1,4 +1,5 @@
-import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, toggle } from "test-utils/render";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
@@ -81,16 +82,136 @@ describe("<OrganisationSettings>", () => {
   it("shows the form with a Save button for a manager", async () => {
     setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
     renderPage();
-    expect(await screen.findByLabelText(/Organisation Name/)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Organisation name/)).toBeInTheDocument();
     expect(screen.getByLabelText("Logo URL")).toBeInTheDocument();
     expect(screen.getByLabelText("Max attendance edits")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Save/ })).toBeInTheDocument();
   });
 
+  it("never offers a form of defaults to save when the settings fail to load", async () => {
+    // Saving defaults would overwrite the real settings (collapse off,
+    // default edit limit), so a failed load shows the error and Try again.
+    mockGet.mockImplementationOnce(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Database offline" } } }),
+    );
+    setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+    renderPage();
+    expect(await screen.findByText("Couldn't load settings")).toBeInTheDocument();
+    expect(screen.getByText("Database offline")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Organisation name/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByLabelText(/Organisation name/)).toHaveValue("VOB Choir");
+    expect(screen.getByLabelText("Max attendance edits")).toHaveValue(3);
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  it("keeps the form on screen while it refreshes after a save", async () => {
+    setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+    renderPage();
+    const name = await screen.findByLabelText(/Organisation name/);
+    let refresh: (value: unknown) => void = () => undefined;
+    mockGet.mockImplementation(() => new Promise((resolve) => { refresh = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // The post-save refetch is in flight: the form stays, no loader swap.
+    expect(name).toBeInTheDocument();
+    expect(screen.queryByText("Loading settings...")).not.toBeInTheDocument();
+    await act(async () => refresh({ data: { data: { id: "org1", name: "VOB Choir" } } }));
+  });
+
+  describe("server refreshes and unsaved edits", () => {
+    const serverSays = (over: Record<string, unknown>) =>
+      mockGet.mockImplementation(() =>
+        Promise.resolve({ data: { data: { id: "org1", name: "VOB Choir", maxAttendanceEdits: 3, ...over } } }),
+      );
+    // Refetch, then let React Query's success callbacks and any form reset
+    // settle before asserting (asserting straight away would pass even if
+    // the reply overwrote the form a tick later).
+    const refetchSettings = async () => {
+      await act(async () => {
+        await queryClient.refetchQueries({ queryKey: queryKeys.organisation("org1") });
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    };
+
+    it("keeps unsaved field edits when a background refetch returns different values", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      const name = await screen.findByLabelText(/Organisation name/);
+      fireEvent.change(name, { target: { value: "Unsaved name" } });
+      fireEvent.change(screen.getByLabelText("Max attendance edits"), { target: { value: "7" } });
+
+      // e.g. the phone reconnects and React Query refetches.
+      serverSays({ name: "Renamed elsewhere", maxAttendanceEdits: 5 });
+      await refetchSettings();
+      expect(mockGet).toHaveBeenCalledTimes(2);
+
+      expect(name).toHaveValue("Unsaved name");
+      expect(screen.getByLabelText("Max attendance edits")).toHaveValue(7);
+    });
+
+    it("keeps an unsaved status in the editor across a background refetch", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText("New status label"), { target: { value: "Late" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add status" }));
+      expect(screen.getByTestId("status-row-late")).toBeInTheDocument();
+
+      await refetchSettings();
+      expect(screen.getByTestId("status-row-late")).toBeInTheDocument();
+    });
+
+    it("re-seeds the form with the backend's stored values after a successful save", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      const name = await screen.findByLabelText(/Organisation name/);
+      fireEvent.change(name, { target: { value: "  VOB Choir Lagos  " } });
+      // The backend normalises what it stores; the form must show that.
+      serverSays({ name: "VOB Choir Lagos", maxAttendanceEdits: 4 });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      await waitFor(() => expect(name).toHaveValue("VOB Choir Lagos"));
+      expect(screen.getByLabelText("Max attendance edits")).toHaveValue(4);
+    });
+
+    it("never shows or submits A's form after switching to B, even when A's reply lands late", async () => {
+      const replies: Record<string, (v: unknown) => void> = {};
+      mockGet.mockImplementation(
+        (url: string) => new Promise((resolve) => { replies[url.split("/").pop() as string] = resolve; }),
+      );
+      setOrg({ id: "orgA", permissions: ["settings.view", "settings.manage"] });
+      renderPage();
+      await act(async () => replies.orgA({ data: { data: { id: "orgA", name: "Choir A", maxAttendanceEdits: 3 } } }));
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), { target: { value: "A unsaved" } });
+
+      // A refresh for A is still in flight when the officer switches to B.
+      act(() => { void queryClient.refetchQueries({ queryKey: queryKeys.organisation("orgA") }); });
+      act(() => setOrg({ id: "orgB", permissions: ["settings.view", "settings.manage"] }));
+      expect(screen.queryByLabelText(/Organisation name/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
+
+      await act(async () => replies.orgB({ data: { data: { id: "orgB", name: "Band B", maxAttendanceEdits: 1 } } }));
+      expect(await screen.findByLabelText(/Organisation name/)).toHaveValue("Band B");
+
+      await act(async () => replies.orgA({ data: { data: { id: "orgA", name: "Choir A late", maxAttendanceEdits: 9 } } }));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Band B");
+      expect(screen.getByLabelText("Max attendance edits")).toHaveValue(1);
+
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      const [putUrl, body] = mockPut.mock.calls[0];
+      expect(putUrl).toBe("/organisations/orgB");
+      expect(body).toMatchObject({ name: "Band B", maxAttendanceEdits: 1 });
+    });
+  });
+
   it("hides Save for a view-only user", async () => {
     setOrg({ id: "org1", permissions: ["settings.view"] });
     renderPage();
-    await screen.findByLabelText(/Organisation Name/);
+    await screen.findByLabelText(/Organisation name/);
     expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
   });
 
@@ -194,7 +315,7 @@ describe("<OrganisationSettings>", () => {
       manager();
       renderPage();
       const absent = await screen.findByTestId("status-row-absent");
-      fireEvent.click(within(absent).getByLabelText("Active"));
+      await toggle(within(absent).getByLabelText("Active"));
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
       const alert = await screen.findByRole("alert");
@@ -253,7 +374,7 @@ describe("<OrganisationSettings>", () => {
       );
 
       fireEvent.change(screen.getByLabelText(/Officer plural/), { target: { value: " Coordinators " } });
-      fireEvent.click(screen.getByLabelText("Finance"));
+      await toggle(screen.getByLabelText("Finance"));
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
       await waitFor(() => expect(mockPut).toHaveBeenCalled());
@@ -304,7 +425,7 @@ describe("<OrganisationSettings>", () => {
       );
       setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
       renderPage();
-      await screen.findByLabelText(/Organisation Name/);
+      await screen.findByLabelText(/Organisation name/);
       expect(screen.queryByText("Terminology")).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
       await waitFor(() => expect(mockPut).toHaveBeenCalled());
@@ -446,7 +567,7 @@ describe("<OrganisationSettings>", () => {
       serve({ org1: detail("org1", { welfareSettings: undefined }) });
       manager();
       renderPage();
-      await screen.findByLabelText(/Organisation Name/);
+      await screen.findByLabelText(/Organisation name/);
       expect(
         screen.queryByRole("heading", { name: "Welfare & Engagement" }),
       ).not.toBeInTheDocument();
@@ -623,7 +744,7 @@ describe("<OrganisationSettings>", () => {
       // The PUT reply omits the field; the submitted value still applies.
       mockPut.mockResolvedValue({ data: { data: { id: "org1", name: "Org org1" } } });
       renderPage();
-      fireEvent.click(await screen.findByLabelText(LABEL));
+      await toggle(await screen.findByLabelText(LABEL));
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
@@ -688,11 +809,11 @@ describe("<OrganisationSettings>", () => {
       await waitFor(() => expect(screen.getByLabelText(LABEL)).toBeChecked());
 
       act(() => manager("orgB"));
-      await waitFor(() => expect(screen.getByLabelText(/Organisation Name/)).toHaveValue("Org orgB"));
+      await waitFor(() => expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgB"));
       expect(screen.getByLabelText(LABEL)).not.toBeChecked();
 
       act(() => manager("orgA"));
-      await waitFor(() => expect(screen.getByLabelText(/Organisation Name/)).toHaveValue("Org orgA"));
+      await waitFor(() => expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgA"));
       expect(screen.getByLabelText(LABEL)).toBeChecked();
     });
   });

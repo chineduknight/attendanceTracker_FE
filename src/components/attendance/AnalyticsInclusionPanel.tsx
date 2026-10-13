@@ -1,18 +1,8 @@
 import { useState } from "react";
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  FormControl,
-  FormHelperText,
-  FormLabel,
-  Text,
-  Textarea,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, Text, Textarea, Field } from "@chakra-ui/react";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
@@ -80,7 +70,7 @@ const AnalyticsInclusionPanel = ({
         gap={2}
         flexWrap="wrap"
       >
-        <Badge colorScheme={inclusion.included ? "green" : "gray"}>
+        <Badge colorPalette={inclusion.included ? "green" : "gray"}>
           {inclusion.included
             ? "Included in analytics"
             : "Excluded from analytics"}
@@ -88,9 +78,10 @@ const AnalyticsInclusionPanel = ({
         <Can perm="attendance.manage">
           <Button
             size="sm"
+            minH="44px"
             variant="outline"
             onClick={() => setIsConfirming(true)}
-            isDisabled={isSaving}
+            disabled={isSaving}
           >
             {actionLabel}
           </Button>
@@ -102,13 +93,13 @@ const AnalyticsInclusionPanel = ({
         </Text>
       )}
       {inclusion.excludedAt && (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           Excluded date: {format(new Date(inclusion.excludedAt), "dd MMM yyyy")}
         </Text>
       )}
 
-      <ConfirmModal
-        isOpen={isConfirming}
+      <ConfirmDialog
+        open={isConfirming}
         title={
           inclusion.included
             ? `Exclude this ${session} from analytics?`
@@ -120,18 +111,18 @@ const AnalyticsInclusionPanel = ({
               <Text mb={4}>
                 {`This ${session} will remain available in ${session} history, but it will not count toward organisation or ${member} analytics.`}
               </Text>
-              <FormControl>
-                <FormLabel>Reason (optional)</FormLabel>
+              <Field.Root>
+                <Field.Label>Reason (optional)</Field.Label>
                 <Textarea
                   value={reason}
                   maxLength={ANALYTICS_EXCLUSION_REASON_MAX}
                   onChange={(event) => setReason(event.target.value)}
                   placeholder="Attendance was incompletely recorded"
                 />
-                <FormHelperText>
+                <Field.HelperText>
                   {`${reason.length}/${ANALYTICS_EXCLUSION_REASON_MAX} characters`}
-                </FormHelperText>
-              </FormControl>
+                </Field.HelperText>
+              </Field.Root>
             </>
           ) : (
             `Its stored attendance will count again in organisation and ${member} analytics.`
@@ -139,8 +130,8 @@ const AnalyticsInclusionPanel = ({
         }
         cancelLabel="Cancel"
         confirmLabel={inclusion.included ? "Exclude from analytics" : "Restore"}
-        confirmColorScheme={inclusion.included ? "orange" : "blue"}
-        isLoading={isSaving}
+        confirmPalette={inclusion.included ? "orange" : "blue"}
+        loading={isSaving}
         onConfirm={confirm}
         onClose={close}
       />

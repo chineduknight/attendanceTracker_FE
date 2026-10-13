@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertIcon, Box, Text } from "@chakra-ui/react";
+import { Alert, Box, Text } from "@chakra-ui/react";
 import {
   AttendanceEligibilityRule,
   summarizeEligibilityRules,
@@ -41,19 +41,19 @@ const ExpectedRosterSummary = ({
       </>
     )}
     {rules.length > 0 && (
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="fg.muted">
         {summarizeEligibilityRules(rules, labelFor)}
       </Text>
     )}
     {isOutdated && (
       // Informational, so announced politely rather than as an alert.
-      <Alert status="info" role="status" mt={2} borderRadius="md" fontSize="sm">
-        <AlertIcon />
-        <AlertDescription>
+      <Alert.Root status="info" role="status" mt={2} borderRadius="md" fontSize="sm">
+        <Alert.Indicator />
+        <Alert.Description>
           Eligibility rule has changed since this session was created. The roster
           below is the historical snapshot.
-        </AlertDescription>
-      </Alert>
+        </Alert.Description>
+      </Alert.Root>
     )}
   </Box>
 );

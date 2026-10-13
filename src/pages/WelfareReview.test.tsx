@@ -10,7 +10,8 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format, parseISO } from "date-fns";
-import theme from "styles/theme";
+import { system } from "styles/theme";
+import { selectTab, toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
@@ -199,7 +200,7 @@ const LocationProbe = () => {
 
 const renderPage = (path = "/welfare") =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
@@ -264,11 +265,14 @@ beforeEach(() => {
   serve();
 });
 
+/** The date picker shows a business date readably (e.g. "Oct 9, 2026"). */
+const shown = (businessDate: string) => format(parseISO(businessDate), "MMM d, yyyy");
+
 describe("<Welfare> review as-of date", () => {
   it("defaults to local today when the URL has no asOf, and writes it back", async () => {
     renderPage();
     await waitForProgress();
-    expect(screen.getByLabelText("Review as of")).toHaveValue(TODAY);
+    expect(screen.getByLabelText("Review as of")).toHaveValue(shown(TODAY));
     expect(screen.getByTestId("location")).toHaveTextContent(`asOf=${TODAY}`);
     expect(overviewCalls()[0]).toBe(`/welfare/org1/overview?asOf=${TODAY}`);
   });
@@ -276,7 +280,7 @@ describe("<Welfare> review as-of date", () => {
   it("respects a valid asOf from the URL (refresh-compatible)", async () => {
     renderPage(`/welfare?asOf=${PAST_REVIEW}`);
     await waitForProgress();
-    expect(screen.getByLabelText("Review as of")).toHaveValue(PAST_REVIEW);
+    expect(screen.getByLabelText("Review as of")).toHaveValue(shown(PAST_REVIEW));
     expect(overviewCalls()).toEqual([
       `/welfare/org1/overview?asOf=${PAST_REVIEW}`,
     ]);
@@ -308,8 +312,8 @@ describe("<Welfare> review as-of date", () => {
     renderPage(`/welfare?asOf=${PAST_REVIEW}`);
     await waitForProgress();
     const input = screen.getByLabelText("Review as of");
-    expect(input).toHaveAttribute("max", TODAY);
 
+    // DateField enforces the cap for typed dates too (no native max needed).
     const future = format(addDays(new Date(), 3), "yyyy-MM-dd");
     fireEvent.change(input, { target: { value: future } });
     expect(screen.getByTestId("location")).toHaveTextContent(
@@ -336,7 +340,7 @@ describe("<Welfare> review as-of date", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
     await waitFor(() =>
-      expect(screen.getByLabelText("Review as of")).toHaveValue(TODAY)
+      expect(screen.getByLabelText("Review as of")).toHaveValue(shown(TODAY))
     );
     expect(screen.getByTestId("location")).toHaveTextContent(`asOf=${TODAY}`);
     expect(screen.getByRole("button", { name: "Today" })).toBeDisabled();
@@ -500,13 +504,13 @@ describe("<Welfare> Needs Check-in progress", () => {
     expect(attentionRegion().getByText("Signal Member 4")).toBeInTheDocument();
     expect(attentionRegion().getByText("Signal Member 5")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Followed Up 3" }));
+    await selectTab(screen.getByRole("tab", { name: "Followed Up 3" }));
     expect(attentionRegion().getByText("Signal Member 1")).toBeInTheDocument();
     expect(attentionRegion().getByText("Signal Member 2")).toBeInTheDocument();
     expect(attentionRegion().getByText("Signal Member 3")).toBeInTheDocument();
     expect(attentionRegion().queryByText("Signal Member 4")).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "All 11" }));
+    await selectTab(screen.getByRole("tab", { name: "All 11" }));
     expect(
       attentionRegion().getAllByRole("heading", { name: /^Signal Member/ })
     ).toHaveLength(11);
@@ -534,7 +538,7 @@ describe("<Welfare> Needs Check-in progress", () => {
       cardOf("Signal Member 3").queryByText("Follow-up logged")
     ).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Followed Up 2" }));
+    await selectTab(screen.getByRole("tab", { name: "Followed Up 2" }));
     expect(
       cardOf("Signal Member 1").getByText("Needs check-in")
     ).toBeInTheDocument();
@@ -588,7 +592,7 @@ describe("<Welfare> Needs Check-in progress", () => {
         attentionRegion().getAllByRole("button", { name: "Add follow-up" })[0]
       );
       if (workflowStatus === "open") {
-        fireEvent.click(screen.getByLabelText("Keep open for follow-up"));
+        await toggle(screen.getByLabelText("Keep open for follow-up"));
       }
       fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
 

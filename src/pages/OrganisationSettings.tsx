@@ -4,19 +4,15 @@ import {
   Flex,
   Button,
   Stack,
-  FormControl,
-  FormLabel,
-  FormErrorMessage,
-  FormHelperText,
   Input,
-  Switch,
-  Avatar,
-  Divider,
   Heading,
   Text,
-  useColorModeValue,
+  Separator,
+  Field,
 } from "@chakra-ui/react";
+import { NameAvatar } from "components/ui/avatar";
 import { useForm } from "react-hook-form";
+import { FormSwitch } from "components/ui/switch";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
@@ -43,7 +39,10 @@ import {
   FeatureVisibilitySettings,
   TerminologySettings,
 } from "components/settings/PresentationSettings";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import { ErrorState, errorMessage } from "components/ui/states";
+import { withSafeInset } from "styles/safeArea";
 import AttendanceStatusesEditor from "components/settings/AttendanceStatusesEditor";
 import {
   StatusRow,
@@ -75,8 +74,6 @@ const OrganisationSettings = () => {
     s.updateOrganisation,
   ]);
   const terms = useTerms();
-  const cardBg = useColorModeValue("white", "gray.700");
-  const pageBg = useColorModeValue("gray.50", "gray.800");
   const canManage = usePermissions().has("settings.manage");
   const [statusRows, setStatusRows] = useState<StatusRow[]>(() =>
     toStatusRows(org.attendanceStatuses),
@@ -85,6 +82,7 @@ const OrganisationSettings = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     watch,
@@ -121,11 +119,30 @@ const OrganisationSettings = () => {
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
-  const { isFetching } = useQueryWrapper(queryKeys.organisation(org.id), url, {
+  // The organisation whose saved settings the form holds. Until a fetch for
+  // this organisation succeeds the form is not shown: its defaults are not
+  // the organisation's settings, and saving them would overwrite real ones.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  const seeded = seededFor === org.id;
+  // Same, readable inside query callbacks without a stale closure.
+  const seededOrgId = useRef<string | null>(null);
+  // Set by a successful Save: the refetch it triggers re-seeds the form with
+  // the backend's canonical values. Any other refetch (e.g. on reconnect)
+  // must leave the officer's unsaved edits alone.
+  const resyncOrgId = useRef<string | null>(null);
+
+  const { isError, error, refetch, isRefetching } = useQueryWrapper(queryKeys.organisation(org.id), url, {
     enabled: Boolean(org.id),
     refetchOnWindowFocus: false,
     onSuccess: (res: any) => {
       const data = res.data;
+      const id: string = data.id ?? org.id;
+      const firstLoad = seededOrgId.current !== id;
+      const afterSave = resyncOrgId.current === id;
+      if (!firstLoad && !afterSave) return;
+      resyncOrgId.current = null;
+      seededOrgId.current = id;
+      setSeededFor(id);
       reset({
         name: data.name ?? "",
         image: data.image ?? "",
@@ -178,7 +195,9 @@ const OrganisationSettings = () => {
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
-      // Refresh this organisation's detail only — never another tenant's.
+      // Refresh this organisation's detail only — never another tenant's —
+      // and let that refresh re-seed the form with what the backend stored.
+      resyncOrgId.current = savingOrgId.current;
       queryClient.invalidateQueries({ queryKey: queryKeys.organisation(org.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
       // A new review window changes this organisation's Welfare overview.
@@ -209,25 +228,29 @@ const OrganisationSettings = () => {
 
   return (
     <RequirePermission perm="settings.view">
-      <Box minH="100vh" bg={pageBg}>
-        {isFetching ? (
-          <LoadingSpinner h="30vh" text="Loading settings..." />
+      <PageContainer width="form">
+        {!seeded && isError ? (
+          <ErrorState
+            title="Couldn't load settings"
+            description={errorMessage(error)}
+            onRetry={() => refetch()}
+            retrying={isRefetching}
+          />
+        ) : !seeded ? (
+          <PageLoader h="30vh" label="Loading settings..." />
         ) : (
-          <Flex align="center" justify="center">
-            <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>
+          <>
+            <form onSubmit={handleSubmit(onSubmit)}>
               <Stack
-                spacing={4}
-                w="full"
-                maxW="lg"
-                bg={cardBg}
+                gap={4}
+                bg="bg.panel"
+                borderWidth="1px"
+                borderColor="border"
                 rounded="xl"
-                boxShadow="lg"
-                p={6}
-                my={12}
-                mx="auto"
+                p={{ base: 4, md: 6 }}
               >
-                <FormControl isInvalid={Boolean(errors.name)} isRequired>
-                  <FormLabel>Organisation Name</FormLabel>
+                <Field.Root invalid={Boolean(errors.name)} required>
+                  <Field.Label>Organisation name</Field.Label>
                   <Input
                     placeholder="Seat of wisdom presidium"
                     {...register("name", {
@@ -235,21 +258,21 @@ const OrganisationSettings = () => {
                         v.trim().length > 0 || "Name is required",
                     })}
                   />
-                  <FormErrorMessage>{errors.name?.message}</FormErrorMessage>
-                </FormControl>
+                  <Field.ErrorText>{errors.name?.message}</Field.ErrorText>
+                </Field.Root>
 
-                <FormControl isInvalid={Boolean(errors.image)}>
-                  <FormLabel>Logo URL</FormLabel>
+                <Field.Root invalid={Boolean(errors.image)}>
+                  <Field.Label>Logo URL</Field.Label>
                   <Flex align="center" gap={3}>
-                    <Avatar
-                      name={watch("name")}
-                      src={watch("image")}
+                    <NameAvatar
                       size="md"
                       bg={watch("image") ? "white" : undefined}
                       borderWidth="2px"
-                      borderColor="blue.400"
-                    />
+                      borderColor="blue.400" name={watch("name")} src={watch("image")} />
                     <Input
+                      flex="1"
+                      type="url"
+                      inputMode="url"
                       placeholder="https://cdn.example.com/logo.png"
                       {...register("image", {
                         validate: (v) =>
@@ -259,25 +282,28 @@ const OrganisationSettings = () => {
                       })}
                     />
                   </Flex>
-                  <FormErrorMessage>{errors.image?.message}</FormErrorMessage>
-                </FormControl>
+                  <Field.ErrorText>{errors.image?.message}</Field.ErrorText>
+                </Field.Root>
 
-                <Divider />
+                <Separator />
                 <Heading size="sm">{`${terms.attendanceSingular} settings`}</Heading>
 
-                <FormControl display="flex" alignItems="center">
-                  <FormLabel mb="0">{`Collapse ${lowerTerm(
-                    terms.attendanceSingular,
-                  )} by day`}</FormLabel>
-                  <Switch {...register("collapseAttendanceByDay")} />
-                </FormControl>
+                <Field.Root>
+                  <Flex align="center" justify="space-between" gap={3} w="100%">
+                    <Field.Label mb="0">{`Collapse ${lowerTerm(
+                      terms.attendanceSingular,
+                    )} by day`}</Field.Label>
+                    <FormSwitch control={control} name="collapseAttendanceByDay" />
+                  </Flex>
+                </Field.Root>
 
-                <FormControl isInvalid={Boolean(errors.maxAttendanceEdits)}>
-                  <FormLabel>{`Max ${lowerTerm(
+                <Field.Root invalid={Boolean(errors.maxAttendanceEdits)}>
+                  <Field.Label>{`Max ${lowerTerm(
                     terms.attendanceSingular,
-                  )} edits`}</FormLabel>
+                  )} edits`}</Field.Label>
                   <Input
                     type="number"
+                    inputMode="numeric"
                     placeholder={`${DEFAULT_MAX_EDITS} (default)`}
                     {...register("maxAttendanceEdits", {
                       validate: (v) => {
@@ -289,30 +315,30 @@ const OrganisationSettings = () => {
                       },
                     })}
                   />
-                  <FormHelperText>
+                  <Field.HelperText>
                     0 disables editing for all records. Leave blank to use the
                     default ({DEFAULT_MAX_EDITS}).
-                  </FormHelperText>
-                  <FormErrorMessage>
+                  </Field.HelperText>
+                  <Field.ErrorText>
                     {errors.maxAttendanceEdits?.message}
-                  </FormErrorMessage>
-                </FormControl>
+                  </Field.ErrorText>
+                </Field.Root>
 
                 {eligibilitySettingSupported && (
-                  <FormControl>
-                    <Flex align="center" justify="space-between" gap={3}>
-                      <FormLabel htmlFor="attendanceEligibilityEnabled" mb="0">
+                  <Field.Root>
+                    <Flex align="center" justify="space-between" gap={3} w="100%">
+                      <Field.Label mb="0">
                         {`Use ${lowerTerm(
                           terms.attendanceSingular,
                         )} eligibility rules`}
-                      </FormLabel>
-                      <Switch
-                        id="attendanceEligibilityEnabled"
-                        isDisabled={!canManage}
-                        {...register("attendanceEligibilityEnabled")}
+                      </Field.Label>
+                      <FormSwitch
+                        disabled={!canManage}
+                        control={control}
+                        name="attendanceEligibilityEnabled"
                       />
                     </Flex>
-                    <FormHelperText>
+                    <Field.HelperText>
                       {`Allow ${lowerTerm(
                         terms.officerPlural,
                       )} to choose which ${lowerTerm(
@@ -322,12 +348,12 @@ const OrganisationSettings = () => {
                       )}.`}{" "}
                       Useful for sectional rehearsals, committees and other
                       restricted sessions.
-                    </FormHelperText>
-                  </FormControl>
+                    </Field.HelperText>
+                  </Field.Root>
                 )}
 
 
-                <Divider />
+                <Separator />
                 <AttendanceStatusesEditor
                   rows={statusRows}
                   onChange={onStatusRowsChange}
@@ -337,29 +363,30 @@ const OrganisationSettings = () => {
 
                 {welfareSettingsSupported && (
                   <>
-                    <Divider />
+                    <Separator />
                     <Box>
                       <Heading size="sm">Welfare &amp; Engagement</Heading>
-                      <Text fontSize="sm" color="gray.500">
+                      <Text fontSize="sm" color="fg.muted">
                         How Presence Pro compares the recent and previous
                         periods when it looks for people who may need a check-in
                         or deserve encouragement.
                       </Text>
                     </Box>
 
-                    <FormControl
-                      isInvalid={Boolean(errors.welfareReviewWindowDays)}
+                    <Field.Root
+                      invalid={Boolean(errors.welfareReviewWindowDays)}
                     >
-                      <FormLabel>Review window (days)</FormLabel>
+                      <Field.Label>Review window (days)</Field.Label>
                       <Input
                         type="number"
-                        isReadOnly={!canManage}
+                        inputMode="numeric"
+                        readOnly={!canManage}
                         placeholder={`${DEFAULT_WELFARE_REVIEW_WINDOW_DAYS} (default)`}
                         {...register("welfareReviewWindowDays", {
                           validate: (v) => welfareReviewWindowError(v) ?? true,
                         })}
                       />
-                      <FormHelperText>
+                      <Field.HelperText>
                         Presence Pro compares the most recent period with the
                         immediately preceding period of the same length.
                         <br />
@@ -369,42 +396,57 @@ const OrganisationSettings = () => {
                         <br />
                         Frequent meetings: 7–14 days. Monthly meetings: around
                         30 days.
-                      </FormHelperText>
-                      <FormErrorMessage>
+                      </Field.HelperText>
+                      <Field.ErrorText>
                         {errors.welfareReviewWindowDays?.message}
-                      </FormErrorMessage>
-                    </FormControl>
+                      </Field.ErrorText>
+                    </Field.Root>
                   </>
                 )}
 
                 {presentationSupported && (
                   <>
-                    <Divider />
+                    <Separator />
                     <TerminologySettings
                       register={register}
                       errors={errors}
                       isReadOnly={!canManage}
                     />
 
-                    <Divider />
+                    <Separator />
                     <FeatureVisibilitySettings
-                      register={register}
-                      errors={errors}
+                      control={control}
                       isReadOnly={!canManage}
                     />
                   </>
                 )}
 
-                <Can perm="settings.manage">
-                  <Button variant="primary" type="submit" isLoading={isSaving}>
+              </Stack>
+              {/* Pinned to the bottom while the long form scrolls, so Save is
+                  always in thumb reach (it sat ~4,500px down on a phone). */}
+              <Can perm="settings.manage">
+                <Box
+                  position="sticky"
+                  bottom={0}
+                  zIndex="docked"
+                  mt={3}
+                  mx={{ base: -4, md: 0 }}
+                  px={{ base: 4, md: 0 }}
+                  pt={3}
+                  pb={withSafeInset("bottom", "0.75rem")}
+                  bg="bg.subtle"
+                  borderTopWidth={{ base: "1px", md: 0 }}
+                  borderColor="border"
+                >
+                  <Button variant="primary" type="submit" w="100%" minH="44px" loading={isSaving}>
                     Save
                   </Button>
-                </Can>
-              </Stack>
+                </Box>
+              </Can>
             </form>
-          </Flex>
+          </>
         )}
-      </Box>
+      </PageContainer>
     </RequirePermission>
   );
 };

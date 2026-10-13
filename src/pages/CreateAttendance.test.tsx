@@ -1,19 +1,20 @@
+import { confirmInDialog, generatedCss } from "test-utils/render";
 import {
   act,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import theme from "styles/theme";
-import { confirmAlert } from "react-confirm-alert";
+import { system } from "styles/theme";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
-import useGlobalStore, { EMPTY_ORG } from "zStore";
+import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG } from "zStore";
 import CreateAttendance from "pages/CreateAttendance";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { AttendanceTemplate } from "helpers/attendanceTemplates";
@@ -24,7 +25,6 @@ import { format } from "date-fns";
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 // Keep the real endpoint constants; only the axios instance is faked.
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -43,7 +43,6 @@ const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
 const mockPut: jest.Mock = mockedAxios.put;
 const mockDelete: jest.Mock = mockedAxios.delete;
-const mockConfirm = confirmAlert as jest.Mock;
 
 const CATEGORIES: CategoryType[] = [
   {
@@ -86,7 +85,7 @@ const selectOrg = (id: string, { eligibility = false } = {}) =>
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/create"]}>
           <Routes>
@@ -98,7 +97,7 @@ const renderPage = () =>
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
-    </ChakraProvider>
+    </ChakraProvider>,
   );
 
 const nameInput = () => screen.getByLabelText(/Name/) as HTMLInputElement;
@@ -129,10 +128,7 @@ const orgBInvalidated = () =>
   queryClient.getQueryState(queryKeys.attendanceTemplates("orgB"))
     ?.isInvalidated;
 
-const confirmDialog = () => {
-  const options = mockConfirm.mock.calls[mockConfirm.mock.calls.length - 1][0];
-  act(() => options.buttons[0].onClick());
-};
+const confirmDialog = () => confirmInDialog("Delete");
 
 const mockApi = () => {
   mockGet.mockImplementation((url: string) => {
@@ -159,15 +155,15 @@ const mockApi = () => {
     return Promise.resolve({ data: { data: [] } });
   });
   mockPost.mockImplementation((_url: string, body: object) =>
-    Promise.resolve({ data: { data: template({ id: "t-new", ...body }) } })
+    Promise.resolve({ data: { data: template({ id: "t-new", ...body }) } }),
   );
   mockPut.mockImplementation((url: string, body: object) =>
     Promise.resolve({
       data: { data: template({ id: url.split("/").pop(), ...body }) },
-    })
+    }),
   );
   mockDelete.mockImplementation(() =>
-    Promise.resolve({ data: { data: "deleted" } })
+    Promise.resolve({ data: { data: "deleted" } }),
   );
 };
 
@@ -177,6 +173,8 @@ describe("<CreateAttendance> session templates", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
     selectOrg("orgA");
     templatesByOrg = { orgA: [template({})], orgB: [] };
     rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
@@ -187,7 +185,7 @@ describe("<CreateAttendance> session templates", () => {
   it("lists the current organisation's templates", async () => {
     renderPage();
     expect(
-      await screen.findByRole("option", { name: "Thursday Rehearsal" })
+      await screen.findByRole("option", { name: "Thursday Rehearsal" }),
     ).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgA/templates");
   });
@@ -211,6 +209,7 @@ describe("<CreateAttendance> session templates", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Ad-hoc meeting",
       date: "2026-10-01",
+      organisationId: "orgA",
       eligibilityRules: [],
     });
   });
@@ -234,7 +233,7 @@ describe("<CreateAttendance> session templates", () => {
     renderPage();
     await screen.findByText(/No templates yet/);
     await waitFor(() =>
-      expect(categorySelect().options.length).toBeGreaterThan(1)
+      expect(categorySelect().options.length).toBeGreaterThan(1),
     );
     type(nameInput(), "Friday Vigil");
     type(categorySelect(), "c2");
@@ -263,7 +262,7 @@ describe("<CreateAttendance> session templates", () => {
     });
     await waitFor(() => expect(templateSelect().value).toBe("t-new"));
     expect(toast.success).toHaveBeenCalledWith(
-      'Saved "Friday Vigil" as a template'
+      'Saved "Friday Vigil" as a template',
     );
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: queryKeys.attendanceTemplates("orgA"),
@@ -280,7 +279,7 @@ describe("<CreateAttendance> session templates", () => {
     type(nameInput(), "thursday rehearsal");
     fireEvent.click(button("Save as template"));
     expect(toast.error).toHaveBeenCalledWith(
-      'A template named "thursday rehearsal" already exists'
+      'A template named "thursday rehearsal" already exists',
     );
     expect(mockPost).not.toHaveBeenCalled();
   });
@@ -290,7 +289,7 @@ describe("<CreateAttendance> session templates", () => {
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     fireEvent.click(button("Save as template"));
     expect(toast.error).toHaveBeenCalledWith(
-      expect.stringMatching(/Enter the attendance name/)
+      expect.stringMatching(/Enter the attendance name/),
     );
     expect(mockPost).not.toHaveBeenCalled();
   });
@@ -313,9 +312,9 @@ describe("<CreateAttendance> session templates", () => {
     await waitFor(() =>
       expect(
         mockGet.mock.calls.filter(
-          ([url]) => url === "/attendance/orgA/templates"
-        )
-      ).toHaveLength(2)
+          ([url]) => url === "/attendance/orgA/templates",
+        ),
+      ).toHaveLength(2),
     );
     expect(orgBInvalidated()).toBe(false);
     expect(mockPut).toHaveBeenCalledWith("/attendance/orgA/templates/t1", {
@@ -338,7 +337,7 @@ describe("<CreateAttendance> session templates", () => {
     queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
       data: [],
     });
-    confirmDialog();
+    await confirmDialog();
 
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
     expect(mockDelete.mock.calls[0][0]).toBe("/attendance/orgA/templates/t1");
@@ -361,11 +360,11 @@ describe("<CreateAttendance> session templates", () => {
 
     expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: "Thursday Rehearsal" })
+      screen.queryByRole("option", { name: "Thursday Rehearsal" }),
     ).not.toBeInTheDocument();
     expect(nameInput().value).toBe("");
     expect(
-      screen.queryByRole("button", { name: "Update template" })
+      screen.queryByRole("button", { name: "Update template" }),
     ).not.toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgB/templates");
   });
@@ -377,11 +376,11 @@ describe("<CreateAttendance> session templates", () => {
     mockGet.mockImplementation((url: string) =>
       url.endsWith("/templates")
         ? Promise.reject(new Error("offline"))
-        : serve(url)
+        : serve(url),
     );
     renderPage();
     expect(
-      await screen.findByText(/Templates could not be loaded/)
+      await screen.findByText(/Templates could not be loaded/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
   });
@@ -394,7 +393,7 @@ describe("<CreateAttendance> session templates", () => {
     mockGet.mockImplementation((url: string) =>
       url.endsWith("/category")
         ? Promise.reject(new Error("offline"))
-        : serve(url)
+        : serve(url),
     );
     renderPage();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
@@ -444,18 +443,18 @@ describe("<CreateAttendance> session templates", () => {
           categoryId: "c2",
           subCategoryId: null,
           eligibilityRules: [],
-        }
+        },
       );
     });
 
     it("can be deleted", async () => {
       await selectStale();
       fireEvent.click(button("Delete template"));
-      confirmDialog();
+      await confirmDialog();
       await waitFor(() =>
         expect(mockDelete.mock.calls[0][0]).toBe(
-          "/attendance/orgA/templates/t-stale"
-        )
+          "/attendance/orgA/templates/t-stale",
+        ),
       );
     });
   });
@@ -465,6 +464,8 @@ describe("<CreateAttendance> eligibility", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
     selectOrg("orgA", { eligibility: true });
     templatesByOrg = { orgA: [], orgB: [] };
     rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
@@ -488,7 +489,7 @@ describe("<CreateAttendance> eligibility", () => {
             endDate: "2026-10-01",
           },
         ],
-      }
+      },
     );
   };
 
@@ -499,10 +500,10 @@ describe("<CreateAttendance> eligibility", () => {
       resolveFresh = resolve;
     });
     const baseGet = mockGet.getMockImplementation() as (
-      url: string
+      url: string,
     ) => Promise<unknown>;
     mockGet.mockImplementation((url: string) =>
-      url.includes("/availability") ? fresh : baseGet(url)
+      url.includes("/availability") ? fresh : baseGet(url),
     );
 
     renderPage();
@@ -510,13 +511,13 @@ describe("<CreateAttendance> eligibility", () => {
     fillDetails();
     expect(button("Continue")).toBeDisabled();
     expect(
-      screen.getByText("Checking attendance availability...")
+      screen.getByText("Checking attendance availability..."),
     ).toBeInTheDocument();
 
     resolveFresh({ data: { data: [] } });
     await waitFor(() => expect(button("Continue")).toBeEnabled());
     expect(
-      screen.queryByText("Checking attendance availability...")
+      screen.queryByText("Checking attendance availability..."),
     ).not.toBeInTheDocument();
   });
 
@@ -527,10 +528,10 @@ describe("<CreateAttendance> eligibility", () => {
       rejectFresh = reject;
     });
     const baseGet = mockGet.getMockImplementation() as (
-      url: string
+      url: string,
     ) => Promise<unknown>;
     mockGet.mockImplementation((url: string) =>
-      url.includes("/availability") ? fresh : baseGet(url)
+      url.includes("/availability") ? fresh : baseGet(url),
     );
     jest.spyOn(console, "error").mockImplementation(() => undefined);
 
@@ -539,14 +540,18 @@ describe("<CreateAttendance> eligibility", () => {
     fillDetails();
     expect(button("Continue")).toBeDisabled();
     rejectFresh(new Error("availability offline"));
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Attendance availability could not be loaded. Try again before continuing."
-        )
-      ).toBeInTheDocument()
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Attendance availability could not be loaded",
     );
+    expect(alert).toHaveTextContent("Try again before continuing.");
     expect(button("Continue")).toBeDisabled();
+
+    // Try again re-checks availability for the same date.
+    mockGet.mockImplementation(baseGet);
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(button("Continue")).toBeEnabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
 
@@ -556,14 +561,14 @@ describe("<CreateAttendance> eligibility", () => {
     expect(expectedText()).toBe("Expected members: 8 of 8");
     expect(screen.getByText("Everyone is expected")).toBeInTheDocument();
     ["Part", "Gender", "Status", "Probationstatus"].forEach((label) =>
-      expect(screen.getByLabelText(`${label} eligibility`)).toBeInTheDocument()
+      expect(screen.getByLabelText(`${label} eligibility`)).toBeInTheDocument(),
     );
     expect(screen.queryByLabelText("Name eligibility")).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Profession eligibility")
+      screen.queryByLabelText("Profession eligibility"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Clear eligibility" })
+      screen.queryByRole("button", { name: "Clear eligibility" }),
     ).not.toBeInTheDocument();
   });
 
@@ -578,7 +583,7 @@ describe("<CreateAttendance> eligibility", () => {
     await pickEligibility("Status", "Active");
     expect(expectedText()).toBe("Expected members: 2 of 8");
     expect(
-      screen.getByText("Part: Soprano, Alto · Status: Active")
+      screen.getByText("Part: Soprano, Alto · Status: Active"),
     ).toBeInTheDocument();
 
     fireEvent.click(button("Clear eligibility"));
@@ -594,14 +599,14 @@ describe("<CreateAttendance> eligibility", () => {
     await pickEligibility("Gender", "Female");
     expect(expectedText()).toBe("Expected members: 0 of 8");
     expect(
-      screen.getByText("No members match these eligibility rules.")
+      screen.getByText("No members match these eligibility rules."),
     ).toBeInTheDocument();
     expect(button("Continue")).toBeDisabled();
   });
 
   it("keeps raw eligibility counts when eligible members are unavailable", async () => {
     const baseGet = mockGet.getMockImplementation() as (
-      url: string
+      url: string,
     ) => Promise<unknown>;
     mockGet.mockImplementation((url: string) =>
       url.includes("/availability")
@@ -621,7 +626,7 @@ describe("<CreateAttendance> eligibility", () => {
               ],
             },
           })
-        : baseGet(url)
+        : baseGet(url),
     );
     renderPage();
     await waitForRoster();
@@ -630,19 +635,19 @@ describe("<CreateAttendance> eligibility", () => {
     expect(expectedText()).toBe("Expected members: 2 of 8");
     await screen.findByText("2 members are unavailable on this date.");
     expect(
-      screen.getByText("Final expected roster: 0 members.")
+      screen.getByText("Final expected roster: 0 members."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("No members match these eligibility rules.")
+      screen.queryByText("No members match these eligibility rules."),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("No members are available for this attendance.")
+      screen.getByText("No members are available for this attendance."),
     ).toBeInTheDocument();
     // Someone unavailable may still physically attend and be added manually.
     expect(
       screen.getByText(
-        "You can still continue and add a member who physically attended."
-      )
+        "You can still continue and add a member who physically attended.",
+      ),
     ).toBeInTheDocument();
     expect(button("Continue")).toBeEnabled();
   });
@@ -651,7 +656,7 @@ describe("<CreateAttendance> eligibility", () => {
     renderPage();
     await waitForRoster();
     await waitFor(() =>
-      expect(categorySelect().options.length).toBeGreaterThan(1)
+      expect(categorySelect().options.length).toBeGreaterThan(1),
     );
     fillDetails();
     type(categorySelect(), "c1");
@@ -666,6 +671,7 @@ describe("<CreateAttendance> eligibility", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Rehearsal",
       date: "2026-10-01",
+      organisationId: "orgA",
       categoryId: "c1",
       eligibilityRules: [
         { field: "part", values: ["soprano"] },
@@ -691,11 +697,13 @@ describe("<CreateAttendance> eligibility", () => {
     templatesByOrg.orgA = [template({})];
     const serve = mockGet.getMockImplementation()!;
     mockGet.mockImplementation((url: string) =>
-      url.endsWith("/model") ? Promise.reject(new Error("offline")) : serve(url)
+      url.endsWith("/model")
+        ? Promise.reject(new Error("offline"))
+        : serve(url),
     );
     renderPage();
     expect(
-      await screen.findByText(/Member fields could not be loaded/)
+      await screen.findByText(/Member fields could not be loaded/),
     ).toBeInTheDocument();
     await screen.findByRole("option", { name: "Thursday Rehearsal" });
     type(templateSelect(), "t1");
@@ -703,8 +711,8 @@ describe("<CreateAttendance> eligibility", () => {
     expect(nameInput().value).toBe("");
     expect(
       await screen.findByText(
-        /can't be applied until categories and member fields load/
-      )
+        /can't be applied until categories and member fields load/,
+      ),
     ).toBeInTheDocument();
     (console.error as jest.Mock).mockRestore();
   });
@@ -801,7 +809,7 @@ describe("<CreateAttendance> eligibility", () => {
         await selectStale();
         expect(screen.getByText("Needs update")).toBeInTheDocument();
         expect(
-          screen.getByText(/Part: Mezzo is no longer an option\./)
+          screen.getByText(/Part: Mezzo is no longer an option\./),
         ).toBeInTheDocument();
         expect(button("Apply")).toBeDisabled();
         expect(nameInput().value).toBe("");
@@ -822,11 +830,11 @@ describe("<CreateAttendance> eligibility", () => {
       it("can be deleted", async () => {
         await selectStale();
         fireEvent.click(button("Delete template"));
-        confirmDialog();
+        await confirmDialog();
         await waitFor(() =>
           expect(mockDelete.mock.calls[0][0]).toBe(
-            "/attendance/orgA/templates/t-mezzo"
-          )
+            "/attendance/orgA/templates/t-mezzo",
+          ),
         );
       });
 
@@ -843,8 +851,8 @@ describe("<CreateAttendance> eligibility", () => {
         await selectStale();
         expect(
           screen.getByText(
-            /no longer exists\. Part: Mezzo is no longer an option\./
-          )
+            /no longer exists\. Part: Mezzo is no longer an option\./,
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -855,12 +863,14 @@ describe("<CreateAttendance> with relabelled member fields", () => {
   const RELABELLED = MEMBER_MODEL.map((field) =>
     field.name === "part"
       ? { ...field, _id: "f-part", label: "Voice Part" }
-      : field
+      : field,
   );
 
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
     selectOrg("orgA", { eligibility: true });
     templatesByOrg = {
       orgA: [
@@ -897,7 +907,7 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     fireEvent.click(button("Continue"));
     await screen.findByText("marking");
     expect(
-      useGlobalStore.getState().currentAttendance.eligibilityRules
+      useGlobalStore.getState().currentAttendance.eligibilityRules,
     ).toEqual([{ field: "part", values: ["soprano"] }]);
   });
 
@@ -917,7 +927,7 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     });
     type(templateSelect(), "t-mezzo");
     expect(
-      screen.getByText(/Voice Part: Mezzo is no longer an option\./)
+      screen.getByText(/Voice Part: Mezzo is no longer an option\./),
     ).toBeInTheDocument();
     expect(button("Apply")).toBeDisabled();
   });
@@ -927,7 +937,7 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     await waitForRoster();
     await screen.findByRole("option", { name: "Rehearsal" });
     expect(
-      await screen.findByRole("option", { name: "Soprano Rehearsal" })
+      await screen.findByRole("option", { name: "Soprano Rehearsal" }),
     ).toBeInTheDocument();
     type(templateSelect(), "t-sop");
     expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
@@ -940,6 +950,8 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
     useGlobalStore.setState({
       organisation: {
         ...EMPTY_ORG,
@@ -971,8 +983,8 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
     await screen.findByText(/^Expected students: \d+ of/);
     await waitFor(() =>
       expect(
-        (screen.getByLabelText("Activity") as HTMLSelectElement).options.length
-      ).toBeGreaterThan(1)
+        (screen.getByLabelText("Activity") as HTMLSelectElement).options.length,
+      ).toBeGreaterThan(1),
     );
     type(nameInput(), "Rehearsal");
     type(dateInput(), "2026-10-01");
@@ -986,6 +998,7 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Rehearsal",
       date: "2026-10-01",
+      organisationId: "orgA",
       categoryId: "c1",
       eligibilityRules: [{ field: "part", values: ["soprano"] }],
     });
@@ -1005,6 +1018,8 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
     selectOrg("orgA");
     templatesByOrg = { orgA: [template({}), sopranoTemplate], orgB: [] };
     rosterByOrg = { orgA: ROSTER, orgB: [] };
@@ -1026,14 +1041,14 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     renderPage();
     await screen.findByText(/No templates yet/);
     await waitFor(() =>
-      expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members")
+      expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members"),
     );
 
     expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Everyone/)).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /clear/i })
+      screen.queryByRole("button", { name: /clear/i }),
     ).not.toBeInTheDocument();
     expect(memberModelRequested()).toBe(false);
 
@@ -1046,6 +1061,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual({
       name: "Ad-hoc meeting",
       date: "2026-10-01",
+      organisationId: "orgA",
       eligibilityRules: [],
     });
   });
@@ -1054,19 +1070,21 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     rosterByOrg.orgA = [];
     renderPage();
     await waitFor(() =>
-      expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members")
+      expect(mockGet).toHaveBeenCalledWith("/organisations/orgA/members"),
     );
     type(dateInput(), "2026-10-01");
     await waitFor(() => expect(button("Continue")).toBeDisabled());
     await waitFor(() =>
       expect(
-        screen.queryByText("Checking attendance availability...")
-      ).not.toBeInTheDocument()
+        screen.queryByText("Checking attendance availability..."),
+      ).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByText("No members are available for this attendance.")
+      screen.getByText("No members are available for this attendance."),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/You can still continue/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/You can still continue/),
+    ).not.toBeInTheDocument();
     expect(button("Continue")).toBeDisabled();
   });
 
@@ -1082,12 +1100,12 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
             data: {
               data: url.endsWith("/templates") ? [template({})] : ROSTER,
             },
-          })
+          }),
     );
     renderPage();
     await screen.findByRole("option", { name: "Rehearsal" });
     expect(
-      screen.queryByText(/fields could not be loaded/)
+      screen.queryByText(/fields could not be loaded/),
     ).not.toBeInTheDocument();
 
     // Unrestricted templates do not depend on member fields while off.
@@ -1111,7 +1129,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     expect(
       await screen.findByRole("option", {
         name: "Soprano Rehearsal (Requires eligibility)",
-      })
+      }),
     ).toBeInTheDocument();
 
     type(templateSelect(), "t-sop");
@@ -1119,8 +1137,8 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     expect(nameInput().value).toBe("");
     expect(
       screen.getByText(
-        /Uses attendance eligibility\. Enable eligibility in Organisation Settings to use this template\./
-      )
+        /Uses attendance eligibility\. Enable eligibility in Organisation Settings to use this template\./,
+      ),
     ).toBeInTheDocument();
     expect(button("Apply")).toBeDisabled();
     expect(button("Update template")).toBeDisabled();
@@ -1130,10 +1148,10 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     // Deleting stays allowed.
     expect(button("Delete template")).toBeEnabled();
     fireEvent.click(button("Delete template"));
-    confirmDialog();
+    await confirmDialog();
     await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
     expect(mockDelete.mock.calls[0][0]).toBe(
-      "/attendance/orgA/templates/t-sop"
+      "/attendance/orgA/templates/t-sop",
     );
   });
 
@@ -1143,7 +1161,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     ];
     renderPage();
     expect(
-      await screen.findByRole("option", { name: "Odd (Requires eligibility)" })
+      await screen.findByRole("option", { name: "Odd (Requires eligibility)" }),
     ).toBeInTheDocument();
   });
 
@@ -1174,7 +1192,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
           ...state.organisation,
           attendanceEligibilityEnabled: false,
         },
-      }))
+      })),
     );
 
     expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
@@ -1184,7 +1202,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     fireEvent.click(button("Continue"));
     await screen.findByText("marking");
     expect(
-      useGlobalStore.getState().currentAttendance.eligibilityRules
+      useGlobalStore.getState().currentAttendance.eligibilityRules,
     ).toEqual([]);
   });
 
@@ -1212,10 +1230,13 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     fireEvent.click(button("Continue"));
     await screen.findByText("marking");
     expect(
-      useGlobalStore.getState().currentAttendance.eligibilityRules
+      useGlobalStore.getState().currentAttendance.eligibilityRules,
     ).toEqual([]);
     off.unmount();
     expect(mockPut).not.toHaveBeenCalled();
+    // Continue started a resumable draft; step past it as if it had been
+    // discarded, since this test is about the setting, not drafts.
+    localStorage.clear();
 
     // On again: the same stored template applies its rules.
     selectOrg("orgA", { eligibility: true });
@@ -1223,7 +1244,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     await waitForRoster();
     await screen.findByRole("option", { name: "Rehearsal" });
     expect(
-      screen.getByRole("option", { name: "Soprano Rehearsal" })
+      screen.getByRole("option", { name: "Soprano Rehearsal" }),
     ).toBeInTheDocument();
     type(templateSelect(), "t-sop");
     expect(nameInput().value).toBe("Soprano Rehearsal");
@@ -1255,10 +1276,261 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
           permissions: [],
           attendanceEligibilityEnabled: true,
         },
-      })
+      }),
     );
     expect(
-      await screen.findByText(/^Expected members: 8 of 8/)
+      await screen.findByText(/^Expected members: 8 of 8/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("<CreateAttendance> unfinished attendance resume", () => {
+  // Keys are asserted as literals on purpose: resume and discard across pages
+  // must keep deriving exactly these (the roster pages build them too).
+  const META_KEY = "attendance-new-draft-orgA";
+  const IDENTITY = "2026-10-01-Sunday Mass";
+  const ROSTER_KEY = `attendance-draft-orgA-${IDENTITY}`;
+  const MANUAL_KEY = `attendance-manual-draft-orgA-${IDENTITY}`;
+  const draftMeta = (over: Record<string, unknown> = {}) => ({
+    version: 1,
+    organisationId: "orgA",
+    name: "Sunday Mass",
+    date: "2026-10-01",
+    categoryId: null,
+    subCategoryId: null,
+    eligibilityRules: [],
+    ...over,
+  });
+  const seedDraft = (over: Record<string, unknown> = {}) => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta(over)));
+    localStorage.setItem(
+      ROSTER_KEY,
+      JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "late" }]),
+    );
+    localStorage.setItem(
+      MANUAL_KEY,
+      JSON.stringify([{ id: "m9", name: "Ife", attendanceStatus: "present" }]),
+    );
+  };
+  const card = () => screen.queryByText("Unfinished attendance");
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
+    selectOrg("orgA");
+    templatesByOrg = { orgA: [], orgB: [] };
+    rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  it("writes the draft metadata only after a valid Continue", async () => {
+    renderPage();
+    await screen.findByText(/No templates yet/);
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+
+    type(nameInput(), "Ad-hoc meeting");
+    type(dateInput(), "2026-10-01");
+    // Typing alone never starts a draft.
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+
+    await waitForContinue();
+    fireEvent.click(button("Continue"));
+    await screen.findByText("marking");
+
+    // Continue also made the session the working state it navigates with.
+    expect(useGlobalStore.getState().currentAttendance).toEqual({
+      name: "Ad-hoc meeting",
+      date: "2026-10-01",
+      organisationId: "orgA",
+      eligibilityRules: [],
+    });
+    expect(JSON.parse(localStorage.getItem(META_KEY) as string)).toEqual({
+      version: 1,
+      organisationId: "orgA",
+      name: "Ad-hoc meeting",
+      date: "2026-10-01",
+      categoryId: null,
+      subCategoryId: null,
+      eligibilityRules: [],
+    });
+  });
+
+  it("shows the unfinished draft instead of the create form", async () => {
+    seedDraft();
+    renderPage();
+
+    expect(
+      await screen.findByText("Unfinished attendance"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Sunday Mass")).toBeInTheDocument();
+    expect(screen.getByText("Thu 01 Oct 26")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "You started marking this attendance but haven't submitted it yet.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue marking" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Discard and create new" }),
+    ).toBeInTheDocument();
+    // The normal form is not offered while the draft exists.
+    expect(screen.queryByLabelText(/Name/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("gives the resume card actions 44px tap targets", async () => {
+    seedDraft();
+    renderPage();
+    await screen.findByText("Unfinished attendance");
+
+    for (const name of ["Continue marking", "Discard and create new"]) {
+      expect(generatedCss(screen.getByRole("button", { name }))).toMatch(
+        /min-height:\s*44px/,
+      );
+    }
+  });
+
+  it("restores the draft into the working state and resumes marking without touching the saved roster", async () => {
+    seedDraft();
+    const rosterDraft = localStorage.getItem(ROSTER_KEY);
+
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue marking" }),
+    );
+
+    expect(await screen.findByText("marking")).toBeInTheDocument();
+    expect(useGlobalStore.getState().currentAttendance).toEqual({
+      name: "Sunday Mass",
+      date: "2026-10-01",
+      organisationId: "orgA",
+      eligibilityRules: [],
+    });
+    // Mark Attendance reconciles these itself; Create Attendance must not
+    // rebuild or discard the officer's saved marks.
+    expect(localStorage.getItem(ROSTER_KEY)).toBe(rosterDraft);
+    expect(localStorage.getItem(MANUAL_KEY)).not.toBeNull();
+  });
+
+  it("keeps the draft when Discard is cancelled", async () => {
+    seedDraft();
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discard and create new" }),
+    );
+
+    const dialog = await confirmInDialog("Cancel");
+    expect(dialog).toHaveTextContent("Discard unfinished attendance?");
+    expect(dialog).toHaveTextContent("Sunday Mass");
+
+    expect(card()).toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+    expect(localStorage.getItem(ROSTER_KEY)).not.toBeNull();
+  });
+
+  it("removes the draft, both roster drafts and the working state on Discard", async () => {
+    seedDraft();
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Sunday Mass",
+        date: "2026-10-01",
+        eligibilityRules: [],
+      },
+    });
+    // Another organisation's unfinished draft must survive the discard.
+    localStorage.setItem(
+      "attendance-new-draft-orgB",
+      JSON.stringify(draftMeta({ organisationId: "orgB", name: "B Vigil" })),
+    );
+
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discard and create new" }),
+    );
+    await confirmInDialog("Discard");
+
+    // The form is revealed only once the discard has fully settled.
+    expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+    expect(localStorage.getItem(ROSTER_KEY)).toBeNull();
+    expect(localStorage.getItem(MANUAL_KEY)).toBeNull();
+    expect(useGlobalStore.getState().currentAttendance).toEqual(
+      EMPTY_CURRENT_ATTENDANCE,
+    );
+    expect(localStorage.getItem("attendance-new-draft-orgB")).not.toBeNull();
+  });
+
+  it("does not clear a working session that belongs to another organisation", async () => {
+    seedDraft();
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Sunday Mass",
+        date: "2026-10-01",
+        organisationId: "orgB",
+        eligibilityRules: [],
+      },
+    });
+
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Discard and create new" }),
+    );
+    await confirmInDialog("Discard");
+
+    expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+    // The foreign working session is not the discarded draft's to clear.
+    expect(useGlobalStore.getState().currentAttendance).toMatchObject({
+      name: "Sunday Mass",
+      organisationId: "orgB",
+    });
+  });
+
+  it("shows the draft only for its own organisation and keeps it through a switch", async () => {
+    seedDraft();
+    renderPage();
+    expect(
+      await screen.findByText("Unfinished attendance"),
+    ).toBeInTheDocument();
+
+    act(() => selectOrg("orgB"));
+    expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+    expect(screen.queryByText("Sunday Mass")).not.toBeInTheDocument();
+
+    act(() => selectOrg("orgA"));
+    expect(
+      await screen.findByText("Unfinished attendance"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Sunday Mass")).toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+  });
+
+  it("ignores a malformed metadata record", async () => {
+    localStorage.setItem(META_KEY, "{ nope");
+    renderPage();
+    expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+  });
+
+  it("does not treat a persisted working attendance as a resumable draft", async () => {
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Old Mass",
+        date: "2026-01-01",
+        eligibilityRules: [],
+      },
+    });
+    renderPage();
+    expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
   });
 });

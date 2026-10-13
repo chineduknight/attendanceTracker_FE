@@ -37,8 +37,8 @@ const VisibleBulkActions = ({
       <Button
         size="sm"
         minH="44px"
-        colorScheme={selectedStatus.color}
-        isDisabled={applyCount === 0}
+        colorPalette={selectedStatus.color}
+        disabled={applyCount === 0}
         onClick={onApply}
       >
         {`Apply ${selectedStatus.label} to ${applyCount} visible`}
@@ -48,21 +48,14 @@ const VisibleBulkActions = ({
       size="sm"
       minH="44px"
       variant="outline"
-      isDisabled={resetCount === 0}
+      disabled={resetCount === 0}
       onClick={onReset}
     >
       {`Reset ${resetCount} visible to ${defaultStatus.label}`}
     </Button>
     {canUndo && (
-      <Button
-        size="sm"
-        minH="44px"
-        variant="ghost"
-        leftIcon={<FaUndo aria-hidden />}
-        onClick={onUndo}
-      >
-        Undo bulk change
-      </Button>
+      <Button size="sm" minH="44px" variant="ghost" onClick={onUndo}><FaUndo aria-hidden />Undo bulk change
+              </Button>
     )}
   </Flex>
 );

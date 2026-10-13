@@ -122,7 +122,7 @@ describe("<AllAttendance> analytics inclusion", () => {
     expect(within(rowOf("Week two")).getByText("1 left")).toBeInTheDocument();
     // Excluded and out of edits: no edit button.
     expect(within(rowOf("Week three")).queryByText(/left$/)).toBeNull();
-    expect(within(rowOf("Week three")).queryByRole("button")).toBeNull();
+    expect(within(rowOf("Week three")).queryByRole("button", { name: /^Edit/ })).toBeNull();
   });
 
   it("names a custom attendance term when the filter matches nothing", async () => {
@@ -140,3 +140,117 @@ describe("<AllAttendance> analytics inclusion", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("<AllAttendance> rows, empty and error states", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    mockNavigate.mockClear();
+    mockGet.mockReset();
+  });
+
+  const renderWith = (permissions: string[] = []) => {
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", permissions: permissions as never },
+    });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+  };
+
+  it("makes each row a button and labels its edit action", async () => {
+    mockGet.mockResolvedValue({ data: { data: RECORDS } });
+    renderWith();
+    const open = await screen.findByRole("button", { name: /^Week one/ });
+    fireEvent.click(open);
+    expect(mockNavigate).toHaveBeenCalledWith("/attendance/r1", expect.anything());
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Week two" }));
+    expect(mockNavigate).toHaveBeenLastCalledWith("/mark-attendance/r2");
+  });
+
+  it("shows the stored session day, not a timezone-shifted one", async () => {
+    mockGet.mockResolvedValue({ data: { data: [RECORDS[0]] } });
+    renderWith();
+    expect(await screen.findByText(/Thu 01 Oct 26/)).toBeInTheDocument();
+  });
+
+  it("offers to create the first record only to officers who can", async () => {
+    mockGet.mockResolvedValue({ data: { data: [] } });
+    renderWith(["attendance.manage"]);
+    expect(await screen.findByText("No attendance yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create attendance" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/create-attendance");
+  });
+
+  it("does not offer create to view-only officers", async () => {
+    mockGet.mockResolvedValue({ data: { data: [] } });
+    renderWith(["attendance.view"]);
+    expect(await screen.findByText("No attendance yet")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create attendance" })).not.toBeInTheDocument();
+  });
+
+  it("explains a failed load and retries, instead of claiming there is nothing", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    mockGet.mockRejectedValueOnce({ response: { status: 500, data: { error: "Server busy" } } });
+    renderWith();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load attendance");
+    expect(alert).toHaveTextContent("Server busy");
+    expect(screen.queryByText("No attendance yet")).not.toBeInTheDocument();
+
+    mockGet.mockResolvedValue({ data: { data: RECORDS } });
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Week one")).toBeInTheDocument();
+    (console.error as jest.Mock).mockRestore();
+  });
+});
+
+describe("<AllAttendance> long histories", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    mockGet.mockReset();
+    useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1" } });
+  });
+
+  // 30 sessions: 1–30 Sep (newest first on screen) plus 2 in August.
+  const many = [
+    ...Array.from({ length: 28 }, (_, i) =>
+      ({ ...record(`s${i + 1}`, `Session ${i + 1}`, i + 1), date: `2026-09-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`, dateFormated: 100 + i }),
+    ),
+    { ...record("a1", "August one", 1), date: "2026-08-20T00:00:00.000Z", dateFormated: 50 },
+    { ...record("a2", "August two", 1), date: "2026-08-10T00:00:00.000Z", dateFormated: 40 },
+  ];
+
+  it("shows 25 at a time under month headings, and more on request", async () => {
+    mockGet.mockResolvedValue({ data: { data: many } });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+    await screen.findByText("Session 28");
+
+    expect(screen.getByRole("heading", { name: "September 2026" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "August 2026" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Session \d+/ })).toHaveLength(25);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 more (5 left)" }));
+    expect(screen.getByRole("heading", { name: "August 2026" })).toBeInTheDocument();
+    expect(screen.getByText("August two")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  it("says when a session was recorded and by whom", async () => {
+    mockGet.mockResolvedValue({
+      data: { data: [{ ...RECORDS[0], createdBy: { id: "u1", name: "knight" } }] },
+    });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+    expect(await screen.findByText(/Thu 01 Oct 26 · recorded \d{1,2}:\d{2} [AP]M by knight/)).toBeInTheDocument();
+  });
+
+  it("starts the shown slice again when the filter changes", async () => {
+    mockGet.mockResolvedValue({ data: { data: many } });
+    renderRoute(<AllAttendance />, "/attendance", "/attendance");
+    await screen.findByText("Session 28");
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 more (5 left)" }));
+    const filter = screen.getByLabelText("Filter by analytics inclusion");
+    fireEvent.change(filter, { target: { value: "included" } });
+    fireEvent.change(filter, { target: { value: "all" } });
+    expect(screen.getAllByRole("button", { name: /^(Session \d+|August)/ })).toHaveLength(25);
+  });
+});
+

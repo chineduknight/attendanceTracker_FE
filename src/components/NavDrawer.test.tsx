@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
+import { render } from "test-utils/render";
 import { MemoryRouter } from "react-router-dom";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import NavDrawer from "components/NavDrawer";
@@ -48,5 +49,11 @@ describe("<NavDrawer>", () => {
     fireEvent.click(screen.getByText("Logout"));
     expect(useGlobalStore.getState().user).toEqual(EMPTY_USER);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps the colour-mode control hidden while dark mode is off", () => {
+    setState({});
+    renderDrawer();
+    expect(screen.queryByText("Appearance")).not.toBeInTheDocument();
   });
 });

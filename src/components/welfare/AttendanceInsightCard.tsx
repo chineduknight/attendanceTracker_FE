@@ -1,16 +1,4 @@
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Link,
-  List,
-  ListItem,
-  Stack,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, Heading, Link, List, Stack, Text } from "@chakra-ui/react";
 import { Link as RouterLink } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { BEHAVIOR_META } from "helpers/attendanceStatuses";
@@ -70,7 +58,7 @@ const presenceSummary = (insight: WelfareInsight): string =>
  */
 const ChangeBadge = ({ points }: { points: number }) => (
   <Badge
-    colorScheme={points < 0 ? "red" : points > 0 ? "green" : "gray"}
+    colorPalette={points < 0 ? "red" : points > 0 ? "green" : "gray"}
     textTransform="none"
     fontSize="xs"
     ml={1}
@@ -130,7 +118,6 @@ const AttendanceInsightCard = ({
   onAddFollowUp,
 }: AttendanceInsightCardProps) => {
   const terms = useTerms();
-  const cardBg = useColorModeValue("white", "gray.700");
   const { label, colorScheme } = VARIANT_META[variant];
   const reasons = reasonsFor(insight, variant);
   const memberName =
@@ -158,7 +145,7 @@ const AttendanceInsightCard = ({
       borderWidth="1px"
       borderRadius="lg"
       p={{ base: 3, md: 4 }}
-      bg={cardBg}
+      bg={"bg.panel"}
       h="full"
     >
       <Flex
@@ -172,7 +159,7 @@ const AttendanceInsightCard = ({
         <Heading size="sm" minW={0} overflowWrap="anywhere">
           {memberName}
         </Heading>
-        <Badge colorScheme={colorScheme} flexShrink={0}>
+        <Badge colorPalette={colorScheme} flexShrink={0}>
           {label}
         </Badge>
       </Flex>
@@ -180,23 +167,23 @@ const AttendanceInsightCard = ({
       {(followUpLogged || followUpBadge) && (
         <Flex gap={2} wrap="wrap" mb={2}>
           {followUpLogged && (
-            <Badge colorScheme="green">Follow-up logged</Badge>
+            <Badge colorPalette="green">Follow-up logged</Badge>
           )}
-          {followUpBadge && <Badge colorScheme="purple">{followUpBadge}</Badge>}
+          {followUpBadge && <Badge colorPalette="purple">{followUpBadge}</Badge>}
         </Flex>
       )}
 
       {reasons.length > 0 && (
-        <List spacing={1} mb={3}>
+        <List.Root gap={1} mb={3}>
           {reasons.map((reason) => (
-            <ListItem key={reason}>
+            <List.Item key={reason}>
               <Text fontWeight="medium">{reason}</Text>
-            </ListItem>
+            </List.Item>
           ))}
-        </List>
+        </List.Root>
       )}
 
-      <Stack spacing={1} fontSize="sm" mb={3}>
+      <Stack gap={1} fontSize="sm" mb={3}>
         <Text>
           {presenceSummary(insight)}
           {variant !== "communicated" &&
@@ -216,23 +203,18 @@ const AttendanceInsightCard = ({
         {variant === "communicated" &&
           insight.recent.absent === 0 &&
           insight.recent.excused > 0 && (
-            <Text color="gray.500">The missed sessions were excused.</Text>
+            <Text color="fg.muted">The missed sessions were excused.</Text>
           )}
       </Stack>
 
       <Flex justify="space-between" align="center" gap={2} wrap="wrap">
-        <Link
-          as={RouterLink}
-          to={`${analyticsPath}?${analyticsQuery}`}
-          color="blue.500"
-          fontWeight="medium"
-          py={2}
-        >
-          {`View ${lowerTerm(terms.attendanceSingular)} history`}
-        </Link>
+        <Link color="blue.fg" fontWeight="medium" minH="44px" asChild><RouterLink to={`${analyticsPath}?${analyticsQuery}`}>
+            {`View ${lowerTerm(terms.attendanceSingular)} history`}
+          </RouterLink></Link>
         {onAddFollowUp && (
           <Button
-            size={{ base: "sm", md: "xs" }}
+            size="sm"
+            minH="44px"
             variant="outline"
             onClick={onAddFollowUp}
           >

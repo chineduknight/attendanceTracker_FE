@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { confirmAlert } from "react-confirm-alert";
+import { confirmInDialog } from "test-utils/render";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -13,7 +13,6 @@ import { PermissionKey } from "rbac/permissions";
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
@@ -28,7 +27,6 @@ const mockDelete: jest.Mock = require("services/api").default.delete;
 const mockPatch: jest.Mock = require("services/api").default.patch;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockPost: jest.Mock = require("services/api").default.post;
-const mockConfirm = confirmAlert as jest.Mock;
 
 const entry = (memberId: string, name: string, attendanceStatus: string) => ({
   _id: `${memberId}-row`,
@@ -99,6 +97,46 @@ describe("<ViewAttendance> with configured statuses", () => {
     await screen.findByText("Zara");
     expect(screen.getByLabelText("Filter by attendance status")).toBeInTheDocument();
     expect(screen.getByLabelText("Filter by member status")).toBeInTheDocument();
+  });
+});
+
+describe("<ViewAttendance> load failure", () => {
+  beforeEach(() => {
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: CUSTOM_STATUSES },
+    });
+  });
+
+  it("explains a failed load with the backend's reason and retries in place", async () => {
+    mockGet.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Server busy" } } }),
+    );
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load this attendance");
+    expect(alert).toHaveTextContent("Server busy");
+
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: SESSION } }));
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Zara")).toBeInTheDocument();
+  });
+
+  it("offers to clear a search that matches no one", async () => {
+    mockGet.mockImplementation(() => Promise.resolve({ data: { data: SESSION } }));
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    // The stored calendar day (UTC midnight), not a timezone-shifted one.
+    expect(screen.getByText("Tue 01 Sep 26")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "nobody" } });
+    expect(screen.getByText("No member found")).toBeInTheDocument();
+    expect(screen.getByText('Nothing matches "nobody".')).toBeInTheDocument();
+
+    const clears = screen.getAllByRole("button", { name: "Clear search" });
+    fireEvent.click(clears[clears.length - 1]);
+    expect(screen.getByText("Zara")).toBeInTheDocument();
   });
 });
 
@@ -238,6 +276,12 @@ describe("<ViewAttendance> with custom terminology", () => {
   });
 
   it("names the session term in the delete confirm and failure copy", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...useGlobalStore.getState().organisation,
+        permissions: ["attendance.view", "attendance.manage"],
+      },
+    });
     mockDelete.mockImplementation(() =>
       Promise.reject({ response: { data: { error: undefined } } }),
     );
@@ -245,12 +289,9 @@ describe("<ViewAttendance> with custom terminology", () => {
     await screen.findByText("Zara");
 
     fireEvent.click(screen.getByRole("button", { name: /Delete Session/ }));
-    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
-    const options = mockConfirm.mock.calls[0][0];
-    expect(options.title).toBe("Delete Session");
-    expect(options.message).toContain("delete this session record?");
-
-    options.buttons[0].onClick();
+    const dialog = await confirmInDialog("Delete");
+    expect(within(dialog).getByText("Delete Session")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("delete this session record?");
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("Failed to delete session."),
     );
@@ -309,7 +350,8 @@ describe("<ViewAttendance> analytics inclusion", () => {
     renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
     await screen.findByText("Zara");
   };
-  const dialog = () => within(screen.getByRole("dialog"));
+  // v3 dialogs open a tick after the click, so wait for one to appear.
+  const dialog = async () => within(await screen.findByRole("alertdialog"));
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -361,16 +403,16 @@ describe("<ViewAttendance> analytics inclusion", () => {
     fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
     expect(mockPatch).not.toHaveBeenCalled();
     expect(
-      dialog().getByText(
+      (await dialog()).getByText(
         "This attendance will remain available in attendance history, but it will not count toward organisation or member analytics."
       )
     ).toBeInTheDocument();
-    const reason = dialog().getByLabelText("Reason (optional)");
+    const reason = (await dialog()).getByLabelText("Reason (optional)");
     expect(reason).toHaveAttribute("maxLength", "200");
     fireEvent.change(reason, { target: { value: " Incomplete marking " } });
-    expect(dialog().getByText("20/200 characters")).toBeInTheDocument();
+    expect((await dialog()).getByText("20/200 characters")).toBeInTheDocument();
     fireEvent.click(
-      dialog().getByRole("button", { name: "Exclude from analytics" })
+      (await dialog()).getByRole("button", { name: "Exclude from analytics" })
     );
 
     await waitFor(() =>
@@ -392,9 +434,9 @@ describe("<ViewAttendance> analytics inclusion", () => {
     setup(["attendance.view", "attendance.manage"]);
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
-    fireEvent.click(dialog().getByRole("button", { name: "Cancel" }));
+    fireEvent.click((await dialog()).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
     );
     expect(mockPatch).not.toHaveBeenCalled();
   });
@@ -408,7 +450,7 @@ describe("<ViewAttendance> analytics inclusion", () => {
     await renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Restore to analytics" }));
-    fireEvent.click(dialog().getByRole("button", { name: "Restore" }));
+    fireEvent.click((await dialog()).getByRole("button", { name: "Restore" }));
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("Restore not allowed")
@@ -425,14 +467,14 @@ describe("<ViewAttendance> analytics inclusion", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore to analytics" }));
     expect(
-      dialog().getByText("Restore this rehearsal to analytics?")
+      (await dialog()).getByText("Restore this rehearsal to analytics?")
     ).toBeInTheDocument();
     expect(
-      dialog().getByText(
+      (await dialog()).getByText(
         "Its stored attendance will count again in organisation and student analytics."
       )
     ).toBeInTheDocument();
-    fireEvent.click(dialog().getByRole("button", { name: "Restore" }));
+    fireEvent.click((await dialog()).getByRole("button", { name: "Restore" }));
     await waitFor(() =>
       expect(mockPatch).toHaveBeenCalledWith(
         "/attendance/org1/att1/analytics-inclusion",
@@ -451,10 +493,10 @@ describe("<ViewAttendance> analytics inclusion", () => {
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Exclude from analytics" }));
     expect(
-      dialog().getByText("Exclude this rehearsal from analytics?")
+      (await dialog()).getByText("Exclude this rehearsal from analytics?")
     ).toBeInTheDocument();
     expect(
-      dialog().getByText(
+      (await dialog()).getByText(
         "This rehearsal will remain available in rehearsal history, but it will not count toward organisation or student analytics."
       )
     ).toBeInTheDocument();
@@ -509,7 +551,10 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
     await screen.findByText("Zara");
   };
-  const dialog = () => within(screen.getByRole("dialog"));
+  // v3 dialogs open a tick after the click, so wait for one to appear.
+  const dialog = async () => within(await screen.findByRole("dialog"));
+  // Removal asks through the shared ConfirmDialog (role="alertdialog").
+  const confirmation = async () => within(await screen.findByRole("alertdialog"));
   const rowContainer = (name: string) =>
     screen.getByText(name).closest("div.chakra-button")
       ?.parentElement as HTMLElement;
@@ -520,7 +565,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     await screen.findByRole("dialog");
   };
   const chooseMember = async (name: string) => {
-    const input = dialog().getByLabelText(/^(Member|Student)/);
+    const input = (await dialog()).getByLabelText(/^(Member|Student)/);
     fireEvent.change(input, { target: { value: name.slice(0, 3) } });
     fireEvent.click(await screen.findByText(name));
   };
@@ -608,19 +653,19 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     setup(MANAGER);
     await renderPage();
     await openAddDialog();
-    expect(dialog().getByText("Add member to this attendance")).toBeInTheDocument();
+    expect((await dialog()).getByText("Add member to this attendance")).toBeInTheDocument();
     expect(
-      dialog().getByText(
+      (await dialog()).getByText(
         "Use this only when the member was not expected for this attendance but physically attended."
       )
     ).toBeInTheDocument();
     expect(
-      dialog().getByText(
+      (await dialog()).getByText(
         "This changes this attendance only. It does not change eligibility, leave, or future attendance."
       )
     ).toBeInTheDocument();
 
-    fireEvent.keyDown(dialog().getByLabelText(/^Member/), { key: "ArrowDown" });
+    fireEvent.keyDown((await dialog()).getByLabelText(/^Member/), { key: "ArrowDown" });
     await screen.findByText("Tunde");
     const menu = document.querySelector(".manual-member__menu") as HTMLElement;
     // The tenor fails the session's rules and is still offered; members
@@ -637,16 +682,16 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     setup(MANAGER);
     await renderPage();
     await openAddDialog();
-    const statusSelect = dialog().getByLabelText(/^Attendance status/);
+    const statusSelect = (await dialog()).getByLabelText(/^Attendance status/);
     expect(
       within(statusSelect)
         .getAllByRole("option")
         .map((o) => o.textContent)
     ).toEqual(["Choose a status", "Present", "Late"]);
-    const reason = dialog().getByLabelText("Reason (optional)");
+    const reason = (await dialog()).getByLabelText("Reason (optional)");
     expect(reason).toHaveAttribute("maxLength", "200");
     fireEvent.change(reason, { target: { value: "Leave ended" } });
-    expect(dialog().getByText("11/200 characters")).toBeInTheDocument();
+    expect((await dialog()).getByText("11/200 characters")).toBeInTheDocument();
   });
 
   it("posts the chosen member, status and reason, then refreshes the session", async () => {
@@ -663,13 +708,13 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     });
     await renderPage();
     await openAddDialog();
-    const add = dialog().getByRole("button", { name: "Add member" });
+    const add = (await dialog()).getByRole("button", { name: "Add member" });
     expect(add).toBeDisabled();
     await chooseMember("Tunde");
-    fireEvent.change(dialog().getByLabelText(/^Attendance status/), {
+    fireEvent.change((await dialog()).getByLabelText(/^Attendance status/), {
       target: { value: "present" },
     });
-    fireEvent.change(dialog().getByLabelText("Reason (optional)"), {
+    fireEvent.change((await dialog()).getByLabelText("Reason (optional)"), {
       target: { value: "  On leave but came  " },
     });
     fireEvent.click(add);
@@ -700,10 +745,10 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     await renderPage();
     await openAddDialog();
     await chooseMember("Tunde");
-    fireEvent.change(dialog().getByLabelText(/^Attendance status/), {
+    fireEvent.change((await dialog()).getByLabelText(/^Attendance status/), {
       target: { value: "late" },
     });
-    fireEvent.click(dialog().getByRole("button", { name: "Add member" }));
+    fireEvent.click((await dialog()).getByRole("button", { name: "Add member" }));
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
@@ -724,9 +769,9 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(removes[0]).toHaveAccessibleName("Remove Tolu from this attendance");
 
     fireEvent.click(removes[0]);
-    expect(dialog().getByText("Remove Tolu from this attendance?")).toBeInTheDocument();
+    expect((await confirmation()).getByText("Remove Tolu from this attendance?")).toBeInTheDocument();
     expect(
-      dialog().getByText(
+      (await confirmation()).getByText(
         "Tolu was manually added to this attendance. Removing them deletes this historical attendance entry from this attendance only."
       )
     ).toBeInTheDocument();
@@ -741,7 +786,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     });
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this attendance" }));
-    fireEvent.click(dialog().getByRole("button", { name: "Remove from this attendance" }));
+    fireEvent.click((await confirmation()).getByRole("button", { name: "Remove from this attendance" }));
 
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith(
@@ -760,7 +805,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     });
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this attendance" }));
-    fireEvent.click(dialog().getByRole("button", { name: "Remove from this attendance" }));
+    fireEvent.click((await confirmation()).getByRole("button", { name: "Remove from this attendance" }));
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("Attendance edits are locked.")
@@ -828,19 +873,86 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     setup(MANAGER, REHEARSAL_TERMS);
     await renderPage();
     await openAddDialog("Add student to this rehearsal");
-    expect(dialog().getByText("Add student to this rehearsal")).toBeInTheDocument();
+    expect((await dialog()).getByText("Add student to this rehearsal")).toBeInTheDocument();
     expect(
-      dialog().getByText(
+      (await dialog()).getByText(
         "This changes this rehearsal only. It does not change eligibility, leave, or future rehearsals."
       )
     ).toBeInTheDocument();
-    fireEvent.click(dialog().getByRole("button", { name: "Cancel" }));
+    fireEvent.click((await dialog()).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     );
     fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this rehearsal" }));
     expect(
-      dialog().getByRole("button", { name: "Remove from this rehearsal" })
+      (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" })
     ).toBeInTheDocument();
+  });
+});
+
+describe("<ViewAttendance> delete visibility", () => {
+  const setup = (over: { permissions?: PermissionKey[]; isOwner?: boolean }) =>
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        ...over,
+      },
+    });
+  const renderPage = async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+  };
+  const deleteButton = () =>
+    screen.queryByRole("button", { name: /Delete Attendance/ });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    mockGet.mockImplementation(() =>
+      Promise.resolve({ data: { data: SESSION } }),
+    );
+  });
+
+  it("hides Delete from a view-only officer", async () => {
+    setup({ permissions: ["attendance.view"] });
+    await renderPage();
+    expect(deleteButton()).not.toBeInTheDocument();
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("lets an attendance manager delete after confirming", async () => {
+    setup({ permissions: ["attendance.view", "attendance.manage"] });
+    mockDelete.mockResolvedValue({ data: { data: "deleted" } });
+    await renderPage();
+
+    fireEvent.click(deleteButton()!);
+    expect(mockDelete).not.toHaveBeenCalled();
+    await confirmInDialog("Delete");
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith("/attendance/org1/att1", {
+        data: undefined,
+      }),
+    );
+  });
+
+  it("sends nothing when the manager cancels the confirmation", async () => {
+    setup({ permissions: ["attendance.view", "attendance.manage"] });
+    await renderPage();
+
+    fireEvent.click(deleteButton()!);
+    const dialog = within(await screen.findByRole("alertdialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("shows Delete to the organisation owner", async () => {
+    setup({ isOwner: true, permissions: [] });
+    await renderPage();
+    expect(deleteButton()).toBeInTheDocument();
   });
 });

@@ -10,7 +10,7 @@ const StatusCountSummary = ({ counts }: { counts: StatusCount[] }) => (
     {counts.map(({ status, count }) => (
       <Badge
         key={status.key || status.label}
-        colorScheme={status.color}
+        colorPalette={status.color}
         variant="subtle"
         textTransform="none"
         fontWeight="normal"

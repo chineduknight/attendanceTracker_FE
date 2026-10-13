@@ -1,22 +1,14 @@
 import {
   Box,
   Flex,
-  useColorModeValue,
   Text,
   Button,
-  Input,
   Heading,
-  InputGroup,
-  InputLeftElement,
-  InputRightElement,
-  IconButton,
-  Icon,
-  Container,
 } from "@chakra-ui/react";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest } from "services";
 import {
@@ -27,19 +19,22 @@ import {
 } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { format } from "date-fns";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import {
   FaFileExcel,
-  FaSearch,
   FaShareAlt,
   FaTrash,
   FaUserPlus,
 } from "react-icons/fa";
-import { FiX } from "react-icons/fi";
 import { toast } from "react-toastify";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
+import PinnedSearchBar from "components/PinnedSearchBar";
+import PageContainer from "components/layout/PageContainer";
+import { formatSessionDate } from "helpers/sessionDate";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
@@ -67,7 +62,7 @@ import {
   toAnalyticsInclusion,
 } from "helpers/attendanceAnalyticsInclusion";
 import { Can } from "rbac/Can";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
 import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
 import { useMembers } from "hooks/useMembers";
@@ -133,6 +128,7 @@ const nextMultiFilter = (values: string[]): string[] => {
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
 const Attendance = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
   const [allMembers, setAllMembers] = useState<MemberType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,7 +177,12 @@ const Attendance = () => {
     id: param.id as string,
   });
 
-  const { isFetching: isFetchingAttendance } = useQueryWrapper(
+  const {
+    isFetching: isFetchingAttendance,
+    isError: attendanceFailed,
+    error: attendanceError,
+    refetch: refetchAttendance,
+  } = useQueryWrapper(
     queryKeys.attendance(org.id, param.id),
     url,
     {
@@ -200,7 +201,6 @@ const Attendance = () => {
   const rulesOutdated =
     memberModelLoaded && eligibilityIssues(storedRules, memberFields).length > 0;
 
-  const handleSearch = useCallback((e) => setSearchQuery(e.target.value), []);
 
   const statusOptions = useMemo<StatusOption[]>(() => {
     const unique = Array.from(
@@ -253,9 +253,8 @@ const Attendance = () => {
     [filteredMembers, statuses],
   );
 
-  const formattedDate = attendanceInfo?.date
-    ? format(new Date(attendanceInfo.date), "EEE dd MMM yy")
-    : "";
+  // The stored calendar day, never shifted by the device timezone.
+  const formattedDate = formatSessionDate(attendanceInfo?.date);
 
   const handleSendToWhatsapp = () => {
     const message = buildAttendanceShareMessage({
@@ -359,66 +358,69 @@ const Attendance = () => {
   );
   const canChangeRoster = attendanceInfo?.canChangeRoster ?? false;
 
-  const handleDelete = () => {
-    confirmAlert({
+  const handleDelete = async () => {
+    const confirmed = await confirm({
       title: `Delete ${terms.attendanceSingular}`,
-      message: `Are you sure you want to delete this ${lowerTerm(
+      body: `Are you sure you want to delete this ${lowerTerm(
         terms.attendanceSingular,
       )} record? This cannot be undone.`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => deleteAttendance({ url: deleteUrl }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: "Delete",
+      destructive: true,
     });
+    if (confirmed) deleteAttendance({ url: deleteUrl });
   };
-  const pageBg = useColorModeValue("gray.50", "gray.800");
 
   return (
-    <Box minH={"100vh"} bg={pageBg}>
-      <Container>
+    <PageContainer>
         {isLoadingAttendance ? (
-          <LoadingSpinner
+          <PageLoader
             h="40vh"
-            text={`Loading ${lowerTerm(terms.attendancePlural)}...`}
+            label={`Loading ${lowerTerm(terms.attendancePlural)}...`}
           />
+        ) : attendanceFailed && !attendanceInfo ? (
+          <Box mt="8">
+            <ErrorState
+              title={`Couldn't load this ${lowerTerm(terms.attendanceSingular)}`}
+              description={errorMessage(attendanceError)}
+              onRetry={() => refetchAttendance()}
+              retrying={isFetchingAttendance}
+            />
+          </Box>
         ) : (
           <>
             {/* Title first, date beneath it, so a long session name never
                 collides with the date on a narrow screen. */}
-            <Box mt="4">
-              <Heading fontSize="22px" noOfLines={2}>
+            <Box>
+              <Heading fontSize="22px" lineClamp={2}>
                 {attendanceInfo?.name}
               </Heading>
-              <Text color="gray.600" mt={1}>
+              <Text color="fg.muted" mt={1}>
                 {formattedDate}
               </Text>
             </Box>
             {/* Sharing the session just marked is the page's main job, so
                 Share leads as the solid action; Excel export is secondary. */}
             <Flex mt="3" gap={2}>
-              <Button
-                flex="1"
-                onClick={handleSendToWhatsapp}
-                leftIcon={<FaShareAlt />}
-              >
+              <Button flex="1" minH="44px" onClick={handleSendToWhatsapp}>
+                <FaShareAlt />
                 Share
               </Button>
               <Button
                 flex="1"
+                minH="44px"
                 onClick={sendToExcel}
-                isLoading={isFetching}
-                leftIcon={<FaFileExcel />}
+                loading={isFetching}
                 variant="outline"
-                colorScheme="green"
+                colorPalette="green"
+                // "Export to" is dropped on narrow phones so the label fits;
+                // the accessible name stays complete.
+                aria-label="Export to Excel"
               >
-                Export to Excel
+                <FaFileExcel />
+                <Box as="span" display={{ base: "none", sm: "inline" }}>
+                  Export to
+                </Box>
+                Excel
               </Button>
             </Flex>
             {attendanceInfo && (
@@ -436,15 +438,12 @@ const Attendance = () => {
                 <Button
                   mt="3"
                   size="sm"
+                  minH="44px"
                   variant="outline"
-                  leftIcon={<FaUserPlus />}
-                  isDisabled={!canChangeRoster}
-                  onClick={() => setIsAddingMember(true)}
-                >
-                  {`Add ${memberTerm} to this ${session}`}
-                </Button>
+                  disabled={!canChangeRoster}
+                  onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${memberTerm} to this ${session}`}</Button>
                 {!canChangeRoster && (
-                  <Text fontSize="sm" color="gray.500" mt={1}>
+                  <Text fontSize="sm" color="fg.muted" mt={1}>
                     {`No edits remain for this ${session}.`}
                   </Text>
                 )}
@@ -457,12 +456,11 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            {/* Side by side even on a phone: each filter takes half the width,
-                so the placeholders stay short while aria-labels keep the
-                full wording. */}
-            <Flex mt="4" gap={2}>
+            {/* Stacked on phones (side by side, each half of 320px showed only
+                "A…"); side by side from sm up. */}
+            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
               <Box flex="1" minW={0}>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
@@ -471,25 +469,19 @@ const Attendance = () => {
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
                   }
                 />
               </Box>
               <Box flex="1" minW={0}>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))
                   }
@@ -499,49 +491,26 @@ const Attendance = () => {
             <StatusCountSummary counts={filteredCounts} />
             {/* Only the search bar is pinned: with the phone keyboard open,
                 anything taller would squeeze the results it is filtering. */}
-            <Box
-              ref={pinnedSearch.barRef}
-              position="sticky"
-              top={0}
-              zIndex="sticky"
-              bg={pageBg}
-              mx={-4}
-              px={4}
-              py={2}
-              mt="2"
-            >
-              <InputGroup>
-                <InputLeftElement pointerEvents="none">
-                  <Icon as={FaSearch} color="gray.400" />
-                </InputLeftElement>
-                <Input
-                  type="text"
-                  placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
-                  value={searchQuery}
-                  onChange={handleSearch}
-                  {...pinnedSearch.inputProps}
-                />
-                {searchQuery && (
-                  <InputRightElement>
-                    <IconButton
-                      aria-label="Clear search"
-                      icon={<FiX />}
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSearchQuery("")}
-                    />
-                  </InputRightElement>
-                )}
-              </InputGroup>
-            </Box>
+            <PinnedSearchBar
+              pinnedSearch={pinnedSearch}
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+            />
             {/* The roster scrolls with the page rather than in a nested box. */}
             <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
               {filteredMembers.length === 0 && (
-                <Box mt="4">
-                  <Text ml="4" fontWeight="bold">
-                    {`No ${lowerTerm(terms.memberSingular)} found`}
-                  </Text>
-                </Box>
+                <EmptyState
+                  title={`No ${lowerTerm(terms.memberSingular)} found`}
+                  description={searchQuery ? `Nothing matches "${searchQuery}".` : undefined}
+                  action={
+                    searchQuery ? (
+                      <Button variant="outline" colorPalette="gray" onClick={() => setSearchQuery("")}>
+                        Clear search
+                      </Button>
+                    ) : undefined
+                  }
+                />
               )}
               {filteredMembers.map((item) => (
                 <AttendanceMemberRow
@@ -556,10 +525,12 @@ const Attendance = () => {
                       <Can perm="attendance.manage">
                         <Button
                           size="sm"
+                          minH="44px"
+                          minW="44px"
                           variant="ghost"
-                          colorScheme="red"
+                          colorPalette="red"
                           aria-label={`Remove ${item.member.name} from this ${session}`}
-                          isDisabled={!canChangeRoster}
+                          disabled={!canChangeRoster}
                           onClick={() => setRemoving(item)}
                         >
                           Remove
@@ -576,22 +547,18 @@ const Attendance = () => {
                 statuses={statuses}
               />
             )}
-            <Button
-              onClick={handleDelete}
-              isLoading={isDeleting}
-              leftIcon={<FaTrash />}
-              bg="red.500"
-              color="white"
-              _hover={{ bg: "red.600" }}
-              w="full"
-              mt="4"
-              mb="8"
-            >
-              {`Delete ${terms.attendanceSingular}`}
-            </Button>
+            <Can perm="attendance.manage">
+              <Button
+                onClick={handleDelete}
+                loading={isDeleting}
+                variant="solid"
+                colorPalette="red"
+                w="full"
+                mt="4"
+                mb="8"><FaTrash />{`Delete ${terms.attendanceSingular}`}</Button>
+            </Can>
           </>
         )}
-      </Container>
 
       <ManualMemberDialog
         isOpen={isAddingMember}
@@ -608,14 +575,14 @@ const Attendance = () => {
         }
         onClose={() => setIsAddingMember(false)}
       />
-      <ConfirmModal
-        isOpen={removing !== null}
+      <ConfirmDialog
+        open={removing !== null}
         title={`Remove ${removing?.member.name ?? ""} from this ${session}?`}
         body={`${removing?.member.name ?? ""} was manually added to this ${session}. Removing them deletes this historical attendance entry from this ${session} only.`}
         cancelLabel="Cancel"
         confirmLabel={`Remove from this ${session}`}
-        confirmColorScheme="red"
-        isLoading={isRemoving}
+        confirmPalette="red"
+        loading={isRemoving}
         onConfirm={() =>
           removing &&
           removeMember(removing.memberId, () => {
@@ -625,7 +592,8 @@ const Attendance = () => {
         }
         onClose={() => !isRemoving && setRemoving(null)}
       />
-    </Box>
+      {confirmDialog}
+    </PageContainer>
   );
 };
 

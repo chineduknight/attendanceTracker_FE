@@ -1,3 +1,4 @@
+import { confirmInDialog, generatedCss } from "test-utils/render";
 import {
   cleanup,
   fireEvent,
@@ -7,13 +8,15 @@ import {
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import theme from "styles/theme";
+import { system } from "styles/theme";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import MemberAttendanceAvailability from "pages/MemberAttendanceAvailability";
 
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
+const mockRefetch = jest.fn();
+let mockLoadFails = false;
 const mockArchive = jest.fn();
 const mockPeriods = [
   {
@@ -47,9 +50,10 @@ jest.mock("hooks/useMembers", () => ({
 }));
 jest.mock("hooks/useAttendanceAvailability", () => ({
   useAttendanceAvailabilityForMember: () => ({
-    periods: mockPeriods,
+    periods: mockLoadFails ? [] : mockPeriods,
     isLoading: false,
-    isError: false,
+    isError: mockLoadFails,
+    refetch: mockRefetch,
   }),
   useAttendanceAvailabilityMutations: () => ({
     create: mockCreate,
@@ -64,7 +68,7 @@ jest.mock("react-toastify", () => ({
 
 const renderPage = () =>
   render(
-    <ChakraProvider theme={theme}>
+    <ChakraProvider value={system}>
       <MemoryRouter
         initialEntries={["/member/member-1/attendance-availability"]}
       >
@@ -81,7 +85,6 @@ const renderPage = () =>
 describe("<MemberAttendanceAvailability>", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(window, "confirm").mockReturnValue(true);
     useGlobalStore.setState({
       organisation: {
         ...EMPTY_ORG,
@@ -100,6 +103,25 @@ describe("<MemberAttendanceAvailability>", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    mockLoadFails = false;
+  });
+
+  it("offers a retry when the periods fail to load", () => {
+    mockLoadFails = true;
+    renderPage();
+    expect(screen.getByText("Couldn't load rehearsal availability")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  it("gives each period's Edit and Remove a 44px tap target", () => {
+    renderPage();
+    for (const button of [
+      ...screen.getAllByRole("button", { name: "Edit" }),
+      ...screen.getAllByRole("button", { name: "Remove" }),
+    ]) {
+      expect(generatedCss(button)).toMatch(/min-height:\s*44px/);
+    }
   });
 
   it("renders for attendance.view and uses local Current, Upcoming and Past groups", () => {
@@ -188,8 +210,10 @@ describe("<MemberAttendanceAvailability>", () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
-    expect(window.confirm).toHaveBeenCalled();
-    expect(mockArchive).toHaveBeenCalledWith("current", expect.any(Function));
-    await waitFor(() => expect(mockArchive).toHaveBeenCalled());
+    const dialog = await confirmInDialog("Remove");
+    expect(dialog).toHaveTextContent("Remove this rehearsal availability period?");
+    await waitFor(() =>
+      expect(mockArchive).toHaveBeenCalledWith("current", expect.any(Function)),
+    );
   });
 });

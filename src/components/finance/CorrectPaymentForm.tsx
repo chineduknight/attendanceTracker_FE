@@ -1,18 +1,10 @@
 import { useState } from "react";
-import {
-  Button,
-  Flex,
-  FormControl,
-  FormLabel,
-  Input,
-  SimpleGrid,
-  Stack,
-  Text,
-} from "@chakra-ui/react";
+import { Button, Flex, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
+import { AmountInput } from "components/ui/amount-input";
 import { MONTHS, formatMoney } from "helpers/financeConstants";
 import { firstLiableMonth, paidOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
-import ConfirmModal from "components/finance/ConfirmModal";
+import { ConfirmDialog } from "components/ui/confirm-dialog";
 
 interface CorrectPaymentFormProps {
   obligation: Obligation;
@@ -27,7 +19,7 @@ interface CorrectPaymentFormProps {
 interface PendingCorrection {
   body: string;
   confirmLabel: string;
-  confirmColorScheme: string;
+  confirmPalette: string;
   run: () => void;
 }
 
@@ -111,7 +103,7 @@ const CorrectPaymentForm = ({
             ? `This clears all recorded payments for ${memberName} on ${obligation.name}.`
             : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.`,
         confirmLabel: count === 0 ? "Yes, clear" : "Yes, update",
-        confirmColorScheme: count === 0 ? "red" : "purple",
+        confirmPalette: count === 0 ? "red" : "purple",
         run: () => onCorrectDues(monthlyPaid),
       });
       return;
@@ -120,75 +112,67 @@ const CorrectPaymentForm = ({
     setPending({
       body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.`,
       confirmLabel: "Yes, update",
-      confirmColorScheme: "purple",
+      confirmPalette: "purple",
       run: () => onCorrectLevy(Number(amountPaid)),
     });
   };
 
   return (
-    <Stack spacing={3}>
+    <Stack gap={3}>
       {isDues ? (
         <>
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             {`Fill months in order (up to ${formatMoney(amountPerMonth)} each). A month unlocks once the previous one is fully paid; clearing a month reopens the one before it.`}
           </Text>
-          <SimpleGrid columns={{ base: 3, sm: 4 }} spacing={2}>
+          <SimpleGrid columns={{ base: 3, sm: 4 }} gap={2}>
             {MONTHS.map((m) => {
               const disabled = !isEditable(m.value);
               return (
-                <FormControl key={m.value} isDisabled={disabled}>
-                  <FormLabel htmlFor={`month-${m.value}`} fontSize="sm" mb={1}>
+                <Field.Root key={m.value} disabled={disabled}>
+                  <Field.Label htmlFor={`month-${m.value}`} fontSize="sm" mb={1}>
                     {m.label}
-                  </FormLabel>
-                  <Input
+                  </Field.Label>
+                  <AmountInput
                     id={`month-${m.value}`}
                     aria-label={m.label}
-                    type="number"
-                    inputMode="decimal"
-                    size="sm"
-                    min={0}
-                    max={amountPerMonth}
-                    isDisabled={disabled}
+                    disabled={disabled}
                     value={valueOf(m.value)}
-                    onChange={(e) => setMonthValue(m.value, e.target.value)}
+                    onChange={(raw) => setMonthValue(m.value, raw)}
                   />
-                </FormControl>
+                </Field.Root>
               );
             })}
           </SimpleGrid>
           <Flex gap={2}>
-            <Button size="sm" variant="outline" colorScheme="blue" onClick={fillAll}>
+            <Button size="sm" minH="44px" variant="outline" colorPalette="blue" onClick={fillAll}>
               Fill all
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setMonthly({})}>
+            <Button size="sm" minH="44px" variant="outline" onClick={() => setMonthly({})}>
               Clear all
             </Button>
           </Flex>
         </>
       ) : (
-        <FormControl>
-          <FormLabel htmlFor="correct-amount-paid">Total amount paid</FormLabel>
-          <Input
+        <Field.Root>
+          <Field.Label htmlFor="correct-amount-paid">Total amount paid</Field.Label>
+          <AmountInput
             id="correct-amount-paid"
-            type="number"
-            inputMode="decimal"
-            min={0}
             value={amountPaid}
-            onChange={(e) => setAmountPaid(e.target.value)}
+            onChange={setAmountPaid}
           />
-        </FormControl>
+        </Field.Root>
       )}
 
-      <Button colorScheme="purple" onClick={requestSave} isLoading={isSaving}>
+      <Button colorPalette="purple" onClick={requestSave} loading={isSaving}>
         Save correction
       </Button>
 
-      <ConfirmModal
-        isOpen={!!pending}
+      <ConfirmDialog
+        open={!!pending}
         title="Confirm correction"
         body={pending?.body ?? ""}
         confirmLabel={pending?.confirmLabel}
-        confirmColorScheme={pending?.confirmColorScheme}
+        confirmPalette={pending?.confirmPalette}
         onConfirm={() => {
           pending?.run();
           setPending(null);

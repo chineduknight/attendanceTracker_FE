@@ -8,7 +8,7 @@
 > Runtime: Node 22  
 > Package manager: Yarn 1.22.22  
 > Framework: React 18 + TypeScript + Create React App  
-> UI: Chakra UI v2  
+> UI: Chakra UI v3 (with v2-parity theme overrides)  
 > Server state: TanStack React Query v4  
 > Client/global state: Zustand v4 with persistence  
 > Routing: React Router DOM v6.3  
@@ -228,7 +228,7 @@ The application roughly follows:
 
 ```text
 App
- ├─ ChakraProvider
+ ├─ Provider (components/ui/provider: ChakraProvider + colour mode)
  ├─ QueryClientProvider
  ├─ ToastContainer
  ├─ ErrorBoundary
@@ -1747,11 +1747,81 @@ Attendance status badges should retain text/accessible labels.
 
 # 52. Chakra UI conventions
 
-The project uses Chakra UI v2.
+The project uses Chakra UI v3 (migrated from v2). Write v3 APIs only:
+compound parts (`Dialog.Root`, `Field.Root`, `NativeSelect.Root`, `Tabs.Root`,
+`Menu.Root`, ...), `open`/`disabled`/`invalid` instead of `isOpen`/`isDisabled`,
+`colorPalette` instead of `colorScheme`, `gap` instead of `spacing`.
 
-Prefer existing primitives such as Box, Flex, Stack, Button, FormControl, Alert, Drawer, Tabs, Badge and Table.
+Theme:
 
-Use `useColorModeValue` when the surrounding page already supports light/dark presentation.
+- `src/styles/theme.ts` exports `system` (`createSystem`). Custom button
+  variants (`primary`, the default, plus `secondary`, `danger`, `logout`) are a
+  recipe; `yarn install` regenerates their types (`postinstall` typegen).
+- `src/styles/components/v2Parity.ts` keeps v2 sizes for headings, buttons,
+  fields and Container. Medium fields stay 16px so iOS does not zoom on focus.
+- Colour mode: dark mode is on. Users follow their device (System is the
+  default) and pick System/Light/Dark in the nav drawer; the choice is saved
+  per device (`presence-pro-theme`). An inline script in `public/index.html`
+  applies it before the app loads (no white flash on dark phones); keep its
+  storage key and dark background in sync (`config/prePaintTheme.test.ts`).
+  `DARK_MODE_ENABLED` in `config/colorMode.ts` is a kill switch: `false`
+  forces light and re-enables `?theme=` previews. Every new screen must work
+  in both modes. Import `useColorModeValue` from `components/ui/color-mode`,
+  not `@chakra-ui/react`.
+- White text on a colour uses `{palette}.solid` (or `colorPalette.solid` with
+  `colorPalette.contrast`), not `{palette}.500`: the theme keeps every
+  white-text `.solid` at 4.5:1+ (`styles/solidContrast.test.ts`).
+- Prefer semantic tokens that flip with the mode (`bg`, `bg.panel`, `fg`,
+  `fg.muted`, `border`, `{palette}.fg`, `{palette}.solid`, `primary`) over
+  `white`, `black` or fixed `gray.*` shades.
+- `PageLoader` (`components/PageLoader`) is the one loading indicator for a
+  page, tab or section. Keep small inline spinners only for a refresh next to
+  results already on screen.
+
+Shared wrappers in `src/components/ui` (use them instead of the raw parts):
+
+- `Switch` / `FormSwitch`: controlled; `FormSwitch` binds react-hook-form via
+  `useController`. Never `register` a switch: v3 does not follow `reset()`.
+  Put switches in a `Field.Root` beside a `Field.Label` with no id/htmlFor.
+- `FormCheckbox`: a checkbox bound to react-hook-form via `useController`
+  (always a boolean). Never `register` a checkbox root: it never reaches the
+  hidden input, and `defaultChecked` ignores a later `reset()`.
+- `NameAvatar`: initials on a name-derived colour, image when present.
+- `DateField` (`ui/date-field`): every date input. Reads and writes
+  `YYYY-MM-DD` (no timezone shift), enforces `min`/`max` for typed dates too,
+  themed for dark mode. Use `todayValue()` for a "no future dates" cap. Do
+  not add native `type="date"` inputs; existing ones move over per batch.
+- `useConfirm` / `ConfirmDialog` (`ui/confirm-dialog`): every confirmation.
+  `if (await confirm({ title, body, confirmLabel: "Delete", destructive: true }))`
+  and render `{confirmDialog}`; use `ConfirmDialog` directly when the dialog
+  must show a loading state. Name the action on the button (not "Yes"); no
+  `window.confirm`. Tests answer it with `confirmInDialog("Delete")`
+  (`role="alertdialog"`).
+- `PageContainer` (`layout/PageContainer`): a page's outer frame (page
+  background `bg.subtle`, `100dvh`, standard padding, home-bar inset) with
+  `width="form" | "content" | "wide"`. Pages move to it in their batch.
+- `PinnedSearchBar`: the roster search bar (with `usePinnedSearch`); 44px
+  clear button, search keyboard, no autofill. Only this bar is pinned.
+- `EmptyState` / `ErrorState` (`ui/states`): say why a list is empty and
+  offer the next step; a load error shows the backend's text
+  (`errorMessage(error)`) and a Try again button wired to `refetch`.
+- `AmountInput` (`ui/amount-input`): money entry. Shows `6,000`, hands the
+  form `"6000"`, so payloads are unchanged. Not for counts or limits.
+
+v3 traps that type-check but misbehave:
+
+- Inside a `Field.Root`, `NativeSelect` ignores its own `disabled`; put
+  `disabled` on the `Field.Root`.
+- `Dialog`/`Drawer.CloseTrigger` renders nothing without
+  `<CloseButton />`; header text belongs in `Dialog.Title`/`Drawer.Title`.
+- `Menu.Item` has no `icon` prop (put the icon in the children) and needs a
+  unique `value`, also inside `.map()`.
+- `aria-label` for a checkbox goes on `Checkbox.HiddenInput`, not the root.
+- Native inputs, textareas and `NativeSelect.Field` keep `onChange`;
+  `onValueChange`/`onCheckedChange` belong to Ark components only.
+- `onCheckedChange`/`onValueChange` receive a details object
+  (`({ checked })`, `({ value })`), not a DOM event: `e.target.checked`
+  type-checks loosely but throws at runtime.
 
 Do not introduce a second component framework for one feature.
 
@@ -1879,6 +1949,16 @@ Test what the officer sees/does:
 - correct cache invalidated,
 - stale data does not overwrite local draft,
 - backend errors stay visible.
+
+## Chakra v3 in tests
+
+Render through `render` from `test-utils/render` (or `renderRoute`): v3
+components throw without a provider. Ark updates are asynchronous, so use
+the shared helpers instead of asserting straight after a click:
+`toggle()` for checkboxes/switches, `selectTab()` for tabs,
+`chooseMenuItem()` for menu items (press, then click), and `findBy*` for
+dialogs. Jest is CRA's Jest 27; `package.json` maps Ark's wildcard exports
+and transforms v3's ESM-only packages.
 
 ## Pure helpers
 

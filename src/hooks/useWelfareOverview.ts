@@ -39,12 +39,12 @@ export const useWelfareOverview = (
     return `${path}?${params.toString()}`;
   }, [organisationId, asOf, validAsOf, status]);
 
-  const { data: response, isLoading, isFetching, isError } = useQueryWrapper(
+  const { data: response, isLoading, isFetching, isError, error, refetch } = useQueryWrapper(
     queryKeys.welfare.overview(organisationId, asOf, status),
     url,
     { enabled: enabled && validAsOf && Boolean(organisationId) },
   );
 
   const overview: WelfareOverview | undefined = response?.data;
-  return { overview, isLoading, isFetching, isError };
+  return { overview, isLoading, isFetching, isError, error, refetch };
 };

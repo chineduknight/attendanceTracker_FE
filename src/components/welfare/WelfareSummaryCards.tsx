@@ -47,28 +47,28 @@ const WelfareSummaryCards = ({
       label: "Needs Check-in",
       value: summary.attention,
       icon: FaHeart,
-      accent: "orange.500",
+      accent: "orange.solid",
     },
     {
       section: "encouragement",
       label: "Encouragement",
       value: summary.encouragement,
       icon: FaSmile,
-      accent: "green.500",
+      accent: "green.solid",
     },
     {
       section: "currentlyAway",
       label: "Currently Away",
       value: summary.currentlyAway,
       icon: FaUmbrellaBeach,
-      accent: "blue.500",
+      accent: "blue.solid",
     },
     {
       section: "returningSoon",
       label: "Returning Soon",
       value: summary.returningSoon,
       icon: FaCalendarCheck,
-      accent: "teal.500",
+      accent: "teal.solid",
     },
   ];
   if (birthdayTile) {
@@ -77,7 +77,7 @@ const WelfareSummaryCards = ({
       label: birthdayTile.label,
       value: birthdayTile.count,
       icon: FaBirthdayCake,
-      accent: "pink.500",
+      accent: "pink.solid",
     });
   }
   const hasOddLast = tiles.length % 2 === 1;

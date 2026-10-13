@@ -1,44 +1,43 @@
 import React, { useState, useMemo } from "react";
 import {
-  Box,
-  Flex,
-  Button,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Badge,
-  Spinner,
-  useColorModeValue,
+  Box,
+  Button,
+  Flex,
+  Group,
   Text,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
 import { useNavigate } from "react-router-dom";
-import { FaFileExcel, FaFilePdf } from "react-icons/fa";
+import { FaListUl, FaTable } from "react-icons/fa";
+import { FiBarChart2 } from "react-icons/fi";
+import { MultiValue } from "react-select";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { attendanceRequest, orgRequest } from "services";
 import { capitalize, convertParamsToString } from "helpers/stringManipulations";
-import {
-  ATTENDANCE_BEHAVIORS,
-  AttendanceBehavior,
-  BEHAVIOR_META,
-} from "helpers/attendanceStatuses";
+import { ATTENDANCE_BEHAVIORS, AttendanceBehavior } from "helpers/attendanceStatuses";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import {
   openExportUrl,
   handleExportError,
 } from "components/analytics/analyticsExport";
-import ReactSelect, { MultiValue } from "react-select";
-import { format, parseISO } from "date-fns";
 import {
   useDateRange,
   formatRangeLabel,
 } from "components/analytics/useDateRange";
 import DateRangeControls from "components/analytics/DateRangeControls";
 import SessionSummary from "components/analytics/SessionSummary";
+import ExportMenu from "components/analytics/ExportMenu";
+import AnalyticsMemberList, {
+  BehaviorCounts,
+} from "components/analytics/AnalyticsMemberList";
+import AnalyticsGrid, { AnalyticsGridRow } from "components/analytics/AnalyticsGrid";
+import PageContainer from "components/layout/PageContainer";
+import PageLoader from "components/PageLoader";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import { ThemedSelect } from "components/ui/themed-select";
 import { AnalyticsSessionSummary } from "helpers/attendanceAnalyticsInclusion";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
@@ -49,19 +48,15 @@ type StatusOption = {
   label: string;
 };
 
-const DAY_HEADER_FORMAT = "EEE d, MMM"; // e.g. "Tue 3, Jul"
+type View = "list" | "grid";
 
-// rotate narrow column headers so single-letter cells don't waste width.
-// applied to an inner span (not the th) so the cell stays in normal writing
-// mode and can center the label horizontally over its column.
-const VERTICAL_LABEL_SX = {
-  display: "inline-block",
-  writingMode: "vertical-rl",
-  transform: "rotate(180deg)",
-  whiteSpace: "nowrap",
-} as const;
+const DATE_KEY = /\d{4}-\d{2}-\d{2}$/;
 
-type BehaviorCounts = Record<AttendanceBehavior, number>;
+/** The session (date-suffixed) columns, sorted by their YYYY-MM-DD suffix. */
+export const sessionColumnsByDate = (keys: string[]): string[] =>
+  keys
+    .filter((k) => DATE_KEY.test(k))
+    .sort((a, b) => a.match(DATE_KEY)![0].localeCompare(b.match(DATE_KEY)![0]));
 
 /**
  * Backend per-member totals, bucketed by behavior rather than status label.
@@ -72,17 +67,6 @@ const behaviorCountOf = (row: any, behavior: AttendanceBehavior): number =>
   (row?.attendanceBehaviorCounts as Partial<BehaviorCounts> | undefined)?.[
     behavior
   ] ?? 0;
-
-// extract the yyyy-MM-dd suffix from a date column key and render it compactly
-const formatDayHeader = (key: string) => {
-  const isoDate = key.match(/\d{4}-\d{2}-\d{2}$/)?.[0];
-  return isoDate ? format(parseISO(isoDate), DAY_HEADER_FORMAT) : key;
-};
-
-// A member with no cell for a session was not on its roster — neither present
-// nor absent, so it is neutral rather than a status of its own.
-const NOT_ON_ROSTER = (session: string) =>
-  `Not applicable: not on this ${lowerTerm(session)} roster`;
 
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
@@ -103,6 +87,11 @@ const AttendanceAnalyticsPage: React.FC = () => {
     "inactive",
   ]);
   const navigate = useNavigate();
+  // Phones start on the ranked list (193 session columns don't fit a phone);
+  // wider screens start on the grid. The officer's choice then sticks.
+  const isWide = useBreakpointValue({ base: false, md: true }, { ssr: false });
+  const [chosenView, setChosenView] = useState<View | null>(null);
+  const view: View = chosenView ?? (isWide ? "grid" : "list");
 
   const goToMemberAnalytics = (memberId: string) => {
     const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, {
@@ -274,258 +263,176 @@ const AttendanceAnalyticsPage: React.FC = () => {
     [statusFilter, statusSelectOptions]
   );
 
-  // detect which columns are dates
-  const dateKeys = useMemo(
-    () => keys.filter((k) => /\d{4}-\d{2}-\d{2}$/.test(k)),
-    [keys]
+  // Session columns, oldest first. The backend's key order isn't by date;
+  // sessions on the same day keep that order (Array.sort is stable).
+  const dateKeys = useMemo(() => sessionColumnsByDate(keys), [keys]);
+
+  const memberRows = useMemo<AnalyticsGridRow[]>(
+    () =>
+      rows.map((row) => ({
+        memberId: row.memberId,
+        name: row.name,
+        counts: Object.fromEntries(
+          ATTENDANCE_BEHAVIORS.map((b) => [b, behaviorCountOf(row, b)])
+        ) as BehaviorCounts,
+        cells: Object.fromEntries(dateKeys.map((d) => [d, row[d] as string | undefined])),
+      })),
+    [rows, dateKeys]
   );
 
   // Legend: active statuses plus any inactive/unknown key in these results.
   const legend = useMemo(() => {
     const usedKeys = new Set<string>();
-    rows.forEach((row) =>
-      dateKeys.forEach((d) => {
-        if (row[d]) usedKeys.add(row[d] as string);
-      })
+    memberRows.forEach((row) =>
+      Object.values(row.cells).forEach((key) => key && usedKeys.add(key))
     );
     return statuses.legendFor(usedKeys);
-  }, [rows, dateKeys, statuses]);
+  }, [memberRows, statuses]);
+
+  const handleStatusChange = (selected: MultiValue<StatusOption>) => {
+    const values = selected.map((item) => item.value);
+    setHasSearched(false);
+    if (values.length === 0) {
+      setStatusFilter(["all"]);
+    } else if (values.includes("all") && values.length > 1) {
+      // "All" picked earlier, a status picked now: the status wins.
+      setStatusFilter(values.filter((value) => value !== "all"));
+    } else {
+      setStatusFilter(values.includes("all") ? ["all"] : values);
+    }
+  };
+
+  const showResults = hasSearched && !isFetching && !error;
 
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Box p={2}>
-        <>
-          <Flex mb={3} mt={2} gap={2} justifyContent="flex-end" flexWrap="wrap">
-            <Button
-              leftIcon={<FaFileExcel />}
-              onClick={() => refetchExcel()}
-              isLoading={isExportingExcel}
-              isDisabled={!canRunQuery}
-              bg="green.500"
-              color="white"
-              _hover={{ bg: "green.600" }}
-            >
-              Export Excel
-            </Button>
-            <Button
-              leftIcon={<FaFilePdf />}
-              onClick={() => refetchPdf()}
-              isLoading={isExportingPdf}
-              isDisabled={!canRunQuery}
-              bg="red.500"
-              color="white"
-              _hover={{ bg: "red.600" }}
-            >
-              Export PDF
-            </Button>
-          </Flex>
-          {/* Date range presets + selectors + status filter + search */}
-          <DateRangeControls
-            fromDate={fromDate}
-            toDate={toDate}
-            activePreset={activePreset}
-            applyPreset={applyPreset}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-            handleDateChange={handleDateChange}
-            trailing={
-              <>
-                <Box w={{ base: "100%", md: "260px" }}>
-                  <ReactSelect
-                    isMulti
-                    placeholder={`Filter ${lowerTerm(
-                      terms.memberPlural
-                    )} by status`}
-                    options={statusSelectOptions}
-                    value={selectedStatusOptions}
-                    closeMenuOnSelect={false}
-                    onChange={(selected: MultiValue<StatusOption>) => {
-                      const values = selected.map((item) => item.value);
-                      if (values.length === 0) {
-                        setStatusFilter(["all"]);
-                        setHasSearched(false);
-                        return;
-                      }
-                      if (values.includes("all") && values.length > 1) {
-                        setStatusFilter(
-                          values.filter((value) => value !== "all")
-                        );
-                        setHasSearched(false);
-                        return;
-                      }
-                      if (values.includes("all")) {
-                        setStatusFilter(["all"]);
-                        setHasSearched(false);
-                        return;
-                      }
-                      setStatusFilter(values);
-                      setHasSearched(false);
-                    }}
-                  />
-                </Box>
-                <Button
-                  colorScheme="blue"
-                  onClick={handleSearch}
-                  isDisabled={!canRunQuery}
-                  w={{ base: "100%", md: "auto" }}
-                >
-                  Search
-                </Button>
-              </>
-            }
-          />
-
-          {/* Loading & error */}
-          {isFetching && <Spinner />}
-          {error && (
-            <Text color="red.500" mb={4}>
-              Error fetching analytics.
-            </Text>
-          )}
-
-          {!isFetching && !error && hasSearched && sessionSummary && (
-            <SessionSummary summary={sessionSummary} />
-          )}
-
-          {/* Table */}
-          {!isFetching && !error && hasSearched && rows.length > 0 && (
-            <Box>
-              {/* Applied range + status legend */}
-              <Flex
-                mb={3}
-                gap={3}
-                align="center"
-                justify="space-between"
-                flexWrap="wrap"
-              >
-                <Text fontWeight="semibold">
-                  {formatRangeLabel(fromDate, toDate)}
-                </Text>
-                <Flex gap={4} flexWrap="wrap">
-                  {legend.map((status) => (
-                    <Flex key={status.key} align="center" gap={1}>
-                      <Badge colorScheme={status.color}>
-                        {status.shortLabel}
-                      </Badge>
-                      <Text fontSize="sm">{status.label}</Text>
-                    </Flex>
-                  ))}
-                </Flex>
-              </Flex>
-
-              <Box overflowX="auto">
-                <Table variant="striped" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th isNumeric>SN</Th>
-                      <Th>Name</Th>
-                      {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                        <Th
-                          key={behavior}
-                          textAlign="center"
-                          verticalAlign="bottom"
-                        >
-                          <Box as="span" sx={VERTICAL_LABEL_SX}>
-                            {BEHAVIOR_META[behavior].label}
-                          </Box>
-                        </Th>
-                      ))}
-                      {dateKeys.map((d) => (
-                        <Th key={d} textAlign="center" verticalAlign="bottom">
-                          <Box as="span" sx={VERTICAL_LABEL_SX}>
-                            {formatDayHeader(d)}
-                          </Box>
-                        </Th>
-                      ))}
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {rows.map((row, index) => (
-                      <Tr
-                        key={row.memberId}
-                        onClick={() =>
-                          row.memberId && goToMemberAnalytics(row.memberId)
-                        }
-                        cursor={row.memberId ? "pointer" : "default"}
-                        _hover={row.memberId ? { bg: "blue.50" } : undefined}
-                        title={
-                          row.memberId
-                            ? `View ${lowerTerm(
-                                terms.memberSingular
-                              )} analytics`
-                            : undefined
-                        }
-                        role={row.memberId ? "button" : undefined}
-                        tabIndex={row.memberId ? 0 : undefined}
-                        onKeyDown={(e) => {
-                          if (
-                            row.memberId &&
-                            (e.key === "Enter" || e.key === " ")
-                          ) {
-                            e.preventDefault();
-                            goToMemberAnalytics(row.memberId);
-                          }
-                        }}
-                      >
-                        <Td isNumeric>{index + 1}</Td>
-                        <Td>{row.name}</Td>
-
-                        {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                          <Td key={behavior} textAlign="center">
-                            <Badge colorScheme={BEHAVIOR_META[behavior].color}>
-                              {behaviorCountOf(row, behavior)}
-                            </Badge>
-                          </Td>
-                        ))}
-
-                        {dateKeys.map((d) => {
-                          const key = row[d] as string | undefined;
-                          if (!key) {
-                            return (
-                              <Td key={d} textAlign="center">
-                                <Badge
-                                  role="img"
-                                  aria-label={NOT_ON_ROSTER(
-                                    terms.attendanceSingular
-                                  )}
-                                  title={NOT_ON_ROSTER(
-                                    terms.attendanceSingular
-                                  )}
-                                >
-                                  N/A
-                                </Badge>
-                              </Td>
-                            );
-                          }
-                          const status = statuses.resolve(key);
-                          return (
-                            <Td key={d} textAlign="center">
-                              <Badge
-                                colorScheme={status.color}
-                                title={status.label}
-                              >
-                                {status.shortLabel}
-                              </Badge>
-                            </Td>
-                          );
-                        })}
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
+    <PageContainer width="wide">
+      <DateRangeControls
+        fromDate={fromDate}
+        toDate={toDate}
+        activePreset={activePreset}
+        applyPreset={applyPreset}
+        setFromDate={setFromDate}
+        setToDate={setToDate}
+        handleDateChange={handleDateChange}
+        trailing={
+          <>
+            <Box flex="1" minW={0} maxW={{ md: "320px" }}>
+              <ThemedSelect
+                isMulti
+                aria-label={`Filter ${lowerTerm(terms.memberPlural)} by status`}
+                placeholder={`${terms.memberSingular} status`}
+                options={statusSelectOptions}
+                value={selectedStatusOptions}
+                closeMenuOnSelect={false}
+                onChange={handleStatusChange}
+              />
             </Box>
+            <Button
+              colorPalette="blue"
+              onClick={handleSearch}
+              disabled={!canRunQuery}
+              minH="44px"
+              flexShrink={0}
+            >
+              Search
+            </Button>
+          </>
+        }
+      />
+
+      {isFetching && <PageLoader h="30vh" />}
+      {!isFetching && Boolean(error) && (
+        <ErrorState
+          title="Couldn't load analytics"
+          description={errorMessage(error)}
+          onRetry={() => refetch()}
+        />
+      )}
+      {!isFetching && !error && !hasSearched && (
+        <EmptyState
+          icon={<FiBarChart2 />}
+          title="Choose a date range"
+          description="Pick a preset or dates, then Search."
+        />
+      )}
+
+      {showResults && (
+        <>
+          {/* What is shown, then how: the summary line, view and Export. */}
+          <Box mb={3}>
+            <Text fontWeight="semibold">
+              {`${formatRangeLabel(fromDate, toDate)} · ${rows.length} ${lowerTerm(
+                rows.length === 1 ? terms.memberSingular : terms.memberPlural
+              )}`}
+            </Text>
+            {sessionSummary && (
+              <Box color="fg.muted" mt={1}>
+                <SessionSummary summary={sessionSummary} />
+              </Box>
+            )}
+            <Flex gap={2} align="center" justify="space-between">
+              <Group attached>
+                {(
+                  [
+                    { value: "list", label: "List", icon: <FaListUl /> },
+                    { value: "grid", label: "Grid", icon: <FaTable /> },
+                  ] as const
+                ).map((option) => (
+                  <Button
+                    key={option.value}
+                    minH="44px"
+                    px={3}
+                    variant={view === option.value ? "solid" : "outline"}
+                    colorPalette={view === option.value ? "blue" : "gray"}
+                    aria-pressed={view === option.value}
+                    onClick={() => setChosenView(option.value)}
+                  >
+                    {option.icon}
+                    {option.label}
+                  </Button>
+                ))}
+              </Group>
+              {/* Exports follow the report on screen, never unsearched inputs. */}
+              <ExportMenu
+                onExcel={() => refetchExcel()}
+                onPdf={() => refetchPdf()}
+                busy={isExportingExcel || isExportingPdf}
+              />
+            </Flex>
+          </Box>
+
+          {rows.length === 0 && (
+            <EmptyState
+              icon={<FiBarChart2 />}
+              title={`No ${lowerTerm(terms.attendanceSingular)} records found for this range.`}
+            />
           )}
 
-          {/* No data message */}
-          {!isFetching && !error && hasSearched && rows.length === 0 && (
-            <Text>{`No ${lowerTerm(
-              terms.attendanceSingular
-            )} records found for this range.`}</Text>
+          {rows.length > 0 && view === "list" && (
+            <AnalyticsMemberList rows={memberRows} onOpen={goToMemberAnalytics} />
+          )}
+
+          {rows.length > 0 && view === "grid" && (
+            <>
+              <Flex mb={3} gap={4} flexWrap="wrap">
+                {legend.map((status) => (
+                  <Flex key={status.key} align="center" gap={1}>
+                    <Badge colorPalette={status.color}>{status.shortLabel}</Badge>
+                    <Text fontSize="sm">{status.label}</Text>
+                  </Flex>
+                ))}
+              </Flex>
+              <AnalyticsGrid
+                rows={memberRows}
+                dateKeys={dateKeys}
+                statuses={statuses}
+                onOpen={goToMemberAnalytics}
+              />
+            </>
           )}
         </>
-      </Box>
-    </Box>
+      )}
+    </PageContainer>
   );
 };
 

@@ -1,13 +1,4 @@
-import {
-  Badge,
-  Box,
-  Button,
-  Flex,
-  HStack,
-  Heading,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, HStack, Heading, Text } from "@chakra-ui/react";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { useTerms } from "hooks/useOrgPresentation";
 import {
@@ -18,7 +9,8 @@ import {
 import { WelfareFollowUp } from "components/welfare/followUps/types";
 
 /** Phone-sized tap targets; compact on wider screens. */
-const ACTION_SIZE = { base: "sm", md: "xs" };
+// Small text, but a 44px tap on every screen.
+const ACTION_SIZE = "sm";
 
 interface WelfareFollowUpCardProps {
   record: WelfareFollowUp;
@@ -46,16 +38,15 @@ const WelfareFollowUpCard = ({
   onViewHistory,
 }: WelfareFollowUpCardProps) => {
   const terms = useTerms();
-  const cardBg = useColorModeValue("white", "gray.700");
   const memberName =
     record.member?.name ?? `Unknown ${lowerTerm(terms.memberSingular)}`;
   const dueLabel = followUpDueLabel(record, asOf);
   const dueColor =
     dueLabel === "Overdue"
-      ? "red.500"
+      ? "fg.error"
       : dueLabel === "Due today"
-      ? "orange.500"
-      : "gray.500";
+      ? "orange.fg"
+      : "fg.muted";
   const noteExcerpt = followUpNoteExcerpt(record.note);
 
   return (
@@ -63,7 +54,7 @@ const WelfareFollowUpCard = ({
       borderWidth="1px"
       borderRadius="lg"
       p={{ base: 3, md: 4 }}
-      bg={cardBg}
+      bg={"bg.panel"}
       role="group"
       aria-label={record.reason}
     >
@@ -71,7 +62,7 @@ const WelfareFollowUpCard = ({
         <Heading size="sm" minW={0} overflowWrap="anywhere">
           {memberName}
         </Heading>
-        <Badge colorScheme="green" flexShrink={0}>
+        <Badge colorPalette="green" flexShrink={0}>
           Open
         </Badge>
       </Flex>
@@ -90,26 +81,27 @@ const WelfareFollowUpCard = ({
       </Text>
 
       {noteExcerpt && (
-        <Text fontSize="sm" color="gray.500" mb={2}>
+        <Text fontSize="sm" color="fg.muted" mb={2}>
           {noteExcerpt}
         </Text>
       )}
 
-      <Text fontSize="xs" color="gray.500">
+      <Text fontSize="xs" color="fg.muted">
         {record.createdBy?.name
           ? `Recorded by ${record.createdBy.name}`
           : "Recorded by unknown user"}
       </Text>
-      <Text fontSize="xs" color="gray.500" mb={3}>
+      <Text fontSize="xs" color="fg.muted" mb={3}>
         {`Record date: ${followUpDateLabel(record.recordDate)}`}
       </Text>
 
-      <HStack spacing={2} wrap="wrap">
+      <HStack gap={2} wrap="wrap">
         {canManage && (
           <Button
             size={ACTION_SIZE}
+            minH="44px"
             onClick={() => onEdit(record)}
-            isDisabled={isSaving}
+            disabled={isSaving}
           >
             Edit
           </Button>
@@ -117,9 +109,10 @@ const WelfareFollowUpCard = ({
         {canManage && (
           <Button
             size={ACTION_SIZE}
+            minH="44px"
             variant="outline"
             onClick={() => onCloseRecord(record)}
-            isDisabled={isSaving}
+            disabled={isSaving}
           >
             Close follow-up
           </Button>
@@ -128,9 +121,10 @@ const WelfareFollowUpCard = ({
             too small a tap target on phones. */}
         <Button
           size={ACTION_SIZE}
+            minH="44px"
           variant="ghost"
           onClick={() => onViewHistory(record)}
-          isDisabled={isSaving}
+          disabled={isSaving}
         >
           Member history
         </Button>

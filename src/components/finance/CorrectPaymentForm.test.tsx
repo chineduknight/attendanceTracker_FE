@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from "test-utils/render";
 import CorrectPaymentForm from "components/finance/CorrectPaymentForm";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
 
@@ -39,24 +40,24 @@ test("dues shows 12 month inputs; a levy shows one total", () => {
   expect(screen.getByLabelText("Dec")).toBeInTheDocument();
 });
 
-test("a levy pre-fills its current total and confirms before overwriting", () => {
+test("a levy pre-fills its current total and confirms before overwriting", async () => {
   const { onCorrectLevy } = setup({
     obligation: levy,
     row: { memberId: "m1", name: "Ada", accountable: true, paid: 4000 },
   });
   const input = screen.getByLabelText(/total amount paid/i);
-  expect(input).toHaveValue(4000);
+  expect(input).toHaveValue("4,000");
   fireEvent.change(input, { target: { value: "6000" } });
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectLevy).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Yes, update"));
+  fireEvent.click(await screen.findByText("Yes, update"));
   expect(onCorrectLevy).toHaveBeenCalledWith(6000);
 });
 
 test("locks paid months, pre-fills them, and gates entry sequentially", () => {
   setup({ row: paidJanToMar });
   expect(screen.getByLabelText("Jan")).toBeDisabled();
-  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+  expect(screen.getByLabelText("Jan")).toHaveValue("500");
   expect(screen.getByLabelText("Apr")).toBeEnabled();
   expect(screen.getByLabelText("May")).toBeDisabled();
 
@@ -80,7 +81,7 @@ test("locks every month when nothing is due this year", () => {
 test("a month accepts no more than the monthly amount", () => {
   setup();
   fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "9999" } });
-  expect(screen.getByLabelText("Jan")).toHaveValue(500);
+  expect(screen.getByLabelText("Jan")).toHaveValue("500");
 });
 
 test("clearing the boundary month relocks the next and reopens the previous one", () => {
@@ -97,31 +98,31 @@ test("clearing the boundary month relocks the next and reopens the previous one"
 test("Fill all and Clear all set every accountable month", () => {
   setup();
   fireEvent.click(screen.getByText("Fill all"));
-  expect(screen.getByLabelText("Jan")).toHaveValue(500);
-  expect(screen.getByLabelText("Dec")).toHaveValue(500);
+  expect(screen.getByLabelText("Jan")).toHaveValue("500");
+  expect(screen.getByLabelText("Dec")).toHaveValue("500");
 
   fireEvent.click(screen.getByText("Clear all"));
-  expect(screen.getByLabelText("Jan")).toHaveValue(null);
+  expect(screen.getByLabelText("Jan")).toHaveValue("");
   expect(screen.getByLabelText("Jan")).toBeEnabled();
   expect(screen.getByLabelText("Feb")).toBeDisabled();
 });
 
-test("builds monthlyPaid in order with numbers, only after confirming", () => {
+test("builds monthlyPaid in order with numbers, only after confirming", async () => {
   const { onCorrectDues } = setup();
   fireEvent.change(screen.getByLabelText("Jan"), { target: { value: "500" } });
   fireEvent.change(screen.getByLabelText("Feb"), { target: { value: "300" } });
 
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectDues).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Yes, update"));
+  fireEvent.click(await screen.findByText("Yes, update"));
   expect(onCorrectDues).toHaveBeenCalledWith({ "1": 500, "2": 300 });
 });
 
-test("clearing everything asks for a destructive confirmation", () => {
+test("clearing everything asks for a destructive confirmation", async () => {
   const { onCorrectDues } = setup({ row: paidJanToMar });
   fireEvent.click(screen.getByText("Clear all"));
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectDues).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Yes, clear"));
+  fireEvent.click(await screen.findByText("Yes, clear"));
   expect(onCorrectDues).toHaveBeenCalledWith({});
 });

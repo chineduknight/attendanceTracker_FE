@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  AlertDescription,
-  AlertIcon,
-  Box,
-  Button,
-  Flex,
-  Stack,
-  Text,
-  useColorModeValue,
-} from "@chakra-ui/react";
+import { Alert, Button, Stack, Text } from "@chakra-ui/react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { FaPlusCircle } from "react-icons/fa";
@@ -23,7 +13,9 @@ import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore from "zStore";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import { ErrorState, errorMessage } from "components/ui/states";
 import ModelFieldCard from "components/members/ModelFieldCard";
 import { useMemberModel } from "hooks/useMemberModel";
 import { MemberModelField } from "helpers/memberFields";
@@ -112,22 +104,20 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
 
   return (
     <Stack
-      spacing={4}
-      w="full"
-      maxW="md"
-      bg={useColorModeValue("white", "gray.700")}
+      gap={4}
+      bg="bg.panel"
       rounded="xl"
       boxShadow="lg"
-      p={{ base: 4, sm: 6 }}
+      p={{ base: 4, md: 6 }}
     >
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="fg.muted">
         {`Labels are what ${lowerTerm(terms.officerPlural)} see and can be changed at any time. Internal keys identify stored ${lowerTerm(terms.memberSingular)} data and stay fixed once saved.`}
       </Text>
       {serverError && (
-        <Alert status="error" borderRadius="md">
-          <AlertIcon />
-          <AlertDescription>{serverError}</AlertDescription>
-        </Alert>
+        <Alert.Root status="error" borderRadius="md">
+          <Alert.Indicator />
+          <Alert.Description>{serverError}</Alert.Description>
+        </Alert.Root>
       )}
       {fields.map((field) => (
         <ModelFieldCard
@@ -141,15 +131,23 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         />
       ))}
       <Button
-        leftIcon={<FaPlusCircle aria-hidden />}
-        variant="logout"
+        variant="outline"
+        colorPalette="blue"
         w="max-content"
         onClick={() => setFields((current) => [...current, newDraftField()])}
       >
+        <FaPlusCircle aria-hidden />
         Add field
       </Button>
-      <Stack spacing={3}>
-        <Button onClick={handleSubmit} isLoading={isLoading}>
+      <Stack gap={3} mt={4}>
+        <Button
+          size="lg"
+          variant="solid"
+          colorPalette="blue"
+          fontWeight="bold"
+          onClick={handleSubmit}
+          loading={isLoading}
+        >
           {isUpdating ? "Update" : "Submit"}
         </Button>
         <Button variant="outline" onClick={() => navigate(-1)}>
@@ -167,7 +165,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
  */
 const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
   const terms = useTerms();
-  const { fields, hasData, isError, isFetchedAfterMount } = useMemberModel(organisationId, {
+  const { fields, hasData, isError, isFetchedAfterMount, error, refetch } = useMemberModel(organisationId, {
     refetchOnWindowFocus: false,
   });
   const [seed, setSeed] = useState<MemberModelField[] | null>(null);
@@ -178,15 +176,17 @@ const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
   if (seed) return <ModelForm organisationId={organisationId} savedFields={seed} />;
   if (isError && !hasData) {
     return (
-      <Text color="red.500">
-        {`The ${lowerTerm(terms.memberSingular)} model could not be loaded. Please refresh.`}
-      </Text>
+      <ErrorState
+        title={`Couldn't load the ${lowerTerm(LABELS.memberModel(terms))}`}
+        description={errorMessage(error)}
+        onRetry={() => refetch()}
+      />
     );
   }
   return (
-    <LoadingSpinner
+    <PageLoader
       h="40vh"
-      text={`Loading ${lowerTerm(terms.memberSingular)} model...`}
+      label={`Loading ${lowerTerm(terms.memberSingular)} model...`}
     />
   );
 };
@@ -198,11 +198,9 @@ const MemberModelEditor = ({ organisationId }: { organisationId: string }) => {
 const UserModel = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);
   return (
-    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")} py={6} px={4}>
-      <Flex justify="center">
-        <MemberModelEditor key={organisationId} organisationId={organisationId} />
-      </Flex>
-    </Box>
+    <PageContainer width="form">
+      <MemberModelEditor key={organisationId} organisationId={organisationId} />
+    </PageContainer>
   );
 };
 

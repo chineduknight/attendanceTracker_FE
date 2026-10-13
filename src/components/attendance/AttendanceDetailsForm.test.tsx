@@ -1,4 +1,5 @@
-import { act, render, screen, fireEvent } from "@testing-library/react";
+import { act, screen, fireEvent } from "@testing-library/react";
+import { render } from "test-utils/render";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";

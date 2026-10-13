@@ -4,13 +4,25 @@ body {
   font-family: 'Palanquin', sans-serif;
 }
 
-/* Add higher specificity to the button styles */
-.confirm-alert-button.confirm-alert-button-yes {
-  background-color: green;
-  /* Add other styles as needed */
+/* Chakra v3 hides a loading button's label with visibility:hidden, which
+   drops it from the accessibility tree, so a saving button has no name.
+   Keep the label in the tree but transparent, as v2 did; the spinner sits
+   on top. Plain (unlayered) CSS on purpose: Chakra's recipe styles live in
+   a cascade layer and cannot override the loader's unlayered style. */
+.chakra-button[data-loading] > span > span:last-child {
+  visibility: visible;
+  color: transparent;
 }
 
-.confirm-alert-button.confirm-alert-button-no {
-  background-color: red;
-  /* Add other styles as needed */
+/* react-toastify's close × is a 14x16 icon button. Give it a 44px tap
+   target without moving the icon: the extra space is padding, pulled back
+   into the toast's own padding with negative margins. */
+.Toastify__close-button {
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px -8px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 8px;
 }

@@ -76,17 +76,17 @@ const WelfareFollowUpSection = ({
         Follow-ups
       </Heading>
 
-      {isLoading && <Text color="gray.500">Loading follow-ups...</Text>}
+      {isLoading && <Text color="fg.muted">Loading follow-ups...</Text>}
 
       {!isLoading && (isError || !summary) && (
-        <Text color="red.500">
+        <Text color="fg.error">
           Follow-up data could not be loaded right now.
         </Text>
       )}
 
       {!isLoading && summary && (
         <>
-          <SimpleGrid columns={3} spacing={{ base: 2, md: 3 }} mb={3} maxW="md">
+          <SimpleGrid columns={3} gap={{ base: 2, md: 3 }} mb={3} maxW="md">
             <StatTile label="Open" value={summary.open} />
             <StatTile label="Due Today" value={summary.dueToday} />
             <StatTile label="Overdue" value={summary.overdue} />
@@ -94,31 +94,22 @@ const WelfareFollowUpSection = ({
 
           <Flex gap={2} wrap="wrap" mb={isListOpen ? 5 : 0}>
             {canCreateManualFollowUp && (
-              <Button
-                size="sm"
-                leftIcon={<FaPlus aria-hidden="true" />}
-                onClick={onAdd}
-                isDisabled={isSaving}
-              >
-                Add welfare follow-up
-              </Button>
+              <Button size="sm" minH="44px" onClick={onAdd} disabled={isSaving}><FaPlus aria-hidden="true" />Add welfare follow-up
+                              </Button>
             )}
             <Button
               size="sm"
+              minH="44px"
               variant="outline"
-              rightIcon={
+              aria-expanded={isListOpen}
+              aria-controls={LIST_ID}
+              onClick={() => setIsListOpen((open) => !open)}>{isListOpen ? "Hide follow-ups" : "Show follow-ups"}{
                 isListOpen ? (
                   <FaChevronUp aria-hidden="true" />
                 ) : (
                   <FaChevronDown aria-hidden="true" />
                 )
-              }
-              aria-expanded={isListOpen}
-              aria-controls={LIST_ID}
-              onClick={() => setIsListOpen((open) => !open)}
-            >
-              {isListOpen ? "Hide follow-ups" : "Show follow-ups"}
-            </Button>
+              }</Button>
           </Flex>
 
           {isListOpen && (
@@ -127,9 +118,9 @@ const WelfareFollowUpSection = ({
                 Open follow-ups
               </Heading>
               {openRecords.length === 0 ? (
-                <Text color="gray.500">No open follow-ups.</Text>
+                <Text color="fg.muted">No open follow-ups.</Text>
               ) : (
-                <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+                <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
                   {openRecords.map((record) => (
                     <WelfareFollowUpCard
                       key={record.id}

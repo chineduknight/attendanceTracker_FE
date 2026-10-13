@@ -1,19 +1,17 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useConfirm } from "components/ui/confirm-dialog";
 import {
   Alert,
-  AlertIcon,
   Box,
   Button,
-  FormControl,
-  FormLabel,
   Heading,
-  Input,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
+  Field,
 } from "@chakra-ui/react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { format, isBefore, parseISO } from "date-fns";
 import useGlobalStore from "zStore";
@@ -23,24 +21,29 @@ import {
   useAttendanceAvailabilityMutations,
 } from "hooks/useAttendanceAvailability";
 import { AttendanceAvailability } from "helpers/attendanceAvailability";
+import { formatSessionDate } from "helpers/sessionDate";
 import { Can } from "rbac/Can";
-import { PROTECTED_PATHS } from "routes/pagePath";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
+import PageContainer from "components/layout/PageContainer";
+import PageLoader from "components/PageLoader";
+import { DateField } from "components/ui/date-field";
+import { EmptyState, ErrorState } from "components/ui/states";
 
 type FormValue = { startDate: string; endDate: string; reason: string };
 const EMPTY_FORM: FormValue = { startDate: "", endDate: "", reason: "" };
 
-const displayDate = (value: string) => format(parseISO(value), "dd MMM yyyy");
+// Periods are calendar days (YYYY-MM-DD): never shift them through a timezone.
+const displayDate = (value: string) => formatSessionDate(value, "dd MMM yyyy");
 
 const MemberAttendanceAvailability = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const organisationId = useGlobalStore((state) => state.organisation.id);
   const terms = useTerms();
   const memberId = useParams<{ memberId: string }>().memberId ?? "";
-  const navigate = useNavigate();
   const { members } = useMembers(organisationId);
   const member = members.find((candidate) => candidate.id === memberId);
-  const { periods, isLoading, isError } = useAttendanceAvailabilityForMember(
+  const { periods, isLoading, isError, refetch } = useAttendanceAvailabilityForMember(
     organisationId,
     memberId
   );
@@ -48,6 +51,7 @@ const MemberAttendanceAvailability = () => {
     useAttendanceAvailabilityMutations(organisationId);
   const [form, setForm] = useState<FormValue>(EMPTY_FORM);
   const [editing, setEditing] = useState<AttendanceAvailability | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
   const today = format(new Date(), "yyyy-MM-dd");
 
   const { current, upcoming, past } = useMemo(() => {
@@ -114,38 +118,53 @@ const MemberAttendanceAvailability = () => {
       endDate: period.endDate,
       reason: period.reason ?? "",
     });
+    // The form is above the list: on a phone it is usually off screen.
+    formRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
 
-  const remove = (period: AttendanceAvailability) => {
-    if (
-      !window.confirm(
-        `Remove this ${lowerTerm(
-          terms.attendanceSingular
-        )} availability period? This will affect only ${lowerTerm(
-          terms.attendancePlural
-        )} created after the change. Existing ${lowerTerm(
-          terms.attendancePlural
-        )} will stay unchanged.`
-      )
-    )
-      return;
+  const remove = async (period: AttendanceAvailability) => {
+    const confirmed = await confirm({
+      title: "Remove availability period",
+      body: `Remove this ${lowerTerm(
+        terms.attendanceSingular
+      )} availability period? This will affect only ${lowerTerm(
+        terms.attendancePlural
+      )} created after the change. Existing ${lowerTerm(
+        terms.attendancePlural
+      )} will stay unchanged.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!confirmed) return;
     archive(period.id, () => toast.success("Availability period removed"));
   };
 
   const renderPeriod = (period: AttendanceAvailability) => (
-    <Box key={period.id} borderWidth="1px" borderRadius="md" p={4}>
+    <Box
+      key={period.id}
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
+      borderRadius="lg"
+      p={4}
+    >
       <Text fontWeight="bold">
         {displayDate(period.startDate)} - {displayDate(period.endDate)}
       </Text>
-      <Text color="gray.600">{period.reason || "No reason provided"}</Text>
+      <Text color="fg.muted">{period.reason || "No reason provided"}</Text>
       <Can perm="attendance.manage">
         <Stack direction="row" mt={3}>
-          <Button size="sm" onClick={() => startEditing(period)}>
+          <Button
+            minH="44px"
+            variant="outline"
+            colorPalette="blue"
+            onClick={() => startEditing(period)}
+          >
             Edit
           </Button>
           <Button
-            size="sm"
-            colorScheme="red"
+            minH="44px"
+            colorPalette="red"
             variant="outline"
             onClick={() => remove(period)}
           >
@@ -156,60 +175,69 @@ const MemberAttendanceAvailability = () => {
     </Box>
   );
 
+  const group = (title: string, items: AttendanceAvailability[]) =>
+    items.length > 0 && (
+      <Box as="section">
+        <Heading as="h2" size="sm" color="fg.muted" letterSpacing="wide" mb={3}>
+          {title}
+        </Heading>
+        <Stack>{items.map(renderPeriod)}</Stack>
+      </Box>
+    );
+
+  const attendanceTerm = lowerTerm(terms.attendanceSingular);
+
   return (
-    <Box minH="100vh" bg="gray.50" px={{ base: 4, md: 8 }} py={6}>
-      <Button
-        variant="link"
-        mb={4}
-        onClick={() => navigate(PROTECTED_PATHS.VIEW_MEMBER)}
-      >
-        Back to {lowerTerm(terms.memberPlural)}
-      </Button>
-      <Heading size="lg" mb={2}>
+    <PageContainer width="form">
+      <Heading as="h1" size="lg" mb={2}>
         {member?.name ?? terms.memberSingular}{" "}
-        {lowerTerm(terms.attendanceSingular)} availability
+        {attendanceTerm} availability
       </Heading>
-      <Text mb={6}>
+      <Text mb={6} color="fg.muted">
         This {lowerTerm(terms.memberSingular)} will not be expected for{" "}
-        {lowerTerm(terms.attendancePlural).toLowerCase()} in an unavailable
-        period.
+        {lowerTerm(terms.attendancePlural)} in an unavailable period.
       </Text>
-      <Alert status="info" mb={6}>
-        <AlertIcon />
+      <Alert.Root status="info" mb={6}>
+        <Alert.Indicator />
         Availability affects {lowerTerm(terms.attendancePlural)} created after
         it is saved. Existing {lowerTerm(terms.attendancePlural)} are not
         recalculated.
-      </Alert>
+      </Alert.Root>
 
       <Can perm="attendance.manage">
-        <Box bg="white" borderRadius="lg" p={5} mb={8} boxShadow="sm">
-          <Heading size="md" mb={4}>
+        <Box
+          ref={formRef}
+          bg="bg.panel"
+          rounded="xl"
+          boxShadow="lg"
+          p={{ base: 4, md: 6 }}
+          mb={8}
+          scrollMarginTop="4"
+        >
+          <Heading as="h2" size="md" mb={4}>
             {editing ? "Edit unavailable period" : "Add unavailable period"}
           </Heading>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl>
-              <FormLabel>Start date</FormLabel>
-              <Input
-                type="date"
+          <SimpleGrid columns={{ base: 1, sm: 2 }} gap={4}>
+            <Field.Root>
+              <Field.Label>Start date</Field.Label>
+              <DateField
                 value={form.startDate}
-                onChange={(event) =>
-                  setForm({ ...form, startDate: event.target.value })
-                }
+                onChange={(startDate) => setForm({ ...form, startDate })}
+                range={{ role: "start", start: form.startDate, end: form.endDate }}
               />
-            </FormControl>
-            <FormControl>
-              <FormLabel>End date</FormLabel>
-              <Input
-                type="date"
+            </Field.Root>
+            <Field.Root>
+              <Field.Label>End date</Field.Label>
+              <DateField
                 value={form.endDate}
-                onChange={(event) =>
-                  setForm({ ...form, endDate: event.target.value })
-                }
+                onChange={(endDate) => setForm({ ...form, endDate })}
+                min={form.startDate || undefined}
+                range={{ role: "end", start: form.startDate, end: form.endDate }}
               />
-            </FormControl>
+            </Field.Root>
           </SimpleGrid>
-          <FormControl mt={4}>
-            <FormLabel>Reason (optional)</FormLabel>
+          <Field.Root mt={4}>
+            <Field.Label>Reason (optional)</Field.Label>
             <Textarea
               value={form.reason}
               maxLength={200}
@@ -218,64 +246,46 @@ const MemberAttendanceAvailability = () => {
               }
               placeholder="Travel, examinations, work assignment..."
             />
-          </FormControl>
+          </Field.Root>
           <Stack direction="row" mt={4}>
-            <Button colorScheme="blue" onClick={submit} isLoading={isSaving}>
+            <Button
+              variant="solid"
+              colorPalette="blue"
+              onClick={submit}
+              loading={isSaving}
+            >
               {editing ? "Save changes" : "Add period"}
             </Button>
-            {editing && <Button onClick={resetForm}>Cancel</Button>}
+            {editing && (
+              <Button variant="outline" onClick={resetForm}>
+                Cancel
+              </Button>
+            )}
           </Stack>
         </Box>
       </Can>
 
-      {isError && (
-        <Alert status="error" mb={5}>
-          <AlertIcon />
-          Unable to load {lowerTerm(terms.attendanceSingular)} availability.
-        </Alert>
-      )}
-      {isLoading && (
-        <Text>
-          Loading {lowerTerm(terms.attendanceSingular)} availability...
-        </Text>
-      )}
-      {!isLoading && !isError && periods.length === 0 && (
-        <Box bg="white" borderRadius="lg" p={6}>
-          <Text>
-            No {lowerTerm(terms.attendanceSingular)} availability periods for
-            this {lowerTerm(terms.memberSingular)}.
-          </Text>
-        </Box>
-      )}
-      {!isLoading && !isError && periods.length > 0 && (
-        <Stack spacing={6}>
-          {current.length > 0 && (
-            <Box>
-              <Heading size="sm" mb={3}>
-                CURRENT
-              </Heading>
-              <Stack>{current.map(renderPeriod)}</Stack>
-            </Box>
-          )}
-          {upcoming.length > 0 && (
-            <Box>
-              <Heading size="sm" mb={3}>
-                UPCOMING
-              </Heading>
-              <Stack>{upcoming.map(renderPeriod)}</Stack>
-            </Box>
-          )}
-          {past.length > 0 && (
-            <Box>
-              <Heading size="sm" mb={3}>
-                PAST
-              </Heading>
-              <Stack>{past.map(renderPeriod)}</Stack>
-            </Box>
-          )}
+      {isLoading ? (
+        <PageLoader h="20vh" label={`Loading ${attendanceTerm} availability...`} />
+      ) : isError ? (
+        <ErrorState
+          title={`Couldn't load ${attendanceTerm} availability`}
+          onRetry={() => refetch?.()}
+        />
+      ) : periods.length === 0 ? (
+        <EmptyState
+          title={`No ${attendanceTerm} availability periods`}
+          description={`This ${lowerTerm(terms.memberSingular)} has no unavailable periods.`}
+        />
+      ) : (
+        <Stack gap={6}>
+          {group("CURRENT", current)}
+          {group("UPCOMING", upcoming)}
+          {group("PAST", past)}
         </Stack>
       )}
-    </Box>
+      {confirmDialog}
+    </PageContainer>
   );
 };
 

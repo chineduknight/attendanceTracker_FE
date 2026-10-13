@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
+import { render } from "test-utils/render";
 import { MemoryRouter } from "react-router-dom";
 import useGlobalStore, { EMPTY_USER } from "zStore";
 import AppHeader from "components/AppHeader";
@@ -89,8 +90,32 @@ describe("<AppHeader>", () => {
         <AppHeader title="Category" />
       </MemoryRouter>
     );
-    expect(screen.getByLabelText("Account menu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Account menu"));
     expect(screen.getByText("Change password")).toBeInTheDocument();
   });
+
+  it("keeps its controls clear of the iOS safe areas", () => {
+    render(
+      <MemoryRouter>
+        <AppHeader title="Finance" />
+      </MemoryRouter>,
+    );
+    // jsdom cannot resolve env(), so check the header's generated rules
+    // rather than faking a device inset.
+    const header = screen.getByRole("banner");
+    const headerRules = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules) as CSSStyleRule[])
+      // Match on the header's own classes (jsdom can't parse every selector).
+      .filter((rule) =>
+        Array.from(header.classList).some((cls) => rule.selectorText === `.${cls}`),
+      )
+      .map((rule) => rule.cssText)
+      .join(" ");
+    expect(headerRules).toContain("calc(0.5rem + env(safe-area-inset-top))");
+    for (const side of ["left", "right"]) {
+      expect(headerRules).toContain(`calc(1rem + env(safe-area-inset-${side}))`);
+    }
+  });
 });
+

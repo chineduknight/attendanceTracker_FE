@@ -1,16 +1,8 @@
-import {
-  Box,
-  Flex,
-  Checkbox,
-  useColorModeValue,
-  Button,
-  FormControl,
-  FormLabel,
-  Input,
-  Stack,
-  Heading,
-  Select,
-} from "@chakra-ui/react";
+import { Box, Button, Flex, Input, Stack, NativeSelect, Field } from "@chakra-ui/react";
+import { FormCheckbox } from "components/ui/checkbox";
+import { DateField, todayValue } from "components/ui/date-field";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import PageContainer from "components/layout/PageContainer";
 import { useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
@@ -23,55 +15,88 @@ import {
 import { convertParamsToString } from "helpers/stringManipulations";
 import { orgRequest } from "services";
 import useGlobalStore from "zStore";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FaPlusSquare, FaTrash } from "react-icons/fa";
-import { confirmAlert } from "react-confirm-alert";
+import { useConfirm } from "components/ui/confirm-dialog";
 import { displayMemberFieldLabel, MemberModelField } from "helpers/memberFields";
-import LoadingSpinner from "components/LoadingSpinner";
+import PageLoader from "components/PageLoader";
 import { Can } from "rbac/Can";
 import { queryKeys } from "services/api/queryKeys";
 import { useTerms } from "hooks/useOrgPresentation";
+import { useMemberModel } from "hooks/useMemberModel";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { LABELS } from "config/presentationLabels";
 
 interface FormData {
-  [fieldName: string]: string;
+  [fieldName: string]: string | boolean;
 }
 
+type MemberData = Record<string, unknown>;
+
+const BUSINESS_DATE = /^\d{4}-\d{2}-\d{2}/;
+
+/** A stored date field as the YYYY-MM-DD the date input reads ("" if unset). */
+const dateValue = (value: unknown) =>
+  typeof value === "string" ? value.match(BUSINESS_DATE)?.[0] ?? "" : "";
+
+// The Birthdays feature reads `dob`: a birth date can't be in the future.
+const maxDateFor = (field: MemberModelField) =>
+  field.name === "dob" ? todayValue() : undefined;
+
 const AddOrUpdateMember = () => {
+  const { confirm, confirmDialog } = useConfirm();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
-  const [membersModel, setMembersModel] = useState<MemberModelField[]>([]);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [currentMember, setcurrentMember] = useState({});
   const navigate = useNavigate();
   const params = useParams();
+  const isUpdating = Boolean(params.memberId);
   const memberURL = convertParamsToString(orgRequest.MEMBER_ONE, {
     organisationId: org.id,
     id: params.memberId as string,
   });
-  useQueryWrapper(queryKeys.member(org.id, params.memberId), memberURL, {
-    onSuccess: (data) => {
-      setcurrentMember(data.data);
-      setIsUpdating(true);
-    },
+  const memberQuery = useQueryWrapper(queryKeys.member(org.id, params.memberId), memberURL, {
     enabled: Boolean(org.id && params.memberId),
   });
+  const model = useMemberModel(org.id);
+  const membersModel = model.fields as MemberModelField[];
+
+  const { register, control, handleSubmit, reset } = useForm<FormData>();
+  // Seed the form once per member, from the first response fetched after
+  // this page opened. A cached copy (served first, then refetched) may
+  // predate the officer's last save; editing it would write old values back.
+  // Once seeded, background refetches (e.g. returning to the app) never
+  // reset what the officer has typed since.
+  const [seed, setSeed] = useState<{ memberId: string; values: FormData } | null>(null);
+  const seededFor = seed?.memberId ?? null;
+  // Inputs mount once seeded, so their defaults are the seeded snapshot,
+  // never a later refetch.
+  const currentMember: FormData = isUpdating && seed ? seed.values : {};
+  const freshMember =
+    memberQuery.isFetchedAfterMount && !memberQuery.isError
+      ? (memberQuery.data?.data as MemberData | undefined)
+      : undefined;
   useEffect(() => {
     if (!params.memberId) {
-      setIsUpdating(false);
-      setcurrentMember({});
+      // Update -> Add reuses this page: drop the previous member's values.
+      if (seededFor !== null) {
+        reset({});
+        setSeed(null);
+      }
+      return;
     }
-  }, [params.memberId]);
-
-  const { register, handleSubmit, reset } = useForm<FormData>();
-  useEffect(() => {
-    if (currentMember && isUpdating) {
-      reset(currentMember);
-    }
-  }, [currentMember, isUpdating, reset]);
+    if (!freshMember || !model.hasData || seededFor === params.memberId) return;
+    const member = freshMember;
+    const values = { ...member } as FormData;
+    membersModel
+      .filter((field) => field.type === "date")
+      .forEach((field) => {
+        values[field.name] = dateValue(member[field.name]);
+      });
+    reset(values);
+    setSeed({ memberId: params.memberId, values });
+  }, [freshMember, params.memberId, model.hasData, membersModel, reset, seededFor]);
 
   const onSuccess = () => {
     toast.success(
@@ -80,24 +105,13 @@ const AddOrUpdateMember = () => {
         : `${terms.memberSingular} added successfully`,
     );
     queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
+    // ["member", org, id] is not under ["members", org]: refresh it too, so
+    // reopening this member never starts from the pre-save copy.
+    if (params.memberId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
+    }
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
   };
-
-  const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
-    organisationId: org.id,
-  });
-
-  const { isFetching: isGettingMembers } = useQueryWrapper(
-    queryKeys.memberModel(org.id),
-    modelURL,
-    {
-      onSuccess: (data) => {
-        setMembersModel(data?.data.fields);
-        const isUpdate = params.memberId !== undefined;
-        setIsUpdating(isUpdate);
-      },
-    },
-  );
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
 
@@ -124,6 +138,7 @@ const AddOrUpdateMember = () => {
     () => {
       toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
+      queryClient.removeQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
@@ -134,47 +149,31 @@ const AddOrUpdateMember = () => {
     },
   );
 
-  const handleDeleteMember = () => {
+  const handleDeleteMember = async () => {
     const url = convertParamsToString(orgRequest.DELETE_MEMBER, {
       organisationId: org.id,
       id: params.memberId as string,
     });
-    confirmAlert({
+    const confirmed = await confirm({
       title: `Delete ${terms.memberSingular}`,
-      message: `Are you sure you want to delete this ${lowerTerm(
+      body: `Are you sure you want to delete this ${lowerTerm(
         terms.memberSingular,
       )}? This cannot be undone.`,
-      buttons: [
-        {
-          label: "Yes",
-          className: "confirm-alert-button confirm-alert-button-yes",
-          onClick: () => deleteMember({ url }),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: "Delete",
+      destructive: true,
     });
+    if (confirmed) deleteMember({ url });
   };
 
-  const onSubmit = handleSubmit((data) => {
-    confirmAlert({
+  const onSubmit = handleSubmit(async (data) => {
+    const confirmed = await confirm({
       title: "Confirmation",
-      message: `Are you sure you want to ${
+      body: `Are you sure you want to ${
         isUpdating ? "update" : "submit"
       } the ${lowerTerm(terms.memberSingular)}?`,
-      buttons: [
-        {
-          label: "Yes",
-          onClick: () => handleAddMember(data),
-        },
-        {
-          label: "No",
-          className: "confirm-alert-button confirm-alert-button-no",
-        },
-      ],
+      confirmLabel: isUpdating ? "Update" : "Submit",
     });
+    if (confirmed) handleAddMember(data);
   });
 
   // Render the form fields based on the members' model
@@ -182,163 +181,183 @@ const AddOrUpdateMember = () => {
     // Labels are display-only; every input stays registered under its storage key.
     return membersModel.map((field) => {
       if (field.type === "checkbox") {
-        const fieldValue = isUpdating ? currentMember[field.name] : false; // Get the current member field value when updating
+        // Controlled: the async reset(currentMember) must reach the visible box.
         return (
-          <FormControl key={field._id ?? field.name} id={field.name}>
-            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
-            <Checkbox
-              {...register(field.name)}
-              colorScheme="blue"
-              defaultChecked={fieldValue} // Set the default checked value for the checkbox
+          <Field.Root key={field._id ?? field.name} id={field.name}>
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
+            <FormCheckbox
+              control={control}
+              name={field.name}
+              label={displayMemberFieldLabel(field)}
+              colorPalette="blue"
             />
-          </FormControl>
+          </Field.Root>
+        );
+      } else if (field.type === "date") {
+        return (
+          <Field.Root
+            key={field._id ?? field.name}
+            id={field.name}
+            required={field.required}
+          >
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
+            <Controller
+              control={control}
+              name={field.name}
+              defaultValue=""
+              rules={{ required: field.required }}
+              render={({ field: input }) => (
+                <DateField
+                  name={input.name}
+                  value={typeof input.value === "string" ? input.value : ""}
+                  onChange={input.onChange}
+                  onBlur={input.onBlur}
+                  max={maxDateFor(field)}
+                  clearable={!field.required}
+                />
+              )}
+            />
+          </Field.Root>
         );
       } else if (field.type === "option") {
-        const fieldValue = isUpdating ? currentMember[field.name] : "";
+        const fieldValue = isUpdating ? (currentMember[field.name] as string) : "";
         return (
-          <FormControl
+          <Field.Root
             key={field._id ?? field.name}
             id={field.name}
-            isRequired={field.required}
+            required={field.required}
           >
-            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
-            <Select
-              defaultValue={fieldValue}
-              {...register(field.name, { required: field.required })}
-            >
-              {Array.isArray(field.options) &&
-                field.options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-            </Select>
-          </FormControl>
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                defaultValue={fieldValue}
+                {...register(field.name, { required: field.required })}>
+                {Array.isArray(field.options) &&
+                  field.options.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </Field.Root>
         );
       } else {
-        const fieldValue = isUpdating ? currentMember[field.name] : ""; // Get the current member field value when updating
+        const fieldValue = isUpdating ? (currentMember[field.name] as string) : ""; // Get the current member field value when updating
         return (
-          <FormControl
+          <Field.Root
             key={field._id ?? field.name}
             id={field.name}
-            isRequired={field.required}
+            required={field.required}
           >
-            <FormLabel>{displayMemberFieldLabel(field)}</FormLabel>
+            <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
             <Input
               type={field.type}
               defaultValue={fieldValue}
               {...register(field.name, { required: field.required })}
             />
-          </FormControl>
+          </Field.Root>
         );
       }
     });
   };
 
-  return (
-    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex justify="flex-end" alignItems="center" mx="6" mt="4">
-        {!isGettingMembers && membersModel.length !== 0 && (
-          <Can perm="members.manage">
+  const memberLabel = lowerTerm(terms.memberSingular);
+  // Until the form is seeded from a fresh response: an error (even with a
+  // cached copy, which may be out of date) or the loader. After that, a
+  // background refetch, failed or not, keeps the form and the officer's edits.
+  const seeded = seededFor === params.memberId;
+  const memberFailed = isUpdating && !seeded && memberQuery.isError;
+  const memberLoading = isUpdating && !seeded && !memberFailed;
+  const modelFailed = model.isError && !model.hasData;
+
+  const body = () => {
+    if (model.isLoading || memberLoading) return <PageLoader h="40vh" />;
+    if (modelFailed) {
+      return (
+        <ErrorState
+          title={`Couldn't load the ${lowerTerm(LABELS.memberModel(terms))}`}
+          description={errorMessage(model.error)}
+          onRetry={() => model.refetch()}
+        />
+      );
+    }
+    if (memberFailed) {
+      return (
+        <ErrorState
+          title={`Couldn't load this ${memberLabel}`}
+          description={errorMessage(memberQuery.error)}
+          onRetry={() => memberQuery.refetch()}
+        />
+      );
+    }
+    if (membersModel.length === 0) {
+      return (
+        <EmptyState
+          title={`You don't have a ${lowerTerm(LABELS.memberModel(terms))} yet`}
+          action={
+            <Can perm="members.manage">
+              <Button
+                colorPalette="blue"
+                variant="outline"
+                onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}><FaPlusSquare />{`Create ${LABELS.memberModel(terms)}`}</Button>
+            </Can>
+          }
+        />
+      );
+    }
+    return (
+      <form onSubmit={onSubmit}>
+        <Stack gap={4} bg="bg.panel" rounded="xl" boxShadow="lg" p={{ base: 4, md: 6 }}>
+          {renderFormFields()}
+          <Box mt="6">
             <Button
-              leftIcon={<FaPlusSquare />}
-              colorScheme="blue"
-              variant="outline"
-              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
+              w="full"
+              size="lg"
+              variant="solid"
+              colorPalette="blue"
+              fontWeight="bold"
+              type="submit"
+              loading={isLoading}
             >
-              {`Update ${LABELS.memberModel(terms)}`}
+              {isUpdating ? "Update" : "Submit"}
             </Button>
-          </Can>
-        )}
-      </Flex>
-      <>
-        {isGettingMembers ? (
-          <LoadingSpinner h="40vh" />
-        ) : (
-          <Box>
-            <Flex mt="40px" align={"center"} justify={"center"}>
-              {!isGettingMembers && membersModel.length === 0 ? (
-                <Flex
-                  flexDir="column"
-                  bg="#fff"
-                  p="8"
-                  rounded={"xl"}
-                  boxShadow={"lg"}
-                >
-                  <Heading>{`You don't have a ${lowerTerm(LABELS.memberModel(terms))} yet`}</Heading>
-                  <Can perm="members.manage">
-                    <Button
-                      mt="4"
-                      leftIcon={<FaPlusSquare />}
-                      colorScheme="blue"
-                      variant="outline"
-                      onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}
-                    >
-                      {`Create ${LABELS.memberModel(terms)}`}
-                    </Button>
-                  </Can>
-                </Flex>
-              ) : (
-                <div style={{ width: "90%" }}>
-                  <form onSubmit={onSubmit}>
-                    <Stack
-                      spacing={4}
-                      w={"full"}
-                      maxW={"md"}
-                      rounded={"xl"}
-                      boxShadow={"lg"}
-                      p={6}
-                    >
-                      {renderFormFields()}
-                      <Box>
-                        <Button
-                          w="full"
-                          mt="40px"
-                          bg={"blue.400"}
-                          color={"white"}
-                          _hover={{
-                            bg: "blue.500",
-                          }}
-                          fontWeight="bold"
-                          fontSize="15px"
-                          type="submit"
-                          isLoading={isLoading}
-                          // onClick={onSubmit}
-                        >
-                          {isUpdating ? "Update" : "Submit"}
-                        </Button>
-                      </Box>
-                      <Button
-                        variant="outline"
-                        onClick={() => navigate(PROTECTED_PATHS.DASHBOARD)}
-                      >
-                        Cancel
-                      </Button>
-                      {isUpdating && (
-                        <Can perm="members.manage">
-                          <Button
-                            leftIcon={<FaTrash />}
-                            bg="red.500"
-                            color="white"
-                            _hover={{ bg: "red.600" }}
-                            w="full"
-                            mt="8"
-                            isLoading={isDeleting}
-                            onClick={handleDeleteMember}
-                          >
-                            {`Delete ${terms.memberSingular}`}
-                          </Button>
-                        </Can>
-                      )}
-                    </Stack>
-                  </form>
-                </div>
-              )}
-            </Flex>
           </Box>
-        )}
-      </>
-    </Box>
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            Cancel
+          </Button>
+          {isUpdating && (
+            <Can perm="members.manage">
+              <Button
+                variant="solid"
+                colorPalette="red"
+                w="full"
+                mt="6"
+                loading={isDeleting}
+                onClick={handleDeleteMember}><FaTrash />{`Delete ${terms.memberSingular}`}</Button>
+            </Can>
+          )}
+        </Stack>
+      </form>
+    );
+  };
+
+  return (
+    <PageContainer width="form">
+      {!model.isLoading && membersModel.length !== 0 && (
+        <Can perm="members.manage">
+          <Flex justify="flex-end" mb={4}>
+            <Button
+              colorPalette="blue"
+              variant="outline"
+              onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}><FaPlusSquare />{`Update ${LABELS.memberModel(terms)}`}</Button>
+          </Flex>
+        </Can>
+      )}
+      {body()}
+      {confirmDialog}
+    </PageContainer>
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
-import { Box, Flex, Button, Spinner, Text } from "@chakra-ui/react";
+import { Flex } from "@chakra-ui/react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { FaFileExcel, FaFilePdf } from "react-icons/fa";
+import { FiBarChart2, FiUserX } from "react-icons/fi";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { attendanceRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -12,7 +12,11 @@ import MemberHero from "components/analytics/MemberHero";
 import StreakCard from "components/analytics/StreakCard";
 import StatTiles from "components/analytics/StatTiles";
 import AttendanceTimeline from "components/analytics/AttendanceTimeline";
-import MemberRecordsTable from "components/analytics/MemberRecordsTable";
+import MemberRecordsList from "components/analytics/MemberRecordsList";
+import ExportMenu from "components/analytics/ExportMenu";
+import PageContainer from "components/layout/PageContainer";
+import PageLoader from "components/PageLoader";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { openExportUrl, handleExportError } from "components/analytics/analyticsExport";
 import { MemberAnalytics as MemberAnalyticsData } from "components/analytics/memberAnalyticsTypes";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
@@ -56,7 +60,7 @@ const MemberAnalyticsPage: React.FC = () => {
     return withQuery(path, queryString);
   }, [canQuery, org.id, memberId, queryString]);
 
-  const { data: response, isFetching, error } = useQueryWrapper(
+  const { data: response, isFetching, error, refetch } = useQueryWrapper(
     queryKeys.analytics.member(org.id, memberId, fromDate, toDate),
     url,
     { enabled: canQuery },
@@ -104,73 +108,63 @@ const MemberAnalyticsPage: React.FC = () => {
   );
 
   return (
-    <Box minH="100vh" bg="gray.50">
-      <Box p={2}>
-        <>
-        <Flex justify="flex-end" align="center" flexWrap="wrap" gap={2} mb={3}>
-          <Flex gap={2} flexWrap="wrap">
-            <Button
-              leftIcon={<FaFileExcel />} onClick={() => refetchExcel()}
-              isLoading={isExportingExcel} isDisabled={!hasData}
-              bg="green.500" color="white" _hover={{ bg: "green.600" }}
-            >
-              Export Excel
-            </Button>
-            <Button
-              leftIcon={<FaFilePdf />} onClick={() => refetchPdf()}
-              isLoading={isExportingPdf} isDisabled={!hasData}
-              bg="red.500" color="white" _hover={{ bg: "red.600" }}
-            >
-              Export PDF
-            </Button>
-          </Flex>
-        </Flex>
-
-        <DateRangeControls
-          fromDate={fromDate}
-          toDate={toDate}
-          activePreset={activePreset}
-          applyPreset={applyPreset}
-          setFromDate={setFromDate}
-          setToDate={setToDate}
-          handleDateChange={handleDateChange}
+    <PageContainer width="content">
+      <Flex justify="flex-end" mb={3}>
+        <ExportMenu
+          onExcel={() => refetchExcel()}
+          onPdf={() => refetchPdf()}
+          disabled={!hasData}
+          busy={isExportingExcel || isExportingPdf}
         />
+      </Flex>
 
-        {isFetching && <Spinner />}
-        {!isFetching && statusCode === 404 && (
-          <Text color="red.500" mt={4}>
-            {`${terms.memberSingular} not found in this organisation.`}
-          </Text>
-        )}
-        {!isFetching && error && statusCode !== 404 && (
-          <Text color="red.500" mt={4}>
-            {`Error loading ${lowerTerm(terms.memberSingular)} analytics.`}
-          </Text>
-        )}
-        {!isFetching && !error && analytics && !hasData && (
-          <Text mt={4}>
-            {`No included ${lowerTerm(terms.attendanceSingular)} records for this range.`}
-          </Text>
-        )}
-        {!isFetching && !error && hasData && analytics && (
-          <Flex direction="column" gap={4} mt={2}>
-            <MemberHero name={analytics.member.name} fields={analytics.member.fields} />
-            <StreakCard
-              currentStreak={analytics.summary.currentStreak}
-              longestStreak={analytics.summary.longestStreak}
-              attendanceRate={analytics.summary.attendanceRate}
-            />
-            <StatTiles
-              behaviorCounts={analytics.summary.behaviorCounts}
-              totalSessions={analytics.summary.totalSessions}
-            />
-            <AttendanceTimeline verdicts={analytics.verdicts} statuses={statuses} />
-            <MemberRecordsTable records={analytics.records} statuses={statuses} />
-          </Flex>
-        )}
-        </>
-      </Box>
-    </Box>
+      <DateRangeControls
+        fromDate={fromDate}
+        toDate={toDate}
+        activePreset={activePreset}
+        applyPreset={applyPreset}
+        setFromDate={setFromDate}
+        setToDate={setToDate}
+        handleDateChange={handleDateChange}
+      />
+
+      {isFetching && <PageLoader h="30vh" />}
+      {!isFetching && statusCode === 404 && (
+        <EmptyState
+          icon={<FiUserX />}
+          title={`${terms.memberSingular} not found in this organisation.`}
+        />
+      )}
+      {!isFetching && Boolean(error) && statusCode !== 404 && (
+        <ErrorState
+          title={`Error loading ${lowerTerm(terms.memberSingular)} analytics.`}
+          description={errorMessage(error)}
+          onRetry={() => refetch()}
+        />
+      )}
+      {!isFetching && !error && analytics && !hasData && (
+        <EmptyState
+          icon={<FiBarChart2 />}
+          title={`No included ${lowerTerm(terms.attendanceSingular)} records for this range.`}
+        />
+      )}
+      {!isFetching && !error && hasData && analytics && (
+        <Flex direction="column" gap={4}>
+          <MemberHero name={analytics.member.name} fields={analytics.member.fields} />
+          <StreakCard
+            currentStreak={analytics.summary.currentStreak}
+            longestStreak={analytics.summary.longestStreak}
+            attendanceRate={analytics.summary.attendanceRate}
+          />
+          <StatTiles
+            behaviorCounts={analytics.summary.behaviorCounts}
+            totalSessions={analytics.summary.totalSessions}
+          />
+          <AttendanceTimeline verdicts={analytics.verdicts} statuses={statuses} />
+          <MemberRecordsList records={analytics.records} statuses={statuses} />
+        </Flex>
+      )}
+    </PageContainer>
   );
 };
 

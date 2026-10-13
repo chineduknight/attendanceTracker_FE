@@ -1,4 +1,4 @@
-import { Box, Button, Flex, Text, useColorModeValue } from "@chakra-ui/react";
+import { Box, Button, Flex, Text } from "@chakra-ui/react";
 import { IconType } from "react-icons";
 
 export interface StatTileProps {
@@ -37,22 +37,27 @@ const StatTile = ({
   onClick,
   isPressed,
 }: StatTileProps) => {
-  const outlineBg = useColorModeValue("white", "gray.700");
-  const outlineLabel = useColorModeValue("gray.600", "gray.300");
   const isSolid = tone === "solid";
-  const bg = isSolid ? accent : outlineBg;
-  const labelColor = isSolid ? "whiteAlpha.900" : outlineLabel;
+  const bg = isSolid ? accent : "bg.panel";
+  // Full white on solid fills: the tiles use `{palette}.solid`, which the
+  // theme keeps at 4.5:1+ for white; translucent white would drop below.
+  const labelColor = isSolid ? "white" : "fg.muted";
 
   const content = (
     <>
       <Flex align="center" gap={1.5} minW={0}>
         {Icon && (
+          // A wrapping span, not asChild: react-icons components cannot take
+          // the ref asChild passes down.
           <Box
-            as={Icon}
+            as="span"
+            display="inline-flex"
             aria-hidden="true"
             color={isSolid ? "white" : accent}
             flexShrink={0}
-          />
+          >
+            <Icon />
+          </Box>
         )}
         <Text
           fontSize={{ base: "xs", md: "md" }}

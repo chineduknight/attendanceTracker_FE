@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
-import ReactSelect, { MultiValue } from "react-select";
+import { MultiValue } from "react-select";
+import { ThemedSelect } from "components/ui/themed-select";
 import { capitalizeFirstLetter } from "helpers/stringManipulations";
 import { memberFieldLabeler } from "helpers/memberFields";
 import {
@@ -67,20 +68,20 @@ const AttendanceEligibilityEditor = ({
       ?.field ?? field;
 
   return (
-    <Stack spacing={3} borderWidth="1px" borderRadius="md" p={3}>
+    <Stack gap={3} borderWidth="1px" borderRadius="md" p={3}>
       <Box aria-live="polite">
         <Text fontWeight="bold">
           {expectedCount === null
             ? `Expected ${members}: counting…`
             : `Expected ${members}: ${expectedCount} of ${totalCount}`}
         </Text>
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           {rules.length
             ? summarizeEligibilityRules(rules, labelFor)
             : "Everyone is expected"}
         </Text>
         {expectedCount === 0 && (
-          <Text fontSize="sm" color="red.500" mt={1}>
+          <Text fontSize="sm" color="fg.error" mt={1}>
             {rules.length
               ? `No ${members} match these eligibility rules.`
               : `This organisation has no ${members} yet.`}
@@ -89,15 +90,15 @@ const AttendanceEligibilityEditor = ({
       </Box>
 
       {fieldsStatus === "loading" ? (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           {`Loading ${lowerTerm(terms.memberSingular)} fields…`}
         </Text>
       ) : fieldsStatus === "error" ? (
-        <Text fontSize="sm" color="red.500">
+        <Text fontSize="sm" color="fg.error">
           {`${terms.memberSingular} fields could not be loaded, so everyone is expected.`}
         </Text>
       ) : fields.length === 0 ? (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           {`Add option fields to the ${lowerTerm(
             terms.memberSingular,
           )} model to limit who is expected.`}
@@ -114,7 +115,7 @@ const AttendanceEligibilityEditor = ({
                 <Text fontSize="sm" fontWeight="bold" mb={1}>
                   {label}
                 </Text>
-                <ReactSelect
+                <ThemedSelect
                   isMulti
                   aria-label={`${
                     repeatedLabels.has(label) ? `${label} (${field.name})` : label
@@ -125,9 +126,6 @@ const AttendanceEligibilityEditor = ({
                     selected.includes(o.value.toLowerCase())
                   )}
                   closeMenuOnSelect={false}
-                  menuPortalTarget={document.body}
-                  menuPosition="fixed"
-                  styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                   onChange={(picked: MultiValue<ValueOption>) =>
                     onChange(
                       setRuleValues(
@@ -141,13 +139,13 @@ const AttendanceEligibilityEditor = ({
               </Box>
             );
           })}
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="fg.muted">
             Within a field, any selected value may match. Across fields, all
             selected fields must match.
           </Text>
           {rules.length > 0 && (
             <Flex>
-              <Button size="sm" variant="outline" onClick={() => onChange([])}>
+              <Button size="sm" minH="44px" variant="outline" onClick={() => onChange([])}>
                 Clear eligibility
               </Button>
             </Flex>

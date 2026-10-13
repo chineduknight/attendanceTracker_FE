@@ -1,17 +1,16 @@
 import {
   act,
-  render,
   screen,
   fireEvent,
   waitFor,
   within,
 } from "@testing-library/react";
+import { render, confirmInDialog } from "test-utils/render";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { confirmAlert } from "react-confirm-alert";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
-import useGlobalStore, { EMPTY_ORG } from "zStore";
+import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
 import { ROSTER as ELIGIBILITY_ROSTER } from "test-utils/eligibilityFixtures";
@@ -21,7 +20,6 @@ import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
-jest.mock("react-confirm-alert", () => ({ confirmAlert: jest.fn() }));
 // Keep the real endpoint constants; only the axios instance is faked.
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -34,7 +32,6 @@ const mockedAxios = require("services/api").default;
 const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
 const mockPut: jest.Mock = mockedAxios.put;
-const mockConfirm = confirmAlert as jest.Mock;
 
 // Configured order is the tap-cycle order.
 const STATUSES = [
@@ -96,9 +93,13 @@ const renderAt = (path: string) =>
           <Route path="/mark" element={<MarkAttendance />} />
           <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
           <Route path="/all-attendance" element={<div>all attendance</div>} />
+          <Route
+            path="/create-attendance"
+            element={<div>create attendance</div>}
+          />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 
 const rowOf = (name: string) =>
@@ -110,17 +111,43 @@ const tap = (name: string, times = 1) => {
 };
 const countText = (label: string) => screen.getByText(`${label}:`).textContent;
 
-const submitAndConfirm = () => {
-  fireEvent.click(screen.getByRole("button", { name: /Submit|Update/ }));
-  const options = mockConfirm.mock.calls[0][0];
-  options.buttons[0].onClick();
-  return options.message as string;
+// Submit, then confirm the "Please verify count" dialog; returns its message.
+const submitAndConfirm = async () => {
+  fireEvent.click(screen.getByRole("button", { name: /^(Submit|Update)$/ }));
+  const dialog = await confirmInDialog(/^(Submit|Update)$/);
+  return (
+    within(dialog).getByText(/Are you sure you want to submit\?/).textContent ??
+    ""
+  );
 };
+
+/**
+ * The explicit per-organisation draft that now authorizes NEW-mode marking;
+ * Mark Attendance ignores the transient working state without it.
+ */
+const seedNewDraft = (
+  organisationId: string,
+  over: Record<string, unknown> = {},
+) =>
+  localStorage.setItem(
+    `attendance-new-draft-${organisationId}`,
+    JSON.stringify({
+      version: 1,
+      organisationId,
+      name: "Rehearsal",
+      date: "2026-10-01",
+      categoryId: null,
+      subCategoryId: null,
+      eligibilityRules: [],
+      ...over,
+    }),
+  );
 
 describe("<MarkAttendance> with configured statuses", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1");
     useGlobalStore.setState({
       organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES },
       currentAttendance: { name: "Rehearsal", date: "2026-10-01", members: [] },
@@ -152,7 +179,9 @@ describe("<MarkAttendance> with configured statuses", () => {
     expect(screen.getByRole("button", { name: "Submit" })).toBeVisible();
 
     fireEvent.focus(search);
-    expect(screen.queryByRole("button", { name: "Submit" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.blur(search);
     expect(screen.getByRole("button", { name: "Submit" })).toBeVisible();
@@ -183,7 +212,7 @@ describe("<MarkAttendance> with configured statuses", () => {
     await screen.findByText("Ada");
     tap("Ada", 2); // Late
 
-    const message = submitAndConfirm();
+    const message = await submitAndConfirm();
     expect(message).toContain("Late: 1");
     expect(message).toContain("No Show: 1");
 
@@ -211,7 +240,7 @@ describe("<MarkAttendance> with configured statuses", () => {
 
     const submit = screen.getByRole("button", { name: "Submit" });
     expect(submit).toBeEnabled();
-    submitAndConfirm();
+    await submitAndConfirm();
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
       { memberId: "m1", status: "excused" },
@@ -292,7 +321,7 @@ describe("<MarkAttendance> quick marking", () => {
       (m: { id: string; attendanceStatus: string }) => [
         m.id,
         m.attendanceStatus,
-      ]
+      ],
     );
   const displayedStatuses = () =>
     FIVE.map((m) => [
@@ -305,7 +334,7 @@ describe("<MarkAttendance> quick marking", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
-    mockConfirm.mockClear();
+    seedNewDraft("org1");
     mockPost.mockClear();
     useGlobalStore.setState({
       organisation: {
@@ -346,10 +375,10 @@ describe("<MarkAttendance> quick marking", () => {
     it("defaults to Cycle", async () => {
       await start();
       expect(
-        within(modes()).getByRole("button", { name: "Cycle" })
+        within(modes()).getByRole("button", { name: "Cycle" }),
       ).toHaveAttribute("aria-pressed", "true");
       expect(
-        within(modes()).getByRole("button", { name: "Present" })
+        within(modes()).getByRole("button", { name: "Present" }),
       ).toHaveAttribute("aria-pressed", "false");
     });
 
@@ -392,13 +421,13 @@ describe("<MarkAttendance> quick marking", () => {
     it("applies the selected status only to the searched members and persists the same roster", async () => {
       await start();
       expect(
-        screen.queryByRole("button", { name: /^Apply/ })
+        screen.queryByRole("button", { name: /^Apply/ }),
       ).not.toBeInTheDocument();
       chooseMode("Present");
       search("Ada");
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 2 visible" })
+        screen.getByRole("button", { name: "Apply Present to 2 visible" }),
       );
 
       expect(statusOf("Ada Eze")).toBe("Present");
@@ -424,7 +453,7 @@ describe("<MarkAttendance> quick marking", () => {
       search("Ada");
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 2 visible to Absent" })
+        screen.getByRole("button", { name: "Reset 2 visible to Absent" }),
       );
       search("");
 
@@ -442,7 +471,7 @@ describe("<MarkAttendance> quick marking", () => {
       await start();
       tap("Bola");
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" }),
       );
       expect(statusOf("Bola")).toBe("Absent");
     });
@@ -456,7 +485,7 @@ describe("<MarkAttendance> quick marking", () => {
       chooseMode("Present");
       search("Ada");
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 2 visible" })
+        screen.getByRole("button", { name: "Apply Present to 2 visible" }),
       );
 
       fireEvent.click(undoButton() as HTMLElement);
@@ -477,12 +506,12 @@ describe("<MarkAttendance> quick marking", () => {
       await start();
       chooseMode("Present");
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 5 visible" })
+        screen.getByRole("button", { name: "Apply Present to 5 visible" }),
       );
       chooseMode("Late");
       search("Ada");
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Late to 2 visible" })
+        screen.getByRole("button", { name: "Apply Late to 2 visible" }),
       );
 
       fireEvent.click(undoButton() as HTMLElement);
@@ -500,7 +529,7 @@ describe("<MarkAttendance> quick marking", () => {
     it("is cleared by a manual single tap", async () => {
       await start();
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" }),
       );
       expect(undoButton()).toBeInTheDocument();
       tap("Bola");
@@ -511,11 +540,11 @@ describe("<MarkAttendance> quick marking", () => {
       await start();
       chooseMode("Present");
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 5 visible" })
+        screen.getByRole("button", { name: "Apply Present to 5 visible" }),
       );
 
       await act(() =>
-        queryClient.refetchQueries({ queryKey: queryKeys.members("org1") })
+        queryClient.refetchQueries({ queryKey: queryKeys.members("org1") }),
       );
 
       fireEvent.click(undoButton() as HTMLElement);
@@ -543,30 +572,31 @@ describe("<MarkAttendance> quick marking", () => {
               <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
             </Routes>
           </MemoryRouter>
-        </QueryClientProvider>
+        </QueryClientProvider>,
       );
       await screen.findByText("Bola");
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" }),
       );
       expect(undoButton()).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "open other" }));
 
       await waitFor(() =>
-        expect(mockGet).toHaveBeenCalledWith("/attendance/org1/att2")
+        expect(mockGet).toHaveBeenCalledWith("/attendance/org1/att2"),
       );
       expect(undoButton()).not.toBeInTheDocument();
     });
 
-    it("and the quick-mark mode are reset by an organisation switch", async () => {
+    it("does not follow the session into another organisation, and resumes it fresh on return", async () => {
       await start();
       chooseMode("Present");
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 5 visible" })
+        screen.getByRole("button", { name: "Apply Present to 5 visible" }),
       );
       expect(undoButton()).toBeInTheDocument();
 
+      // Away: org2 has no draft of its own, so org1's session must not follow.
       act(() => {
         useGlobalStore.setState({
           organisation: {
@@ -576,11 +606,24 @@ describe("<MarkAttendance> quick marking", () => {
           },
         });
       });
-      await screen.findByText("Bola");
+      expect(
+        await screen.findByText("No attendance in progress"),
+      ).toBeInTheDocument();
 
+      // Back: the draft resumes, but with fresh UI state.
+      act(() => {
+        useGlobalStore.setState({
+          organisation: {
+            ...EMPTY_ORG,
+            id: "org1",
+            attendanceStatuses: QUICK_STATUSES,
+          },
+        });
+      });
+      await screen.findByText("Bola");
       expect(undoButton()).not.toBeInTheDocument();
       expect(
-        within(modes()).getByRole("button", { name: "Cycle" })
+        within(modes()).getByRole("button", { name: "Cycle" }),
       ).toHaveAttribute("aria-pressed", "true");
     });
   });
@@ -597,7 +640,7 @@ describe("<MarkAttendance> quick marking", () => {
     it("is restored by Undo after a bulk replace", async () => {
       await start("/mark/att1");
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 5 visible to Absent" })
+        screen.getByRole("button", { name: "Reset 5 visible to Absent" }),
       );
       expect(statusOf("Ada Eze")).toBe("Absent");
 
@@ -605,14 +648,8 @@ describe("<MarkAttendance> quick marking", () => {
 
       expect(statusOf("Ada Eze")).toBe("Remote");
       expect(countText("Remote")).toBe("Remote: 1");
-      expect(
-        JSON.parse(
-          localStorage.getItem("attendance-draft-org1-att1") as string
-        )[0]
-      ).toMatchObject({
-        id: "m1",
-        attendanceStatus: "remote",
-      });
+      // An edit keeps its roster in memory: it has no persisted draft.
+      expect(localStorage.getItem("attendance-draft-org1-att1")).toBeNull();
     });
   });
 
@@ -621,11 +658,11 @@ describe("<MarkAttendance> quick marking", () => {
     chooseMode("Present");
     search("Ada");
     fireEvent.click(
-      screen.getByRole("button", { name: "Apply Present to 2 visible" })
+      screen.getByRole("button", { name: "Apply Present to 2 visible" }),
     );
     search("");
 
-    const message = submitAndConfirm();
+    const message = await submitAndConfirm();
     expect(message).toContain("Present: 2");
     expect(message).toContain("Absent: 3");
 
@@ -685,21 +722,25 @@ describe("<MarkAttendance> eligibility", () => {
 
   const draftIds = () =>
     JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map(
-      (m: { id: string }) => m.id
+      (m: { id: string }) => m.id,
     );
   const rowNames = () =>
     ELIGIBILITY_ROSTER.map((m) => m.name).filter((name) =>
-      screen.queryByText(name)
+      screen.queryByText(name),
     );
   const refetchRoster = () =>
     act(() =>
-      queryClient.refetchQueries({ queryKey: queryKeys.members("org1") })
+      queryClient.refetchQueries({ queryKey: queryKeys.members("org1") }),
     );
 
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1", {
+      name: "Sectional",
+      eligibilityRules: SOP_ALTO_ACTIVE,
+    });
     roster = ELIGIBILITY_ROSTER.map((m) => ({ ...m }));
     useGlobalStore.setState({
       // Stored rosters stay authoritative even after the organisation turns
@@ -738,10 +779,10 @@ describe("<MarkAttendance> eligibility", () => {
       await start();
       expect(rowNames()).toEqual(["Ada", "Chioma"]);
       expect(
-        screen.getByText("Expected roster: 2 members")
+        screen.getByText("Expected roster: 2 members"),
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Part: Soprano, Alto · Status: Active")
+        screen.getByText("Part: Soprano, Alto · Status: Active"),
       ).toBeInTheDocument();
       expect(draftIds()).toEqual(["m1", "m3"]);
     });
@@ -751,13 +792,7 @@ describe("<MarkAttendance> eligibility", () => {
         { id: "m1", name: "Ada" },
         { id: "m2", name: "Bea" },
       ];
-      useGlobalStore.setState({
-        currentAttendance: {
-          name: "Sectional",
-          date: "2026-10-01",
-          eligibilityRules: [],
-        },
-      });
+      seedNewDraft("org1", { name: "Sectional", eligibilityRules: [] });
       mockGet.mockImplementation((url: string) => {
         if (url.includes("/members")) {
           return Promise.resolve({ data: { data: roster } });
@@ -779,7 +814,7 @@ describe("<MarkAttendance> eligibility", () => {
       await screen.findByText("Bea");
       expect(screen.queryByText("Ada")).not.toBeInTheDocument();
       tap("Bea");
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
         { memberId: "m2", status: "present" },
@@ -791,13 +826,7 @@ describe("<MarkAttendance> eligibility", () => {
         { id: "m1", name: "Ada" },
         { id: "m2", name: "Bea" },
       ];
-      useGlobalStore.setState({
-        currentAttendance: {
-          name: "Sectional",
-          date: "2026-10-01",
-          eligibilityRules: [],
-        },
-      });
+      seedNewDraft("org1", { name: "Sectional", eligibilityRules: [] });
       let refreshPending = false;
       let resolveRefresh!: (value: unknown) => void;
       const refreshAvailability = new Promise((resolve) => {
@@ -834,7 +863,7 @@ describe("<MarkAttendance> eligibility", () => {
       await screen.findByText("Bea");
       expect(screen.queryByText("Ada")).not.toBeInTheDocument();
       expect(statusOf("Bea")).toBe("Present");
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1].memberStatuses).toEqual([
         { memberId: "m2", status: "present" },
@@ -846,13 +875,7 @@ describe("<MarkAttendance> eligibility", () => {
         { id: "m1", name: "Ada" },
         { id: "m2", name: "Bea" },
       ];
-      useGlobalStore.setState({
-        currentAttendance: {
-          name: "Sectional",
-          date: "2026-10-01",
-          eligibilityRules: [],
-        },
-      });
+      seedNewDraft("org1", { name: "Sectional", eligibilityRules: [] });
       let refreshPending = false;
       let rejectRefresh!: (error: Error) => void;
       const refreshAvailability = new Promise((_, reject) => {
@@ -878,7 +901,7 @@ describe("<MarkAttendance> eligibility", () => {
       expect(screen.queryByText("Ada")).not.toBeInTheDocument();
       expect(screen.queryByText("Bea")).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Submit" })
+        screen.queryByRole("button", { name: "Submit" }),
       ).not.toBeInTheDocument();
       (console.error as jest.Mock).mockRestore();
     });
@@ -887,13 +910,13 @@ describe("<MarkAttendance> eligibility", () => {
       await start();
       fireEvent.click(
         within(
-          screen.getByRole("group", { name: "Tap a member to" })
+          screen.getByRole("group", { name: "Tap a member to" }),
         ).getByRole("button", {
           name: "Present",
-        })
+        }),
       );
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 2 visible" })
+        screen.getByRole("button", { name: "Apply Present to 2 visible" }),
       );
       expect(statusOf("Ada")).toBe("Present");
       expect(statusOf("Chioma")).toBe("Present");
@@ -921,7 +944,7 @@ describe("<MarkAttendance> eligibility", () => {
       await refetchRoster();
 
       await waitFor(() =>
-        expect(screen.queryByText("Chioma")).not.toBeInTheDocument()
+        expect(screen.queryByText("Chioma")).not.toBeInTheDocument(),
       );
       expect(draftIds()).toEqual(["m1"]);
     });
@@ -929,7 +952,7 @@ describe("<MarkAttendance> eligibility", () => {
     it("creates with the rules and only the expected members' statuses", async () => {
       await start();
       tap("Chioma"); // Present
-      submitAndConfirm();
+      await submitAndConfirm();
 
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0]).toEqual([
@@ -953,7 +976,7 @@ describe("<MarkAttendance> eligibility", () => {
         JSON.stringify([
           { id: "m1", name: "Ada", attendanceStatus: "late" },
           { id: "m5", name: "Emeka", attendanceStatus: "present" },
-        ])
+        ]),
       );
       await start();
       expect(rowNames()).toEqual(["Ada", "Chioma"]);
@@ -965,12 +988,25 @@ describe("<MarkAttendance> eligibility", () => {
       jest.spyOn(console, "error").mockImplementation(() => undefined);
       mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
       renderAt("/mark");
-      expect(
-        await screen.findByText(
-          "Attendance availability could not be loaded. Use Refresh to try again."
-        )
-      ).toBeInTheDocument();
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(
+        "Attendance availability could not be loaded",
+      );
       expect(screen.queryByText(/Expected roster/)).not.toBeInTheDocument();
+      (console.error as jest.Mock).mockRestore();
+    });
+
+    it("retries a failed roster load in place and keeps the new session", async () => {
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const working = mockGet.getMockImplementation();
+      mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
+      renderAt("/mark");
+      const alert = await screen.findByRole("alert");
+
+      mockGet.mockImplementation(working as (url: string) => Promise<unknown>);
+      fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("Ada")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       (console.error as jest.Mock).mockRestore();
     });
 
@@ -987,16 +1023,16 @@ describe("<MarkAttendance> eligibility", () => {
               error: "The expected roster has changed. Refresh to reload it.",
             },
           },
-        })
+        }),
       );
       await start();
       tap("Ada");
-      submitAndConfirm();
+      await submitAndConfirm();
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(
-          "The expected roster has changed. Refresh to reload it."
-        )
+          "The expected roster has changed. Refresh to reload it.",
+        ),
       );
       expect(draftIds()).toEqual(["m1", "m3"]);
       expect(statusOf("Ada")).toBe("Present");
@@ -1065,18 +1101,55 @@ describe("<MarkAttendance> eligibility", () => {
       await screen.findByText("Ada");
     };
 
+    it("explains a stored session that failed to load and retries without touching the draft", async () => {
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const working = mockGet.getMockImplementation() as (
+        url: string,
+      ) => Promise<unknown>;
+      mockGet.mockImplementation((url: string) =>
+        url === "/attendance/org1/att9"
+          ? Promise.reject({
+              response: { status: 500, data: { error: "Server busy" } },
+            })
+          : working(url),
+      );
+      renderAt("/mark/att9");
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Couldn't load this attendance");
+      // No empty roster and no Update button while nothing is loaded.
+      expect(screen.queryByText(/Expected roster/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Update" }),
+      ).not.toBeInTheDocument();
+
+      mockGet.mockImplementation(working);
+      fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("Ada")).toBeInTheDocument();
+      expect(rowNames()).toEqual(["Ada", "Bisi", "Dayo"]);
+      (console.error as jest.Mock).mockRestore();
+    });
+
+    it("titles the page with the session name and its date, without a member prefix", async () => {
+      await open();
+      expect(
+        screen.getByRole("heading", { name: "Old Sectional" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Tue 01 Sep 26")).toBeInTheDocument();
+    });
+
     it("loads the stored roster unchanged, never re-filtering or adding members", async () => {
       await open();
       expect(rowNames()).toEqual(["Ada", "Bisi", "Dayo"]);
       expect(screen.queryByText("Ife")).not.toBeInTheDocument();
       expect(
-        screen.getByText("Expected roster: 3 members")
+        screen.getByText("Expected roster: 3 members"),
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Part: Soprano, Alto · Status: Active")
+        screen.getByText("Part: Soprano, Alto · Status: Active"),
       ).toBeInTheDocument();
       expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(
-        false
+        false,
       );
     });
 
@@ -1084,7 +1157,7 @@ describe("<MarkAttendance> eligibility", () => {
       await open();
       expect(statusOf("Dayo")).toBe("Remote");
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 3 visible to Absent" })
+        screen.getByRole("button", { name: "Reset 3 visible to Absent" }),
       );
       expect(statusOf("Dayo")).toBe("Absent");
       fireEvent.click(screen.getByRole("button", { name: "Undo bulk change" }));
@@ -1093,7 +1166,7 @@ describe("<MarkAttendance> eligibility", () => {
 
     it("updates without eligibility rules", async () => {
       await open();
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
       expect(mockPut.mock.calls[0]).toEqual([
         "/attendance/att9",
@@ -1182,12 +1255,12 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
     const placeholder = screen.getByText("Former member (profile unavailable)");
     expect(placeholder.closest("button")).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Reset 2 visible to Absent" })
+      screen.getByRole("button", { name: "Reset 2 visible to Absent" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Newbie")).not.toBeInTheDocument();
 
     tap("Chioma"); // Absent -> Present
-    submitAndConfirm();
+    await submitAndConfirm();
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     expect(mockPut.mock.calls[0][1].memberStatuses).toEqual([
@@ -1195,7 +1268,7 @@ describe("<MarkAttendance> editing a roster with an unresolvable member", () => 
       { memberId: "m3", status: "present" },
     ]);
     expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(
-      false
+      false,
     );
   });
 });
@@ -1212,6 +1285,7 @@ describe("<MarkAttendance> with custom terminology", () => {
   beforeEach(() => {
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1");
     useGlobalStore.setState({
       organisation: {
         ...EMPTY_ORG,
@@ -1237,7 +1311,7 @@ describe("<MarkAttendance> with custom terminology", () => {
     mockGet.mockImplementation(() => new Promise(() => undefined));
     renderAt("/mark");
     expect(
-      await screen.findByText("Checking session availability...")
+      await screen.findByText("Checking session availability..."),
     ).toBeInTheDocument();
   });
 
@@ -1245,31 +1319,31 @@ describe("<MarkAttendance> with custom terminology", () => {
     jest.spyOn(console, "error").mockImplementation(() => undefined);
     mockGet.mockImplementation(() => Promise.reject(new Error("offline")));
     renderAt("/mark");
-    expect(
-      await screen.findByText(
-        "Session availability could not be loaded. Use Refresh to try again."
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Session availability could not be loaded",
+    );
     (console.error as jest.Mock).mockRestore();
   });
 
   it("uses the session term in created success copy", async () => {
     renderAt("/mark");
     await screen.findByText("Ada");
-    submitAndConfirm();
+    await submitAndConfirm();
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Session Created successfully")
+      expect(toast.success).toHaveBeenCalledWith(
+        "Session Created successfully",
+      ),
     );
   });
 
   it("uses the session term in updated success copy", async () => {
     renderAt("/mark/att1");
     await screen.findByText("Ada");
-    submitAndConfirm();
+    await submitAndConfirm();
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Session Updated")
+      expect(toast.success).toHaveBeenCalledWith("Session Updated"),
     );
   });
 });
@@ -1304,7 +1378,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     within(rowEl(name)).getAllByText(/.+/)[1].textContent;
   const addManually = async (name: string, status: string, reason = "") => {
     fireEvent.click(
-      screen.getByRole("button", { name: "Add member to this attendance" })
+      screen.getByRole("button", { name: "Add member to this attendance" }),
     );
     await screen.findByRole("dialog");
     fireEvent.change(dialog().getByLabelText(/^Member/), {
@@ -1321,7 +1395,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     }
     fireEvent.click(dialog().getByRole("button", { name: "Add member" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
   };
 
@@ -1329,6 +1403,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     jest.clearAllMocks();
     queryClient.clear();
     localStorage.clear();
+    seedNewDraft("org1", { eligibilityRules: SOPRANOS });
     unavailable = ["m4"];
     useGlobalStore.setState({
       organisation: { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES },
@@ -1362,7 +1437,9 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("adds an unavailable or non-eligible member to the draft, counted apart from the expected roster", async () => {
       await start();
       expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
-      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(
+        screen.getByText("Expected roster: 2 members"),
+      ).toBeInTheDocument();
       expect(screen.queryByText(/Added manually/)).not.toBeInTheDocument();
 
       await addManually("Dayo", "late"); // on leave
@@ -1372,7 +1449,9 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(manualBadgeOn("Chidi")).toBeInTheDocument();
       expect(manualBadgeOn("Ada")).toBeNull();
       expect(statusOfRow("Dayo")).toBe("Late");
-      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(
+        screen.getByText("Expected roster: 2 members"),
+      ).toBeInTheDocument();
       expect(screen.getByText("Added manually: 2")).toBeInTheDocument();
       expect(screen.getByText("Session roster: 4")).toBeInTheDocument();
     });
@@ -1380,17 +1459,21 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("offers only off-roster candidates and present-behavior statuses", async () => {
       await start();
       fireEvent.click(
-        screen.getByRole("button", { name: "Add member to this attendance" })
+        screen.getByRole("button", { name: "Add member to this attendance" }),
       );
       await screen.findByRole("dialog");
       expect(
         within(dialog().getByLabelText(/^Attendance status/))
           .getAllByRole("option")
-          .map((o) => o.textContent)
+          .map((o) => o.textContent),
       ).toEqual(["Choose a status", "Present", "Late"]);
-      fireEvent.keyDown(dialog().getByLabelText(/^Member/), { key: "ArrowDown" });
+      fireEvent.keyDown(dialog().getByLabelText(/^Member/), {
+        key: "ArrowDown",
+      });
       await screen.findByText("Dayo");
-      const menu = document.querySelector(".manual-member__menu") as HTMLElement;
+      const menu = document.querySelector(
+        ".manual-member__menu",
+      ) as HTMLElement;
       expect(within(menu).queryByText("Ada")).toBeNull();
       expect(within(menu).getByText("Chidi")).toBeInTheDocument();
     });
@@ -1398,7 +1481,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("submits manual additions separately from memberStatuses", async () => {
       await start();
       await addManually("Dayo", "late", "  Came despite leave  ");
-      submitAndConfirm();
+      await submitAndConfirm();
 
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       const body = mockPost.mock.calls[0][1];
@@ -1418,7 +1501,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
 
     it("omits manualAdditions when none were added", async () => {
       await start();
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1]).not.toHaveProperty("manualAdditions");
     });
@@ -1444,22 +1527,22 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(statusOfRow("Dayo")).toBe("Late");
       expect(
         screen.getByText(
-          "Members added manually can only be marked with a present status, so tapping them does nothing in this mode. Bulk actions to other statuses skip them."
-        )
+          "Members added manually can only be marked with a present status, so tapping them does nothing in this mode. Bulk actions to other statuses skip them.",
+        ),
       ).toBeInTheDocument();
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Excused to 2 visible" })
+        screen.getByRole("button", { name: "Apply Excused to 2 visible" }),
       );
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 2 visible to No Show" })
+        screen.getByRole("button", { name: "Reset 2 visible to No Show" }),
       );
       expect(statusOfRow("Dayo")).toBe("Late");
 
       // A present-behavior bulk status does reach the manual row.
       fireEvent.click(screen.getByRole("button", { name: "Present" }));
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Present to 3 visible" })
+        screen.getByRole("button", { name: "Apply Present to 3 visible" }),
       );
       expect(statusOfRow("Dayo")).toBe("Present");
       fireEvent.click(screen.getByRole("button", { name: "Undo bulk change" }));
@@ -1470,31 +1553,42 @@ describe("<MarkAttendance> manual per-session additions", () => {
       await start();
       await addManually("Dayo", "late");
       fireEvent.click(
-        screen.getByRole("button", { name: "Remove Dayo from this attendance" })
+        screen.getByRole("button", {
+          name: "Remove Dayo from this attendance",
+        }),
       );
       expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
-      expect(JSON.parse(localStorage.getItem(MANUAL_KEY) as string)).toEqual([]);
+      expect(JSON.parse(localStorage.getItem(MANUAL_KEY) as string)).toEqual(
+        [],
+      );
       expect(
-        screen.queryByRole("button", { name: /Remove (Ada|Bola)/ })
+        screen.queryByRole("button", { name: /Remove (Ada|Bola)/ }),
       ).not.toBeInTheDocument();
     });
 
     it("persists manual additions in their own draft and restores them", async () => {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "present" }])
+        JSON.stringify([
+          { id: "m1", name: "Ada", attendanceStatus: "present" },
+        ]),
       );
       const { unmount } = renderAt("/mark");
       await screen.findByText("Ada");
       await addManually("Dayo", "late", "Leave ended early");
       expect(JSON.parse(localStorage.getItem(MANUAL_KEY) as string)).toEqual([
-        { id: "m4", name: "Dayo", attendanceStatus: "late", reason: "Leave ended early" },
+        {
+          id: "m4",
+          name: "Dayo",
+          attendanceStatus: "late",
+          reason: "Leave ended early",
+        },
       ]);
       // The expected draft never gains the manual member.
       expect(
         JSON.parse(localStorage.getItem(DRAFT_KEY) as string).map(
-          (m: { id: string }) => m.id
-        )
+          (m: { id: string }) => m.id,
+        ),
       ).toEqual(["m1", "m2"]);
       unmount();
 
@@ -1503,7 +1597,9 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(manualBadgeOn("Dayo")).toBeInTheDocument();
       expect(statusOfRow("Dayo")).toBe("Late");
       expect(statusOfRow("Ada")).toBe("Present");
-      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(
+        screen.getByText("Expected roster: 2 members"),
+      ).toBeInTheDocument();
     });
 
     it("moves a manual member who becomes expected onto the expected roster, keeping their status", async () => {
@@ -1512,16 +1608,19 @@ describe("<MarkAttendance> manual per-session additions", () => {
       unavailable = [];
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
       expect(
-        await screen.findByText("Expected roster: 3 members")
+        await screen.findByText("Expected roster: 3 members"),
       ).toBeInTheDocument();
       expect(manualBadgeOn("Dayo")).toBeNull();
       expect(statusOfRow("Dayo")).toBe("Late");
       expect(screen.queryByText(/Added manually/)).not.toBeInTheDocument();
 
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       const body = mockPost.mock.calls[0][1];
-      expect(body.memberStatuses).toContainEqual({ memberId: "m4", status: "late" });
+      expect(body.memberStatuses).toContainEqual({
+        memberId: "m4",
+        status: "late",
+      });
       expect(body).not.toHaveProperty("manualAdditions");
     });
 
@@ -1533,7 +1632,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
 
       await addManually("Ada", "present");
       expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
       expect(mockPost.mock.calls[0][1]).toMatchObject({
         memberStatuses: [],
@@ -1541,13 +1640,30 @@ describe("<MarkAttendance> manual per-session additions", () => {
       });
     });
 
-    it("clears both drafts after a successful create", async () => {
+    it("clears the metadata, both drafts and the working state after a successful create", async () => {
+      // An unfinished draft for this same session, as Create Attendance saves.
+      localStorage.setItem(
+        "attendance-new-draft-org1",
+        JSON.stringify({
+          version: 1,
+          organisationId: "org1",
+          name: "Rehearsal",
+          date: "2026-10-01",
+          categoryId: null,
+          subCategoryId: null,
+          eligibilityRules: SOPRANOS,
+        }),
+      );
       await start();
       await addManually("Dayo", "late");
-      submitAndConfirm();
+      await submitAndConfirm();
       await screen.findByText("all attendance");
       expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
       expect(localStorage.getItem(MANUAL_KEY)).toBeNull();
+      expect(localStorage.getItem("attendance-new-draft-org1")).toBeNull();
+      expect(useGlobalStore.getState().currentAttendance).toEqual(
+        EMPTY_CURRENT_ATTENDANCE,
+      );
     });
   });
 
@@ -1558,8 +1674,17 @@ describe("<MarkAttendance> manual per-session additions", () => {
       organisationId: "org1",
       eligibilityRules: SOPRANOS,
       attendance: [
-        { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "no_show", manuallyAdded: false },
-        { memberId: "m2", member: { name: "Bola" }, attendanceStatus: "present" },
+        {
+          memberId: "m1",
+          member: { name: "Ada" },
+          attendanceStatus: "no_show",
+          manuallyAdded: false,
+        },
+        {
+          memberId: "m2",
+          member: { name: "Bola" },
+          attendanceStatus: "present",
+        },
         {
           memberId: "m3",
           member: { name: "Chidi" },
@@ -1576,7 +1701,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
       mockGet.mockImplementation((url: string) =>
         Promise.resolve({
           data: { data: url === "/attendance/org1/att5" ? RECORD : [] },
-        })
+        }),
       );
       renderAt("/mark/att5");
       await screen.findByText("Chidi");
@@ -1586,12 +1711,16 @@ describe("<MarkAttendance> manual per-session additions", () => {
       await start();
       expect(manualBadgeOn("Chidi")).toBeInTheDocument();
       expect(manualBadgeOn("Ada")).toBeNull();
-      expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+      expect(
+        screen.getByText("Expected roster: 2 members"),
+      ).toBeInTheDocument();
       expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /Add member/ })
+        screen.queryByRole("button", { name: /Add member/ }),
       ).not.toBeInTheDocument();
-      expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(false);
+      expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(
+        false,
+      );
     });
 
     it("moves a manual row between present statuses but never to Excused or No Show", async () => {
@@ -1615,13 +1744,13 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("skips manual rows in Reset and non-present bulk actions", async () => {
       await start();
       fireEvent.click(
-        screen.getByRole("button", { name: "Reset 2 visible to No Show" })
+        screen.getByRole("button", { name: "Reset 2 visible to No Show" }),
       );
       expect(statusOfRow("Chidi")).toBe("Late");
       expect(statusOfRow("Bola")).toBe("No Show");
       fireEvent.click(screen.getByRole("button", { name: "Excused" }));
       fireEvent.click(
-        screen.getByRole("button", { name: "Apply Excused to 2 visible" })
+        screen.getByRole("button", { name: "Apply Excused to 2 visible" }),
       );
       expect(statusOfRow("Chidi")).toBe("Late");
     });
@@ -1629,7 +1758,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("updates with statuses only, never manual metadata", async () => {
       await start();
       tapRow("Chidi"); // Late -> Present
-      submitAndConfirm();
+      await submitAndConfirm();
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
       const body = mockPut.mock.calls[0][1];
       expect(body.memberStatuses).toEqual([
@@ -1638,8 +1767,405 @@ describe("<MarkAttendance> manual per-session additions", () => {
         { memberId: "m3", status: "present" },
       ]);
       expect(JSON.stringify(body)).not.toMatch(
-        /manuallyAdded|manualAdditionReason|manualAdditions|editCount|eligibilityRules/
+        /manuallyAdded|manualAdditionReason|manualAdditions|editCount|eligibilityRules/,
       );
     });
+  });
+});
+
+describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
+  // Configured cycle order: Present -> Late -> Absent (default).
+  const STATUSES_3 = [
+    statusDefinition({
+      key: "present",
+      label: "Present",
+      shortLabel: "P",
+      color: "green",
+    }),
+    statusDefinition({
+      key: "late",
+      label: "Late",
+      shortLabel: "L",
+      color: "yellow",
+    }),
+    statusDefinition({
+      key: "absent",
+      label: "Absent",
+      shortLabel: "A",
+      color: "red",
+      behavior: "absent",
+      isDefault: true,
+    }),
+  ];
+  const MEMBERS = [
+    { id: "m1", name: "Ada" },
+    { id: "m2", name: "Bola" },
+    { id: "m3", name: "Chidi" },
+  ];
+  const OLD_RECORD = {
+    name: "Last Sunday",
+    date: "2026-09-01T00:00:00.000Z",
+    organisationId: "org1",
+    attendance: [
+      { memberId: "m1", member: { name: "Ada" }, attendanceStatus: "late" },
+      { memberId: "m2", member: { name: "Bola" }, attendanceStatus: "present" },
+    ],
+  };
+  // Keys are asserted as literals on purpose: Create Attendance and Mark
+  // Attendance must keep deriving exactly these for the same session.
+  const META_KEY = "attendance-new-draft-org1";
+  const ROSTER_KEY = "attendance-draft-org1-2026-10-01-Rehearsal";
+  const MANUAL_KEY = "attendance-manual-draft-org1-2026-10-01-Rehearsal";
+  const draftMeta = (over: Record<string, unknown> = {}) => ({
+    version: 1,
+    organisationId: "org1",
+    name: "Rehearsal",
+    date: "2026-10-01",
+    categoryId: null,
+    subCategoryId: null,
+    eligibilityRules: [],
+    ...over,
+  });
+  let unavailable: string[];
+  const leave = (memberId: string) => ({
+    memberId,
+    startDate: "2026-09-25",
+    endDate: "2026-10-05",
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    unavailable = [];
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: STATUSES_3,
+      },
+      currentAttendance: { ...EMPTY_CURRENT_ATTENDANCE },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/availability")) {
+        return Promise.resolve({ data: { data: unavailable.map(leave) } });
+      }
+      if (url.includes("/members")) {
+        return Promise.resolve({
+          data: { data: MEMBERS.map((m) => ({ ...m })) },
+        });
+      }
+      if (url === "/attendance/org1/att1") {
+        return Promise.resolve({ data: { data: OLD_RECORD } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+    mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  it("resumes the saved session from the metadata when the working store is empty", async () => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    localStorage.setItem(
+      ROSTER_KEY,
+      JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "late" }]),
+    );
+
+    renderAt("/mark");
+    await screen.findByText("Ada");
+
+    expect(
+      screen.getByRole("heading", { name: "Rehearsal" }),
+    ).toBeInTheDocument();
+    expect(statusOf("Ada")).toBe("Late");
+    expect(statusOf("Bola")).toBe("Absent");
+    // The resumed session becomes the working state for Submit and Create.
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toMatchObject({
+        name: "Rehearsal",
+        date: "2026-10-01",
+      }),
+    );
+    // Nothing is cleared before the backend stores the session.
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+    expect(localStorage.getItem(ROSTER_KEY)).not.toBeNull();
+  });
+
+  it("restores manual additions saved with the draft", async () => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    localStorage.setItem(
+      MANUAL_KEY,
+      JSON.stringify([
+        {
+          id: "m3",
+          name: "Chidi",
+          attendanceStatus: "late",
+          reason: "Came anyway",
+        },
+      ]),
+    );
+    unavailable = ["m3"];
+
+    renderAt("/mark");
+    await screen.findByText("Ada");
+
+    expect(screen.getByText("Chidi")).toBeInTheDocument();
+    expect(screen.getByText("Added manually")).toBeInTheDocument();
+    expect(screen.getByText("Late:").textContent).toBe("Late: 1");
+    expect(screen.getByText("Expected roster: 2 members")).toBeInTheDocument();
+    expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
+  });
+
+  it("survives a remount: marks saved before a reload are restored from the draft", async () => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+
+    const { unmount } = renderAt("/mark");
+    await screen.findByText("Ada");
+    tap("Ada"); // Absent -> Present
+    expect(statusOf("Ada")).toBe("Present");
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem(ROSTER_KEY) as string),
+      ).toContainEqual({
+        id: "m1",
+        name: "Ada",
+        attendanceStatus: "present",
+      }),
+    );
+    unmount();
+
+    // A fresh page load: the working store no longer holds the session; the
+    // metadata plus the roster draft bring it back.
+    useGlobalStore.getState().clearCurrentAttendance();
+    renderAt("/mark");
+    await screen.findByText("Ada");
+
+    expect(
+      screen.getByRole("heading", { name: "Rehearsal" }),
+    ).toBeInTheDocument();
+    expect(statusOf("Ada")).toBe("Present");
+    expect(statusOf("Bola")).toBe("Absent");
+  });
+
+  it("offers a way to create one when there is no draft and no working session", async () => {
+    renderAt("/mark");
+
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    // No bogus empty roster is fetched or marked.
+    expect(
+      mockGet.mock.calls.some(([url]) => String(url).includes("/members")),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create attendance" }));
+    expect(await screen.findByText("create attendance")).toBeInTheDocument();
+  });
+
+  it("never resumes an untagged legacy working session without draft metadata", async () => {
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Old persisted session",
+        date: "2026-10-01",
+        eligibilityRules: [],
+      },
+    });
+
+    renderAt("/mark");
+
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Old persisted session")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    // Nothing was marked, so nothing was drafted.
+    expect(
+      Object.keys(localStorage).filter((k) =>
+        k.startsWith("attendance-draft-org1"),
+      ),
+    ).toEqual([]);
+    // The stale transient session is cleared, not kept as a phantom draft.
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toEqual(
+        EMPTY_CURRENT_ATTENDANCE,
+      ),
+    );
+  });
+
+  it("never resumes a session stamped for another organisation without draft metadata", async () => {
+    useGlobalStore.setState({
+      currentAttendance: {
+        name: "Foreign Sectional",
+        date: "2026-10-01",
+        organisationId: "orgOther",
+      },
+    });
+
+    renderAt("/mark");
+
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Foreign Sectional")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never turns an abandoned update of an existing attendance into a new draft", async () => {
+    const { unmount } = renderAt("/mark/att1");
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("Late");
+    // The edit loaded the stored record into the transient working state…
+    expect(useGlobalStore.getState().currentAttendance.organisationId).toBe(
+      "org1",
+    );
+    unmount();
+
+    // …and leaving it must not make /mark-attendance treat it as a draft.
+    renderAt("/mark");
+    expect(
+      await screen.findByText("No attendance in progress"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Last Sunday")).not.toBeInTheDocument();
+    expect(
+      Object.keys(localStorage).filter((k) =>
+        k.startsWith("attendance-draft-org1"),
+      ),
+    ).toEqual([]);
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toEqual(
+        EMPTY_CURRENT_ATTENDANCE,
+      ),
+    );
+  });
+
+  it.each([
+    [
+      "an old untagged session",
+      { name: "Old Session", date: "2026-01-01", eligibilityRules: [] },
+    ],
+    [
+      "a foreign organisation's session",
+      {
+        name: "Foreign Session",
+        date: "2026-09-01",
+        organisationId: "orgOther",
+      },
+    ],
+    [
+      "a previously loaded existing attendance",
+      { name: "Old Sectional", date: "2026-09-01", organisationId: "org1" },
+    ],
+  ])("explicit draft metadata wins over %s", async (_label, transient) => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    useGlobalStore.setState({
+      currentAttendance: transient as never,
+    });
+
+    renderAt("/mark");
+    await screen.findByText("Ada");
+
+    expect(
+      screen.getByRole("heading", { name: "Rehearsal" }),
+    ).toBeInTheDocument();
+    // The resumed draft replaces the stale transient session.
+    await waitFor(() =>
+      expect(useGlobalStore.getState().currentAttendance).toMatchObject({
+        name: "Rehearsal",
+        organisationId: "org1",
+      }),
+    );
+  });
+
+  it("keeps an edit in memory: no draft key is written or restored", async () => {
+    const { unmount } = renderAt("/mark/att1");
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("Late");
+
+    tap("Ada"); // Late -> Absent
+    expect(statusOf("Ada")).toBe("Absent");
+    expect(localStorage.getItem("attendance-draft-org1-att1")).toBeNull();
+    expect(
+      localStorage.getItem("attendance-manual-draft-org1-att1"),
+    ).toBeNull();
+
+    // Reopening restores the stored record, never the abandoned edit.
+    unmount();
+    renderAt("/mark/att1");
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("Late");
+  });
+
+  it("keeps an unfinished new draft intact through an update of an old attendance", async () => {
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    localStorage.setItem(
+      ROSTER_KEY,
+      JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "present" }]),
+    );
+    localStorage.setItem(MANUAL_KEY, JSON.stringify([]));
+    const metadataBefore = localStorage.getItem(META_KEY);
+
+    renderAt("/mark/att1");
+    await screen.findByText("Ada");
+    tap("Bola"); // Present -> Late
+    await submitAndConfirm();
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+
+    // The officer's unfinished new session survives the old attendance's save.
+    expect(localStorage.getItem(META_KEY)).toBe(metadataBefore);
+    expect(JSON.parse(localStorage.getItem(ROSTER_KEY) as string)).toEqual([
+      { id: "m1", name: "Ada", attendanceStatus: "present" },
+    ]);
+    expect(localStorage.getItem(MANUAL_KEY)).toBe("[]");
+    // Only the transient edited session is cleared from the working state.
+    expect(useGlobalStore.getState().currentAttendance).toEqual(
+      EMPTY_CURRENT_ATTENDANCE,
+    );
+  });
+
+  it("keeps the resumed draft recoverable when the create fails", async () => {
+    // React Query logs the rejected mutation; the rejection is the scenario.
+    const silence = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    localStorage.setItem(META_KEY, JSON.stringify(draftMeta()));
+    localStorage.setItem(
+      ROSTER_KEY,
+      JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "present" }]),
+    );
+    mockPost.mockImplementation(() =>
+      Promise.reject({
+        response: {
+          status: 422,
+          data: {
+            error: "The expected roster has changed. Refresh to reload it.",
+          },
+        },
+      }),
+    );
+
+    renderAt("/mark");
+    await screen.findByText("Ada");
+    await submitAndConfirm();
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "The expected roster has changed. Refresh to reload it.",
+      ),
+    );
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+    expect(localStorage.getItem(ROSTER_KEY)).not.toBeNull();
+    expect(statusOf("Ada")).toBe("Present");
+    expect(useGlobalStore.getState().currentAttendance).toMatchObject({
+      name: "Rehearsal",
+      date: "2026-10-01",
+    });
+    silence.mockRestore();
   });
 });

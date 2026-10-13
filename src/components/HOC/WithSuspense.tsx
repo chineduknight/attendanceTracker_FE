@@ -1,5 +1,5 @@
 import { ComponentType, Suspense } from "react";
-import LoadingSpinner from "../LoadingSpinner";
+import PageLoader from "../PageLoader";
 
 const WithSuspense =
   <P extends object>(Component: ComponentType<P>, showLoader = true) =>
@@ -7,7 +7,7 @@ const WithSuspense =
     return (
       <Suspense
         fallback={
-          showLoader ? <LoadingSpinner h="100vh" text="Loading page..." /> : null
+          showLoader ? <PageLoader h="100vh" label="Loading page..." /> : null
         }
       >
         <Component {...props} />

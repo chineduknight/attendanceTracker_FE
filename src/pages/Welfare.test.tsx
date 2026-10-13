@@ -1,11 +1,5 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { render } from "test-utils/render";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
@@ -615,6 +609,30 @@ describe("<Welfare>", () => {
         screen.queryByRole("heading", { name: "Upcoming Birthdays" }),
       ).not.toBeInTheDocument();
       expect(birthdayCalls()).toHaveLength(0);
+    });
+
+    it("offers a retry when the overview fails to load", async () => {
+      let overviewFails = true;
+      mockGet.mockImplementation((url: string) => {
+        const value = String(url);
+        if (value.startsWith("/welfare/") && value.includes("/overview")) {
+          return overviewFails
+            ? Promise.reject({ response: { status: 500, data: { error: "Welfare service down" } } })
+            : Promise.resolve({ data: { data: OVERVIEW } });
+        }
+        if (value.includes("/model"))
+          return Promise.resolve({ data: MEMBER_MODEL });
+        return Promise.resolve({ data: { data: {} } });
+      });
+      renderPage();
+      expect(
+        await screen.findByText("Couldn't load Welfare & Engagement"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Welfare service down")).toBeInTheDocument();
+
+      overviewFails = false;
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
     });
 
     it("keeps Welfare working when the birthday query fails", async () => {

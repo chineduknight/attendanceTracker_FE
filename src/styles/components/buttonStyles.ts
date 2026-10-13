@@ -1,62 +1,52 @@
-// https://github.com/chakra-ui/chakra-ui/blob/main/packages/theme/components/input.ts
-export const ButtonStyles = {
-  // style object for base or default style
-  baseStyle: {
-    color: "#fff", // ensure text color is white
-    outline: "none",
-    _focus: { boxShadow: "none" },
-  },
-  // styles for different sizes ("sm", "md", "lg")
-  sizes: {},
-  // styles for different visual variants ("outline", "solid")
+import { defineRecipe } from "@chakra-ui/react";
+import { buttonSizes } from "./v2Parity";
+
+// Extends Chakra's built-in button recipe (merged by createSystem): the
+// app's own variants, with "primary" still the default as it was in v2.
+const filled = {
+  borderRadius: "4px",
+  fontSize: "14px",
+  fontWeight: "500",
+} as const;
+
+// White text belongs to the filled custom variants only: in `base` it also
+// whitened `secondary`, a light grey button.
+export const buttonRecipe = defineRecipe({
   variants: {
-    primary: (props) => ({
-      bg: "#3f51b5", // indigo shade
-      borderRadius: "4px",
-      fontSize: "14px",
-      fontWeight: "500",
-      _hover: {
-        bg: "#283593", // darker shade of indigo for hover
-        boxShadow: "md",
-        _disabled: {
-          bg: "#283593",
+    size: buttonSizes,
+    variant: {
+      primary: {
+        ...filled,
+        color: "#fff",
+        bg: "#3f51b5", // indigo shade
+        _hover: {
+          bg: "#283593", // darker shade of indigo for hover
+          boxShadow: "md",
+          _disabled: { bg: "#283593" },
         },
       },
-    }),
-    secondary: () => ({
-      bg: "#EEEEEE",
-      borderRadius: "4px",
-      fontSize: "14px",
-      fontWeight: "500",
-      _hover: {
-        bg: "#E5EBF5",
-        boxShadow: "md",
-        outline: "none",
+      secondary: {
+        ...filled,
+        bg: "bg.muted",
+        color: "fg",
+        _hover: { bg: "bg.emphasized", boxShadow: "md" },
       },
-    }),
-    danger: () => ({
-      bg: "#b71c1c", // deep red color
-      borderRadius: "4px",
-      fontSize: "14px",
-      fontWeight: "500",
-      _hover: {
-        bg: "#d32f2f", // brighter red on hover
-        boxShadow: "md",
+      danger: {
+        ...filled,
+        color: "#fff",
+        bg: "#b71c1c", // deep red color
+        _hover: { bg: "#d32f2f", boxShadow: "md" }, // brighter red on hover
       },
-    }),
-    logout: () => ({
-      bg: "#9e9e9e", // a lighter neutral gray color for better contrast with the blue navbar
-      borderRadius: "4px",
-      fontSize: "14px",
-      fontWeight: "500",
-      _hover: {
-        bg: "#757575", // a slightly darker gray on hover
-        boxShadow: "md",
+      logout: {
+        ...filled,
+        color: "#fff",
+        // a lighter neutral gray color for better contrast with the blue navbar
+        bg: "#9e9e9e",
+        _hover: { bg: "#757575", boxShadow: "md" }, // slightly darker on hover
       },
-    }),
+    },
   },
-  // default values for `size` and `variant`
-  defaultProps: {
+  defaultVariants: {
     variant: "primary",
   },
-};
+});

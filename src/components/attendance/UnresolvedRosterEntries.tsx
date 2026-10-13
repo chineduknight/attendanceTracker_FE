@@ -20,7 +20,7 @@ const UnresolvedRosterEntries = ({ entries, statuses }: UnresolvedRosterEntriesP
   const members = lowerTerm(terms.memberPlural);
   return entries.length ? (
     <Box mt="4">
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="fg.muted">
         {entries.length === 1
           ? `1 ${member} on this roster no longer has a profile. Their stored status is kept and can't be edited.`
           : `${entries.length} ${members} on this roster no longer have a profile. Their stored statuses are kept and can't be edited.`}
