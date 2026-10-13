@@ -65,10 +65,10 @@ const AttendanceStatusesEditor = ({
       <Heading id="attendance-statuses-heading" size="sm">
         {`${terms.attendanceSingular} statuses`}
       </Heading>
-      <Text fontSize="sm" color="gray.600">
+      <Text fontSize="sm" color="fg.muted">
         {`${terms.memberPlural} are marked with these statuses, in this order. Each status has a behavior that decides how analytics treat it:`}
       </Text>
-      <List.Root as='ul' fontSize="sm" color="gray.600" gap={1}>
+      <List.Root as='ul' fontSize="sm" color="fg.muted" gap={1} ps={5}>
         {ATTENDANCE_BEHAVIORS.map((behavior) => (
           <List.Item key={behavior}>
             <strong>{BEHAVIOR_META[behavior].label}:</strong>{" "}
@@ -99,25 +99,30 @@ const AttendanceStatusesEditor = ({
           <Flex justify="space-between" align="center" mb={2} gap={2}>
             <Flex align="center" gap={2} minW={0}>
               <Badge colorPalette={row.color}>{row.shortLabel || "?"}</Badge>
-              <Text fontSize="xs" color="gray.500" lineClamp={1}>
+              <Text fontSize="xs" color="fg.muted" lineClamp={1}>
                 key: {row.key}
               </Text>
             </Flex>
             <Flex gap={1}>
               <IconButton
                 aria-label={`Move ${row.label} up`}
-                size="xs"
+                variant="outline"
+                minW="44px"
+                h="44px"
                 disabled={isReadOnly || index === 0}
                 onClick={() => onChange(moveStatusRow(rows, index, -1))}><FaArrowUp /></IconButton>
               <IconButton
                 aria-label={`Move ${row.label} down`}
-                size="xs"
+                variant="outline"
+                minW="44px"
+                h="44px"
                 disabled={isReadOnly || index === rows.length - 1}
                 onClick={() => onChange(moveStatusRow(rows, index, 1))}><FaArrowDown /></IconButton>
               {!row.persisted && !isReadOnly && (
                 <IconButton
                   aria-label={`Remove ${row.label}`}
-                  size="xs"
+                  minW="44px"
+                  h="44px"
                   colorPalette="red"
                   variant="ghost"
                   onClick={() =>
@@ -133,7 +138,6 @@ const AttendanceStatusesEditor = ({
                 Label
               </Field.Label>
               <Input
-                size="sm"
                 maxLength={MAX_STATUS_LABEL_LENGTH}
                 value={row.label}
                 readOnly={isReadOnly}
@@ -145,7 +149,6 @@ const AttendanceStatusesEditor = ({
                 Short label
               </Field.Label>
               <Input
-                size="sm"
                 maxLength={MAX_STATUS_SHORT_LABEL_LENGTH}
                 value={row.shortLabel}
                 readOnly={isReadOnly}
@@ -158,7 +161,7 @@ const AttendanceStatusesEditor = ({
               <Field.Label fontSize="xs" mb={1}>
                 Color
               </Field.Label>
-              <NativeSelect.Root size="sm">
+              <NativeSelect.Root>
                 <NativeSelect.Field
                   value={row.color}
                   onChange={(e) =>
@@ -179,7 +182,7 @@ const AttendanceStatusesEditor = ({
               <Field.Label fontSize="xs" mb={1}>
                 Behavior
               </Field.Label>
-              <NativeSelect.Root size="sm">
+              <NativeSelect.Root>
                 <NativeSelect.Field
                   value={row.behavior}
                   onChange={(e) =>
@@ -198,7 +201,7 @@ const AttendanceStatusesEditor = ({
             </Field.Root>
           </Flex>
 
-          <Flex gap={6} mt={2}>
+          <Flex gap={6} mt={2} minH="44px" align="center">
             <Field.Root display="flex" alignItems="center" w="auto">
               <Field.Label fontSize="sm" mb={0}>
                 Active
@@ -222,7 +225,6 @@ const AttendanceStatusesEditor = ({
       {!isReadOnly && (
         <Flex gap={2}>
           <Input
-            size="sm"
             placeholder="New status label, e.g. Late"
             aria-label="New status label"
             maxLength={MAX_STATUS_LABEL_LENGTH}
@@ -236,7 +238,8 @@ const AttendanceStatusesEditor = ({
             }}
           />
           <Button
-            size="sm"
+            minH="44px"
+            flexShrink={0}
             onClick={addRow}
             disabled={!newLabel.trim() || rows.length >= MAX_ATTENDANCE_STATUSES}
           >
@@ -244,13 +247,13 @@ const AttendanceStatusesEditor = ({
           </Button>
         </Flex>
       )}
-      <Text fontSize="xs" color="gray.500">
+      <Text fontSize="xs" color="fg.muted">
         Saved statuses can be deactivated but not deleted, so past sessions keep
         their meaning. New marking sessions start at the default status.
       </Text>
 
       {errors.length > 0 && (
-        <List.Root as='ul' role="alert" fontSize="sm" color="red.500" gap={1} ml={4}>
+        <List.Root as='ul' role="alert" fontSize="sm" color="fg.error" gap={1} ml={4}>
           {errors.map((error) => (
             <List.Item key={error}>{error}</List.Item>
           ))}

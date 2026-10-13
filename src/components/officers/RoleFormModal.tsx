@@ -59,7 +59,7 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header><Dialog.Title>{isEdit ? "Edit role" : "Create role"}</Dialog.Title></Dialog.Header>
-            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
             <Dialog.Body>
               <Field.Root invalid={nameInvalid} mb={4}>
                 <Field.Label>Role name</Field.Label>
@@ -69,8 +69,8 @@ const RoleFormModal = ({ organisationId, role, isOpen, onClose }: Props) => {
               {catalog && <PermissionGrid areas={catalog.areas} value={perms} onChange={setPerms} />}
             </Dialog.Body>
             <Dialog.Footer>
-              <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-              <Button variant="primary" loading={creating || updating}
+              <Button variant="secondary" mr={3} minH="44px" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" minH="44px" loading={creating || updating}
                 disabled={name.trim().length === 0} onClick={onSave}>
                 {isEdit ? "Save" : "Create"}
               </Button>

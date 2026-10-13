@@ -51,15 +51,15 @@ const EditOfficerPermissionsModal = ({ organisationId, officer, onClose }: Props
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header><Dialog.Title>Permissions — {officer?.username}</Dialog.Title></Dialog.Header>
-            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
             <Dialog.Body>
               {catalog && (
                 <PermissionGrid areas={catalog.areas} value={selected} onChange={setSelected} />
               )}
             </Dialog.Body>
             <Dialog.Footer>
-              <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-              <Button variant="primary" loading={isLoading} onClick={onSave}>Save</Button>
+              <Button variant="secondary" mr={3} minH="44px" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" minH="44px" loading={isLoading} onClick={onSave}>Save</Button>
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog.Positioner>

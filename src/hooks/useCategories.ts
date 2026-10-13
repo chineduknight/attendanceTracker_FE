@@ -26,11 +26,11 @@ const NO_CATEGORIES: CategoryType[] = [];
 
 export const useCategories = (organisationId: string) => {
   const url = convertParamsToString(orgRequest.CATEGORY, { organisationId });
-  const { data, isLoading, isSuccess, isError } = useQueryWrapper(queryKeys.categories(organisationId), url, {
+  const { data, isLoading, isSuccess, isError, error, refetch, isRefetching } = useQueryWrapper(queryKeys.categories(organisationId), url, {
     enabled: Boolean(organisationId),
   });
   // The API wraps payloads as { data: ... }; derive the list straight from the
   // query cache rather than mirroring it into local state via onSuccess.
   const categories: CategoryType[] = data?.data ?? NO_CATEGORIES;
-  return { categories, isLoading, isSuccess, isError };
+  return { categories, isLoading, isSuccess, isError, error, refetch, isRefetching };
 };

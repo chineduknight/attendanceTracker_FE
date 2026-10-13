@@ -43,7 +43,7 @@ const EditOfficerRoleModal = ({ organisationId, officer, onClose }: Props) => {
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header><Dialog.Title>Change role — {officer?.username}</Dialog.Title></Dialog.Header>
-            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
             <Dialog.Body>
               <Field.Root>
                 <Field.Label>Role</Field.Label>
@@ -56,8 +56,8 @@ const EditOfficerRoleModal = ({ organisationId, officer, onClose }: Props) => {
               </Field.Root>
             </Dialog.Body>
             <Dialog.Footer>
-              <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-              <Button variant="primary" loading={isLoading} disabled={!roleId} onClick={onSave}>Save</Button>
+              <Button variant="secondary" mr={3} minH="44px" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" minH="44px" loading={isLoading} disabled={!roleId} onClick={onSave}>Save</Button>
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog.Positioner>

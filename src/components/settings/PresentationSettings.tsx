@@ -1,4 +1,4 @@
-import { Box, Heading, Input, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
+import { Box, Flex, Heading, Input, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
 import { Control, FieldErrors, UseFormRegister } from "react-hook-form";
 import { FormSwitch } from "components/ui/switch";
 import { OrgSettingsForm } from "helpers/orgPayloads";
@@ -23,7 +23,7 @@ export const TerminologySettings = ({ register, errors, isReadOnly }: Presentati
   <Stack gap={3}>
     <Box>
       <Heading size="sm">Terminology</Heading>
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="fg.muted">
         These labels change what officers see. They do not rename stored data or API fields.
       </Text>
     </Box>
@@ -58,20 +58,22 @@ export const FeatureVisibilitySettings = ({ control, isReadOnly }: FeatureVisibi
   <Stack gap={3}>
     <Box>
       <Heading size="sm">Visible modules</Heading>
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="fg.muted">
         Hidden modules are removed from this organisation's navigation. Permissions are unchanged.
       </Text>
     </Box>
     {OPTIONAL_FEATURES.map((feature) => (
-      <Field.Root key={feature} display="flex" alignItems="center" justifyContent="space-between">
-        <Field.Label mb="0">
-          {FEATURE_LABELS[feature]}
-        </Field.Label>
-        <FormSwitch
-          disabled={isReadOnly}
-          control={control}
-          name={`featureVisibility.${feature}`}
-        />
+      <Field.Root key={feature}>
+        <Flex align="center" justify="space-between" gap={3} w="100%" minH="44px">
+          <Field.Label mb="0">
+            {FEATURE_LABELS[feature]}
+          </Field.Label>
+          <FormSwitch
+            disabled={isReadOnly}
+            control={control}
+            name={`featureVisibility.${feature}`}
+          />
+        </Flex>
       </Field.Root>
     ))}
   </Stack>

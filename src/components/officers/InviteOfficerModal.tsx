@@ -45,7 +45,7 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
         <Dialog.Positioner>
           <Dialog.Content>
             <Dialog.Header><Dialog.Title>{`Invite ${lowerTerm(terms.officerSingular)}`}</Dialog.Title></Dialog.Header>
-            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
             <form onSubmit={handleSubmit(onSubmit)}>
               <Dialog.Body>
                 <Field.Root invalid={!!errors.email} mb={3}>
@@ -70,8 +70,8 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
                 </Field.Root>
               </Dialog.Body>
               <Dialog.Footer>
-                <Button variant="secondary" mr={3} onClick={onClose}>Cancel</Button>
-                <Button type="submit" variant="primary" loading={isLoading}>Send invite</Button>
+                <Button variant="secondary" mr={3} minH="44px" onClick={onClose}>Cancel</Button>
+                <Button type="submit" variant="primary" minH="44px" loading={isLoading}>Send invite</Button>
               </Dialog.Footer>
             </form>
           </Dialog.Content>
