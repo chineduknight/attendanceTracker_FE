@@ -938,7 +938,9 @@ describe("<ViewAttendance> sharing the session report", () => {
   });
   // Ada (active), Bayo (associate) and the manual addition Efe are present;
   // Chidi is excused; Dayo (probationary) is absent — then three entries whose
-  // profile no longer resolves, covering all three behaviors.
+  // profile no longer resolves: two expected (present, excused) and one manual
+  // addition, which the backend only ever records with a present-behaviour
+  // status.
   const SHARE_SESSION = {
     name: "Rehearsal",
     date: "2026-09-01T00:00:00.000Z",
@@ -954,7 +956,7 @@ describe("<ViewAttendance> sharing the session report", () => {
       },
       unresolvedEntry("s6", "present"),
       unresolvedEntry("s7", "excused"),
-      unresolvedEntry("s8", "no_show", {
+      unresolvedEntry("s8", "late", {
         manuallyAdded: true,
         manualAdditionReason: "Came late",
       }),
@@ -1019,14 +1021,17 @@ describe("<ViewAttendance> sharing the session report", () => {
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
 
     const text = sharedText(open);
-    // Present-behavior: Ada + late Bayo + manual Efe + unresolved; excused:
-    // Chidi + unresolved; absent: Dayo + the unresolved manual addition.
+    // Present-behavior: Ada + late Bayo + manual Efe + the unresolved present
+    // and manual Late entries; excused: Chidi + unresolved; absent: Dayo.
     // Membership statuses never remove anyone from the figures.
-    expect(text).toContain("✅ Present: 3  |  ✅ Late: 1  |  🟡 Excused: 2");
+    expect(text).toContain("✅ Present: 3  |  ✅ Late: 2  |  🟡 Excused: 2");
     expect(text).toContain("*Tenor — 3*\nBro Ada\nBro Bayo\nBro Efe");
+    expect(text).toContain(
+      "*Other — 2*\nFormer member (profile unavailable)\nFormer member (profile unavailable)",
+    );
     expect(text).toContain("*EXCUSED — 2*");
     expect(text).toContain("Former member (profile unavailable) — Other");
-    expect(text).toContain("*Absent Members: 2*");
+    expect(text).toContain("*Absent Members: 1*");
     // The neutral placeholder is never titled and no member id is exposed.
     expect(text).not.toMatch(/Bro Former|Sis Former/);
     expect(text).not.toMatch(/\bs[1-8]\b/);
