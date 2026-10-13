@@ -1,5 +1,4 @@
-import { Box, Flex, Button, Input, Stack, Field } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
+import { Button, Input, Stack, Field, Heading } from "@chakra-ui/react";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useNavigate } from "react-router-dom";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
@@ -7,77 +6,57 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import { orgRequest } from "services";
+import PageContainer from "components/layout/PageContainer";
 
 type Inputs = {
   name: string;
-  // image: string,
 };
 
 const AddOrganisation = () => {
   const navigate = useNavigate();
+  const { register, handleSubmit, formState: { errors } } = useForm<Inputs>();
 
-  const { register, handleSubmit } = useForm<Inputs>();
-
-  const onSuccess = (data) => {
+  // Leave only once the organisation exists: a failure keeps the officer
+  // here with their text and the backend's error (toasted by the wrapper).
+  const { mutate, isLoading } = useMutationWrapper(postRequest, () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
-  };
-
-  const { mutate } = useMutationWrapper(postRequest, onSuccess);
-
-  const handleAddOrg = (details) => {
-    const data = {
-      name: details.name,
-      // image: "https://picsum.photos/200/300"
-    };
-
-    mutate({
-      url: orgRequest.ORGANISATIONS,
-      data,
-    });
-
     navigate(PROTECTED_PATHS.ALL_ORG);
-  };
+  });
 
-  const onSubmit: SubmitHandler<Inputs> = (details) => {
-    handleAddOrg(details);
+  const onSubmit: SubmitHandler<Inputs> = ({ name }) => {
+    if (isLoading) return;
+    mutate({ url: orgRequest.ORGANISATIONS, data: { name: name.trim() } });
   };
 
   return (
-    <Box minH={"100vh"} bg={useColorModeValue("gray.50", "gray.800")}>
-      <Flex
-        align={"center"}
-        justify={"center"}
-        bg={useColorModeValue("gray.50", "gray.800")}
+    <PageContainer width="form">
+      <Stack
+        as="form"
+        onSubmit={handleSubmit(onSubmit)}
+        gap={4}
+        bg="bg.panel"
+        borderWidth="1px"
+        borderColor="border"
+        rounded="xl"
+        p={{ base: 4, md: 6 }}
       >
-        <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>
-          <Stack
-            gap={4}
-            w={"full"}
-            maxW={"md"}
-            bg={useColorModeValue("white", "gray.700")}
-            rounded={"xl"}
-            boxShadow={"lg"}
-            p={6}
-            my={12}
-          >
-            <Field.Root id="email" required>
-              <Field.Label>Organisation Name</Field.Label>
-              <Input
-                placeholder="Seat of wisdom presidium"
-                _placeholder={{ color: "gray.500" }}
-                type="name"
-                {...register("name", { required: true })}
-              />
-            </Field.Root>
-            <Stack gap={6}>
-              <Button variant="primary" type="submit">
-                Submit
-              </Button>
-            </Stack>
-          </Stack>
-        </form>
-      </Flex>
-    </Box>
+        <Heading as="h1" size="md">New organisation</Heading>
+        <Field.Root invalid={Boolean(errors.name)} required>
+          <Field.Label>Organisation name</Field.Label>
+          <Input
+            placeholder="Seat of wisdom presidium"
+            autoComplete="organization"
+            {...register("name", {
+              validate: (v) => v.trim().length > 0 || "Enter a name",
+            })}
+          />
+          <Field.ErrorText>{errors.name?.message}</Field.ErrorText>
+        </Field.Root>
+        <Button type="submit" minH="44px" loading={isLoading} loadingText="Creating…">
+          Create organisation
+        </Button>
+      </Stack>
+    </PageContainer>
   );
 };
 
