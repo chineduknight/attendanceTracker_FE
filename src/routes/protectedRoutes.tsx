@@ -4,23 +4,25 @@ import { PageRouteConfig, PAGE_ROUTES } from "./protectedRouteConfig";
 import ProtectedLayout from "components/ProtectedLayout";
 import { RequirePermission } from "rbac/RequirePermission";
 import { RequireFeature } from "./RequireFeature";
+import { RequireOrganisation } from "./RequireOrganisation";
 
 /**
  * Wrap each route element in its guards. Hiding dashboard buttons alone can be
  * bypassed by typing a URL, so every route is re-checked at navigation time:
- * RBAC first (the authorization boundary), then whether the org shows the
- * module at all.
+ * a selected organisation first (permissions mean nothing without one), then
+ * RBAC (the authorization boundary), then whether the org shows the module.
  */
 export const applyRoutePermissions = (routes: PageRouteConfig[]) =>
-  routes.map(({ perm, feature, element, ...route }) => {
+  routes.map(({ perm, feature, needsOrganisation = true, element, ...route }) => {
     const shown = feature ? (
       <RequireFeature feature={feature}>{element}</RequireFeature>
     ) : (
       element
     );
+    const permitted = perm ? <RequirePermission perm={perm}>{shown}</RequirePermission> : shown;
     return {
       ...route,
-      element: perm ? <RequirePermission perm={perm}>{shown}</RequirePermission> : shown,
+      element: needsOrganisation ? <RequireOrganisation>{permitted}</RequireOrganisation> : permitted,
     };
   });
 

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Organisations from "pages/Organisations";
@@ -84,6 +84,27 @@ describe("<Organisations>", () => {
     await chooseMenuItem(await screen.findByRole("menuitem", { name: "Delete" }));
     await confirmInDialog("Delete");
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith("/organisations/o1", expect.anything()));
+  });
+
+  it("forgets a deleted organisation that was selected, and nothing on a failed delete", async () => {
+    useGlobalStore.setState({ organisation: { ...OWNED } });
+    api.get.mockResolvedValue({ data: { data: [OWNED] } });
+    const deleteOnce = async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "More actions for Demo Choir" }));
+      await chooseMenuItem(await screen.findByRole("menuitem", { name: "Delete" }));
+      await confirmInDialog("Delete");
+    };
+    renderPage();
+
+    api.delete.mockRejectedValueOnce({ response: { status: 500, data: { error: "Try later" } } });
+    await deleteOnce();
+    await waitFor(() => expect(api.delete).toHaveBeenCalledTimes(1));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(useGlobalStore.getState().organisation.id).toBe("o1");
+
+    api.delete.mockResolvedValueOnce({ data: { data: {} } });
+    await deleteOnce();
+    await waitFor(() => expect(useGlobalStore.getState().organisation).toEqual(EMPTY_ORG));
   });
 
   it("opens settings for that organisation from the menu", async () => {

@@ -20,6 +20,7 @@ import PageContainer from "components/layout/PageContainer";
 import PageLoader from "components/PageLoader";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import { forgetOrganisation } from "helpers/forgetOrganisation";
 
 const orgUrl = (id: string) => convertParamsToString(orgRequest.ORGANISATION_ONE, { id });
 
@@ -50,7 +51,8 @@ const OrgList = () => {
       confirmLabel: "Delete",
       destructive: true,
     });
-    if (confirmed) mutate({ url: orgUrl(org.id) });
+    // Only once the backend has deleted it: a failed delete changes nothing.
+    if (confirmed) mutate({ url: orgUrl(org.id) }, { onSuccess: () => forgetOrganisation(org.id) });
   };
 
   const open = (org: OrganisationSummary) => {

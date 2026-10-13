@@ -74,6 +74,11 @@ export type PageRouteConfig = {
   perm?: PermissionKey;
   /** Optional module; a direct visit redirects when the org hides it. */
   feature?: OptionalFeature;
+  /**
+   * Whether the page belongs to a selected organisation (default true). Only
+   * the organisation picker and Add Org work without one.
+   */
+  needsOrganisation?: boolean;
 };
 
 export const PAGE_ROUTES: PageRouteConfig[] = [
@@ -82,6 +87,7 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
     element: <OrgList />,
     title: "Organisations",
     showBack: false,
+    needsOrganisation: false,
   },
   {
     path: DASHBOARD,
@@ -89,7 +95,7 @@ export const PAGE_ROUTES: PageRouteConfig[] = [
     title: "Dashboard",
     showBack: false,
   },
-  { path: ADD_ORG, element: <AddOrganisation />, title: "New Organisation" },
+  { path: ADD_ORG, element: <AddOrganisation />, title: "New Organisation", needsOrganisation: false },
   {
     path: USER_MODEL,
     element: <UserModel />,

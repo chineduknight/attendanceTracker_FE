@@ -48,6 +48,10 @@ import { Can } from "rbac/Can";
 import { useTerms } from "hooks/useOrgPresentation";
 import { LABELS } from "config/presentationLabels";
 import { lowerTerm } from "helpers/organisationPresentation";
+import {
+  legacyShownFieldsStorageKey,
+  shownFieldsStorageKey,
+} from "helpers/memberListFields";
 
 type SelectOption = {
   value: string;
@@ -63,10 +67,6 @@ const REQUIRED_EXPORT_FIELDS = ["name"];
 // Keys never offered as extra display fields.
 const HIDDEN_KEYS = ["name", "createdAt", "updatedAt", "organisationId", "id"];
 
-export const shownFieldsStorageKey = (organisationId: string) =>
-  `memberListFields-${organisationId}`;
-const legacyShownFieldsStorageKey = (organisationId: string) =>
-  `selectedFields-${organisationId}`;
 
 const parseFieldList = (raw: string | null): string[] | null => {
   if (raw === null) return null;
