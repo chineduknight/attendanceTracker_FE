@@ -1,101 +1,70 @@
-import { Flex, Box, Input, Checkbox, Stack, Link, Button, Heading, Text, Field } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
-import { useState } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Button, Field, Flex, Input, Stack } from "@chakra-ui/react";
+import { SubmitHandler, useForm } from "react-hook-form";
 import PasswordInput from "components/PasswordInput";
+import AuthLayout, { AuthLink } from "components/auth/AuthLayout";
+import { usernameInputProps } from "helpers/authFields";
 import { authRequest } from "services";
 import { postRequest, useMutationWrapper } from "services/api/apiHelper";
 import { PUBLIC_PATHS } from "routes/pagePath";
 import useGlobalStore from "zStore";
 
+interface LoginInputs {
+  username: string;
+  password: string;
+}
+
 const Login = () => {
-  const [username, setUserName] = useState("");
-  const [password, setPassword] = useState("");
   const [setUser] = useGlobalStore((state) => [state.setUser]);
+  const {
+    register, handleSubmit, formState: { errors },
+  } = useForm<LoginInputs>();
+
   const onSuccess = (data) => {
     setUser(data.data);
   };
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
-  const handleSubmit = (e) => {
-    e.preventDefault();
 
-    mutate({
-      url: authRequest.LOGIN,
-      data: {
-        username,
-        password,
-      },
-    });
-  };
+  const onSubmit: SubmitHandler<LoginInputs> = (data) =>
+    mutate({ url: authRequest.LOGIN, data });
+
   return (
-    <Flex
-      minH={"100vh"}
-      align={"center"}
-      justify={"center"}
-      bg={useColorModeValue("gray.50", "gray.800")}
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Sign in to take attendance and manage your organisation."
+      footer={
+        <>
+          New here? <AuthLink to={PUBLIC_PATHS.SIGN_UP}>Create an account</AuthLink>
+        </>
+      }
     >
-      <Stack gap={8} mx={"auto"} maxW={"lg"} pb={12} px={6}>
-        <Stack align={"center"}>
-          <Heading fontSize={"4xl"}>Sign in to your account</Heading>
-          <Text fontSize={"lg"} color={"gray.600"}>
-            to enjoy all of our cool <Link color={"blue.400"}>features</Link> ✌️
-          </Text>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        <Stack gap={4}>
+          <Field.Root invalid={!!errors.username}>
+            <Field.Label>Username or email</Field.Label>
+            <Input
+              autoComplete="username"
+              {...usernameInputProps}
+              {...register("username", { required: "Enter your username or email" })}
+            />
+            <Field.ErrorText>{errors.username?.message}</Field.ErrorText>
+          </Field.Root>
+          <Field.Root invalid={!!errors.password}>
+            <Field.Label>Password</Field.Label>
+            <PasswordInput
+              autoComplete="current-password"
+              {...register("password", { required: "Enter your password" })}
+            />
+            <Field.ErrorText>{errors.password?.message}</Field.ErrorText>
+          </Field.Root>
+          <Flex justify="flex-end" mt={-2}>
+            <AuthLink to={PUBLIC_PATHS.FORGOT_PASSWORD}>Forgot password?</AuthLink>
+          </Flex>
+          <Button type="submit" size="lg" w="full" loading={isLoading}>
+            Sign in
+          </Button>
         </Stack>
-        <Box
-          rounded={"lg"}
-          bg={useColorModeValue("white", "gray.700")}
-          boxShadow={"lg"}
-          p={8}
-        >
-          <form onSubmit={handleSubmit}>
-            <Stack gap={4}>
-              <Field.Root id="text">
-                <Field.Label>Username or email</Field.Label>
-                <Input
-                  type="text"
-                  autoComplete="username"
-                  onChange={(e) => setUserName(e.target.value)}
-                />
-              </Field.Root>
-              <Field.Root id="password">
-                <Field.Label>Password</Field.Label>
-                <PasswordInput
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-              </Field.Root>
-              <Stack gap={10}>
-                <Stack
-                  direction={{ base: "column", sm: "row" }}
-                  align={"start"}
-                  justify={"space-between"}
-                >
-                  <Checkbox.Root><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>Remember me</Checkbox.Label></Checkbox.Root>
-                  <Link color={"blue.400"} asChild><RouterLink to={PUBLIC_PATHS.FORGOT_PASSWORD}>Forgot password?
-                                      </RouterLink></Link>
-                </Stack>
-                <Button
-                  bg={"blue.400"}
-                  color={"white"}
-                  type="submit"
-                  loading={isLoading}
-                  _hover={{
-                    bg: "blue.500",
-                  }}
-                >
-                  Sign in
-                </Button>
-              </Stack>
-            </Stack>
-          </form>
-          <Text mt={4} textAlign="center" fontSize="sm">
-            New here?{" "}
-            <Link color="blue.400" asChild><RouterLink to={PUBLIC_PATHS.SIGN_UP}>Create an account
-                          </RouterLink></Link>
-          </Text>
-        </Box>
-      </Stack>
-    </Flex>
+      </form>
+    </AuthLayout>
   );
 };
 
