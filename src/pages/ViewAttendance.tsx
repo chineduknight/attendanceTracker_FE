@@ -612,14 +612,16 @@ const Attendance = () => {
                 statuses={statuses}
               />
             )}
-            <Button
-              onClick={handleDelete}
-              loading={isDeleting}
-              variant="solid"
-              colorPalette="red"
-              w="full"
-              mt="4"
-              mb="8"><FaTrash />{`Delete ${terms.attendanceSingular}`}</Button>
+            <Can perm="attendance.manage">
+              <Button
+                onClick={handleDelete}
+                loading={isDeleting}
+                variant="solid"
+                colorPalette="red"
+                w="full"
+                mt="4"
+                mb="8"><FaTrash />{`Delete ${terms.attendanceSingular}`}</Button>
+            </Can>
           </>
         )}
 
