@@ -29,17 +29,19 @@ const PermissionGrid = ({ areas, value, onChange, disabled }: PermissionGridProp
       {areas.map((area) => (
         <Box key={area} borderWidth="1px" borderRadius="md" p={3}>
           <Text fontWeight="bold" mb={2}>{resolveText(AREA_LABEL[area], terms)}</Text>
-          <SimpleGrid columns={2} gap={2}>
+          <SimpleGrid columns={{ base: 1, sm: 2 }} gap={2}>
             {ACTIONS.map((action) => {
               const key: PermissionKey = `${area}.${action}`;
               return (
                 <Checkbox.Root
                   key={key}
+                  minH="44px"
+                  alignItems="center"
                   disabled={disabled}
                   onCheckedChange={() => toggle(key)}
                   checked={selected.has(key)}
                 ><Checkbox.HiddenInput aria-label={key} /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>
-                    {PERMISSION_COPY[key].label}— {resolveText(PERMISSION_COPY[key].description, terms)}
+                    {PERMISSION_COPY[key].label} — {resolveText(PERMISSION_COPY[key].description, terms)}
                   </Checkbox.Label></Checkbox.Root>
               );
             })}

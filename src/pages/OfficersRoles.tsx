@@ -1,5 +1,5 @@
-import { Box, Tabs } from "@chakra-ui/react";
-import { useColorModeValue } from "components/ui/color-mode";
+import { Tabs } from "@chakra-ui/react";
+import PageContainer from "components/layout/PageContainer";
 import useGlobalStore from "zStore";
 import { RequirePermission } from "rbac/RequirePermission";
 import OfficersTab from "components/officers/OfficersTab";
@@ -18,20 +18,19 @@ interface ContentProps { organisationId: string; }
 const OfficersRolesContent = ({ organisationId }: ContentProps) => {
   const terms = useTerms();
   return (
-    <Box minH="100vh" bg={useColorModeValue("gray.50", "gray.800")}>
-      <Box p={4}>
-        <Tabs.Root defaultValue="officers" variant="enclosed" colorPalette="blue">
-          <Tabs.List>
-            <Tabs.Trigger value="officers">{terms.officerPlural}</Tabs.Trigger>
-            <Tabs.Trigger value="invites">Pending Invites</Tabs.Trigger>
-            <Tabs.Trigger value="roles">Roles</Tabs.Trigger>
+    <PageContainer width="content">
+        <Tabs.Root defaultValue="officers" variant="enclosed" colorPalette="blue" fitted>
+          <Tabs.List mb={3}>
+            <Tabs.Trigger value="officers" minH="44px">{terms.officerPlural}</Tabs.Trigger>
+            {/* "Invites" fits three tabs across a 320px phone. */}
+            <Tabs.Trigger value="invites" minH="44px">Invites</Tabs.Trigger>
+            <Tabs.Trigger value="roles" minH="44px">Roles</Tabs.Trigger>
           </Tabs.List>
           <Tabs.Content value="officers"><OfficersTab organisationId={organisationId} /></Tabs.Content>
           <Tabs.Content value="invites"><PendingInvitesTab organisationId={organisationId} /></Tabs.Content>
           <Tabs.Content value="roles"><RolesTab organisationId={organisationId} /></Tabs.Content>
         </Tabs.Root>
-      </Box>
-    </Box>
+    </PageContainer>
   );
 };
 

@@ -1,32 +1,22 @@
 import { useState } from "react";
-import {
-  Box,
-  Button,
-  Flex,
-  HStack,
-  Table,
-  
-  
-  
-  
-  
-  Text,
-  Badge,
-  Wrap,
-  WrapItem,
-} from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, Text } from "@chakra-ui/react";
+import { FaKey, FaUserMinus, FaUserShield, FaUsers } from "react-icons/fa";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { useQueryWrapper, deleteRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { queryKeys } from "services/api/queryKeys";
 import PageLoader from "components/PageLoader";
+import { GroupedList, GroupedListItem } from "components/GroupedList";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import useGlobalStore from "zStore";
 import { Can } from "rbac/Can";
 import { Officer } from "rbac/types";
 import InviteOfficerModal from "components/officers/InviteOfficerModal";
 import EditOfficerRoleModal from "components/officers/EditOfficerRoleModal";
 import EditOfficerPermissionsModal from "components/officers/EditOfficerPermissionsModal";
+import PermissionSummary from "components/officers/PermissionSummary";
+import RowActions from "components/officers/RowActions";
 import { useTerms } from "hooks/useOrgPresentation";
 import { lowerTerm } from "helpers/organisationPresentation";
 
@@ -36,13 +26,15 @@ const OfficersTab = ({ organisationId }: Props) => {
   const { confirm, confirmDialog } = useConfirm();
   const [organisation] = useGlobalStore((s) => [s.organisation]);
   const terms = useTerms();
+  const officerWord = lowerTerm(terms.officerSingular);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [roleTarget, setRoleTarget] = useState<Officer | null>(null);
   const [permsTarget, setPermsTarget] = useState<Officer | null>(null);
 
   const url = convertParamsToString(rbacRequest.OFFICERS, { organisationId });
-  const { data, isLoading } = useQueryWrapper(queryKeys.rbac.officers(organisationId), url);
-  const officers: Officer[] = data?.data ?? [];
+  const { data, isLoading, isError, error, refetch, isRefetching } =
+    useQueryWrapper(queryKeys.rbac.officers(organisationId), url);
+  const officers: Officer[] | undefined = data?.data;
 
   const { mutate: removeMutate } = useMutationWrapper(deleteRequest, () =>
     queryClient.invalidateQueries({
@@ -52,7 +44,7 @@ const OfficersTab = ({ organisationId }: Props) => {
 
   const handleRemove = async (o: Officer) => {
     const confirmed = await confirm({
-      title: `Remove ${lowerTerm(terms.officerSingular)}`,
+      title: `Remove ${officerWord}`,
       body: `Remove ${o.username} from this organisation?`,
       confirmLabel: "Remove",
       destructive: true,
@@ -66,83 +58,70 @@ const OfficersTab = ({ organisationId }: Props) => {
     });
   };
 
-  if (isLoading) return <PageLoader />;
+  const body = () => {
+    if (isLoading) return <PageLoader h="20vh" />;
+    // A failed load is not "no officers": say so and offer a retry.
+    if (isError && !officers) {
+      return (
+        <ErrorState
+          title={`Couldn't load ${lowerTerm(terms.officerPlural)}`}
+          description={errorMessage(error)}
+          onRetry={() => refetch()}
+          retrying={isRefetching}
+        />
+      );
+    }
+    if (!officers?.length) {
+      return <EmptyState icon={<FaUsers />} title={`No ${lowerTerm(terms.officerPlural)} yet`} />;
+    }
+    return (
+      <GroupedList>
+        {officers.map((o) => {
+          const isOwnerRow = o.userId === organisation.owner;
+          return (
+            <GroupedListItem key={o.userId}>
+              <Flex align="flex-start" gap={2}>
+                <Box flex="1" minW={0}>
+                  <Flex align="center" gap={2} wrap="wrap">
+                    <Text fontWeight="semibold" lineClamp={1} minW={0}>{o.username}</Text>
+                    <Badge colorPalette="blue" variant="subtle">{o.roleName}</Badge>
+                    {isOwnerRow && <Badge colorPalette="purple">Owner</Badge>}
+                  </Flex>
+                  {o.email && (
+                    <Text fontSize="sm" color="fg.muted" truncate title={o.email}>{o.email}</Text>
+                  )}
+                  <PermissionSummary permissions={o.permissions} />
+                </Box>
+                {!isOwnerRow && (
+                  <Can perm="officers.manage">
+                    <RowActions
+                      label={`Actions for ${o.username}`}
+                      actions={[
+                        { value: "role", label: "Change role", icon: <FaUserShield />, onSelect: () => setRoleTarget(o) },
+                        { value: "permissions", label: "Edit permissions", icon: <FaKey />, onSelect: () => setPermsTarget(o) },
+                        { value: "remove", label: "Remove", icon: <FaUserMinus />, onSelect: () => handleRemove(o), destructive: true },
+                      ]}
+                    />
+                  </Can>
+                )}
+              </Flex>
+            </GroupedListItem>
+          );
+        })}
+      </GroupedList>
+    );
+  };
 
   return (
     <Box>
-      <Flex justify="flex-end" mb={3}>
-        <Can perm="officers.manage">
-          <Button variant="primary" onClick={() => setInviteOpen(true)}>
-            {`Invite ${lowerTerm(terms.officerSingular)}`}
+      <Can perm="officers.manage">
+        <Flex justify="flex-end" mb={3}>
+          <Button variant="primary" minH="44px" onClick={() => setInviteOpen(true)}>
+            {`Invite ${officerWord}`}
           </Button>
-        </Can>
-      </Flex>
-      <Box overflowX="auto">
-        <Table.Root size="sm">
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeader>Name</Table.ColumnHeader>
-              <Table.ColumnHeader>Email</Table.ColumnHeader>
-              <Table.ColumnHeader>Role</Table.ColumnHeader>
-              <Table.ColumnHeader>Permissions</Table.ColumnHeader>
-              <Table.ColumnHeader></Table.ColumnHeader>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {officers.map((o) => {
-              const isOwnerRow = o.userId === organisation.owner;
-              return (
-                <Table.Row key={o.userId}>
-                  <Table.Cell>{o.username}</Table.Cell>
-                  <Table.Cell>{o.email}</Table.Cell>
-                  <Table.Cell>
-                    <Badge>{o.roleName}</Badge>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Wrap>
-                      {o.permissions.map((p) => (
-                        <WrapItem key={p}>
-                          <Badge colorPalette="green" variant="subtle">
-                            {p}
-                          </Badge>
-                        </WrapItem>
-                      ))}
-                    </Wrap>
-                  </Table.Cell>
-                  <Table.Cell>
-                    {!isOwnerRow && (
-                      <Can perm="officers.manage">
-                        <HStack gap={2}>
-                          <Button size="xs" onClick={() => setRoleTarget(o)}>
-                            Role
-                          </Button>
-                          <Button size="xs" onClick={() => setPermsTarget(o)}>
-                            Permissions
-                          </Button>
-                          <Button
-                            size="xs"
-                            colorPalette="red"
-                            onClick={() => handleRemove(o)}
-                          >
-                            Remove
-                          </Button>
-                        </HStack>
-                      </Can>
-                    )}
-                  </Table.Cell>
-                </Table.Row>
-              );
-            })}
-            {officers.length === 0 && (
-              <Table.Row>
-                <Table.Cell colSpan={5}>
-                  <Text color="gray.500">{`No ${lowerTerm(terms.officerPlural)} yet.`}</Text>
-                </Table.Cell>
-              </Table.Row>
-            )}
-          </Table.Body>
-        </Table.Root>
-      </Box>
+        </Flex>
+      </Can>
+      {body()}
 
       <InviteOfficerModal
         organisationId={organisationId}
