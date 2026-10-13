@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useColorModeValue } from "components/ui/color-mode";
 import {
   Box,
   Flex,
@@ -41,6 +40,9 @@ import {
   TerminologySettings,
 } from "components/settings/PresentationSettings";
 import PageLoader from "components/PageLoader";
+import PageContainer from "components/layout/PageContainer";
+import { ErrorState, errorMessage } from "components/ui/states";
+import { withSafeInset } from "styles/safeArea";
 import AttendanceStatusesEditor from "components/settings/AttendanceStatusesEditor";
 import {
   StatusRow,
@@ -72,8 +74,6 @@ const OrganisationSettings = () => {
     s.updateOrganisation,
   ]);
   const terms = useTerms();
-  const cardBg = useColorModeValue("white", "gray.700");
-  const pageBg = useColorModeValue("gray.50", "gray.800");
   const canManage = usePermissions().has("settings.manage");
   const [statusRows, setStatusRows] = useState<StatusRow[]>(() =>
     toStatusRows(org.attendanceStatuses),
@@ -119,11 +119,18 @@ const OrganisationSettings = () => {
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
-  const { isFetching } = useQueryWrapper(queryKeys.organisation(org.id), url, {
+  // The organisation whose saved settings the form holds. Until a fetch for
+  // this organisation succeeds the form is not shown: its defaults are not
+  // the organisation's settings, and saving them would overwrite real ones.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  const seeded = seededFor === org.id;
+
+  const { isError, error, refetch, isRefetching } = useQueryWrapper(queryKeys.organisation(org.id), url, {
     enabled: Boolean(org.id),
     refetchOnWindowFocus: false,
     onSuccess: (res: any) => {
       const data = res.data;
+      setSeededFor(data.id ?? org.id);
       reset({
         name: data.name ?? "",
         image: data.image ?? "",
@@ -207,25 +214,29 @@ const OrganisationSettings = () => {
 
   return (
     <RequirePermission perm="settings.view">
-      <Box minH="100vh" bg={pageBg}>
-        {isFetching ? (
+      <PageContainer width="form">
+        {!seeded && isError ? (
+          <ErrorState
+            title="Couldn't load settings"
+            description={errorMessage(error)}
+            onRetry={() => refetch()}
+            retrying={isRefetching}
+          />
+        ) : !seeded ? (
           <PageLoader h="30vh" label="Loading settings..." />
         ) : (
-          <Flex align="center" justify="center">
-            <form onSubmit={handleSubmit(onSubmit)} style={{ width: "80%" }}>
+          <>
+            <form onSubmit={handleSubmit(onSubmit)}>
               <Stack
                 gap={4}
-                w="full"
-                maxW="lg"
-                bg={cardBg}
+                bg="bg.panel"
+                borderWidth="1px"
+                borderColor="border"
                 rounded="xl"
-                boxShadow="lg"
-                p={6}
-                my={12}
-                mx="auto"
+                p={{ base: 4, md: 6 }}
               >
                 <Field.Root invalid={Boolean(errors.name)} required>
-                  <Field.Label>Organisation Name</Field.Label>
+                  <Field.Label>Organisation name</Field.Label>
                   <Input
                     placeholder="Seat of wisdom presidium"
                     {...register("name", {
@@ -245,6 +256,9 @@ const OrganisationSettings = () => {
                       borderWidth="2px"
                       borderColor="blue.400" name={watch("name")} src={watch("image")} />
                     <Input
+                      flex="1"
+                      type="url"
+                      inputMode="url"
                       placeholder="https://cdn.example.com/logo.png"
                       {...register("image", {
                         validate: (v) =>
@@ -260,11 +274,13 @@ const OrganisationSettings = () => {
                 <Separator />
                 <Heading size="sm">{`${terms.attendanceSingular} settings`}</Heading>
 
-                <Field.Root display="flex" alignItems="center">
-                  <Field.Label mb="0">{`Collapse ${lowerTerm(
-                    terms.attendanceSingular,
-                  )} by day`}</Field.Label>
-                  <FormSwitch control={control} name="collapseAttendanceByDay" />
+                <Field.Root>
+                  <Flex align="center" justify="space-between" gap={3} w="100%">
+                    <Field.Label mb="0">{`Collapse ${lowerTerm(
+                      terms.attendanceSingular,
+                    )} by day`}</Field.Label>
+                    <FormSwitch control={control} name="collapseAttendanceByDay" />
+                  </Flex>
                 </Field.Root>
 
                 <Field.Root invalid={Boolean(errors.maxAttendanceEdits)}>
@@ -273,6 +289,7 @@ const OrganisationSettings = () => {
                   )} edits`}</Field.Label>
                   <Input
                     type="number"
+                    inputMode="numeric"
                     placeholder={`${DEFAULT_MAX_EDITS} (default)`}
                     {...register("maxAttendanceEdits", {
                       validate: (v) => {
@@ -295,7 +312,7 @@ const OrganisationSettings = () => {
 
                 {eligibilitySettingSupported && (
                   <Field.Root>
-                    <Flex align="center" justify="space-between" gap={3}>
+                    <Flex align="center" justify="space-between" gap={3} w="100%">
                       <Field.Label mb="0">
                         {`Use ${lowerTerm(
                           terms.attendanceSingular,
@@ -335,7 +352,7 @@ const OrganisationSettings = () => {
                     <Separator />
                     <Box>
                       <Heading size="sm">Welfare &amp; Engagement</Heading>
-                      <Text fontSize="sm" color="gray.500">
+                      <Text fontSize="sm" color="fg.muted">
                         How Presence Pro compares the recent and previous
                         periods when it looks for people who may need a check-in
                         or deserve encouragement.
@@ -348,6 +365,7 @@ const OrganisationSettings = () => {
                       <Field.Label>Review window (days)</Field.Label>
                       <Input
                         type="number"
+                        inputMode="numeric"
                         readOnly={!canManage}
                         placeholder={`${DEFAULT_WELFARE_REVIEW_WINDOW_DAYS} (default)`}
                         {...register("welfareReviewWindowDays", {
@@ -389,16 +407,32 @@ const OrganisationSettings = () => {
                   </>
                 )}
 
-                <Can perm="settings.manage">
-                  <Button variant="primary" type="submit" loading={isSaving}>
+              </Stack>
+              {/* Pinned to the bottom while the long form scrolls, so Save is
+                  always in thumb reach (it sat ~4,500px down on a phone). */}
+              <Can perm="settings.manage">
+                <Box
+                  position="sticky"
+                  bottom={0}
+                  zIndex="docked"
+                  mt={3}
+                  mx={{ base: -4, md: 0 }}
+                  px={{ base: 4, md: 0 }}
+                  pt={3}
+                  pb={withSafeInset("bottom", "0.75rem")}
+                  bg="bg.subtle"
+                  borderTopWidth={{ base: "1px", md: 0 }}
+                  borderColor="border"
+                >
+                  <Button variant="primary" type="submit" w="100%" minH="44px" loading={isSaving}>
                     Save
                   </Button>
-                </Can>
-              </Stack>
+                </Box>
+              </Can>
             </form>
-          </Flex>
+          </>
         )}
-      </Box>
+      </PageContainer>
     </RequirePermission>
   );
 };

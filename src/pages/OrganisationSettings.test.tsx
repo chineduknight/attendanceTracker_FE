@@ -82,16 +82,49 @@ describe("<OrganisationSettings>", () => {
   it("shows the form with a Save button for a manager", async () => {
     setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
     renderPage();
-    expect(await screen.findByLabelText(/Organisation Name/)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Organisation name/)).toBeInTheDocument();
     expect(screen.getByLabelText("Logo URL")).toBeInTheDocument();
     expect(screen.getByLabelText("Max attendance edits")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Save/ })).toBeInTheDocument();
   });
 
+  it("never offers a form of defaults to save when the settings fail to load", async () => {
+    // Saving defaults would overwrite the real settings (collapse off,
+    // default edit limit), so a failed load shows the error and Try again.
+    mockGet.mockImplementationOnce(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Database offline" } } }),
+    );
+    setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+    renderPage();
+    expect(await screen.findByText("Couldn't load settings")).toBeInTheDocument();
+    expect(screen.getByText("Database offline")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Organisation name/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByLabelText(/Organisation name/)).toHaveValue("VOB Choir");
+    expect(screen.getByLabelText("Max attendance edits")).toHaveValue(3);
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  it("keeps the form on screen while it refreshes after a save", async () => {
+    setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
+    renderPage();
+    const name = await screen.findByLabelText(/Organisation name/);
+    let refresh: (value: unknown) => void = () => undefined;
+    mockGet.mockImplementation(() => new Promise((resolve) => { refresh = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // The post-save refetch is in flight: the form stays, no loader swap.
+    expect(name).toBeInTheDocument();
+    expect(screen.queryByText("Loading settings...")).not.toBeInTheDocument();
+    await act(async () => refresh({ data: { data: { id: "org1", name: "VOB Choir" } } }));
+  });
+
   it("hides Save for a view-only user", async () => {
     setOrg({ id: "org1", permissions: ["settings.view"] });
     renderPage();
-    await screen.findByLabelText(/Organisation Name/);
+    await screen.findByLabelText(/Organisation name/);
     expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
   });
 
@@ -305,7 +338,7 @@ describe("<OrganisationSettings>", () => {
       );
       setOrg({ id: "org1", permissions: ["settings.view", "settings.manage"] });
       renderPage();
-      await screen.findByLabelText(/Organisation Name/);
+      await screen.findByLabelText(/Organisation name/);
       expect(screen.queryByText("Terminology")).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /Save/ }));
       await waitFor(() => expect(mockPut).toHaveBeenCalled());
@@ -447,7 +480,7 @@ describe("<OrganisationSettings>", () => {
       serve({ org1: detail("org1", { welfareSettings: undefined }) });
       manager();
       renderPage();
-      await screen.findByLabelText(/Organisation Name/);
+      await screen.findByLabelText(/Organisation name/);
       expect(
         screen.queryByRole("heading", { name: "Welfare & Engagement" }),
       ).not.toBeInTheDocument();
@@ -689,11 +722,11 @@ describe("<OrganisationSettings>", () => {
       await waitFor(() => expect(screen.getByLabelText(LABEL)).toBeChecked());
 
       act(() => manager("orgB"));
-      await waitFor(() => expect(screen.getByLabelText(/Organisation Name/)).toHaveValue("Org orgB"));
+      await waitFor(() => expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgB"));
       expect(screen.getByLabelText(LABEL)).not.toBeChecked();
 
       act(() => manager("orgA"));
-      await waitFor(() => expect(screen.getByLabelText(/Organisation Name/)).toHaveValue("Org orgA"));
+      await waitFor(() => expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgA"));
       expect(screen.getByLabelText(LABEL)).toBeChecked();
     });
   });
