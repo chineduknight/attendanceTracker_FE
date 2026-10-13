@@ -30,15 +30,15 @@ const StreakCard: React.FC<StreakCardProps> = ({ currentStreak, longestStreak, a
       <Flex justify="space-between" align="center" gap={4} flexWrap="wrap">
         <Box>
           <Text fontSize="3xl" fontWeight="extrabold" lineHeight="1">🔥 {currentStreak}</Text>
-          <Text opacity={0.9}>current streak</Text>
-          <Text fontSize="sm" opacity={0.85} mt={1}>Longest ever: <b>{longestStreak}</b></Text>
+          <Text>current streak</Text>
+          <Text fontSize="sm" mt={1}>Longest ever: <b>{longestStreak}</b></Text>
         </Box>
         <RateRing rate={attendanceRate} />
       </Flex>
       <Box mt={4} h="14px" bg="whiteAlpha.300" borderRadius="999px" overflow="hidden">
         <Box h="100%" width={`${percent}%`} borderRadius="999px" bgGradient="to-r" gradientFrom="yellow.400" gradientTo="orange.400" />
       </Box>
-      <Flex justify="space-between" fontSize="xs" opacity={0.9} mt={1}>
+      <Flex justify="space-between" fontSize="xs" mt={1}>
         <Text>0</Text>
         <Text textAlign="center">{cheer}</Text>
         <Text>{nextTier ? `🏅 ${nextTier}` : "🏆 max"}</Text>

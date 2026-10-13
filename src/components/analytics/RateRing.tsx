@@ -24,7 +24,7 @@ const RateRing: React.FC<RateRingProps> = ({ rate, size = 76, trackColor = "#0BC
         display="flex" flexDirection="column" alignItems="center" justifyContent="center" color="white"
       >
         <Text fontWeight="bold" fontSize="md" lineHeight="1">{clamped}%</Text>
-        <Text fontSize="9px" textTransform="uppercase" opacity={0.8}>rate</Text>
+        <Text fontSize="9px" textTransform="uppercase">rate</Text>
       </Box>
     </Box>
   );

@@ -51,7 +51,7 @@ const MemberHero: React.FC<MemberHeroProps> = ({ name, fields }) => {
       {/* minW 0 + wrap anywhere: an email in the details line can't push the card wide. */}
       <Box minW={0} overflowWrap="anywhere">
         <Text fontWeight="bold" fontSize="xl">{name}</Text>
-        {identity && <Text fontSize="sm" opacity={0.9}>{identity}</Text>}
+        {identity && <Text fontSize="sm">{identity}</Text>}
       </Box>
     </Flex>
   );
