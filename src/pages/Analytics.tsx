@@ -52,6 +52,12 @@ type View = "list" | "grid";
 
 const DATE_KEY = /\d{4}-\d{2}-\d{2}$/;
 
+/** The session (date-suffixed) columns, sorted by their YYYY-MM-DD suffix. */
+export const sessionColumnsByDate = (keys: string[]): string[] =>
+  keys
+    .filter((k) => DATE_KEY.test(k))
+    .sort((a, b) => a.match(DATE_KEY)![0].localeCompare(b.match(DATE_KEY)![0]));
+
 /**
  * Backend per-member totals, bucketed by behavior rather than status label.
  * `attendanceBehaviorCounts` is the source of truth; the legacy
@@ -257,8 +263,9 @@ const AttendanceAnalyticsPage: React.FC = () => {
     [statusFilter, statusSelectOptions]
   );
 
-  // detect which columns are dates
-  const dateKeys = useMemo(() => keys.filter((k) => DATE_KEY.test(k)), [keys]);
+  // Session columns, oldest first. The backend's key order isn't by date;
+  // sessions on the same day keep that order (Array.sort is stable).
+  const dateKeys = useMemo(() => sessionColumnsByDate(keys), [keys]);
 
   const memberRows = useMemo<AnalyticsGridRow[]>(
     () =>

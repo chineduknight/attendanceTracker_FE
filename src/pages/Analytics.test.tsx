@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
-import Analytics from "pages/Analytics";
+import Analytics, { sessionColumnsByDate } from "pages/Analytics";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
@@ -132,6 +132,19 @@ describe("<Analytics> with configured statuses", () => {
       )
     ).map((cell) => cell.textContent);
     expect(adaCells).toEqual(["1", "Ada", "1", "0", "1", "T", "NS"]);
+  });
+
+  it("shows session columns oldest first whatever order the backend sends", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.includes("/analytics?")
+          ? { data: { ...ANALYTICS, keys: ["name", D2, D1], attendanceStatuses: RESPONSE_STATUSES } }
+          : { data: {} },
+      })
+    );
+    await searchGrid();
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers.slice(-2)).toEqual(["Tue 1, Sep", "Tue 8, Sep"]);
   });
 
   it("renders exact status keys in date cells and a dynamic legend", async () => {
@@ -277,5 +290,26 @@ describe("<Analytics> session summary", () => {
     );
     expect(chiCells).toHaveLength(6);
     expect(chiCells[5]).toHaveTextContent("N/A");
+  });
+});
+
+describe("sessionColumnsByDate", () => {
+  it("orders session columns by date, keeping same-day order and dropping non-session keys", () => {
+    expect(
+      sessionColumnsByDate([
+        "name",
+        "Rehearsal 2026-07-30",
+        "Mass 2026-02-21",
+        "Vigil 2026-04-22",
+        "Second Mass 2026-02-21",
+        "Mass 2026-04-22",
+      ])
+    ).toEqual([
+      "Mass 2026-02-21",
+      "Second Mass 2026-02-21",
+      "Vigil 2026-04-22",
+      "Mass 2026-04-22",
+      "Rehearsal 2026-07-30",
+    ]);
   });
 });
