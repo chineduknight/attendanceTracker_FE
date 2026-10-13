@@ -276,6 +276,12 @@ describe("<ViewAttendance> with custom terminology", () => {
   });
 
   it("names the session term in the delete confirm and failure copy", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...useGlobalStore.getState().organisation,
+        permissions: ["attendance.view", "attendance.manage"],
+      },
+    });
     mockDelete.mockImplementation(() =>
       Promise.reject({ response: { data: { error: undefined } } }),
     );
@@ -881,5 +887,72 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(
       (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" })
     ).toBeInTheDocument();
+  });
+});
+
+describe("<ViewAttendance> delete visibility", () => {
+  const setup = (over: { permissions?: PermissionKey[]; isOwner?: boolean }) =>
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        ...over,
+      },
+    });
+  const renderPage = async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+  };
+  const deleteButton = () =>
+    screen.queryByRole("button", { name: /Delete Attendance/ });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    mockGet.mockImplementation(() =>
+      Promise.resolve({ data: { data: SESSION } }),
+    );
+  });
+
+  it("hides Delete from a view-only officer", async () => {
+    setup({ permissions: ["attendance.view"] });
+    await renderPage();
+    expect(deleteButton()).not.toBeInTheDocument();
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("lets an attendance manager delete after confirming", async () => {
+    setup({ permissions: ["attendance.view", "attendance.manage"] });
+    mockDelete.mockResolvedValue({ data: { data: "deleted" } });
+    await renderPage();
+
+    fireEvent.click(deleteButton()!);
+    expect(mockDelete).not.toHaveBeenCalled();
+    await confirmInDialog("Delete");
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith("/attendance/org1/att1", {
+        data: undefined,
+      }),
+    );
+  });
+
+  it("sends nothing when the manager cancels the confirmation", async () => {
+    setup({ permissions: ["attendance.view", "attendance.manage"] });
+    await renderPage();
+
+    fireEvent.click(deleteButton()!);
+    const dialog = within(await screen.findByRole("alertdialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("shows Delete to the organisation owner", async () => {
+    setup({ isOwner: true, permissions: [] });
+    await renderPage();
+    expect(deleteButton()).toBeInTheDocument();
   });
 });
