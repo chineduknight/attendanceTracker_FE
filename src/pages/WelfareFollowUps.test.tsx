@@ -16,6 +16,8 @@ import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
 import { WelfareFollowUp } from "components/welfare/followUps/types";
+import { toggle } from "test-utils/render";
+import { PermissionKey } from "rbac/permissions";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn(), info: jest.fn() },
@@ -702,6 +704,201 @@ describe("<Welfare> follow-ups — workflow", () => {
     );
     expect(toast.success).not.toHaveBeenCalledWith("Follow-up closed");
   });
+});
+
+describe("<Welfare> follow-ups — revision after an edit", () => {
+  const MANAGER: PermissionKey[] = [
+    "attendance.view",
+    "welfare.view",
+    "welfare.manage",
+  ];
+
+  /**
+   * Holds every list refetch open, like a slow staging API: the page keeps
+   * the record it loaded, so only the saved reply can supply the revision.
+   */
+  const stallRefetches = (list: unknown) => {
+    let loaded = false;
+    serve({ list });
+    const served = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) => {
+      if (String(url).includes("/follow-ups")) {
+        if (loaded) return new Promise(() => undefined);
+        loaded = true;
+      }
+      return served(url);
+    });
+  };
+
+  const patchBodies = () => mockPatch.mock.calls.map(([, body]) => body);
+
+  const editNote = async (note: string) => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(await screen.findByLabelText(/^Note/), {
+      target: { value: note },
+    });
+  };
+
+  const saveChanges = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/^Note/)).not.toBeInTheDocument(),
+    );
+  };
+
+  it("closes straight after an edit with the revision the edit returned", async () => {
+    setOrg({ permissions: MANAGER });
+    stallRefetches(listFor([openRecord({ id: "f-open" })]));
+    mockPatch
+      .mockResolvedValueOnce({
+        data: {
+          data: openRecord({ id: "f-open", note: "Called.", revision: 2 }),
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: openRecord({
+            id: "f-open",
+            workflowStatus: "closed",
+            revision: 3,
+          }),
+        },
+      });
+    renderPage();
+    await openFollowUpList();
+
+    await editNote("Called.");
+    await saveChanges();
+    expect(await screen.findByText("Called.")).toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Close follow-up" }),
+    );
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+    expect(patchBodies()[1]).toEqual({
+      expectedRevision: 2,
+      workflowStatus: "closed",
+    });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Follow-up closed"),
+    );
+  }, 15000);
+
+  it("reopens straight after an edit that closed the record", async () => {
+    setOrg({ permissions: MANAGER });
+    stallRefetches(listFor([openRecord({ id: "f-open" })]));
+    mockPatch
+      .mockResolvedValueOnce({
+        data: {
+          data: openRecord({
+            id: "f-open",
+            workflowStatus: "closed",
+            revision: 2,
+          }),
+        },
+      })
+      .mockResolvedValueOnce({
+        data: { data: openRecord({ id: "f-open", revision: 3 }) },
+      });
+    renderPage();
+    await openFollowUpList();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await toggle(
+      await screen.findByRole("checkbox", { name: /Keep open for follow-up/ }),
+    );
+    await saveChanges();
+    expect(patchBodies()[0]).toMatchObject({
+      expectedRevision: 1,
+      workflowStatus: "closed",
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reopen follow-up" }),
+    );
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+    expect(patchBodies()[1]).toEqual({
+      expectedRevision: 2,
+      workflowStatus: "open",
+    });
+  }, 15000);
+
+  it("sends one write for a double tap, then the next action uses its revision", async () => {
+    setOrg({ permissions: MANAGER });
+    stallRefetches(listFor([openRecord({ id: "f-open" })]));
+    let finishClose: (value: unknown) => void = () => undefined;
+    mockPatch
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (finishClose = resolve)),
+      )
+      .mockResolvedValueOnce({
+        data: { data: openRecord({ id: "f-open", revision: 3 }) },
+      });
+    renderPage();
+    await openFollowUpList();
+
+    const close = screen.getByRole("button", { name: "Close follow-up" });
+    fireEvent.click(close);
+    fireEvent.click(close);
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+
+    await act(async () =>
+      finishClose({
+        data: {
+          data: openRecord({
+            id: "f-open",
+            workflowStatus: "closed",
+            revision: 2,
+          }),
+        },
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reopen follow-up" }),
+    );
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+    expect(patchBodies()[1]).toEqual({
+      expectedRevision: 2,
+      workflowStatus: "open",
+    });
+  }, 15000);
+
+  it("keeps the loaded revision when the edit fails", async () => {
+    setOrg({ permissions: MANAGER });
+    stallRefetches(listFor([openRecord({ id: "f-open" })]));
+    mockPatch
+      .mockRejectedValueOnce({
+        response: { status: 500, data: { error: "Server error" } },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: openRecord({
+            id: "f-open",
+            workflowStatus: "closed",
+            revision: 2,
+          }),
+        },
+      });
+    renderPage();
+    await openFollowUpList();
+
+    await editNote("Not saved.");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Server error"));
+    // The editor stays open on a non-stale failure; the officer cancels it.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/^Note/)).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Not saved.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(2));
+    expect(patchBodies()[1]).toEqual({
+      expectedRevision: 1,
+      workflowStatus: "closed",
+    });
+  }, 15000);
 });
 
 describe("<Welfare> follow-ups — tenancy", () => {

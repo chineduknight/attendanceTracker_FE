@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { QueryKey } from "@tanstack/react-query";
 import {
   deleteRequest,
   patchRequest,
@@ -14,6 +15,7 @@ import { localBusinessDate } from "helpers/birthday";
 import {
   WelfareFollowUp,
   WelfareFollowUpCreatePayload,
+  WelfareFollowUpListData,
   WelfareFollowUpSummary,
   WelfareFollowUpUpdatePayload,
   WelfareFollowUpWorkflowStatus,
@@ -30,6 +32,31 @@ export const isStaleFollowUpError = (error: unknown): boolean => {
   const status = (error as { response?: { status?: number } })?.response
     ?.status;
   return status === 409 || status === 404;
+};
+
+/**
+ * Writes a saved record into every cached follow-up list of one organisation,
+ * so the card shows the new revision the moment the save succeeds rather than
+ * after the refetch lands. Without it, Close straight after an edit sent the
+ * old revision and got a 409. Only a newer revision replaces the cached one,
+ * so a refetch that already landed is never rolled back.
+ */
+const syncFollowUpRecord = (rootKey: QueryKey, record?: WelfareFollowUp) => {
+  if (!record?.id || typeof record.revision !== "number") return;
+  queryClient.setQueriesData<{ data?: WelfareFollowUpListData }>(
+    rootKey,
+    (cached) => {
+      const list = cached?.data?.followUps;
+      if (!cached?.data || !list) return cached;
+      const index = list.findIndex(
+        (item) => item.id === record.id && item.revision < record.revision,
+      );
+      if (index === -1) return cached;
+      const followUps = [...list];
+      followUps[index] = record;
+      return { ...cached, data: { ...cached.data, followUps } };
+    },
+  );
 };
 
 export interface UseWelfareFollowUpsOptions {
@@ -132,34 +159,67 @@ export const useWelfareFollowUps = (
       },
     );
 
+  // Records with a write in flight. A second write would carry the same
+  // (soon stale) revision and fail with a 409, so it is dropped; the buttons
+  // are disabled while saving, this also covers a double tap before re-render.
+  const inFlight = useRef(new Set<string>());
+
+  /**
+   * Runs one revision-guarded write. `mutateAsync` always settles, unlike the
+   * per-call callbacks of `mutate`, which React Query drops when another
+   * mutation starts first, so the cache sync and refetch can never be lost.
+   */
+  const guardedWrite = (
+    id: string,
+    write: () => Promise<{ data?: WelfareFollowUp } | undefined>,
+    { onSuccess, onError }: WelfareFollowUpMutationCallbacks,
+    syncRecord: boolean,
+  ) => {
+    if (inFlight.current.has(id)) return;
+    inFlight.current.add(id);
+    // Captured now: a reply that lands after an organisation switch still
+    // updates the organisation it was sent for, never the new one.
+    const writeRootKey = rootKey;
+    write()
+      .then((res) => {
+        if (syncRecord) syncFollowUpRecord(writeRootKey, res?.data);
+        onSuccess?.(syncRecord ? res?.data : undefined);
+      })
+      .catch((error: unknown) => onError?.(error))
+      .finally(() => {
+        inFlight.current.delete(id);
+        // Refetch after failures too: a 409/404 means another officer
+        // changed or archived the record, so the list on screen is stale.
+        queryClient.invalidateQueries({ queryKey: writeRootKey });
+      });
+  };
+
   const update = (
     id: string,
     payload: WelfareFollowUpUpdatePayload,
-    { onSuccess, onError }: WelfareFollowUpMutationCallbacks = {},
+    callbacks: WelfareFollowUpMutationCallbacks = {},
   ) =>
-    updateMutation.mutate(
-      { url: oneUrl(id), data: payload },
-      {
-        // Refetch after failures too: a 409/404 means another officer changed
-        // or archived the record, so the list on screen is stale.
-        onSettled: invalidate,
-        onSuccess: (res: { data?: WelfareFollowUp }) => onSuccess?.(res?.data),
-        onError: (error: unknown) => onError?.(error),
-      },
+    guardedWrite(
+      id,
+      () => updateMutation.mutateAsync({ url: oneUrl(id), data: payload }),
+      callbacks,
+      true,
     );
 
   const archive = (
     id: string,
     expectedRevision: number,
-    { onSuccess, onError }: WelfareFollowUpMutationCallbacks = {},
+    callbacks: WelfareFollowUpMutationCallbacks = {},
   ) =>
-    archiveMutation.mutate(
-      { url: oneUrl(id), data: { expectedRevision } },
-      {
-        onSettled: invalidate,
-        onSuccess: () => onSuccess?.(),
-        onError: (error: unknown) => onError?.(error),
-      },
+    guardedWrite(
+      id,
+      () =>
+        archiveMutation.mutateAsync({
+          url: oneUrl(id),
+          data: { expectedRevision },
+        }),
+      callbacks,
+      false,
     );
 
   return {
