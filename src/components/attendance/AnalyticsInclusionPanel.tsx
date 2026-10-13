@@ -93,7 +93,7 @@ const AnalyticsInclusionPanel = ({
         </Text>
       )}
       {inclusion.excludedAt && (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           Excluded date: {format(new Date(inclusion.excludedAt), "dd MMM yyyy")}
         </Text>
       )}

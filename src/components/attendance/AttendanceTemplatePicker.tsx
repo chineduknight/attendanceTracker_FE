@@ -192,12 +192,12 @@ const AttendanceTemplatePicker = ({
     <Stack gap={3}>
       <Field.Root id="attendanceTemplate" disabled={isLoading || isSaving}>
         {isError ? (
-          <Text fontSize="sm" color="red.500">
+          <Text fontSize="sm" color="fg.error">
             Templates could not be loaded. You can still fill in the details
             below.
           </Text>
         ) : templates.length === 0 && !isLoading ? (
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             No templates yet. Fill in the details below and save them as a
             template to reuse them next time.
           </Text>
@@ -227,7 +227,7 @@ const AttendanceTemplatePicker = ({
           </>
         )}
         {selected && setupFailed && (
-          <Field.HelperText color="red.500">
+          <Field.HelperText color="fg.error">
             {eligibilityEnabled
               ? `Templates can't be applied until ${lowerTerm(
                   terms.categoryPlural,

@@ -62,7 +62,7 @@ const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProp
   const terms = useTerms();
   return (
     <Flex direction="column" gap={1} mt="4">
-      <Text fontSize="sm" color="gray.500" id="quick-mark-label">
+      <Text fontSize="sm" color="fg.muted" id="quick-mark-label">
         {`Tap ${withArticle(lowerTerm(terms.memberSingular))} to`}
       </Text>
       <Flex

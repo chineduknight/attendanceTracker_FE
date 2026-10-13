@@ -65,7 +65,7 @@ const ManualMemberForm = ({
         <Text mb={2}>
           {`Use this only when the ${member} was not expected for this ${session} but physically attended.`}
         </Text>
-        <Text mb={4} fontSize="sm" color="gray.500">
+        <Text mb={4} fontSize="sm" color="fg.muted">
           {`This changes this ${session} only. It does not change eligibility, leave, or future ${lowerTerm(
             terms.attendancePlural
           )}.`}
@@ -108,7 +108,7 @@ const ManualMemberForm = ({
               <NativeSelect.Indicator />
             </NativeSelect.Root>
           ) : (
-            <Text color="red.500" fontSize="sm">
+            <Text color="fg.error" fontSize="sm">
               No active present status is configured for this organisation.
             </Text>
           )}

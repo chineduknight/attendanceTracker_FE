@@ -43,10 +43,10 @@ const WelfareFollowUpCard = ({
   const dueLabel = followUpDueLabel(record, asOf);
   const dueColor =
     dueLabel === "Overdue"
-      ? "red.500"
+      ? "fg.error"
       : dueLabel === "Due today"
-      ? "orange.500"
-      : "gray.500";
+      ? "orange.fg"
+      : "fg.muted";
   const noteExcerpt = followUpNoteExcerpt(record.note);
 
   return (
