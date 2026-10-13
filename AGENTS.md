@@ -1759,11 +1759,18 @@ Theme:
   recipe; `yarn install` regenerates their types (`postinstall` typegen).
 - `src/styles/components/v2Parity.ts` keeps v2 sizes for headings, buttons,
   fields and Container. Medium fields stay 16px so iOS does not zoom on focus.
-- Colour mode: `DARK_MODE_ENABLED` in `config/colorMode.ts` keeps users on
-  light until every page is dark-safe. `?theme=dark|light|system` previews a
-  mode for the current tab (and shows the System/Light/Dark control in the nav
-  drawer); `?theme=off` ends it. Import `useColorModeValue` from
-  `components/ui/color-mode`, not `@chakra-ui/react`.
+- Colour mode: dark mode is on. Users follow their device (System is the
+  default) and pick System/Light/Dark in the nav drawer; the choice is saved
+  per device (`presence-pro-theme`). An inline script in `public/index.html`
+  applies it before the app loads (no white flash on dark phones); keep its
+  storage key and dark background in sync (`config/prePaintTheme.test.ts`).
+  `DARK_MODE_ENABLED` in `config/colorMode.ts` is a kill switch: `false`
+  forces light and re-enables `?theme=` previews. Every new screen must work
+  in both modes. Import `useColorModeValue` from `components/ui/color-mode`,
+  not `@chakra-ui/react`.
+- White text on a colour uses `{palette}.solid` (or `colorPalette.solid` with
+  `colorPalette.contrast`), not `{palette}.500`: the theme keeps every
+  white-text `.solid` at 4.5:1+ (`styles/solidContrast.test.ts`).
 - Prefer semantic tokens that flip with the mode (`bg`, `bg.panel`, `fg`,
   `fg.muted`, `border`, `{palette}.fg`, `{palette}.solid`, `primary`) over
   `white`, `black` or fixed `gray.*` shades.

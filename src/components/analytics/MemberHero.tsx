@@ -21,14 +21,25 @@ const getIdentityLine = (fields: Record<string, unknown>) =>
     .map((value) => capitalize(String(value)))
     .join(" · ");
 
+export const MEMBER_HERO_GRADIENT = {
+  from: "purple.600",
+  via: "blue.600",
+  to: "cyan.650",
+} as const;
+
 const MemberHero: React.FC<MemberHeroProps> = ({ name, fields }) => {
   const identity = getIdentityLine(fields);
   return (
     <Flex
       align="center" gap={4} borderRadius="14px" p={5} color="white"
       // v3 gradient props: v2's bgGradient="linear(...)" string is silently
-      // ignored, which left white text on the page background.
-      bgGradient="to-br" gradientFrom="purple.500" gradientVia="blue.500" gradientTo="cyan.400"
+      // ignored, which left white text on the page background. Stops are
+      // deep enough for white text along the whole gradient (5.1:1+; the
+      // old cyan.400 end was 1.9:1 under the email line).
+      bgGradient="to-br"
+      gradientFrom={MEMBER_HERO_GRADIENT.from}
+      gradientVia={MEMBER_HERO_GRADIENT.via}
+      gradientTo={MEMBER_HERO_GRADIENT.to}
       boxShadow="0 8px 20px rgba(59,130,246,.35)"
     >
       <Flex
@@ -40,7 +51,7 @@ const MemberHero: React.FC<MemberHeroProps> = ({ name, fields }) => {
       {/* minW 0 + wrap anywhere: an email in the details line can't push the card wide. */}
       <Box minW={0} overflowWrap="anywhere">
         <Text fontWeight="bold" fontSize="xl">{name}</Text>
-        {identity && <Text fontSize="sm" opacity={0.9}>{identity}</Text>}
+        {identity && <Text fontSize="sm">{identity}</Text>}
       </Box>
     </Flex>
   );

@@ -39,7 +39,9 @@ const StatTile = ({
 }: StatTileProps) => {
   const isSolid = tone === "solid";
   const bg = isSolid ? accent : "bg.panel";
-  const labelColor = isSolid ? "whiteAlpha.900" : "fg.muted";
+  // Full white on solid fills: the tiles use `{palette}.solid`, which the
+  // theme keeps at 4.5:1+ for white; translucent white would drop below.
+  const labelColor = isSolid ? "white" : "fg.muted";
 
   const content = (
     <>

@@ -1,9 +1,11 @@
 /**
- * Dark mode stays off for users until every page is dark-safe (the
- * mobile-first + dark pass). Flip this once the last page batch lands: users
- * then follow their device setting and get the System/Light/Dark toggle.
+ * Dark mode is on: users follow their device (System is the default) and
+ * get the System/Light/Dark control in the nav drawer. Kept as a kill
+ * switch: false forces everyone back to light and re-enables ?theme=
+ * previews. If you flip it off for long, also remove the pre-paint script
+ * in public/index.html, or dark-mode phones paint dark until the app loads.
  */
-export const DARK_MODE_ENABLED = false;
+export const DARK_MODE_ENABLED = true;
 
 export const THEME_PREFERENCES = ["system", "light", "dark"] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];

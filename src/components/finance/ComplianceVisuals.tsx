@@ -7,10 +7,14 @@ import { ComplianceRow, MonthStatus } from "components/finance/financeTypes";
 const monthStatus = (row: ComplianceRow, month: number): MonthStatus =>
   row.months?.[String(month)] ?? "not-due";
 
-/** Tinted cell colours that stay readable in light and dark mode. */
+/**
+ * Tinted cell colours that stay readable in light and dark mode: pale tint
+ * with dark text in light, the deep 700 shade with white text in dark (600
+ * left white letters at 3-4.3:1).
+ */
 const useStatusTint = () => {
-  const shade = useColorModeValue("100", "600");
-  const text = useColorModeValue("gray.800", "whiteAlpha.900");
+  const shade = useColorModeValue("100", "700");
+  const text = useColorModeValue("gray.800", "white");
   return { tint: (status: MonthStatus) => `${statusMeta(status).scheme}.${shade}`, text };
 };
 

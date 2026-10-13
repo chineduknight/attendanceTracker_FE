@@ -41,7 +41,7 @@ const ExpectedRosterSummary = ({
       </>
     )}
     {rules.length > 0 && (
-      <Text fontSize="sm" color="gray.500">
+      <Text fontSize="sm" color="fg.muted">
         {summarizeEligibilityRules(rules, labelFor)}
       </Text>
     )}

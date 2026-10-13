@@ -75,13 +75,13 @@ const AttendanceEligibilityEditor = ({
             ? `Expected ${members}: counting…`
             : `Expected ${members}: ${expectedCount} of ${totalCount}`}
         </Text>
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           {rules.length
             ? summarizeEligibilityRules(rules, labelFor)
             : "Everyone is expected"}
         </Text>
         {expectedCount === 0 && (
-          <Text fontSize="sm" color="red.500" mt={1}>
+          <Text fontSize="sm" color="fg.error" mt={1}>
             {rules.length
               ? `No ${members} match these eligibility rules.`
               : `This organisation has no ${members} yet.`}
@@ -90,15 +90,15 @@ const AttendanceEligibilityEditor = ({
       </Box>
 
       {fieldsStatus === "loading" ? (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           {`Loading ${lowerTerm(terms.memberSingular)} fields…`}
         </Text>
       ) : fieldsStatus === "error" ? (
-        <Text fontSize="sm" color="red.500">
+        <Text fontSize="sm" color="fg.error">
           {`${terms.memberSingular} fields could not be loaded, so everyone is expected.`}
         </Text>
       ) : fields.length === 0 ? (
-        <Text fontSize="sm" color="gray.500">
+        <Text fontSize="sm" color="fg.muted">
           {`Add option fields to the ${lowerTerm(
             terms.memberSingular,
           )} model to limit who is expected.`}
@@ -139,7 +139,7 @@ const AttendanceEligibilityEditor = ({
               </Box>
             );
           })}
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="fg.muted">
             Within a field, any selected value may match. Across fields, all
             selected fields must match.
           </Text>
