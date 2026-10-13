@@ -124,13 +124,25 @@ const OrganisationSettings = () => {
   // the organisation's settings, and saving them would overwrite real ones.
   const [seededFor, setSeededFor] = useState<string | null>(null);
   const seeded = seededFor === org.id;
+  // Same, readable inside query callbacks without a stale closure.
+  const seededOrgId = useRef<string | null>(null);
+  // Set by a successful Save: the refetch it triggers re-seeds the form with
+  // the backend's canonical values. Any other refetch (e.g. on reconnect)
+  // must leave the officer's unsaved edits alone.
+  const resyncOrgId = useRef<string | null>(null);
 
   const { isError, error, refetch, isRefetching } = useQueryWrapper(queryKeys.organisation(org.id), url, {
     enabled: Boolean(org.id),
     refetchOnWindowFocus: false,
     onSuccess: (res: any) => {
       const data = res.data;
-      setSeededFor(data.id ?? org.id);
+      const id: string = data.id ?? org.id;
+      const firstLoad = seededOrgId.current !== id;
+      const afterSave = resyncOrgId.current === id;
+      if (!firstLoad && !afterSave) return;
+      resyncOrgId.current = null;
+      seededOrgId.current = id;
+      setSeededFor(id);
       reset({
         name: data.name ?? "",
         image: data.image ?? "",
@@ -183,7 +195,9 @@ const OrganisationSettings = () => {
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
-      // Refresh this organisation's detail only — never another tenant's.
+      // Refresh this organisation's detail only — never another tenant's —
+      // and let that refresh re-seed the form with what the backend stored.
+      resyncOrgId.current = savingOrgId.current;
       queryClient.invalidateQueries({ queryKey: queryKeys.organisation(org.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.allOrganisations });
       // A new review window changes this organisation's Welfare overview.
