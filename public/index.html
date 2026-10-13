@@ -24,6 +24,31 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
+    <!--
+      Pre-paint colour mode. The app's styles arrive with its JavaScript, so
+      until then a dark-mode phone would show a white page. This applies the
+      saved choice (or the device setting) first; next-themes takes over once
+      the app runs. Keep the storage key in sync with THEME_STORAGE_KEY in
+      src/config/colorMode.ts, and #111111 with the dark page background
+      (Chakra's bg.subtle, gray.950).
+    -->
+    <style>
+      html.dark { background-color: #111111; color-scheme: dark; }
+    </style>
+    <script>
+      (function () {
+        try {
+          var preference = localStorage.getItem("presence-pro-theme") || "system";
+          var dark =
+            preference === "dark" ||
+            (preference === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.add(dark ? "dark" : "light");
+        } catch (e) {
+          // Storage blocked: the app still applies the theme once it loads.
+        }
+      })();
+    </script>
     <title>Presence Pro</title>
   </head>
   <body>
