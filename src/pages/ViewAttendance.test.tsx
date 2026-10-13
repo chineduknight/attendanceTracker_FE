@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { useNavigate } from "react-router-dom";
 import { confirmInDialog } from "test-utils/render";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
@@ -237,6 +238,28 @@ describe("<ViewAttendance> with an unresolvable roster member", () => {
     expect(within(placeholder.parentElement as HTMLElement).getByTitle("Late")).toBeInTheDocument();
     expect(placeholder.closest("button")).toBeNull();
     expect(screen.getByText("Xavi")).toBeInTheDocument();
+  });
+
+  it("adds the unresolved entries to the unfiltered status totals", async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    // Present: Zara. Late: the unresolved entry. No Show: Xavi. The tally
+    // adds up to the whole stored roster (3), not just the resolvable rows.
+    expect(screen.getByText("Present:").textContent).toBe("Present: 1");
+    expect(screen.getByText("Late:").textContent).toBe("Late: 1");
+    expect(screen.getByText("Excused:").textContent).toBe("Excused: 0");
+    expect(screen.getByText("No Show:").textContent).toBe("No Show: 1");
+  });
+
+  it("keeps filtered totals describing only the rows that matched", async () => {
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Zara");
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Xavi" },
+    });
+    expect(screen.getByText("Present:").textContent).toBe("Present: 0");
+    expect(screen.getByText("Late:").textContent).toBe("Late: 0");
+    expect(screen.getByText("No Show:").textContent).toBe("No Show: 1");
   });
 });
 
@@ -881,5 +904,227 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(
       (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" })
     ).toBeInTheDocument();
+  });
+});
+
+describe("<ViewAttendance> sharing the session report", () => {
+  const rosterEntry = (
+    memberId: string,
+    name: string,
+    attendanceStatus: string,
+    memberStatus = "active"
+  ) => ({
+    _id: `${memberId}-row`,
+    memberId,
+    attendanceStatus,
+    member: { name, status: memberStatus, gender: "male", part: "tenor" },
+  });
+  const unresolvedEntry = (
+    memberId: string,
+    attendanceStatus: string,
+    extra: Record<string, unknown> = {}
+  ) => ({
+    _id: `${memberId}-row`,
+    memberId,
+    attendanceStatus,
+    member: null,
+    ...extra,
+  });
+  // Ada (active), Bayo (associate) and the manual addition Efe are present;
+  // Chidi is excused; Dayo (probationary) is absent — then three entries whose
+  // profile no longer resolves, covering all three behaviors.
+  const SHARE_SESSION = {
+    name: "Rehearsal",
+    date: "2026-09-01T00:00:00.000Z",
+    attendance: [
+      rosterEntry("s1", "Ada", "present"),
+      rosterEntry("s2", "Bayo", "late", "associate"),
+      rosterEntry("s3", "Chidi", "excused"),
+      rosterEntry("s4", "Dayo", "no_show", "probationary"),
+      {
+        ...rosterEntry("s5", "Efe", "present"),
+        manuallyAdded: true,
+        manualAdditionReason: "Joined the sectional",
+      },
+      unresolvedEntry("s6", "present"),
+      unresolvedEntry("s7", "excused"),
+      unresolvedEntry("s8", "no_show", {
+        manuallyAdded: true,
+        manualAdditionReason: "Came late",
+      }),
+    ],
+  };
+
+  /** Another session of the same organisation, with a different roster. */
+  const OTHER_SESSION = {
+    name: "Sunday Service",
+    date: "2026-09-06T00:00:00.000Z",
+    attendance: [rosterEntry("t1", "Tolu", "present")],
+  };
+
+  const sharedText = (open: jest.SpyInstance): string => {
+    const url = String(open.mock.calls[0][0]);
+    return decodeURIComponent(url.replace("https://wa.me/?text=", ""));
+  };
+
+  const WithSessionSwitcher = () => {
+    const navigate = useNavigate();
+    return (
+      <>
+        <button onClick={() => navigate("/attendance/att2")}>
+          open other session
+        </button>
+        <ViewAttendance />
+      </>
+    );
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+      },
+    });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: { data: url.endsWith("/model") ? { fields: [] } : SHARE_SESSION },
+      })
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("shares the complete stored roster even while page filters are applied", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Ada");
+
+    // The officer narrows the screen to one member; the report must not follow.
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Ada" },
+    });
+    expect(screen.queryByText("Bayo")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+
+    const text = sharedText(open);
+    // Present-behavior: Ada + late Bayo + manual Efe + unresolved; excused:
+    // Chidi + unresolved; absent: Dayo + the unresolved manual addition.
+    // Membership statuses never remove anyone from the figures.
+    expect(text).toContain("✅ Present: 3  |  ✅ Late: 1  |  🟡 Excused: 2");
+    expect(text).toContain("*Tenor — 3*\nBro Ada\nBro Bayo\nBro Efe");
+    expect(text).toContain("*EXCUSED — 2*");
+    expect(text).toContain("Former member (profile unavailable) — Other");
+    expect(text).toContain("*Absent Members: 2*");
+    // The neutral placeholder is never titled and no member id is exposed.
+    expect(text).not.toMatch(/Bro Former|Sis Former/);
+    expect(text).not.toMatch(/\bs[1-8]\b/);
+  });
+
+  it("never shows or shares a previous session's roster after switching sessions", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    let failSecond: ((error: unknown) => void) | undefined;
+    mockGet.mockImplementation((url: string) => {
+      if (url.endsWith("/model")) {
+        return Promise.resolve({ data: { data: { fields: [] } } });
+      }
+      if (url.includes("/att2")) {
+        return new Promise((_resolve, reject) => {
+          failSecond = reject;
+        });
+      }
+      return Promise.resolve({ data: { data: SHARE_SESSION } });
+    });
+    renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Ada");
+
+    fireEvent.click(screen.getByRole("button", { name: "open other session" }));
+
+    // While the new session loads, the previous roster is already gone —
+    // nothing stale on screen and nothing to share.
+    await waitFor(() =>
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument()
+    );
+    expect(
+      screen.queryByRole("button", { name: "Share" })
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => expect(failSecond).toBeDefined());
+    await act(async () => {
+      failSecond?.({ response: { status: 500, data: { error: "Server busy" } } });
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load this attendance");
+    expect(alert).toHaveTextContent("Server busy");
+    expect(
+      screen.queryByRole("button", { name: "Share" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("shares the roster of the session that is actually open", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: {
+          data: url.endsWith("/model")
+            ? { fields: [] }
+            : url.includes("/att2")
+            ? OTHER_SESSION
+            : SHARE_SESSION,
+        },
+      })
+    );
+    renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Ada");
+
+    fireEvent.click(screen.getByRole("button", { name: "open other session" }));
+    await screen.findByText("Tolu");
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    const text = sharedText(open);
+    expect(text).toContain("Bro Tolu");
+    expect(text).toContain("*Absent Members: 0*");
+    expect(text).not.toContain("Bro Ada");
+    expect(text).not.toContain("Former member");
+  });
+
+  it("never shares a previous organisation's roster when the organisation changes", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    mockGet.mockImplementation((url: string) => {
+      if (url.endsWith("/model")) {
+        return Promise.resolve({ data: { data: { fields: [] } } });
+      }
+      if (url.includes("/org2/")) return new Promise(() => undefined);
+      return Promise.resolve({ data: { data: SHARE_SESSION } });
+    });
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Ada");
+
+    act(() => {
+      useGlobalStore.setState({
+        organisation: {
+          ...EMPTY_ORG,
+          id: "org2",
+          attendanceStatuses: CUSTOM_STATUSES,
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument()
+    );
+    expect(
+      screen.queryByRole("button", { name: "Share" })
+    ).not.toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
   });
 });

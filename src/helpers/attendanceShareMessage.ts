@@ -9,25 +9,39 @@ import {
   lowerTerm,
   OrganisationTerminology,
 } from "helpers/organisationPresentation";
+import { unresolvedMemberLabel } from "helpers/storedRoster";
 
 /*
  * WhatsApp summary for one attendance session.
  *
  * Grouping is by behavior (present / excused / absent) so custom statuses such
  * as "Late" land in the right section, and every status mention uses the
- * organisation's own label. The voice-part grouping, Bro/Sis prefixes and the
- * choir closing lines are still choir-specific — a later terminology /
- * share-template phase will make those configurable.
+ * organisation's own label. Figures always come from the complete saved
+ * roster — resolved and unresolved entries, manual additions included — never
+ * from today's membership list or a member's current membership status. The
+ * voice-part grouping, Bro/Sis prefixes and the choir closing lines are still
+ * choir-specific — a later terminology / share-template phase will make those
+ * configurable.
  */
 
 export interface ShareMember {
   attendanceStatus: string;
+  /**
+   * The stored member profile; null when it can no longer be resolved. A null
+   * profile is still part of the saved roster and is counted and listed
+   * exactly like a resolved one — under a neutral placeholder.
+   */
   member: {
     name: string;
+    /**
+     * Membership status ("active", "associate", …). Never consulted when
+     * classifying the recorded attendance: the stored attendance status
+     * decides the behavior, so every recorded absence counts.
+     */
     status: string;
     gender?: string;
     part?: string;
-  };
+  } | null;
 }
 
 export interface ShareMessageInput {
@@ -52,7 +66,7 @@ const BEHAVIOR_EMOJI: Record<AttendanceBehavior, string> = {
 };
 
 const partKeyOf = (item: ShareMember): string =>
-  item.member.part ? item.member.part.toLowerCase() : "others";
+  item.member?.part ? item.member.part.toLowerCase() : "others";
 
 const partLabelOf = (partKey: string): string =>
   partKey === "others" ? "Other" : capitalize(partKey);
@@ -63,13 +77,24 @@ const partRankOf = (item: ShareMember): number => {
   return index === -1 ? VOICE_PART_ORDER.length : index;
 };
 
-const memberDisplayName = (item: ShareMember): string => {
+const memberDisplayName = (
+  item: ShareMember,
+  unresolvedLabel: string,
+): string => {
+  // An unresolved profile is never given an invented name — or a Bro/Sis
+  // title, whose gender cannot be known.
+  if (!item.member) return unresolvedLabel;
   const isMale = item.member.gender?.toLowerCase() === "male";
   return `${isMale ? "Bro" : "Sis"} ${item.member.name}`;
 };
 
-const byMemberName = (a: ShareMember, b: ShareMember): number =>
-  a.member.name.toLowerCase().localeCompare(b.member.name.toLowerCase());
+// Names sort alphabetically; entries whose profile no longer resolves have no
+// stored name and keep their stored order at the end of a group.
+const byMemberName = (a: ShareMember, b: ShareMember): number => {
+  if (!a.member) return b.member ? 1 : 0;
+  if (!b.member) return -1;
+  return a.member.name.toLowerCase().localeCompare(b.member.name.toLowerCase());
+};
 
 const orderedPartKeys = (keys: string[]): string[] => {
   const known = VOICE_PART_ORDER.filter((part) => keys.includes(part));
@@ -128,10 +153,14 @@ export const buildAttendanceShareMessage = ({
     statuses.resolve(item.attendanceStatus).behavior;
   const presentMembers = members.filter((item) => behaviorOf(item) === "present");
   const excusedMembers = members.filter((item) => behaviorOf(item) === "excused");
-  // Absent count only reflects active members, matching the on-screen figures.
+  // Every stored entry whose status resolves to absent behavior counts — the
+  // member's membership status never decides whether they were absent. Each
+  // entry resolves to exactly one behavior (unknown keys fail closed), so
+  // present + excused + absent always equals the saved roster count.
   const absentCount = members.filter(
-    (item) => behaviorOf(item) === "absent" && item.member.status === "active",
+    (item) => behaviorOf(item) === "absent",
   ).length;
+  const unresolvedLabel = unresolvedMemberLabel(terminology.memberSingular);
 
   // Header: org name, session name, date, and a compact non-absent summary
   // using the organisation's own status labels.
@@ -163,7 +192,7 @@ export const buildAttendanceShareMessage = ({
           const group = [...presentByPart[partKey]].sort(byMemberName);
           return [
             `*${partLabelOf(partKey)} — ${group.length}*`,
-            ...group.map(memberDisplayName),
+            ...group.map((item) => memberDisplayName(item, unresolvedLabel)),
           ].join("\n");
         })
         .join("\n\n")
@@ -183,7 +212,10 @@ export const buildAttendanceShareMessage = ({
         ...[...excusedMembers]
           .sort((a, b) => partRankOf(a) - partRankOf(b) || byMemberName(a, b))
           .map((item) => {
-            const line = `${memberDisplayName(item)} — ${partLabelOf(partKeyOf(item))}`;
+            const line = `${memberDisplayName(
+              item,
+              unresolvedLabel,
+            )} — ${partLabelOf(partKeyOf(item))}`;
             return excusedKeys.size > 1
               ? `${line} (${statuses.resolve(item.attendanceStatus).label})`
               : line;
