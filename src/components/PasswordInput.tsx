@@ -15,13 +15,15 @@ const PasswordInput = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
       endElementProps={{ pe: 0 }}
       endElement={
         // 44px tap target inside a 40px field: plain variant, so the extra
-        // 2px above and below has nothing to draw.
+        // 2px above and below has nothing to draw. In the tab order so
+        // keyboard users can check what they typed; type="button" so
+        // toggling never submits the surrounding form.
         <IconButton
+          type="button"
           variant="plain"
           color="fg.muted"
           boxSize="44px"
           minW="44px"
-          tabIndex={-1}
           aria-label={show ? "Hide password" : "Show password"}
           onClick={() => setShow((prev) => !prev)}
         >

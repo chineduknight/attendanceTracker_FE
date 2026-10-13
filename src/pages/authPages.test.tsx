@@ -1,10 +1,12 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { queryClient } from "services/api/apiHelper";
 import Login from "pages/Login";
 import Signup from "pages/Signup";
 import ForgotPassword from "pages/ForgotPassword";
 import ResetPassword from "pages/ResetPassword";
 import BrandMark from "components/auth/BrandMark";
+import ChangePasswordModal from "components/auth/ChangePasswordModal";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { generatedCss, render } from "test-utils/render";
 import useGlobalStore, { EMPTY_USER } from "zStore";
@@ -12,7 +14,7 @@ import useGlobalStore, { EMPTY_USER } from "zStore";
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
-  default: { post: jest.fn() },
+  default: { post: jest.fn(), patch: jest.fn() },
 }));
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 
@@ -23,7 +25,7 @@ jest.mock("react-router-dom", () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const api = require("services/api").default as { post: jest.Mock };
+const api = require("services/api").default as { post: jest.Mock; patch: jest.Mock };
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { toast } = require("react-toastify");
 
@@ -186,5 +188,38 @@ describe("<BrandMark>", () => {
     expect(wordmark).toHaveTextContent("Presence Pro");
     expect(generatedCss(wordmark)).toMatch(/linear-gradient/);
     expect(generatedCss(wordmark)).toMatch(/background-clip: text/);
+  });
+});
+
+// Every form using PasswordInput: the show/hide toggle is reachable by Tab
+// from its field and toggling with the keyboard never submits the form.
+describe("password show/hide toggle on each form", () => {
+  const toggleFromKeyboard = (field: HTMLElement) => {
+    userEvent.type(field, "secret1");
+    userEvent.tab();
+    // The field's own toggle: each form's first password field is the one typed in.
+    expect(screen.getAllByRole("button", { name: "Show password" })[0]).toHaveFocus();
+    userEvent.keyboard("{Enter}");
+    expect(field).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toHaveFocus();
+    userEvent.keyboard(" ");
+    expect(field).toHaveAttribute("type", "password");
+  };
+
+  it.each([
+    ["Login", () => renderRoute(<Login />, "/login", "/login"), /^Password/],
+    ["Signup", () => renderRoute(<Signup />, "/signup", "/signup"), /^Password/],
+    ["Reset password", () => renderRoute(<ResetPassword />, "/reset-password", "/reset-password?token=abc"), /^New password/],
+  ])("%s", (_name, renderPage, label) => {
+    renderPage();
+    toggleFromKeyboard(screen.getByLabelText(label, { selector: "input" }));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("Change password", async () => {
+    renderRoute(<ChangePasswordModal isOpen onClose={jest.fn()} />, "/", "/");
+    const dialog = await screen.findByRole("dialog");
+    toggleFromKeyboard(within(dialog).getByLabelText(/^Current password/, { selector: "input" }));
+    expect(api.patch).not.toHaveBeenCalled();
   });
 });
