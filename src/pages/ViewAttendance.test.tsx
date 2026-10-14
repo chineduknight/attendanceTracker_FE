@@ -1029,12 +1029,67 @@ describe("<ViewAttendance> sharing the session report", () => {
     expect(text).toContain(
       "*Other — 2*\nFormer member (profile unavailable)\nFormer member (profile unavailable)",
     );
-    expect(text).toContain("*EXCUSED — 2*");
-    expect(text).toContain("Former member (profile unavailable) — Other");
+    expect(text).toContain("*EXCUSED — 2*\nBro Chidi — Tenor\nFormer member (profile unavailable)");
+    expect(text).not.toContain("— Other");
     expect(text).toContain("*Absent Members: 1*");
     // The neutral placeholder is never titled and no member id is exposed.
     expect(text).not.toMatch(/Bro Former|Sis Former/);
     expect(text).not.toMatch(/\bs[1-8]\b/);
+  });
+
+  it("shares with the generic template when the organisation uses it", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        name: "Lakeside Tennis Club",
+        attendanceStatuses: CUSTOM_STATUSES,
+        attendanceShareTemplate: "generic",
+      },
+    });
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Ada");
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    const text = sharedText(open);
+    expect(text.startsWith("*LAKESIDE TENNIS CLUB ATTENDANCE*")).toBe(true);
+    // Same Stage 1 figures, plain names, no grouping or titles.
+    expect(text).toContain("✅ Present: 3  |  ✅ Late: 2  |  🟡 Excused: 2");
+    expect(text).toContain(
+      "*PRESENT MEMBERS — 5*\n\nAda\nBayo\nEfe\nFormer member (profile unavailable)\nFormer member (profile unavailable)",
+    );
+    expect(text).toContain("*EXCUSED — 2*\nChidi\nFormer member (profile unavailable)");
+    expect(text).toContain("*Absent Members: 1*");
+    expect(text).not.toMatch(/🎶|\bBro\b|\bSis\b|Tenor|\bOther\b|choir/i);
+  });
+
+  it("uses a newly saved template for the next share without reloading the session", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+    await screen.findByText("Ada");
+    const sessionLoads = mockGet.mock.calls.filter(([url]) => url.includes("/att1")).length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(sharedText(open)).toContain("Bro Ada");
+
+    // Organisation Settings saved Generic for this organisation.
+    act(() => {
+      useGlobalStore.setState({
+        organisation: {
+          ...useGlobalStore.getState().organisation,
+          attendanceShareTemplate: "generic",
+        },
+      });
+    });
+    open.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    const text = sharedText(open);
+    expect(text).toContain("*PRESENT MEMBERS — 5*\n\nAda\nBayo\nEfe");
+    expect(text).not.toContain("Bro ");
+    expect(
+      mockGet.mock.calls.filter(([url]) => url.includes("/att1")).length,
+    ).toBe(sessionLoads);
   });
 
   it("never shows or shares a previous session's roster after switching sessions", async () => {

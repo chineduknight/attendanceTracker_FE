@@ -6,6 +6,7 @@ import {
   TERM_KEYS,
 } from "helpers/organisationPresentation";
 import { parseWelfareReviewWindow, WelfareSettings } from "helpers/welfareSettings";
+import { AttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 
 export interface OrgSettingsForm {
   name: string;
@@ -18,6 +19,7 @@ export interface OrgSettingsForm {
   welfareReviewWindowDays: string;
   terminology: OrganisationTerminology;
   featureVisibility: OrganisationFeatureVisibility;
+  attendanceShareTemplate: AttendanceShareTemplate;
 }
 
 export interface OrgUpdatePayload {
@@ -33,6 +35,8 @@ export interface OrgUpdatePayload {
   /** Sent only to a backend that supports presentation settings. */
   terminology?: OrganisationTerminology;
   featureVisibility?: OrganisationFeatureVisibility;
+  /** Sent only to a backend that supports the share template setting. */
+  attendanceShareTemplate?: AttendanceShareTemplate;
 }
 
 /**
@@ -42,9 +46,9 @@ export interface OrgUpdatePayload {
  * A blank `maxAttendanceEdits` maps to `null` so the BE applies its default.
  * Attendance statuses, terminology and module visibility travel in the same
  * body — terminology and visibility always complete, as the backend requires —
- * so saving one setting never wipes another. Presentation settings and the
- * eligibility switch are each only included for a backend that returned them
- * (an older validator rejects unknown fields).
+ * so saving one setting never wipes another. Presentation settings, the
+ * eligibility switch and the share template are each only included for a
+ * backend that returned them (an older validator rejects unknown fields).
  */
 export const buildOrgUpdatePayload = (
   form: OrgSettingsForm,
@@ -53,7 +57,13 @@ export const buildOrgUpdatePayload = (
     includePresentation = true,
     includeEligibilitySetting = true,
     includeWelfareSettings = true,
-  }: { includePresentation?: boolean; includeEligibilitySetting?: boolean; includeWelfareSettings?: boolean } = {},
+    includeShareTemplate = true,
+  }: {
+    includePresentation?: boolean;
+    includeEligibilitySetting?: boolean;
+    includeWelfareSettings?: boolean;
+    includeShareTemplate?: boolean;
+  } = {},
 ): OrgUpdatePayload => {
   const trimmedMax = form.maxAttendanceEdits.trim();
   return {
@@ -69,6 +79,9 @@ export const buildOrgUpdatePayload = (
       welfareSettings: {
         reviewWindowDays: parseWelfareReviewWindow(form.welfareReviewWindowDays),
       },
+    }),
+    ...(includeShareTemplate && {
+      attendanceShareTemplate: form.attendanceShareTemplate,
     }),
     ...(includePresentation && {
 

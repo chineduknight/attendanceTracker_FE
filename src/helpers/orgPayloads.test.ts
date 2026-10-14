@@ -18,6 +18,7 @@ describe("buildOrgUpdatePayload", () => {
     welfareReviewWindowDays: "",
     terminology: { ...DEFAULT_TERMINOLOGY },
     featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+    attendanceShareTemplate: "generic" as const,
   };
   const rows = toStatusRows(DEFAULT_ATTENDANCE_STATUSES);
 
@@ -34,6 +35,7 @@ describe("buildOrgUpdatePayload", () => {
       welfareSettings: { reviewWindowDays: 14 },
       terminology: { ...DEFAULT_TERMINOLOGY },
       featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+      attendanceShareTemplate: "generic",
     });
   });
 
@@ -70,6 +72,7 @@ describe("buildOrgUpdatePayload", () => {
         welfareReviewWindowDays: "",
         terminology: { ...DEFAULT_TERMINOLOGY },
         featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+        attendanceShareTemplate: "choir",
       },
       rows,
     );
@@ -138,6 +141,7 @@ describe("buildOrgUpdatePayload", () => {
       },
       featureVisibility: { finance: false, birthdays: false, analytics: true, welfare: false },
       welfareSettings: { reviewWindowDays: 14 },
+      attendanceShareTemplate: "generic",
     });
   });
 
@@ -158,6 +162,7 @@ describe("buildOrgUpdatePayload", () => {
         welfareSettings: { reviewWindowDays: 14 },
         terminology: { ...DEFAULT_TERMINOLOGY },
         featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+        attendanceShareTemplate: "generic",
       });
     });
 
@@ -210,5 +215,45 @@ describe("buildOrgUpdatePayload", () => {
       expect(result.terminology).toEqual(DEFAULT_TERMINOLOGY);
     });
   });
-});
 
+  describe("attendance share template", () => {
+    it.each(["generic", "choir"] as const)(
+      "sends %s with every other setting for a supporting backend",
+      (template) => {
+        const result = buildOrgUpdatePayload(
+          { ...base, maxAttendanceEdits: "2", attendanceShareTemplate: template },
+          rows,
+        );
+        expect(result.attendanceShareTemplate).toBe(template);
+        expect(result).toMatchObject({
+          maxAttendanceEdits: 2,
+          attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
+          attendanceEligibilityEnabled: false,
+          welfareSettings: { reviewWindowDays: 14 },
+          terminology: { ...DEFAULT_TERMINOLOGY },
+          featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+        });
+      },
+    );
+
+    it("omits the template for an older backend, keeping every other setting", () => {
+      const result = buildOrgUpdatePayload(
+        { ...base, maxAttendanceEdits: "2" },
+        rows,
+        { includeShareTemplate: false },
+      );
+      expect(result).not.toHaveProperty("attendanceShareTemplate");
+      expect(result).toEqual({
+        name: "VOB Choir",
+        image: "https://cdn.example.com/logo.png",
+        collapseAttendanceByDay: true,
+        maxAttendanceEdits: 2,
+        attendanceStatuses: DEFAULT_ATTENDANCE_STATUSES,
+        attendanceEligibilityEnabled: false,
+        welfareSettings: { reviewWindowDays: 14 },
+        terminology: { ...DEFAULT_TERMINOLOGY },
+        featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+      });
+    });
+  });
+});

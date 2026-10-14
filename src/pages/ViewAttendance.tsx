@@ -39,6 +39,7 @@ import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
 import { buildAttendanceShareMessage, ShareMember } from "helpers/attendanceShareMessage";
+import { effectiveAttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 import {
   AttendanceEligibilityRule,
   eligibilityIssues,
@@ -329,6 +330,9 @@ const Attendance = () => {
       members: attendanceInfo.shareRoster,
       statuses,
       terminology: terms,
+      // Read at share time, so a template saved in Settings applies to the
+      // next message without reloading the session.
+      template: effectiveAttendanceShareTemplate(org),
     });
     if (navigator.share) {
       navigator.share({ title: "", text: message }).catch(() => {

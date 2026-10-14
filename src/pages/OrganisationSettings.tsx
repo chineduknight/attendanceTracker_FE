@@ -55,6 +55,12 @@ import {
   effectiveWelfareSettings,
   welfareReviewWindowError,
 } from "helpers/welfareSettings";
+import {
+  AttendanceShareTemplate,
+  effectiveAttendanceShareTemplate,
+  isAttendanceShareTemplate,
+} from "helpers/attendanceShareTemplate";
+import AttendanceShareTemplateSettings from "components/settings/AttendanceShareTemplateSettings";
 
 const DEFAULT_MAX_EDITS = 1;
 
@@ -99,6 +105,7 @@ const OrganisationSettings = () => {
       ),
       terminology: effectiveTerminology(org),
       featureVisibility: effectiveFeatureVisibility(org),
+      attendanceShareTemplate: effectiveAttendanceShareTemplate(org),
     },
   });
   // Only a backend that returns presentation settings can store them; an
@@ -110,12 +117,19 @@ const OrganisationSettings = () => {
   // And only a backend that serialises welfare settings accepts them back.
   const [welfareSettingsSupported, setWelfareSettingsSupported] =
     useState(false);
+  // And only a backend that returns a valid share template accepts one; an
+  // older backend keeps today's choir layout and is never sent the key.
+  const [shareTemplateSupported, setShareTemplateSupported] = useState(false);
   // The organisation a save was submitted for; its reply may land after a switch.
   const savingOrgId = useRef<string | null>(null);
   // The eligibility switch as submitted, when the backend supports it.
   const savingEligibility = useRef<boolean | undefined>(undefined);
   // The review window as submitted, when the backend supports it.
   const savingWelfareWindow = useRef<number | undefined>(undefined);
+  // The share template as submitted, when the backend supports it.
+  const savingShareTemplate = useRef<AttendanceShareTemplate | undefined>(
+    undefined,
+  );
 
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
@@ -157,6 +171,7 @@ const OrganisationSettings = () => {
         ),
         terminology: effectiveTerminology(data),
         featureVisibility: effectiveFeatureVisibility(data),
+        attendanceShareTemplate: effectiveAttendanceShareTemplate(data),
       });
       setPresentationSupported(
         data.terminology != null && data.featureVisibility != null,
@@ -166,6 +181,9 @@ const OrganisationSettings = () => {
       );
       setWelfareSettingsSupported(
         typeof data.welfareSettings?.reviewWindowDays === "number",
+      );
+      setShareTemplateSupported(
+        isAttendanceShareTemplate(data.attendanceShareTemplate),
       );
       setStatusRows(toStatusRows(data.attendanceStatuses));
       setStatusErrors([]);
@@ -191,6 +209,9 @@ const OrganisationSettings = () => {
         }),
         ...(savingWelfareWindow.current !== undefined && {
           welfareSettings: { reviewWindowDays: savingWelfareWindow.current },
+        }),
+        ...(savingShareTemplate.current !== undefined && {
+          attendanceShareTemplate: savingShareTemplate.current,
         }),
         ...res.data,
       });
@@ -219,10 +240,12 @@ const OrganisationSettings = () => {
       includePresentation: presentationSupported,
       includeEligibilitySetting: eligibilitySettingSupported,
       includeWelfareSettings: welfareSettingsSupported,
+      includeShareTemplate: shareTemplateSupported,
     });
     savingOrgId.current = org.id;
     savingEligibility.current = data.attendanceEligibilityEnabled;
     savingWelfareWindow.current = data.welfareSettings?.reviewWindowDays;
+    savingShareTemplate.current = data.attendanceShareTemplate;
     mutate({ url, data });
   };
 
@@ -360,6 +383,16 @@ const OrganisationSettings = () => {
                   errors={statusErrors}
                   isReadOnly={!canManage}
                 />
+
+                {shareTemplateSupported && (
+                  <>
+                    <Separator />
+                    <AttendanceShareTemplateSettings
+                      control={control}
+                      isReadOnly={!canManage}
+                    />
+                  </>
+                )}
 
                 {welfareSettingsSupported && (
                   <>

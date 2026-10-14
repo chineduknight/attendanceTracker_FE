@@ -12,6 +12,7 @@ import {
   AttendanceStatusDefinition,
   DEFAULT_ATTENDANCE_STATUSES,
 } from "helpers/attendanceStatuses";
+import { AttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 import {
   DEFAULT_WELFARE_REVIEW_WINDOW_DAYS,
   WelfareSettings,
@@ -86,6 +87,11 @@ export type OrganisationType = {
    * the welfareSettings helper.
    */
   welfareSettings?: WelfareSettings;
+  /**
+   * WhatsApp share layout. Optional for the same reason — always read via
+   * effectiveAttendanceShareTemplate, which falls back to choir.
+   */
+  attendanceShareTemplate?: AttendanceShareTemplate;
 };
 
 export const EMPTY_USER: UserType = {
