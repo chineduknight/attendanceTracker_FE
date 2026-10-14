@@ -1,4 +1,5 @@
-import { Button, Input, Stack, NativeSelect, Field } from "@chakra-ui/react";
+import { Button, Input, Stack, Field } from "@chakra-ui/react";
+import { FormOptionSelect } from "components/ui/themed-select";
 import { useNavigate } from "react-router-dom";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { FaLayerGroup } from "react-icons/fa";
@@ -25,7 +26,7 @@ const SubCategory = () => {
   const navigate = useNavigate();
   const { categories, isLoading: isGettingCat, isError, error, refetch, isRefetching } =
     useCategories(org.id);
-  const { register, handleSubmit, resetField, setFocus, watch, formState: { errors } } =
+  const { register, control, handleSubmit, resetField, setFocus, watch, formState: { errors } } =
     useForm<Inputs>({ defaultValues: { categoryId: "", name: "" } });
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, () => {
@@ -84,19 +85,16 @@ const SubCategory = () => {
       >
         <Field.Root invalid={Boolean(errors.categoryId)} required>
           <Field.Label>{terms.categorySingular}</Field.Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field
-              placeholder={`Choose ${lowerTerm(terms.categorySingular)}`}
-              {...register("categoryId", { required: `Choose ${lowerTerm(terms.categorySingular)}` })}
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </NativeSelect.Field>
-            <NativeSelect.Indicator />
-          </NativeSelect.Root>
+          <FormOptionSelect
+            control={control}
+            name="categoryId"
+            rules={{ required: `Choose ${lowerTerm(terms.categorySingular)}` }}
+            placeholder={`Choose ${lowerTerm(terms.categorySingular)}`}
+            options={categories.map((category) => ({
+              value: category.id,
+              label: category.name,
+            }))}
+          />
           <Field.ErrorText>{errors.categoryId?.message}</Field.ErrorText>
         </Field.Root>
         <Field.Root invalid={Boolean(errors.name)} required>

@@ -1,4 +1,5 @@
-import { CloseButton, Input, NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Input, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { FormOptionSelect } from "components/ui/themed-select";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { toast } from "react-toastify";
 import { useQueryWrapper, postRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
@@ -18,7 +19,7 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
   const { data: rolesData } = useQueryWrapper(queryKeys.rbac.roles(organisationId), rolesUrl, { enabled: isOpen });
   const roles: Role[] = rolesData?.data ?? [];
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<InviteInputs>();
+  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<InviteInputs>();
 
   const onSuccess = (res: { data: InviteResponse }) => {
     if ("attached" in res.data) toast.success(`${terms.officerSingular} added`);
@@ -58,14 +59,13 @@ const InviteOfficerModal = ({ organisationId, isOpen, onClose }: Props) => {
                 </Field.Root>
                 <Field.Root invalid={!!errors.roleId}>
                   <Field.Label>Role</Field.Label>
-                  <NativeSelect.Root>
-                    <NativeSelect.Field
-                      placeholder="Select role"
-                      {...register("roleId", { required: "Role is required" })}>
-                      {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
+                  <FormOptionSelect
+                    control={control}
+                    name="roleId"
+                    rules={{ required: "Role is required" }}
+                    placeholder="Select role"
+                    options={roles.map((r) => ({ value: r.id, label: r.name }))}
+                  />
                   <Field.ErrorText>{errors.roleId?.message}</Field.ErrorText>
                 </Field.Root>
               </Dialog.Body>

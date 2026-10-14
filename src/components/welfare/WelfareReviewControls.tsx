@@ -1,4 +1,5 @@
-import { Box, Button, Flex, NativeSelect, Field } from "@chakra-ui/react";
+import { Box, Button, Flex, Field } from "@chakra-ui/react";
+import { OptionSelect } from "components/ui/themed-select";
 import { DateField } from "components/ui/date-field";
 import { useTerms } from "hooks/useOrgPresentation";
 import { ALL_STATUSES } from "helpers/welfareReview";
@@ -75,20 +76,15 @@ const WelfareReviewControls = ({
           <Field.Label htmlFor="welfare-status" fontSize="sm" mb={1}>
             {`${terms.memberSingular} status`}
           </Field.Label>
-          <NativeSelect.Root size={{ base: "md", md: "sm" }}>
-            <NativeSelect.Field
-              id="welfare-status"
-              value={status}
-              onChange={(event) => onStatusChange(event.target.value)}>
-              <option value={ALL_STATUSES}>All</option>
-              {statusOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </NativeSelect.Field>
-            <NativeSelect.Indicator />
-          </NativeSelect.Root>
+          <OptionSelect
+            inputId="welfare-status"
+            options={[
+              { value: ALL_STATUSES, label: "All" },
+              ...statusOptions.map((option) => ({ value: option, label: option })),
+            ]}
+            value={status}
+            onChange={onStatusChange}
+          />
         </Field.Root>
       )}
     </Flex>

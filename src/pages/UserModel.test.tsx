@@ -11,7 +11,7 @@ import UserModel from "pages/UserModel";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
-import { generatedCss, toggle } from "test-utils/render";
+import { generatedCss, toggle, chooseOption } from "test-utils/render";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -147,7 +147,7 @@ describe("<UserModel>", () => {
     expect(within(draft).getByRole("button", { name: "Remove" })).toBeInTheDocument();
     fireEvent.change(labelInput(draft), { target: { value: "Voice Range" } });
     expect(keyInput(draft).value).toBe("voice_range");
-    fireEvent.change(within(draft).getByLabelText("Field type"), { target: { value: "option" } });
+    await chooseOption(within(draft).getByLabelText("Field type"), "option");
     fireEvent.change(within(draft).getByLabelText(/Options/), { target: { value: "High, Low" } });
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 

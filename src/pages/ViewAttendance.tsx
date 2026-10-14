@@ -1,5 +1,6 @@
 import {
   Box,
+  chakra,
   Flex,
   Text,
   Button,
@@ -27,7 +28,7 @@ import {
   FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { MultiValue } from "react-select";
+import { MultiValue, StylesConfig } from "react-select";
 import { ThemedSelect } from "components/ui/themed-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
@@ -151,6 +152,28 @@ const nextMultiFilter = (values: string[]): string[] => {
   return values.filter((v) => v !== ALL);
 };
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
+
+/** The small caption above each roster filter. */
+const FilterLabel = chakra("label", {
+  base: {
+    display: "block",
+    fontSize: "sm",
+    fontWeight: "medium",
+    color: "fg.muted",
+    mb: 1,
+    lineClamp: 1,
+  },
+});
+
+// The two filters share a 320px row: tighten the padding. "All" has no ✕ — removing it only puts it back — so a tap on the
+// chip, in the middle of a narrow control, opens the menu instead.
+const COMPACT_FILTER_STYLES: StylesConfig<StatusOption, true> = {
+  valueContainer: (base) => ({ ...base, paddingLeft: 8, paddingRight: 2 }),
+  multiValueLabel: (base, { data }) =>
+    data.value === ALL ? { ...base, paddingRight: 6 } : base,
+  multiValueRemove: (base, { data }) =>
+    data.value === ALL ? { display: "none" } : base,
+};
 
 const Attendance = () => {
   const { confirm, confirmDialog } = useConfirm();
@@ -525,18 +548,26 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            {/* Stacked on phones (side by side, each half of 320px showed only
-                "A…"); side by side from sm up. */}
-            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
+            {/* Side by side at every width. Neither filter has a clear-all ✕:
+                choosing "All" (or a chip's own ✕) already resets it, and the
+                44px button left half of a 320px screen showing only "A…". */}
+            <Flex mt="4" gap={2}>
               <Box flex="1" minW={0}>
+                {/* Both filters read "All" until used: the label says which is which. */}
+                <FilterLabel htmlFor="attendance-status-filter">
+                  {`${terms.attendanceSingular} status`}
+                </FilterLabel>
                 <ThemedSelect
                   isMulti
+                  inputId="attendance-status-filter"
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
                   )} status`}
                   placeholder={`${terms.attendanceSingular} status`}
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
+                  isClearable={false}
+                  styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
@@ -544,12 +575,18 @@ const Attendance = () => {
                 />
               </Box>
               <Box flex="1" minW={0}>
+                <FilterLabel htmlFor="member-status-filter">
+                  {`${terms.memberSingular} status`}
+                </FilterLabel>
                 <ThemedSelect
                   isMulti
+                  inputId="member-status-filter"
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
+                  isClearable={false}
+                  styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))

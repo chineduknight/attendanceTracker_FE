@@ -6,11 +6,11 @@ import {
   IconButton,
   Menu,
   Progress,
-  NativeSelect,
   Stack,
   Text,
   Portal,
 } from "@chakra-ui/react";
+import { OptionSelect } from "components/ui/themed-select";
 import { FaChevronRight, FaEllipsisV, FaFileExcel, FaFilePdf } from "react-icons/fa";
 import { formatMoney } from "helpers/financeConstants";
 import {
@@ -151,21 +151,16 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
   return (
     <Stack gap={4}>
       <Flex gap={2} align="center">
-        <NativeSelect.Root>
-          <NativeSelect.Field
-            aria-label="Obligation"
-            value={obligationId}
-            onChange={(e) => onObligationChange(e.target.value)}
-            bg="bg.panel"
-            fontWeight="semibold">
-            {obligations.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </NativeSelect.Field>
-          <NativeSelect.Indicator />
-        </NativeSelect.Root>
+        <OptionSelect
+          aria-label="Obligation"
+          options={obligations.map((o) => ({ value: o.id, label: o.name }))}
+          value={obligationId}
+          onChange={onObligationChange}
+          styles={{
+            container: (base) => ({ ...base, flex: 1, minWidth: 0 }),
+            singleValue: (base) => ({ ...base, fontWeight: 600 }),
+          }}
+        />
         <Menu.Root positioning={{
           placement: 'bottom-end'
         }}>
@@ -293,21 +288,23 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                 ]}
               />
             </Box>
-            <NativeSelect.Root w="auto" flexShrink={0}>
-              <NativeSelect.Field
+            <Box flexShrink={0} w={{ base: "9rem", md: "48" }}>
+              <OptionSelect<CollectSort>
                 aria-label="Sort"
+                options={sortOptions.map((key) => ({
+                  value: key,
+                  label: COLLECT_SORT_LABELS[key],
+                }))}
                 value={sort}
-                onChange={(e) => setSort(e.target.value as CollectSort)}
-                bg="bg.panel"
-                maxW={{ base: "9rem", md: "48" }}>
-                {sortOptions.map((key) => (
-                  <option key={key} value={key}>
-                    {COLLECT_SORT_LABELS[key]}
-                  </option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+                onChange={setSort}
+                // A 9rem box at 320px: trimmed padding and chevron (the whole
+                // control opens the menu) leave room for "Name (A–Z)".
+                styles={{
+                  valueContainer: (base) => ({ ...base, paddingLeft: 10, paddingRight: 0 }),
+                  dropdownIndicator: (base) => ({ ...base, minWidth: 32, paddingInline: 4 }),
+                }}
+              />
+            </Box>
           </Flex>
 
           <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>

@@ -1,4 +1,5 @@
-import { Box, Flex, Text, Stack, Button, Badge, NativeSelect, IconButton } from "@chakra-ui/react";
+import { Box, Flex, Text, Stack, Button, Badge, IconButton } from "@chakra-ui/react";
+import { OptionSelect } from "components/ui/themed-select";
 import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { useQueryWrapper } from "services/api/apiHelper";
@@ -141,20 +142,19 @@ const AllAttendance = () => {
           />
         ) : allAttend.length ? (
           <>
-            <NativeSelect.Root>
-              <NativeSelect.Field
-                aria-label="Filter by analytics inclusion"
-                value={inclusionFilter}
-                onChange={(e) => {
-                  setInclusionFilter(e.target.value as AnalyticsInclusionFilter);
-                  setShownCount(PAGE_SIZE);
-                }}>
-                <option value="all">All</option>
-                <option value="included">Included in analytics</option>
-                <option value="excluded">Excluded from analytics</option>
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+            <OptionSelect<AnalyticsInclusionFilter>
+              aria-label="Filter by analytics inclusion"
+              options={[
+                { value: "all", label: "All" },
+                { value: "included", label: "Included in analytics" },
+                { value: "excluded", label: "Excluded from analytics" },
+              ]}
+              value={inclusionFilter}
+              onChange={(next) => {
+                setInclusionFilter(next);
+                setShownCount(PAGE_SIZE);
+              }}
+            />
             {visibleAttendance.length === 0 && (
               <EmptyState
                 title={`No ${lowerTerm(terms.attendanceSingular)} matches this filter.`}

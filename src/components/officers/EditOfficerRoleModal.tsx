@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { CloseButton, NativeSelect, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Button, Field, Dialog, Portal } from "@chakra-ui/react";
+import { OptionSelect } from "components/ui/themed-select";
 import { useQueryWrapper, patchRequest, useMutationWrapper, queryClient } from "services/api/apiHelper";
 import { rbacRequest } from "services";
 import { convertParamsToString } from "helpers/stringManipulations";
@@ -47,12 +48,11 @@ const EditOfficerRoleModal = ({ organisationId, officer, onClose }: Props) => {
             <Dialog.Body>
               <Field.Root>
                 <Field.Label>Role</Field.Label>
-                <NativeSelect.Root>
-                  <NativeSelect.Field value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-                    {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </NativeSelect.Field>
-                  <NativeSelect.Indicator />
-                </NativeSelect.Root>
+                <OptionSelect
+                  options={roles.map((r) => ({ value: r.id, label: r.name }))}
+                  value={roleId}
+                  onChange={setRoleId}
+                />
               </Field.Root>
             </Dialog.Body>
             <Dialog.Footer>
