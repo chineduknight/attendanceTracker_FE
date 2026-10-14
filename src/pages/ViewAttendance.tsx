@@ -1,5 +1,6 @@
 import {
   Box,
+  chakra,
   Flex,
   Text,
   Button,
@@ -151,6 +152,18 @@ const nextMultiFilter = (values: string[]): string[] => {
   return values.filter((v) => v !== ALL);
 };
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
+
+/** The small caption above each roster filter. */
+const FilterLabel = chakra("label", {
+  base: {
+    display: "block",
+    fontSize: "sm",
+    fontWeight: "medium",
+    color: "fg.muted",
+    mb: 1,
+    lineClamp: 1,
+  },
+});
 
 // The two filters share a 320px row: tighten the padding. "All" has no ✕ — removing it only puts it back — so a tap on the
 // chip, in the middle of a narrow control, opens the menu instead.
@@ -540,8 +553,13 @@ const Attendance = () => {
                 44px button left half of a 320px screen showing only "A…". */}
             <Flex mt="4" gap={2}>
               <Box flex="1" minW={0}>
+                {/* Both filters read "All" until used: the label says which is which. */}
+                <FilterLabel htmlFor="attendance-status-filter">
+                  {`${terms.attendanceSingular} status`}
+                </FilterLabel>
                 <ThemedSelect
                   isMulti
+                  inputId="attendance-status-filter"
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
                   )} status`}
@@ -557,8 +575,12 @@ const Attendance = () => {
                 />
               </Box>
               <Box flex="1" minW={0}>
+                <FilterLabel htmlFor="member-status-filter">
+                  {`${terms.memberSingular} status`}
+                </FilterLabel>
                 <ThemedSelect
                   isMulti
+                  inputId="member-status-filter"
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}

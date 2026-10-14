@@ -66,6 +66,29 @@ describe("<ViewAttendance> with configured statuses", () => {
       .getAllByText(/^(Zara|Yemi|Xavi|Wale|Vera|Uche)$/)
       .map((node) => node.textContent);
 
+  it("labels both filters with the organisation's terms", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        attendanceStatuses: CUSTOM_STATUSES,
+        terminology: { ...DEFAULT_TERMINOLOGY, memberSingular: "Chorister" },
+      },
+    });
+    renderPage();
+    await screen.findByText("Zara");
+    // Both read "All" until used, so each carries a visible caption that
+    // also stays part of its accessible name.
+    expect(screen.getByText("Attendance status", { selector: "label" })).toHaveAttribute(
+      "for",
+      screen.getByLabelText("Filter by attendance status").id,
+    );
+    expect(screen.getByText("Chorister status", { selector: "label" })).toHaveAttribute(
+      "for",
+      screen.getByLabelText("Filter by chorister status").id,
+    );
+  });
+
   it("sorts by configured status order with unknown statuses last", async () => {
     renderPage();
     await screen.findByText("Zara");
