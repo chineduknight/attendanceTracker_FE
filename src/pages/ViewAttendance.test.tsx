@@ -1027,6 +1027,9 @@ describe("<ViewAttendance> sharing the session report", () => {
         <button onClick={() => navigate("/attendance/att2")}>
           open other session
         </button>
+        <button onClick={() => navigate("/attendance/att1")}>
+          back to first session
+        </button>
         <ViewAttendance />
       </>
     );
@@ -1195,6 +1198,8 @@ describe("<ViewAttendance> sharing the session report", () => {
         data: {
           data: url.endsWith("/model")
             ? { fields: [] }
+            : isAvailability(url)
+            ? []
             : url.includes("/att2")
             ? OTHER_SESSION
             : SHARE_SESSION,
@@ -1517,6 +1522,164 @@ describe("<ViewAttendance> sharing the session report", () => {
 
       expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument();
       expect(open).not.toHaveBeenCalled();
+    });
+
+    describe("after switching away and back (A → B → A)", () => {
+      // att1 loads once; every later load of att1, and anything for att2 or
+      // org2, stays pending — so the page returns to session A while still
+      // holding A's first snapshot, the case where an old report could
+      // otherwise resurface.
+      const holdLaterLoads = () => {
+        const pending = deferAvailability();
+        let att1Loads = 0;
+        const answer = mockGet.getMockImplementation() as (url: string) => Promise<unknown>;
+        mockGet.mockImplementation((url: string) => {
+          if (url.includes("/att2") || url.includes("/org2/")) {
+            return new Promise(() => undefined);
+          }
+          if (url.endsWith("/attendance/org1/att1") && ++att1Loads > 1) {
+            return new Promise(() => undefined);
+          }
+          return answer(url);
+        });
+        return pending;
+      };
+      const toOrg = (id: string) =>
+        act(() => {
+          useGlobalStore.setState({
+            organisation: { ...EMPTY_ORG, id, attendanceStatuses: CUSTOM_STATUSES },
+          });
+        });
+      const viaSession = async () => {
+        fireEvent.click(screen.getByRole("button", { name: "open other session" }));
+        await waitFor(() => expect(screen.queryByText("Ada")).not.toBeInTheDocument());
+        fireEvent.click(screen.getByRole("button", { name: "back to first session" }));
+      };
+      const viaOrganisation = async () => {
+        toOrg("org2");
+        await waitFor(() => expect(screen.queryByText("Ada")).not.toBeInTheDocument());
+        toOrg("org1");
+      };
+
+      describe.each([
+        ["session", viaSession],
+        ["organisation", viaOrganisation],
+      ])("by %s", (_case, switchAwayAndBack) => {
+        it("never reopens a prepared report; Share fetches afresh", async () => {
+          const open = jest.spyOn(window, "open").mockImplementation(() => null);
+          const pending = holdLaterLoads();
+          renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
+          await screen.findByText("Ada");
+
+          fireEvent.click(screen.getByRole("button", { name: "Share" }));
+          await waitFor(() => expect(pending).toHaveLength(1));
+          await act(async () => {
+            pending[0].resolve([awayPeriod("a1", "Old Answer", "2026-09-14")]);
+          });
+          await screen.findByTestId("share-preview");
+
+          await switchAwayAndBack();
+          await screen.findByText("Ada");
+          await waitFor(() =>
+            expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument(),
+          );
+          expect(screen.queryByRole("button", { name: "Share now" })).not.toBeInTheDocument();
+
+          fireEvent.click(screen.getByRole("button", { name: "Share" }));
+          await waitFor(() => expect(pending).toHaveLength(2));
+          expect(pending[1].url).toBe("/attendance/org1/availability?date=2026-09-01");
+          await act(async () => {
+            pending[1].resolve([awayPeriod("a1", "New Answer", "2026-09-14")]);
+          });
+          fireEvent.click(await screen.findByRole("button", { name: "Share now" }));
+          expect(sharedText(open)).toContain("New Answer");
+          expect(sharedText(open)).not.toContain("Old Answer");
+        });
+
+        it("clears a pending report; the old answer never lands", async () => {
+          const open = jest.spyOn(window, "open").mockImplementation(() => null);
+          const pending = holdLaterLoads();
+          renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
+          await screen.findByText("Ada");
+
+          fireEvent.click(screen.getByRole("button", { name: "Share" }));
+          await waitFor(() => expect(pending).toHaveLength(1));
+
+          await switchAwayAndBack();
+          await screen.findByText("Ada");
+          // No resurrected spinner: Share is ready to start again.
+          expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
+          fireEvent.click(screen.getByRole("button", { name: "Share" }));
+          await waitFor(() => expect(pending).toHaveLength(2));
+
+          await act(async () => {
+            pending[0].resolve([awayPeriod("a1", "Old Answer", "2026-09-14")]);
+          });
+          expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument();
+          expect(screen.getByRole("button", { name: /preparing message/i })).toBeDisabled();
+
+          await act(async () => {
+            pending[1].resolve([awayPeriod("a1", "New Answer", "2026-09-14")]);
+          });
+          fireEvent.click(await screen.findByRole("button", { name: "Share now" }));
+          expect(sharedText(open)).toContain("New Answer");
+          expect(sharedText(open)).not.toContain("Old Answer");
+        });
+
+        it("does not bring back an old error", async () => {
+          const open = jest.spyOn(window, "open").mockImplementation(() => null);
+          const pending = holdLaterLoads();
+          renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
+          await screen.findByText("Ada");
+
+          fireEvent.click(screen.getByRole("button", { name: "Share" }));
+          await waitFor(() => expect(pending).toHaveLength(1));
+          await act(async () => pending[0].reject(new Error("offline")));
+          await screen.findByText(/Nothing was shared/);
+
+          await switchAwayAndBack();
+          await screen.findByText("Ada");
+          expect(screen.queryByText(/Nothing was shared/)).not.toBeInTheDocument();
+          expect(open).not.toHaveBeenCalled();
+        });
+      });
+    });
+
+    it.each([
+      ["a null list", { data: null }],
+      ["no list at all", {}],
+      ["an object instead of a list", { data: { periods: [] } }],
+    ])("treats a successful response with %s as a failure", async (_case, body) => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: isAvailability(url)
+            ? body
+            : { data: url.endsWith("/model") ? { fields: [] } : SHARE_SESSION },
+        }),
+      );
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Couldn't prepare the report. Nothing was shared.");
+      expect(within(alert).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Share now" })).not.toBeInTheDocument();
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it("shares the Stage 2 message unchanged when the list is empty", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      await shareReport();
+      const text = sharedText(open);
+      expect(text).not.toContain("AWAY");
+      expect(text).toContain(
+        "*EXCUSED — 2*\nBro Chidi — Tenor\nFormer member (profile unavailable)\n\n🔴 *Absent Members: 1*",
+      );
     });
 
     describe("with the device share sheet", () => {

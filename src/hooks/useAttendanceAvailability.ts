@@ -111,22 +111,32 @@ export const useAttendanceAvailabilityForDate = (
 /**
  * Always a fresh network read of the periods covering `date` — never an
  * earlier cached answer, which an edit or archive since could have made
- * wrong. For one-off reads such as preparing a share message. The answer is
- * cached under the same key as useAttendanceAvailabilityForDate, so the
- * existing per-organisation invalidation still covers it.
+ * wrong, and never one still in flight from an earlier preparation (that
+ * request is cancelled first). For one-off reads such as preparing a share
+ * message. The answer is cached under the same key as
+ * useAttendanceAvailabilityForDate, so the existing per-organisation
+ * invalidation still covers it.
  */
 export const fetchAttendanceAvailabilityForDate = async (
   organisationId: string,
   date: string
 ): Promise<AttendanceAvailability[]> => {
+  const queryKey = queryKeys.attendanceAvailability.date(organisationId, date);
+  await queryClient.cancelQueries({ queryKey, exact: true });
   const response = await queryClient.fetchQuery<AvailabilityResponse>({
-    queryKey: queryKeys.attendanceAvailability.date(organisationId, date),
+    queryKey,
     queryFn: async () =>
-      (await axiosInstance.get(availabilityListUrl(organisationId, { date })))
-        .data,
+      (
+        await axiosInstance.get(availabilityListUrl(organisationId, { date }))
+      ).data,
     staleTime: 0,
   });
-  return Array.isArray(response?.data) ? response.data : emptyPeriods;
+  // A success without a list is not "nobody away": treat it as a failure so
+  // a report is never shared with unknown AWAY data. [] is a real answer.
+  if (!Array.isArray(response?.data)) {
+    throw new Error("Couldn't read who is away for this date.");
+  }
+  return response.data;
 };
 
 export const useAttendanceAvailabilityMutations = (organisationId: string) => {

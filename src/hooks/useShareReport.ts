@@ -12,7 +12,8 @@ import { useRef, useState } from "react";
  * Everything is tied to one snapshot (an object: a session's loaded roster,
  * say). When the caller passes a different snapshot or null (another
  * session, another organisation, a reload), anything prepared or still
- * pending for the old one is thrown away and never shown or shared.
+ * pending is thrown away for good and never shown or shared — even if the
+ * same snapshot object comes back later (session A → B → A).
  */
 
 export type ShareReportState<T> =
@@ -29,6 +30,9 @@ export type ShareReportState<T> =
 
 const IDLE = { phase: "idle" } as const;
 
+/** A state together with the snapshot epoch it was created in. */
+type Stored<T> = { epoch: number; state: ShareReportState<T> };
+
 const openWhatsApp = (message: string) => {
   window.open(
     `https://wa.me/?text=${encodeURIComponent(message)}`,
@@ -41,11 +45,18 @@ export const useShareReport = <T extends object>(
   snapshot: T | null,
   prepare: (snapshot: T) => Promise<string>
 ) => {
-  const [stored, setStored] = useState<ShareReportState<T>>(IDLE);
+  const [stored, setStoredState] = useState<Stored<T>>({
+    epoch: 0,
+    state: IDLE,
+  });
   // Bumped by every new request, cancel and snapshot change: a response
   // only lands while its number is still the latest, so an older response
   // can never overwrite a newer one.
   const request = useRef(0);
+  // Bumped by every snapshot change, never reset. State is only shown in
+  // the epoch it was created in, so returning to an earlier snapshot object
+  // cannot bring back its old preview, error or spinner.
+  const epoch = useRef(0);
   const latest = useRef(snapshot);
   // The device share sheet is open: a second tap would make it fail.
   const sharing = useRef(false);
@@ -54,19 +65,37 @@ export const useShareReport = <T extends object>(
   if (latest.current !== snapshot) {
     latest.current = snapshot;
     request.current += 1;
+    epoch.current += 1;
   }
 
-  // State left over from another snapshot reads as idle from the very
-  // render that switches.
+  // The epoch this render's handlers belong to: a handler kept from before
+  // a switch (even one back to the same snapshot) does nothing.
+  const renderEpoch = epoch.current;
+
+  const setStored = (next: ShareReportState<T>) =>
+    setStoredState({ epoch: epoch.current, state: next });
+
+  // State from an earlier epoch reads as idle from the very render that
+  // switches, and stays idle.
   const state: ShareReportState<T> =
-    stored.phase !== "idle" && stored.snapshot === snapshot ? stored : IDLE;
+    stored.epoch === epoch.current &&
+    stored.state.phase !== "idle" &&
+    stored.state.snapshot === snapshot
+      ? stored.state
+      : IDLE;
 
   const isCurrent = (id: number, target: T) =>
     id === request.current && latest.current === target;
 
   const start = () => {
     const target = latest.current;
-    if (!target || state.phase === "preparing") return;
+    if (
+      !target ||
+      renderEpoch !== epoch.current ||
+      state.phase === "preparing"
+    ) {
+      return;
+    }
     const id = ++request.current;
     setStored({ phase: "preparing", snapshot: target });
     prepare(target).then(
@@ -97,6 +126,7 @@ export const useShareReport = <T extends object>(
   const shareNow = () => {
     if (
       state.phase !== "ready" ||
+      renderEpoch !== epoch.current ||
       latest.current !== state.snapshot ||
       sharing.current
     ) {
