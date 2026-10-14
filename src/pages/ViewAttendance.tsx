@@ -39,7 +39,11 @@ import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
-import { buildAttendanceShareMessage, ShareMember } from "helpers/attendanceShareMessage";
+import {
+  awayForShare,
+  buildAttendanceShareMessage,
+  ShareMember,
+} from "helpers/attendanceShareMessage";
 import { effectiveAttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 import {
   AttendanceEligibilityRule,
@@ -70,6 +74,10 @@ import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
 import { useMembers } from "hooks/useMembers";
 import { manualCandidates } from "helpers/manualAttendance";
 import { canChangeStoredRoster } from "helpers/attendanceEdits";
+import { fetchAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
+import { isValidAvailabilityDate } from "helpers/attendanceAvailability";
+import { useShareReport } from "hooks/useShareReport";
+import { ShareReportDialog, ShareReportError } from "components/attendance/ShareReport";
 
 type StatusOption = {
   value: string;
@@ -341,34 +349,37 @@ const Attendance = () => {
   // The stored calendar day, never shifted by the device timezone.
   const formattedDate = formatSessionDate(attendanceInfo?.date);
 
-  const handleSendToWhatsapp = () => {
-    // Only the current session's complete stored snapshot may be shared; the
-    // button only renders with one loaded, and this guard keeps a race from
-    // sending another session's roster.
-    if (!attendanceInfo || attendanceInfo.sessionKey !== sessionKey) return;
-    const message = buildAttendanceShareMessage({
+  // Each Share reads who is away on the session's own date afresh — a
+  // period may have been edited or archived since — then builds the message
+  // from the complete stored snapshot. Only the current session's snapshot
+  // may be shared: switching session or organisation, or reloading it,
+  // discards anything prepared or pending (see useShareReport).
+  const prepareShareMessage = async (info: AttendanceInfoType) => {
+    const sessionDate = formatSessionDate(info.date, "yyyy-MM-dd");
+    if (!isValidAvailabilityDate(sessionDate)) {
+      throw new Error("This session has no valid date.");
+    }
+    const periods = await fetchAttendanceAvailabilityForDate(org.id, sessionDate);
+    return buildAttendanceShareMessage({
       orgName: org.name,
-      sessionName: attendanceInfo.name,
-      formattedDate,
-      members: attendanceInfo.shareRoster,
+      sessionName: info.name,
+      formattedDate: formatSessionDate(info.date),
+      members: info.shareRoster,
       statuses,
       terminology: terms,
       // Read at share time, so a template saved in Settings applies to the
       // next message without reloading the session.
       template: effectiveAttendanceShareTemplate(org),
+      away: awayForShare(periods, {
+        sessionDate,
+        rosterMemberIds: info.rosterMemberIds,
+      }),
     });
-    if (navigator.share) {
-      navigator.share({ title: "", text: message }).catch(() => {
-        /* user dismissed the native share sheet */
-      });
-    } else {
-      window.open(
-        `https://wa.me/?text=${encodeURIComponent(message)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-    }
   };
+  const share = useShareReport(
+    snapshotIsCurrent && attendanceInfo ? attendanceInfo : null,
+    prepareShareMessage,
+  );
 
   const downloadURl = useMemo(() => {
     const base = convertParamsToString(attendanceRequest.EXPORT, {
@@ -493,7 +504,13 @@ const Attendance = () => {
             {/* Sharing the session just marked is the page's main job, so
                 Share leads as the solid action; Excel export is secondary. */}
             <Flex mt="3" gap={2}>
-              <Button flex="1" minH="44px" onClick={handleSendToWhatsapp}>
+              <Button
+                flex="1"
+                minH="44px"
+                onClick={share.start}
+                loading={share.state.phase === "preparing"}
+                loadingText="Preparing message..."
+              >
                 <FaShareAlt />
                 Share
               </Button>
@@ -515,6 +532,13 @@ const Attendance = () => {
                 Excel
               </Button>
             </Flex>
+            {share.state.phase === "failed" && (
+              <ShareReportError
+                error={share.state.error}
+                onRetry={share.start}
+                onCancel={share.cancel}
+              />
+            )}
             {attendanceInfo && (
               <ExpectedRosterSummary
                 title={`Expected ${lowerTerm(terms.memberPlural)}: ${attendanceInfo.expectedCount}`}
@@ -697,6 +721,13 @@ const Attendance = () => {
           })
         }
         onClose={() => !isRemoving && setRemoving(null)}
+      />
+      <ShareReportDialog
+        open={share.state.phase === "ready"}
+        message={share.state.phase === "ready" ? share.state.message : ""}
+        nativeFailed={share.state.phase === "ready" && share.state.nativeFailed}
+        onShare={share.shareNow}
+        onClose={share.cancel}
       />
       {confirmDialog}
     </PageContainer>
