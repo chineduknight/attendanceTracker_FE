@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { CloseButton, Button, NativeSelect, Text, Textarea, Field, Dialog, Portal } from "@chakra-ui/react";
+import { CloseButton, Button, Text, Textarea, Field, Dialog, Portal } from "@chakra-ui/react";
 import { SingleValue } from "react-select";
-import { ThemedSelect } from "components/ui/themed-select";
+import { ThemedSelect, OptionSelect } from "components/ui/themed-select";
 import { AttendanceStatusConfig } from "helpers/attendanceStatuses";
 import {
   MANUAL_ADDITION_REASON_MAX,
@@ -76,6 +76,8 @@ const ManualMemberForm = ({
           </Field.Label>
           <ThemedSelect
             inputId="manual-member-select"
+            // A long list of names: typing to find one stays on.
+            isSearchable
             classNamePrefix="manual-member"
             options={options}
             value={options.find((o) => o.value === memberId) ?? null}
@@ -94,19 +96,15 @@ const ManualMemberForm = ({
         <Field.Root required mb={4}>
           <Field.Label>{`${terms.attendanceSingular} status`}</Field.Label>
           {allowedStatuses.length ? (
-            <NativeSelect.Root>
-              <NativeSelect.Field
-                value={status}
-                placeholder={allowedStatuses.length > 1 ? "Choose a status" : undefined}
-                onChange={(event) => setStatus(event.target.value)}>
-                {allowedStatuses.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+            <OptionSelect
+              placeholder="Choose a status"
+              options={allowedStatuses.map((option) => ({
+                value: option.key,
+                label: option.label,
+              }))}
+              value={status}
+              onChange={setStatus}
+            />
           ) : (
             <Text color="fg.error" fontSize="sm">
               No active present status is configured for this organisation.

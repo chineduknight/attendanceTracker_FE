@@ -4,6 +4,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import AllAttendance from "pages/AllAttendance";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
+import { chooseOption } from "test-utils/render";
 
 const mockNavigate = jest.fn();
 jest.mock("react-router-dom", () => ({
@@ -82,10 +83,8 @@ describe("<AllAttendance> analytics inclusion", () => {
   it("badges only excluded records and keeps them listed", async () => {
     await renderPage();
     expect(names()).toEqual(["Week three", "Week two", "Week one"]);
-    expect(screen.getAllByText("Excluded from analytics")).toHaveLength(
-      // two row badges plus the filter option
-      3
-    );
+    // The two row badges (the filter's options only exist while it is open).
+    expect(screen.getAllByText("Excluded from analytics")).toHaveLength(2);
     expect(
       within(rowOf("Week one")).queryByText("Excluded from analytics")
     ).not.toBeInTheDocument();
@@ -105,13 +104,13 @@ describe("<AllAttendance> analytics inclusion", () => {
     const filter = screen.getByLabelText("Filter by analytics inclusion");
     const calls = mockGet.mock.calls.length;
 
-    fireEvent.change(filter, { target: { value: "excluded" } });
+    await chooseOption(filter, "Excluded from analytics");
     expect(names()).toEqual(["Week three", "Week two"]);
 
-    fireEvent.change(filter, { target: { value: "included" } });
+    await chooseOption(filter, "Included in analytics");
     expect(names()).toEqual(["Week one"]);
 
-    fireEvent.change(filter, { target: { value: "all" } });
+    await chooseOption(filter, "All");
     expect(names()).toHaveLength(3);
     expect(mockGet.mock.calls.length).toBe(calls);
   });
@@ -132,9 +131,10 @@ describe("<AllAttendance> analytics inclusion", () => {
       attendanceSingular: "Rehearsal",
       attendancePlural: "Rehearsals",
     });
-    fireEvent.change(screen.getByLabelText("Filter by analytics inclusion"), {
-      target: { value: "excluded" },
-    });
+    await chooseOption(
+      screen.getByLabelText("Filter by analytics inclusion"),
+      "Excluded from analytics",
+    );
     expect(
       screen.getByText("No rehearsal matches this filter.")
     ).toBeInTheDocument();
@@ -248,8 +248,8 @@ describe("<AllAttendance> long histories", () => {
     await screen.findByText("Session 28");
     fireEvent.click(screen.getByRole("button", { name: "Show 5 more (5 left)" }));
     const filter = screen.getByLabelText("Filter by analytics inclusion");
-    fireEvent.change(filter, { target: { value: "included" } });
-    fireEvent.change(filter, { target: { value: "all" } });
+    await chooseOption(filter, "Included in analytics");
+    await chooseOption(filter, "All");
     expect(screen.getAllByRole("button", { name: /^(Session \d+|August)/ })).toHaveLength(25);
   });
 });

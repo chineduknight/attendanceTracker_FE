@@ -1,5 +1,5 @@
 import { act, screen, fireEvent } from "@testing-library/react";
-import { render } from "test-utils/render";
+import { render, chooseOption } from "test-utils/render";
 import AttendanceDetailsForm, {
   AttendanceDetails,
 } from "components/attendance/AttendanceDetailsForm";
@@ -49,6 +49,7 @@ it("shows sub-categories of the selected category", () => {
       categories={categories}
     />,
   );
+  fireEvent.keyDown(screen.getByLabelText("Sub-category"), { key: "ArrowDown" });
   expect(screen.getByRole("option", { name: "First Mass" })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: "Second Mass" })).toBeInTheDocument();
   // Only the selected category's sub-categories show — not another category's.
@@ -67,7 +68,7 @@ it("shows no sub-category options when no category is selected", () => {
   ).not.toBeInTheDocument();
 });
 
-it("clears the sub-category when the category changes", () => {
+it("clears the sub-category when the category changes", async () => {
   const onChange = jest.fn();
   render(
     <AttendanceDetailsForm
@@ -76,7 +77,7 @@ it("clears the sub-category when the category changes", () => {
       categories={categories}
     />,
   );
-  fireEvent.change(screen.getByLabelText("Category"), { target: { value: "c2" } });
+  await chooseOption(screen.getByLabelText("Category"), "Weekday");
   expect(onChange).toHaveBeenCalledWith(
     expect.objectContaining({ categoryId: "c2", subCategoryId: "" }),
   );
@@ -89,7 +90,7 @@ it("emits name edits", () => {
   expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ name: "First Mass" }));
 });
 
-it("labels category fields with the organisation's terms but keeps category ids", () => {
+it("labels category fields with the organisation's terms but keeps category ids", async () => {
   useGlobalStore.setState({
     organisation: {
       ...EMPTY_ORG,
@@ -103,7 +104,7 @@ it("labels category fields with the organisation's terms but keeps category ids"
   const onChange = jest.fn();
   render(<AttendanceDetailsForm value={base} onChange={onChange} categories={categories} />);
 
-  fireEvent.change(screen.getByLabelText("Activity"), { target: { value: "c1" } });
+  await chooseOption(screen.getByLabelText("Activity"), "Sunday Service");
 
   expect(screen.getByLabelText("Activity type")).toBeInTheDocument();
   expect(onChange).toHaveBeenCalledWith({ ...base, categoryId: "c1", subCategoryId: "" });

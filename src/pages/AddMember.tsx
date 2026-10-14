@@ -1,4 +1,5 @@
-import { Box, Button, Flex, Input, Stack, NativeSelect, Field } from "@chakra-ui/react";
+import { Box, Button, Flex, Input, Stack, Field } from "@chakra-ui/react";
+import { FormOptionSelect } from "components/ui/themed-select";
 import { FormCheckbox } from "components/ui/checkbox";
 import { DateField, todayValue } from "components/ui/date-field";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
@@ -228,19 +229,20 @@ const AddOrUpdateMember = () => {
             required={field.required}
           >
             <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
-            <NativeSelect.Root>
-              <NativeSelect.Field
-                defaultValue={fieldValue}
-                {...register(field.name, { required: field.required })}>
-                {Array.isArray(field.options) &&
-                  field.options.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+            <FormOptionSelect
+              control={control}
+              name={field.name}
+              rules={{ required: field.required }}
+              options={(Array.isArray(field.options) ? field.options : []).map(
+                (option) => ({ value: option, label: option }),
+              )}
+              // As the native select did: with nothing stored, the first
+              // option is shown and saved.
+              defaultValue={
+                fieldValue ||
+                (Array.isArray(field.options) ? field.options[0] : undefined)
+              }
+            />
           </Field.Root>
         );
       } else {

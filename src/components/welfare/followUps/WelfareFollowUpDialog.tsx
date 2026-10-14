@@ -4,7 +4,6 @@ import {
   Button,
   Flex,
   Input,
-  NativeSelect,
   Stack,
   Text,
   Textarea,
@@ -14,7 +13,7 @@ import {
 } from "@chakra-ui/react";
 import { Switch } from "components/ui/switch";
 import { SingleValue } from "react-select";
-import { ThemedSelect } from "components/ui/themed-select";
+import { ThemedSelect, OptionSelect } from "components/ui/themed-select";
 import { DateField } from "components/ui/date-field";
 import { toast } from "react-toastify";
 import useGlobalStore from "zStore";
@@ -331,6 +330,8 @@ const WelfareFollowUpDialog = ({
                         <ThemedSelect
                           inputId="follow-up-member"
                           classNamePrefix="follow-up-member"
+                          // A long list of names: typing to find one stays on.
+                          isSearchable
                           options={memberOptions}
                           // Kept visible even if the scope changes after picking.
                           value={
@@ -356,29 +357,29 @@ const WelfareFollowUpDialog = ({
                               ? `${terms.memberPlural} could not be loaded.`
                               : `No matching ${lowerTerm(terms.memberPlural)}`
                           }
-                          // Full width: as wide as the fields below it.
-                          styles={{ container: (base) => ({ ...base, width: "100%" }) }}
                         />
                         {memberStatusOptions.length > 0 && (
-                          <NativeSelect.Root>
-                            <NativeSelect.Field
-                              aria-label={`Filter ${lowerTerm(
-                                terms.memberPlural,
-                              )} by status`}
-                              mt={2}
-                              value={memberStatus}
-                              onChange={(event) =>
-                                setMemberStatus(event.target.value)
-                              }>
-                              <option value={ALL_STATUSES}>All statuses</option>
-                              {memberStatusOptions.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </NativeSelect.Field>
-                            <NativeSelect.Indicator />
-                          </NativeSelect.Root>
+                          <OptionSelect
+                            // A filter inside the member field: its own name,
+                            // never the field's id or invalid state.
+                            inputId="follow-up-member-status"
+                            aria-label={`Filter ${lowerTerm(
+                              terms.memberPlural,
+                            )} by status`}
+                            aria-invalid={false}
+                            options={[
+                              { value: ALL_STATUSES, label: "All statuses" },
+                              ...memberStatusOptions.map((option) => ({
+                                value: option,
+                                label: option,
+                              })),
+                            ]}
+                            value={memberStatus}
+                            onChange={setMemberStatus}
+                            styles={{
+                              container: (base) => ({ ...base, marginTop: 8 }),
+                            }}
+                          />
                         )}
                         {members.isError && (
                           <Field.ErrorText>
@@ -465,22 +466,18 @@ const WelfareFollowUpDialog = ({
                     <Field.Root>
                       <Field.Label htmlFor="follow-up-assignee">Assignment</Field.Label>
                       {canManageAssignedOfficers ? (
-                        <NativeSelect.Root>
-                          <NativeSelect.Field
-                            id="follow-up-assignee"
-                            value={assignedToUserId}
-                            onChange={(event) =>
-                              setAssignedToUserId(event.target.value)
-                            }>
-                            <option value="">Unassigned</option>
-                            {assigneeOptions.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.name}
-                              </option>
-                            ))}
-                          </NativeSelect.Field>
-                          <NativeSelect.Indicator />
-                        </NativeSelect.Root>
+                        <OptionSelect
+                          inputId="follow-up-assignee"
+                          options={[
+                            { value: "", label: "Unassigned" },
+                            ...assigneeOptions.map((option) => ({
+                              value: option.id,
+                              label: option.name,
+                            })),
+                          ]}
+                          value={assignedToUserId}
+                          onChange={setAssignedToUserId}
+                        />
                       ) : (
                         <Text fontSize="sm">
                           {assignedToName

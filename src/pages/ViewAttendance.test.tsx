@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { useNavigate } from "react-router-dom";
-import { confirmInDialog } from "test-utils/render";
+import { chooseOption, confirmInDialog, optionLabels } from "test-utils/render";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -706,11 +706,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     await renderPage();
     await openAddDialog();
     const statusSelect = (await dialog()).getByLabelText(/^Attendance status/);
-    expect(
-      within(statusSelect)
-        .getAllByRole("option")
-        .map((o) => o.textContent)
-    ).toEqual(["Choose a status", "Present", "Late"]);
+    expect(await optionLabels(statusSelect)).toEqual(["Present", "Late"]);
     const reason = (await dialog()).getByLabelText("Reason (optional)");
     expect(reason).toHaveAttribute("maxLength", "200");
     fireEvent.change(reason, { target: { value: "Leave ended" } });
@@ -734,9 +730,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     const add = (await dialog()).getByRole("button", { name: "Add member" });
     expect(add).toBeDisabled();
     await chooseMember("Tunde");
-    fireEvent.change((await dialog()).getByLabelText(/^Attendance status/), {
-      target: { value: "present" },
-    });
+    await chooseOption((await dialog()).getByLabelText(/^Attendance status/), "Present");
     fireEvent.change((await dialog()).getByLabelText("Reason (optional)"), {
       target: { value: "  On leave but came  " },
     });
@@ -768,9 +762,7 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     await renderPage();
     await openAddDialog();
     await chooseMember("Tunde");
-    fireEvent.change((await dialog()).getByLabelText(/^Attendance status/), {
-      target: { value: "late" },
-    });
+    await chooseOption((await dialog()).getByLabelText(/^Attendance status/), "Late");
     fireEvent.click((await dialog()).getByRole("button", { name: "Add member" }));
 
     await waitFor(() =>

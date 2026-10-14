@@ -1748,7 +1748,7 @@ Attendance status badges should retain text/accessible labels.
 # 52. Chakra UI conventions
 
 The project uses Chakra UI v3 (migrated from v2). Write v3 APIs only:
-compound parts (`Dialog.Root`, `Field.Root`, `NativeSelect.Root`, `Tabs.Root`,
+compound parts (`Dialog.Root`, `Field.Root`, `Tabs.Root`,
 `Menu.Root`, ...), `open`/`disabled`/`invalid` instead of `isOpen`/`isDisabled`,
 `colorPalette` instead of `colorScheme`, `gap` instead of `spacing`.
 
@@ -1810,14 +1810,12 @@ Shared wrappers in `src/components/ui` (use them instead of the raw parts):
 
 v3 traps that type-check but misbehave:
 
-- Inside a `Field.Root`, `NativeSelect` ignores its own `disabled`; put
-  `disabled` on the `Field.Root`.
 - `Dialog`/`Drawer.CloseTrigger` renders nothing without
   `<CloseButton />`; header text belongs in `Dialog.Title`/`Drawer.Title`.
 - `Menu.Item` has no `icon` prop (put the icon in the children) and needs a
   unique `value`, also inside `.map()`.
 - `aria-label` for a checkbox goes on `Checkbox.HiddenInput`, not the root.
-- Native inputs, textareas and `NativeSelect.Field` keep `onChange`;
+- Native inputs and textareas keep `onChange`;
   `onValueChange`/`onCheckedChange` belong to Ark components only.
 - `onCheckedChange`/`onValueChange` receive a details object
   (`({ checked })`, `({ value })`), not a DOM event: `e.target.checked`
@@ -1827,20 +1825,30 @@ Do not introduce a second component framework for one feature.
 
 ---
 
-# 53. react-select usage
+# 53. Dropdowns: one component, no native selects
 
-The project uses `react-select` for multi-select filters.
+Every dropdown is the themed react-select in `components/ui/themed-select`.
+Do not add `NativeSelect` or `<select>`.
 
-For dropdowns inside overlays or constrained containers, existing code may use:
+- `OptionSelect`: one value from a list, by value (`value`, `options`,
+  `onChange(value)`; `onClear` for an optional value). Inside a
+  `Field.Root` it takes the field's control id (so `Field.Label` names
+  it), disabled and invalid state.
+- `FormOptionSelect`: the same bound to react-hook-form (`control`,
+  `name`, `rules`). Never `register` a dropdown.
+- `ThemedSelect`: multi-select filters and anything custom.
 
-```text
-menuPortalTarget={document.body}
-menuPosition="fixed"
-```
+Typing is off by default (a tap opens the list without the phone
+keyboard). Pass `isSearchable` only for a long list such as a member
+picker. Menus portal with fixed positioning: to `<body>`, or inside a
+dialog to the dialog itself (a modal hides everything outside it from
+screen readers and treats a tap there as an outside click). Do not
+override `menuPortalTarget` to `document.body` inside a dialog.
 
-with a high z-index.
-
-Follow nearby patterns when adding selects to drawers/modals.
+Tests: `chooseOption(input, "Label")`, `optionLabels(input)`,
+`openOption(input, "Label")` and `shownValue(input)` from
+`test-utils/render`. Options exist only while the menu is open, and the
+control shows labels, not values.
 
 ---
 

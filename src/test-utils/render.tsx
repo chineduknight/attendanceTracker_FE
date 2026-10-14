@@ -61,6 +61,53 @@ export const selectTab = async (tab: HTMLElement) => {
 };
 
 /**
+ * Pick an option from one of the app's dropdowns (ThemedSelect /
+ * OptionSelect): open it from its input the way the keyboard does, then
+ * click the option in the portalled menu. `input` is the element found by
+ * its label, e.g. `screen.getByLabelText("Role")`.
+ */
+export const chooseOption = async (input: HTMLElement, option: string | RegExp) => {
+  fireEvent.click(await openOption(input, option));
+};
+
+/**
+ * Open a dropdown and wait for one of its options. Options that load after
+ * the menu opened can re-render it closed, so it is reopened until the
+ * option shows.
+ */
+export const openOption = async (
+  input: HTMLElement,
+  option: string | RegExp,
+): Promise<HTMLElement> => {
+  // Not inside waitFor: opening the menu mutates the DOM, which would re-run
+  // the callback and reopen it in a loop that starves the timeout.
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (!screen.queryByRole("option", { name: option })) {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    }
+    const found = await screen
+      .findByRole("option", { name: option }, { timeout: 200 })
+      .catch(() => null);
+    if (found) return found;
+  }
+  throw new Error(`openOption(): no option ${String(option)}`);
+};
+
+/** The labels a dropdown offers: opens its menu, reads it, closes it. */
+export const optionLabels = async (input: HTMLElement): Promise<string[]> => {
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  const labels = (await screen.findAllByRole("option")).map(
+    (option) => option.textContent ?? "",
+  );
+  fireEvent.keyDown(input, { key: "Escape" });
+  return labels;
+};
+
+/** The value a single-value dropdown shows (its placeholder when empty). */
+export const shownValue = (input: HTMLElement): string =>
+  input.closest<HTMLElement>('[class*="-container"]')?.textContent ?? "";
+
+/**
  * Answer the open ConfirmDialog (useConfirm) by clicking one of its buttons,
  * e.g. "Delete" or "Cancel". Returns the dialog so callers can check its
  * title and body; it opens asynchronously, so this waits for it.

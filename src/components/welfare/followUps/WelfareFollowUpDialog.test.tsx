@@ -10,7 +10,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
-import { toggle } from "test-utils/render";
+import { toggle, chooseOption, openOption } from "test-utils/render";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
@@ -446,13 +446,10 @@ describe("WelfareFollowUpDialog — assignment", () => {
       request: EDIT_REQUEST,
       canManageAssignedOfficers: true,
     });
-    await screen.findByRole("option", { name: "Chairman" });
-    const select = screen.getByLabelText("Assignment");
+    await openOption(screen.getByLabelText("Assignment"), "Chairman");
+    expect(screen.getByRole("option", { name: "Welfare II" })).toBeInTheDocument();
     expect(
-      within(select).getByRole("option", { name: "Welfare II" }),
-    ).toBeInTheDocument();
-    expect(
-      within(select).queryByRole("option", { name: "Treasurer" }),
+      screen.queryByRole("option", { name: "Treasurer" }),
     ).not.toBeInTheDocument();
   });
 
@@ -478,10 +475,7 @@ describe("WelfareFollowUpDialog — assignment", () => {
       canManageAssignedOfficers: true,
       update,
     });
-    await screen.findByRole("option", { name: "Chairman" });
-    fireEvent.change(screen.getByLabelText("Assignment"), {
-      target: { value: "owner-1" },
-    });
+    await chooseOption(screen.getByLabelText("Assignment"), "Chairman");
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(update.mock.calls[0][1].assignedToUserId).toBe("owner-1");
   });

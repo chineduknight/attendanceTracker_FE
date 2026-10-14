@@ -1,4 +1,4 @@
-import { confirmInDialog, generatedCss } from "test-utils/render";
+import { chooseOption, confirmInDialog, generatedCss, openOption, shownValue } from "test-utils/render";
 import {
   act,
   fireEvent,
@@ -102,12 +102,42 @@ const renderPage = () =>
 
 const nameInput = () => screen.getByLabelText(/Name/) as HTMLInputElement;
 const dateInput = () => screen.getByLabelText(/Date/) as HTMLInputElement;
-const categorySelect = () =>
-  screen.getByLabelText("Category") as HTMLSelectElement;
-const subCategorySelect = () =>
-  screen.getByLabelText("Sub-category") as HTMLSelectElement;
-const templateSelect = () =>
-  screen.getByLabelText("Template") as HTMLSelectElement;
+const categorySelect = () => screen.getByLabelText("Category");
+const subCategorySelect = () => screen.getByLabelText("Sub-category");
+const templateSelect = () => screen.getByLabelText("Template");
+
+// The dropdowns show labels, while these tests speak in fixture ids.
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const fixtures = () => [
+  ...CATEGORIES.flatMap((c) => [c, ...c.subCategories]),
+  ...Object.values(templatesByOrg).flat().map((t) => template(t)),
+];
+/** A fixture's option; a template may carry a "(Needs update)"-style note. */
+const optionFor = (id: string): RegExp => {
+  const item = fixtures().find((candidate) => candidate.id === id);
+  if (!item) throw new Error(`No fixture with id ${id}`);
+  return new RegExp(`^${escapeRe(item.name)}( \\(.+\\))?$`);
+};
+/** Choose a fixture by id in one of the dropdowns. */
+const pick = (select: HTMLElement, id: string) => chooseOption(select, optionFor(id));
+/** The fixture id a dropdown shows, or "" for its placeholder. */
+const shownId = (select: HTMLElement): string => {
+  const shown = shownValue(select);
+  return (
+    fixtures().find(
+      (item) => shown === item.name || shown.startsWith(`${item.name} (`),
+    )?.id ?? ""
+  );
+};
+const isCategoryName = (name: string | RegExp) =>
+  typeof name === "string" && CATEGORIES.some((c) => c.name === name);
+/** Wait until the template (or category) dropdown lists an option. */
+const listed = async (name: string | RegExp) => {
+  const select = isCategoryName(name) ? categorySelect() : templateSelect();
+  const option = await openOption(select, name);
+  fireEvent.keyDown(select, { key: "Escape" });
+  return option;
+};
 const button = (name: string) => screen.getByRole("button", { name });
 const waitForContinue = () =>
   waitFor(() => expect(button("Continue")).toBeEnabled());
@@ -184,15 +214,13 @@ describe("<CreateAttendance> session templates", () => {
 
   it("lists the current organisation's templates", async () => {
     renderPage();
-    expect(
-      await screen.findByRole("option", { name: "Thursday Rehearsal" }),
-    ).toBeInTheDocument();
+    await listed("Thursday Rehearsal");
     expect(mockGet).toHaveBeenCalledWith("/attendance/orgA/templates");
   });
 
   it("defaults the session date to today's local business date", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    await listed("Thursday Rehearsal");
     expect(dateInput().value).toBe(format(new Date(), "MMM d, yyyy"));
   });
 
@@ -216,15 +244,15 @@ describe("<CreateAttendance> session templates", () => {
 
   it("fills name, category and sub-category from a template without changing the date", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    await screen.findByRole("option", { name: "Rehearsal" });
+    await listed("Thursday Rehearsal");
+    await listed("Rehearsal");
     type(dateInput(), "2026-10-01");
 
-    type(templateSelect(), "t1");
+    await pick(templateSelect(), "t1");
 
     expect(nameInput().value).toBe("Thursday Rehearsal");
-    expect(categorySelect().value).toBe("c1");
-    expect(subCategorySelect().value).toBe("s1");
+    expect(shownId(categorySelect())).toBe("c1");
+    expect(shownId(subCategorySelect())).toBe("s1");
     expect(dateInput().value).toBe("Oct 1, 2026");
   });
 
@@ -233,10 +261,10 @@ describe("<CreateAttendance> session templates", () => {
     renderPage();
     await screen.findByText(/No templates yet/);
     await waitFor(() =>
-      expect(categorySelect().options.length).toBeGreaterThan(1),
+      expect(categorySelect()).toBeInTheDocument(),
     );
     type(nameInput(), "Friday Vigil");
-    type(categorySelect(), "c2");
+    await pick(categorySelect(), "c2");
     type(dateInput(), "2026-10-02");
     const invalidate = jest.spyOn(queryClient, "invalidateQueries");
     queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
@@ -260,7 +288,8 @@ describe("<CreateAttendance> session templates", () => {
       subCategoryId: null,
       eligibilityRules: [],
     });
-    await waitFor(() => expect(templateSelect().value).toBe("t-new"));
+    // The template just created, selected by its name.
+    await waitFor(() => expect(shownValue(templateSelect())).toBe("Friday Vigil"));
     expect(toast.success).toHaveBeenCalledWith(
       'Saved "Friday Vigil" as a template',
     );
@@ -275,7 +304,7 @@ describe("<CreateAttendance> session templates", () => {
 
   it("blocks an obvious duplicate name client-side", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    await listed("Thursday Rehearsal");
     type(nameInput(), "thursday rehearsal");
     fireEvent.click(button("Save as template"));
     expect(toast.error).toHaveBeenCalledWith(
@@ -286,7 +315,7 @@ describe("<CreateAttendance> session templates", () => {
 
   it("requires a name before saving a template", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    await listed("Thursday Rehearsal");
     fireEvent.click(button("Save as template"));
     expect(toast.error).toHaveBeenCalledWith(
       expect.stringMatching(/Enter the attendance name/),
@@ -296,11 +325,11 @@ describe("<CreateAttendance> session templates", () => {
 
   it("updates the selected template from the current details, excluding the date", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    type(templateSelect(), "t1");
+    await listed("Rehearsal");
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
     type(nameInput(), "Thursday Practice");
-    type(categorySelect(), "c2");
+    await pick(categorySelect(), "c2");
     type(dateInput(), "2026-10-01");
     queryClient.setQueryData(queryKeys.attendanceTemplates("orgB"), {
       data: [],
@@ -327,9 +356,9 @@ describe("<CreateAttendance> session templates", () => {
 
   it("deletes the selected template after confirmation and keeps the entered details", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    type(templateSelect(), "t1");
+    await listed("Rehearsal");
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
     type(dateInput(), "2026-10-01");
 
     fireEvent.click(button("Delete template"));
@@ -344,16 +373,16 @@ describe("<CreateAttendance> session templates", () => {
     await screen.findByText(/No templates yet/);
     expect(orgBInvalidated()).toBe(false);
     expect(nameInput().value).toBe("Thursday Rehearsal");
-    expect(categorySelect().value).toBe("c1");
-    expect(subCategorySelect().value).toBe("s1");
+    expect(shownId(categorySelect())).toBe("c1");
+    expect(shownId(subCategorySelect())).toBe("s1");
     expect(dateInput().value).toBe("Oct 1, 2026");
   });
 
   it("resets the selected template and details on organisation switch and never shows A's templates in B", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    type(templateSelect(), "t1");
+    await listed("Rehearsal");
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
     expect(nameInput().value).toBe("Thursday Rehearsal");
 
     act(() => selectOrg("orgB"));
@@ -396,8 +425,8 @@ describe("<CreateAttendance> session templates", () => {
         : serve(url),
     );
     renderPage();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    type(templateSelect(), "t1");
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
     expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
     expect(button("Apply")).toBeDisabled();
     expect(nameInput().value).toBe("");
@@ -417,9 +446,9 @@ describe("<CreateAttendance> session templates", () => {
 
     const selectStale = async () => {
       renderPage();
-      await screen.findByRole("option", { name: "Rehearsal" });
-      await screen.findByRole("option", { name: "Old Vigil (Needs update)" });
-      type(templateSelect(), "t-stale");
+      await listed("Rehearsal");
+      await listed("Old Vigil (Needs update)");
+      await pick(templateSelect(), "t-stale");
     };
 
     it("is marked Needs update, cannot be applied and fills nothing", async () => {
@@ -427,13 +456,13 @@ describe("<CreateAttendance> session templates", () => {
       expect(screen.getByText("Needs update")).toBeInTheDocument();
       expect(button("Apply")).toBeDisabled();
       expect(nameInput().value).toBe("");
-      expect(categorySelect().value).toBe("");
+      expect(shownId(categorySelect())).toBe("");
     });
 
     it("can be repaired with Update using the current valid details", async () => {
       await selectStale();
       type(nameInput(), "Old Vigil");
-      type(categorySelect(), "c2");
+      await pick(categorySelect(), "c2");
       fireEvent.click(button("Update template"));
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
       expect(mockPut).toHaveBeenCalledWith(
@@ -656,10 +685,10 @@ describe("<CreateAttendance> eligibility", () => {
     renderPage();
     await waitForRoster();
     await waitFor(() =>
-      expect(categorySelect().options.length).toBeGreaterThan(1),
+      expect(categorySelect()).toBeInTheDocument(),
     );
     fillDetails();
-    type(categorySelect(), "c1");
+    await pick(categorySelect(), "c1");
     await pickEligibility("Part", "Soprano");
     await pickEligibility("Status", "Active");
 
@@ -705,8 +734,8 @@ describe("<CreateAttendance> eligibility", () => {
     expect(
       await screen.findByText(/Member fields could not be loaded/),
     ).toBeInTheDocument();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    type(templateSelect(), "t1");
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
     expect(button("Apply")).toBeDisabled();
     expect(nameInput().value).toBe("");
     expect(
@@ -732,9 +761,9 @@ describe("<CreateAttendance> eligibility", () => {
       templatesByOrg.orgA = [legacy];
       renderPage();
       await waitForRoster();
-      await screen.findByRole("option", { name: "Rehearsal" });
+      await listed("Rehearsal");
       await pickEligibility("Part", "Alto");
-      type(templateSelect(), "t-old");
+      await pick(templateSelect(), "t-old");
       expect(expectedText()).toBe("Expected members: 8 of 8");
     });
 
@@ -742,10 +771,10 @@ describe("<CreateAttendance> eligibility", () => {
       templatesByOrg.orgA = [sopranoTemplate];
       renderPage();
       await waitForRoster();
-      await screen.findByRole("option", { name: "Rehearsal" });
+      await listed("Rehearsal");
       type(dateInput(), "2026-10-01");
 
-      type(templateSelect(), "t-sop");
+      await pick(templateSelect(), "t-sop");
 
       expect(nameInput().value).toBe("Soprano Rehearsal");
       expect(expectedText()).toBe("Expected members: 2 of 8");
@@ -771,8 +800,8 @@ describe("<CreateAttendance> eligibility", () => {
       templatesByOrg.orgA = [sopranoTemplate];
       renderPage();
       await waitForRoster();
-      await screen.findByRole("option", { name: "Rehearsal" });
-      type(templateSelect(), "t-sop");
+      await listed("Rehearsal");
+      await pick(templateSelect(), "t-sop");
       fireEvent.click(button("Clear eligibility"));
       fireEvent.click(button("Update template"));
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
@@ -798,11 +827,9 @@ describe("<CreateAttendance> eligibility", () => {
       const selectStale = async () => {
         renderPage();
         await waitForRoster();
-        await screen.findByRole("option", { name: "Rehearsal" });
-        await screen.findByRole("option", {
-          name: "Mezzo Sectional (Needs update)",
-        });
-        type(templateSelect(), "t-mezzo");
+        await listed("Rehearsal");
+        await listed("Mezzo Sectional (Needs update)");
+        await pick(templateSelect(), "t-mezzo");
       };
 
       it("needs an update, explains why and cannot be applied", async () => {
@@ -921,11 +948,9 @@ describe("<CreateAttendance> with relabelled member fields", () => {
     ];
     renderPage();
     await waitForRoster();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    await screen.findByRole("option", {
-      name: "Mezzo Sectional (Needs update)",
-    });
-    type(templateSelect(), "t-mezzo");
+    await listed("Rehearsal");
+    await listed("Mezzo Sectional (Needs update)");
+    await pick(templateSelect(), "t-mezzo");
     expect(
       screen.getByText(/Voice Part: Mezzo is no longer an option\./),
     ).toBeInTheDocument();
@@ -935,11 +960,9 @@ describe("<CreateAttendance> with relabelled member fields", () => {
   it("does not mark a part-keyed template stale after a label-only rename", async () => {
     renderPage();
     await waitForRoster();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    expect(
-      await screen.findByRole("option", { name: "Soprano Rehearsal" }),
-    ).toBeInTheDocument();
-    type(templateSelect(), "t-sop");
+    await listed("Rehearsal");
+    await listed("Soprano Rehearsal");
+    await pick(templateSelect(), "t-sop");
     expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
     expect(button("Apply")).toBeEnabled();
     expect(expectedText()).toBe("Expected members: 2 of 8");
@@ -981,14 +1004,9 @@ describe("<CreateAttendance> under custom organisation terminology", () => {
   it("shows the organisation's words but stores category ids and storage-keyed rules", async () => {
     renderPage();
     await screen.findByText(/^Expected students: \d+ of/);
-    await waitFor(() =>
-      expect(
-        (screen.getByLabelText("Activity") as HTMLSelectElement).options.length,
-      ).toBeGreaterThan(1),
-    );
     type(nameInput(), "Rehearsal");
     type(dateInput(), "2026-10-01");
-    type(screen.getByLabelText("Activity"), "c1");
+    await pick(screen.getByLabelText("Activity"), "c1");
     await pickEligibility("Part", "Soprano");
 
     await waitForContinue();
@@ -1032,7 +1050,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
       useGlobalStore.getState().organisation;
     useGlobalStore.setState({ organisation: legacy });
     renderPage();
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    await listed("Thursday Rehearsal");
     expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
   });
 
@@ -1103,36 +1121,32 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
           }),
     );
     renderPage();
-    await screen.findByRole("option", { name: "Rehearsal" });
+    await listed("Rehearsal");
     expect(
       screen.queryByText(/fields could not be loaded/),
     ).not.toBeInTheDocument();
 
     // Unrestricted templates do not depend on member fields while off.
-    type(templateSelect(), "t1");
+    await pick(templateSelect(), "t1");
     expect(nameInput().value).toBe("Thursday Rehearsal");
     expect(button("Apply")).toBeEnabled();
   });
 
   it("applies a template without rules", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
-    type(templateSelect(), "t1");
+    await listed("Rehearsal");
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
     expect(nameInput().value).toBe("Thursday Rehearsal");
-    expect(categorySelect().value).toBe("c1");
+    expect(shownId(categorySelect())).toBe("c1");
   });
 
   it("lists a restricted template as unavailable, fills nothing and never widens it", async () => {
     renderPage();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    expect(
-      await screen.findByRole("option", {
-        name: "Soprano Rehearsal (Requires eligibility)",
-      }),
-    ).toBeInTheDocument();
+    await listed("Rehearsal");
+    await listed("Soprano Rehearsal (Requires eligibility)");
 
-    type(templateSelect(), "t-sop");
+    await pick(templateSelect(), "t-sop");
 
     expect(nameInput().value).toBe("");
     expect(
@@ -1160,9 +1174,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
       template({ id: "t-bad", name: "Odd", eligibilityRules: "nope" as never }),
     ];
     renderPage();
-    expect(
-      await screen.findByRole("option", { name: "Odd (Requires eligibility)" }),
-    ).toBeInTheDocument();
+    await listed("Odd (Requires eligibility)");
   });
 
   it("saves new templates as Everyone", async () => {
@@ -1210,19 +1222,17 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     selectOrg("orgA", { eligibility: true });
     const first = renderPage();
     await waitForRoster();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    type(templateSelect(), "t-sop");
+    await listed("Rehearsal");
+    await pick(templateSelect(), "t-sop");
     expect(expectedText()).toBe("Expected members: 2 of 8");
     first.unmount();
 
     // Off: the editor is gone, the template is unavailable, Everyone still works.
     selectOrg("orgA");
     const off = renderPage();
-    await screen.findByRole("option", {
-      name: "Soprano Rehearsal (Requires eligibility)",
-    });
+    await listed("Soprano Rehearsal (Requires eligibility)");
     expect(screen.queryByLabelText("Part eligibility")).not.toBeInTheDocument();
-    type(templateSelect(), "t-sop");
+    await pick(templateSelect(), "t-sop");
     expect(button("Apply")).toBeDisabled();
     type(nameInput(), "Everyone rehearsal");
     type(dateInput(), "2026-10-04");
@@ -1242,11 +1252,9 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     selectOrg("orgA", { eligibility: true });
     renderPage();
     await waitForRoster();
-    await screen.findByRole("option", { name: "Rehearsal" });
-    expect(
-      screen.getByRole("option", { name: "Soprano Rehearsal" }),
-    ).toBeInTheDocument();
-    type(templateSelect(), "t-sop");
+    await listed("Rehearsal");
+    await listed("Soprano Rehearsal");
+    await pick(templateSelect(), "t-sop");
     expect(nameInput().value).toBe("Soprano Rehearsal");
     expect(expectedText()).toBe("Expected members: 2 of 8");
   });
@@ -1265,7 +1273,7 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
     await screen.findByText(/^Expected members: 8 of 8/);
 
     act(() => selectOrg("orgA"));
-    await screen.findByRole("option", { name: "Thursday Rehearsal" });
+    await listed("Thursday Rehearsal");
     expect(screen.queryByText(/^Expected members:/)).not.toBeInTheDocument();
 
     act(() =>

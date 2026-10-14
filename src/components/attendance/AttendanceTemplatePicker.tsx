@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Badge, Button, Flex, NativeSelect, Stack, Text, Field } from "@chakra-ui/react";
+import { OptionSelect } from "components/ui/themed-select";
+import { Badge, Button, Flex, Stack, Text, Field } from "@chakra-ui/react";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { toast } from "react-toastify";
 import { CategoryType } from "hooks/useCategories";
@@ -204,26 +205,21 @@ const AttendanceTemplatePicker = ({
         ) : (
           <>
             <Field.Label mb="0">Template</Field.Label>
-            <NativeSelect.Root>
-              <NativeSelect.Field
-                placeholder={
-                  isLoading ? "Loading templates…" : "Choose a template"
-                }
-                // A template deleted elsewhere drops out of the list; show no selection.
-                value={selected?.id ?? ""}
-                onChange={(e) => onSelect(e.target.value)}>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {needsEligibility(template)
-                      ? `${template.name} (Requires eligibility)`
-                      : stalenessById.has(template.id)
-                        ? `${template.name} (Needs update)`
-                        : template.name}
-                  </option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
+            <OptionSelect
+              placeholder={isLoading ? "Loading templates…" : "Choose a template"}
+              isLoading={isLoading}
+              options={templates.map((template) => ({
+                value: template.id,
+                label: needsEligibility(template)
+                  ? `${template.name} (Requires eligibility)`
+                  : stalenessById.has(template.id)
+                    ? `${template.name} (Needs update)`
+                    : template.name,
+              }))}
+              // A template deleted elsewhere drops out of the list; show no selection.
+              value={selected?.id ?? ""}
+              onChange={onSelect}
+            />
           </>
         )}
         {selected && setupFailed && (

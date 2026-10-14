@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { render, confirmInDialog } from "test-utils/render";
+import { render, chooseOption, confirmInDialog, optionLabels } from "test-utils/render";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
@@ -1376,6 +1376,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     within(rowEl(name)).queryByText("Added manually");
   const statusOfRow = (name: string) =>
     within(rowEl(name)).getAllByText(/.+/)[1].textContent;
+  const STATUS_LABELS: Record<string, string> = { present: "Present", late: "Late" };
   const addManually = async (name: string, status: string, reason = "") => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add member to this attendance" }),
@@ -1385,9 +1386,10 @@ describe("<MarkAttendance> manual per-session additions", () => {
       target: { value: name.slice(0, 3) },
     });
     fireEvent.click(await screen.findByText(name));
-    fireEvent.change(dialog().getByLabelText(/^Attendance status/), {
-      target: { value: status },
-    });
+    await chooseOption(
+      dialog().getByLabelText(/^Attendance status/),
+      STATUS_LABELS[status] ?? status,
+    );
     if (reason) {
       fireEvent.change(dialog().getByLabelText("Reason (optional)"), {
         target: { value: reason },
@@ -1463,10 +1465,8 @@ describe("<MarkAttendance> manual per-session additions", () => {
       );
       await screen.findByRole("dialog");
       expect(
-        within(dialog().getByLabelText(/^Attendance status/))
-          .getAllByRole("option")
-          .map((o) => o.textContent),
-      ).toEqual(["Choose a status", "Present", "Late"]);
+        await optionLabels(dialog().getByLabelText(/^Attendance status/)),
+      ).toEqual(["Present", "Late"]);
       fireEvent.keyDown(dialog().getByLabelText(/^Member/), {
         key: "ArrowDown",
       });

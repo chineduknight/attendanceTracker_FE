@@ -3,7 +3,7 @@ import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
-import { generatedCss, toggle } from "test-utils/render";
+import { generatedCss, toggle, chooseOption, shownValue } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
@@ -145,7 +145,7 @@ describe("Collect", () => {
     renderFinance();
 
     expect(await screen.findByText(/collected · 63%/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Obligation")).toHaveValue("dues-now");
+    expect(shownValue(screen.getByLabelText("Obligation"))).toBe(`${YEAR} Dues`);
     expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filter by payment status" });
     expect(within(chips).getByRole("button", { name: "Owing 1" })).toBeInTheDocument();
@@ -273,7 +273,9 @@ describe("Obligations", () => {
     await openTab("Obligations");
     fireEvent.click(await screen.findByText("Building Levy"));
 
-    await waitFor(() => expect(screen.getByLabelText("Obligation")).toHaveValue("levy"));
+    await waitFor(() =>
+      expect(shownValue(screen.getByLabelText("Obligation"))).toBe("Building Levy"),
+    );
   });
 
   it("hides create, rename and delete from a viewer", async () => {
@@ -403,7 +405,7 @@ describe("arrears lens", () => {
 
     fireEvent.click(overdue);
     expect(screen.getByRole("button", { name: "Behind 1" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Sort")).toHaveValue("behind");
+    expect(shownValue(screen.getByLabelText("Sort"))).toBe("Most behind");
     const filtered = screen.getByRole("list");
     expect(within(filtered).queryByText("Bola")).not.toBeInTheDocument();
   });
@@ -423,6 +425,8 @@ describe("arrears lens", () => {
     renderFinance();
     await screen.findByRole("button", { name: "Owing 1" });
     expect(screen.queryByRole("button", { name: /^Behind/ })).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByLabelText("Sort"), { key: "ArrowDown" });
+    expect(await screen.findAllByRole("option")).not.toHaveLength(0);
     expect(screen.queryByRole("option", { name: "Most behind" })).not.toBeInTheDocument();
   });
 });
@@ -432,7 +436,7 @@ describe("organisation switching", () => {
     setOrg("org1", MANAGER);
     renderFinance();
     const picker = await screen.findByLabelText("Obligation");
-    fireEvent.change(picker, { target: { value: "levy" } });
+    await chooseOption(picker, "Building Levy");
     await waitFor(() =>
       expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/finance/org1/obligations/levy/compliance")),
     );
@@ -444,7 +448,7 @@ describe("organisation switching", () => {
       expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/finance/org2/obligations/dues-now/compliance")),
     );
     expect(api.get.mock.calls.every(([url]: [string]) => !url.includes("org1"))).toBe(true);
-    expect(await screen.findByLabelText("Obligation")).toHaveValue("dues-now");
+    expect(shownValue(await screen.findByLabelText("Obligation"))).toBe(`${YEAR} Dues`);
   });
 
   it("resets the tab and any selections when the organisation changes", async () => {
