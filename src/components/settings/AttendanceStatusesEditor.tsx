@@ -8,13 +8,13 @@ import {
   IconButton,
   Input,
   RadioGroup,
-  NativeSelect,
   Stack,
   Text,
   Field,
   List,
 } from "@chakra-ui/react";
 import { Switch } from "components/ui/switch";
+import { OptionSelect } from "components/ui/themed-select";
 import { FaArrowDown, FaArrowUp, FaTrash } from "react-icons/fa";
 import {
   ATTENDANCE_BEHAVIORS,
@@ -161,43 +161,27 @@ const AttendanceStatusesEditor = ({
               <Field.Label fontSize="xs" mb={1}>
                 Color
               </Field.Label>
-              <NativeSelect.Root>
-                <NativeSelect.Field
-                  value={row.color}
-                  onChange={(e) =>
-                    updateRow(row.key, {
-                      color: e.target.value as AttendanceStatusColor,
-                    })
-                  }>
-                  {ATTENDANCE_STATUS_COLORS.map((color) => (
-                    <option key={color} value={color}>
-                      {color}
-                    </option>
-                  ))}
-                </NativeSelect.Field>
-                <NativeSelect.Indicator />
-              </NativeSelect.Root>
+              <OptionSelect<AttendanceStatusColor>
+                options={ATTENDANCE_STATUS_COLORS.map((color) => ({
+                  value: color,
+                  label: color,
+                }))}
+                value={row.color}
+                onChange={(color) => updateRow(row.key, { color })}
+              />
             </Field.Root>
             <Field.Root flex="1 1 110px" disabled={isReadOnly || row.persisted}>
               <Field.Label fontSize="xs" mb={1}>
                 Behavior
               </Field.Label>
-              <NativeSelect.Root>
-                <NativeSelect.Field
-                  value={row.behavior}
-                  onChange={(e) =>
-                    updateRow(row.key, {
-                      behavior: e.target.value as AttendanceBehavior,
-                    })
-                  }>
-                  {ATTENDANCE_BEHAVIORS.map((behavior) => (
-                    <option key={behavior} value={behavior}>
-                      {BEHAVIOR_META[behavior].label}
-                    </option>
-                  ))}
-                </NativeSelect.Field>
-                <NativeSelect.Indicator />
-              </NativeSelect.Root>
+              <OptionSelect<AttendanceBehavior>
+                options={ATTENDANCE_BEHAVIORS.map((behavior) => ({
+                  value: behavior,
+                  label: BEHAVIOR_META[behavior].label,
+                }))}
+                value={row.behavior}
+                onChange={(behavior) => updateRow(row.key, { behavior })}
+              />
             </Field.Root>
           </Flex>
 

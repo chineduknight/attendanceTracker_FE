@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format, parseISO } from "date-fns";
 import { system } from "styles/theme";
-import { selectTab, toggle } from "test-utils/render";
+import { selectTab, toggle, chooseOption, shownValue } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
@@ -375,7 +375,7 @@ describe("<Welfare> member-status scope", () => {
     orgs.org1.model = statusModel(["ACTIVE", "Inactive", "Alumni"]);
     renderPage();
     await waitForProgress();
-    expect(screen.getByLabelText("Member status")).toHaveValue("ACTIVE");
+    expect(shownValue(screen.getByLabelText("Member status"))).toBe("ACTIVE");
     // One request only: the scope resolves before the first overview fetch.
     expect(overviewCalls()).toEqual([
       `/welfare/org1/overview?asOf=${TODAY}&statuses=ACTIVE`,
@@ -386,7 +386,7 @@ describe("<Welfare> member-status scope", () => {
     orgs.org1.model = statusModel(["Member", "Alumni"]);
     renderPage();
     await waitForProgress();
-    expect(screen.getByLabelText("Member status")).toHaveValue("__all__");
+    expect(shownValue(screen.getByLabelText("Member status"))).toBe("All");
     expect(overviewCalls()).toEqual([`/welfare/org1/overview?asOf=${TODAY}`]);
   });
 
@@ -414,18 +414,14 @@ describe("<Welfare> member-status scope", () => {
     renderPage();
     await waitForProgress();
 
-    fireEvent.change(screen.getByLabelText("Member status"), {
-      target: { value: "Inactive" },
-    });
+    await chooseOption(screen.getByLabelText("Member status"), "Inactive");
     await waitFor(() =>
       expect(overviewCalls()).toContain(
         `/welfare/org1/overview?asOf=${TODAY}&statuses=Inactive`
       )
     );
 
-    fireEvent.change(screen.getByLabelText("Member status"), {
-      target: { value: "__all__" },
-    });
+    await chooseOption(screen.getByLabelText("Member status"), "All");
     await waitFor(() =>
       expect(overviewCalls()).toContain(`/welfare/org1/overview?asOf=${TODAY}`)
     );
@@ -436,9 +432,7 @@ describe("<Welfare> member-status scope", () => {
     orgs.org2.model = statusModel(["active", "Left"]);
     renderPage();
     await waitForProgress();
-    fireEvent.change(screen.getByLabelText("Member status"), {
-      target: { value: "Alumni" },
-    });
+    await chooseOption(screen.getByLabelText("Member status"), "Alumni");
     await waitFor(() =>
       expect(overviewCalls()).toContain(
         `/welfare/org1/overview?asOf=${TODAY}&statuses=Alumni`
@@ -447,7 +441,7 @@ describe("<Welfare> member-status scope", () => {
 
     act(() => setOrg({ id: "org2" }));
     await waitFor(() =>
-      expect(screen.getByLabelText("Member status")).toHaveValue("active")
+      expect(shownValue(screen.getByLabelText("Member status"))).toBe("active")
     );
     const org2Calls = overviewCalls().filter((u) => u.includes("/org2/"));
     expect(org2Calls).toEqual([
@@ -670,14 +664,14 @@ describe("<Welfare> searchable manual member picker", () => {
     renderPage();
     const input = await openManual();
     const scope = screen.getByLabelText("Filter members by status");
-    expect(scope).toHaveValue("Active");
+    expect(shownValue(scope)).toBe("Active");
 
     fireEvent.change(input, { target: { value: "Zi" } });
     expect(
       screen.queryByRole("option", { name: "Zion Inactive" })
     ).not.toBeInTheDocument();
 
-    fireEvent.change(scope, { target: { value: "__all__" } });
+    await chooseOption(scope, "All statuses");
     fireEvent.change(input, { target: { value: "Zio" } });
     expect(
       await screen.findByRole("option", { name: "Zion Inactive" })

@@ -1,5 +1,6 @@
 import {
   Box,
+  chakra,
   Flex,
   Text,
   Button,
@@ -27,7 +28,7 @@ import {
   FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { MultiValue } from "react-select";
+import { MultiValue, StylesConfig } from "react-select";
 import { ThemedSelect } from "components/ui/themed-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
@@ -38,7 +39,12 @@ import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { useAttendanceStatuses } from "hooks/useAttendanceStatuses";
 import AttendanceMemberRow from "components/attendance/AttendanceMemberRow";
 import StatusCountSummary from "components/attendance/StatusCountSummary";
-import { buildAttendanceShareMessage } from "helpers/attendanceShareMessage";
+import {
+  awayForShare,
+  buildAttendanceShareMessage,
+  ShareMember,
+} from "helpers/attendanceShareMessage";
+import { effectiveAttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 import {
   AttendanceEligibilityRule,
   eligibilityIssues,
@@ -68,6 +74,10 @@ import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
 import { useMembers } from "hooks/useMembers";
 import { manualCandidates } from "helpers/manualAttendance";
 import { canChangeStoredRoster } from "helpers/attendanceEdits";
+import { fetchAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
+import { isValidAvailabilityDate } from "helpers/attendanceAvailability";
+import { useShareReport } from "hooks/useShareReport";
+import { ShareReportDialog, ShareReportError } from "components/attendance/ShareReport";
 
 type StatusOption = {
   value: string;
@@ -86,6 +96,19 @@ type MemberType = StoredRosterEntry & {
   };
 };
 
+/**
+ * A stored roster row exactly as the attendance API returns it: `member` is
+ * null for entries whose profile can no longer be resolved.
+ */
+type StoredEntryRow = StoredRosterEntry & {
+  member: {
+    name: string;
+    status: string;
+    gender?: string;
+    part?: string;
+  } | null;
+};
+
 /** Reason and date of a manual addition, for anyone who can view the session. */
 const manualAdditionNote = (entry: MemberType): string | undefined => {
   if (!isManualEntry(entry)) return undefined;
@@ -101,6 +124,17 @@ const manualAdditionNote = (entry: MemberType): string | undefined => {
 type AttendanceInfoType = {
   name: string;
   date: Date;
+  /**
+   * `organisationId:attendanceId` of the session this snapshot was loaded
+   * for. Sharing refuses to run against any other session, so a switch in
+   * flight can never send the previous session's roster.
+   */
+  sessionKey: string;
+  /**
+   * The complete saved roster — resolved and unresolved entries, manual
+   * additions included — as the one source for share calculations.
+   */
+  shareRoster: ShareMember[];
   /**
    * Expected entries of the stored roster snapshot, including those whose
    * member profile no longer resolves — never recomputed from current members
@@ -127,6 +161,28 @@ const nextMultiFilter = (values: string[]): string[] => {
 };
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
+/** The small caption above each roster filter. */
+const FilterLabel = chakra("label", {
+  base: {
+    display: "block",
+    fontSize: "sm",
+    fontWeight: "medium",
+    color: "fg.muted",
+    mb: 1,
+    lineClamp: 1,
+  },
+});
+
+// The two filters share a 320px row: tighten the padding. "All" has no ✕ — removing it only puts it back — so a tap on the
+// chip, in the middle of a narrow control, opens the menu instead.
+const COMPACT_FILTER_STYLES: StylesConfig<StatusOption, true> = {
+  valueContainer: (base) => ({ ...base, paddingLeft: 8, paddingRight: 2 }),
+  multiValueLabel: (base, { data }) =>
+    data.value === ALL ? { ...base, paddingRight: 6 } : base,
+  multiValueRemove: (base, { data }) =>
+    data.value === ALL ? { display: "none" } : base,
+};
+
 const Attendance = () => {
   const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
@@ -139,6 +195,7 @@ const Attendance = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const [attendanceInfo, setAttendanceInfo] = useState<AttendanceInfoType>();
   const navigate = useNavigate();
+  const param = useParams();
   const onSuccess = (data) => {
     const {
       resolved: unsorted,
@@ -157,6 +214,22 @@ const Attendance = () => {
     setAttendanceInfo({
       name: data.data.name,
       date: data.data.date,
+      // Bound to the session it was loaded for, so a stale snapshot can never
+      // be shown or shared under a different session.
+      sessionKey: `${org.id}:${param.id}`,
+      // Sharing reads the stored roster itself — unresolved and manual
+      // entries included — never today's member list.
+      shareRoster: (data.data.attendance as StoredEntryRow[]).map((entry) => ({
+        attendanceStatus: entry.attendanceStatus,
+        member: entry.member
+          ? {
+              name: entry.member.name,
+              status: entry.member.status,
+              gender: entry.member.gender,
+              part: entry.member.part,
+            }
+          : null,
+      })),
       expectedCount,
       manualCount,
       rosterCount,
@@ -171,7 +244,9 @@ const Attendance = () => {
 
     setAllMembers(members);
   };
-  const param = useParams();
+  // The session identity the URL currently points at; a snapshot only counts
+  // once it was loaded for exactly this session.
+  const sessionKey = `${org.id}:${param.id}`;
   const url = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
     organisationId: org.id,
     id: param.id as string,
@@ -190,7 +265,11 @@ const Attendance = () => {
       refetchOnWindowFocus: false,
     },
   );
-  const isLoadingAttendance = isFetchingAttendance && allMembers.length === 0;
+  // A snapshot counts only for the session in the URL. Until one exists for
+  // that session, show the loader (or the load error) — never a previous
+  // session's roster, which could otherwise be shown or shared by mistake.
+  const snapshotIsCurrent = attendanceInfo?.sessionKey === sessionKey;
+  const isLoadingAttendance = !snapshotIsCurrent && !attendanceFailed;
 
   const { fields: memberFields, isSuccess: memberModelLoaded } = useMemberModel(
     org.id,
@@ -248,35 +327,59 @@ const Attendance = () => {
     );
   }, [allMembers, searchQuery, statusFilter, attendanceFilter]);
 
+  // Unfiltered, the tally describes the whole saved roster, so it adds the
+  // read-only entries whose profile no longer resolves — those rows are
+  // always on screen. While any search or filter is active the tally keeps
+  // describing exactly the rows that matched, as before.
+  const unfiltered =
+    searchQuery === "" &&
+    statusFilter.includes(ALL) &&
+    attendanceFilter.includes(ALL);
   const filteredCounts = useMemo(
-    () => statuses.countStatuses(filteredMembers.map((m) => m.attendanceStatus)),
-    [filteredMembers, statuses],
+    () =>
+      statuses.countStatuses([
+        ...filteredMembers.map((m) => m.attendanceStatus),
+        ...(unfiltered
+          ? (attendanceInfo?.unresolved ?? []).map((u) => u.attendanceStatus)
+          : []),
+      ]),
+    [filteredMembers, statuses, unfiltered, attendanceInfo?.unresolved],
   );
 
   // The stored calendar day, never shifted by the device timezone.
   const formattedDate = formatSessionDate(attendanceInfo?.date);
 
-  const handleSendToWhatsapp = () => {
-    const message = buildAttendanceShareMessage({
+  // Each Share reads who is away on the session's own date afresh — a
+  // period may have been edited or archived since — then builds the message
+  // from the complete stored snapshot. Only the current session's snapshot
+  // may be shared: switching session or organisation, or reloading it,
+  // discards anything prepared or pending (see useShareReport).
+  const prepareShareMessage = async (info: AttendanceInfoType) => {
+    const sessionDate = formatSessionDate(info.date, "yyyy-MM-dd");
+    if (!isValidAvailabilityDate(sessionDate)) {
+      throw new Error("This session has no valid date.");
+    }
+    const periods = await fetchAttendanceAvailabilityForDate(org.id, sessionDate);
+    return buildAttendanceShareMessage({
       orgName: org.name,
-      sessionName: attendanceInfo?.name ?? "",
-      formattedDate,
-      members: allMembers,
+      sessionName: info.name,
+      formattedDate: formatSessionDate(info.date),
+      members: info.shareRoster,
       statuses,
       terminology: terms,
+      // Read at share time, so a template saved in Settings applies to the
+      // next message without reloading the session.
+      template: effectiveAttendanceShareTemplate(org),
+      away: awayForShare(periods, {
+        sessionDate,
+        rosterMemberIds: info.rosterMemberIds,
+      }),
     });
-    if (navigator.share) {
-      navigator.share({ title: "", text: message }).catch(() => {
-        /* user dismissed the native share sheet */
-      });
-    } else {
-      window.open(
-        `https://wa.me/?text=${encodeURIComponent(message)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-    }
   };
+  const share = useShareReport(
+    snapshotIsCurrent && attendanceInfo ? attendanceInfo : null,
+    prepareShareMessage,
+  );
 
   const downloadURl = useMemo(() => {
     const base = convertParamsToString(attendanceRequest.EXPORT, {
@@ -377,7 +480,7 @@ const Attendance = () => {
             h="40vh"
             label={`Loading ${lowerTerm(terms.attendancePlural)}...`}
           />
-        ) : attendanceFailed && !attendanceInfo ? (
+        ) : attendanceFailed && !snapshotIsCurrent ? (
           <Box mt="8">
             <ErrorState
               title={`Couldn't load this ${lowerTerm(terms.attendanceSingular)}`}
@@ -401,7 +504,13 @@ const Attendance = () => {
             {/* Sharing the session just marked is the page's main job, so
                 Share leads as the solid action; Excel export is secondary. */}
             <Flex mt="3" gap={2}>
-              <Button flex="1" minH="44px" onClick={handleSendToWhatsapp}>
+              <Button
+                flex="1"
+                minH="44px"
+                onClick={share.start}
+                loading={share.state.phase === "preparing"}
+                loadingText="Preparing message..."
+              >
                 <FaShareAlt />
                 Share
               </Button>
@@ -423,6 +532,13 @@ const Attendance = () => {
                 Excel
               </Button>
             </Flex>
+            {share.state.phase === "failed" && (
+              <ShareReportError
+                error={share.state.error}
+                onRetry={share.start}
+                onCancel={share.cancel}
+              />
+            )}
             {attendanceInfo && (
               <ExpectedRosterSummary
                 title={`Expected ${lowerTerm(terms.memberPlural)}: ${attendanceInfo.expectedCount}`}
@@ -456,18 +572,26 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            {/* Stacked on phones (side by side, each half of 320px showed only
-                "A…"); side by side from sm up. */}
-            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
+            {/* Side by side at every width. Neither filter has a clear-all ✕:
+                choosing "All" (or a chip's own ✕) already resets it, and the
+                44px button left half of a 320px screen showing only "A…". */}
+            <Flex mt="4" gap={2}>
               <Box flex="1" minW={0}>
+                {/* Both filters read "All" until used: the label says which is which. */}
+                <FilterLabel htmlFor="attendance-status-filter">
+                  {`${terms.attendanceSingular} status`}
+                </FilterLabel>
                 <ThemedSelect
                   isMulti
+                  inputId="attendance-status-filter"
                   aria-label={`Filter by ${lowerTerm(
                     terms.attendanceSingular,
                   )} status`}
                   placeholder={`${terms.attendanceSingular} status`}
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
+                  isClearable={false}
+                  styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
@@ -475,12 +599,18 @@ const Attendance = () => {
                 />
               </Box>
               <Box flex="1" minW={0}>
+                <FilterLabel htmlFor="member-status-filter">
+                  {`${terms.memberSingular} status`}
+                </FilterLabel>
                 <ThemedSelect
                   isMulti
+                  inputId="member-status-filter"
                   aria-label={`Filter by ${lowerTerm(terms.memberSingular)} status`}
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
+                  isClearable={false}
+                  styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))
@@ -591,6 +721,13 @@ const Attendance = () => {
           })
         }
         onClose={() => !isRemoving && setRemoving(null)}
+      />
+      <ShareReportDialog
+        open={share.state.phase === "ready"}
+        message={share.state.phase === "ready" ? share.state.message : ""}
+        nativeFailed={share.state.phase === "ready" && share.state.nativeFailed}
+        onShare={share.shareNow}
+        onClose={share.cancel}
       />
       {confirmDialog}
     </PageContainer>

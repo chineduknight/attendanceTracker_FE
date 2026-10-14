@@ -1,5 +1,5 @@
 import { screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { render } from "test-utils/render";
+import { render, chooseOption, shownValue } from "test-utils/render";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
@@ -76,9 +76,8 @@ describe("sub-category create cache invalidation", () => {
     setOrg("orgA");
     renderPage(<SubCategory />);
 
-    const select = await screen.findByRole("combobox");
-    await screen.findByRole("option", { name: "Choir" });
-    fireEvent.change(select, { target: { value: "c1" } });
+    const select = await screen.findByLabelText("Category");
+    await chooseOption(select, "Choir");
     fireEvent.change(screen.getByLabelText(/Sub-category name/), {
       target: { value: "Soprano" },
     });
@@ -109,14 +108,13 @@ describe("after a save", () => {
   it("keeps the chosen category but clears the sub-category name", async () => {
     setOrg("orgA");
     renderPage(<SubCategory />);
-    const select = await screen.findByRole("combobox");
-    await screen.findByRole("option", { name: "Choir" });
-    fireEvent.change(select, { target: { value: "c1" } });
+    const select = await screen.findByLabelText("Category");
+    await chooseOption(select, "Choir");
     const name = screen.getByLabelText(/Sub-category name/);
     fireEvent.change(name, { target: { value: "Alto" } });
     fireEvent.click(screen.getByRole("button", { name: "Add sub-category" }));
     await waitFor(() => expect(name).toHaveValue(""));
-    expect(select).toHaveValue("c1");
+    expect(shownValue(select)).toBe("Choir");
   });
 });
 

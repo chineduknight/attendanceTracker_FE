@@ -12,6 +12,8 @@ import {
 } from "helpers/organisationPresentation";
 import { isAttendanceEligibilityEnabled } from "helpers/attendanceEligibility";
 import { DEFAULT_ATTENDANCE_STATUSES } from "helpers/attendanceStatuses";
+import { effectiveAttendanceShareTemplate } from "helpers/attendanceShareTemplate";
+import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -815,6 +817,211 @@ describe("<OrganisationSettings>", () => {
       act(() => manager("orgA"));
       await waitFor(() => expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgA"));
       expect(screen.getByLabelText(LABEL)).toBeChecked();
+    });
+  });
+  describe("attendance share template", () => {
+    const detail = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      name: `Org ${id}`,
+      image: "",
+      collapseAttendanceByDay: true,
+      maxAttendanceEdits: 4,
+      attendanceStatuses: CUSTOM_STATUSES,
+      attendanceEligibilityEnabled: true,
+      terminology: { ...DEFAULT_TERMINOLOGY, memberPlural: "Players" },
+      featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY, finance: false },
+      welfareSettings: { reviewWindowDays: 21 },
+      attendanceShareTemplate: "choir",
+      ...over,
+    });
+    const serve = (byId: Record<string, Record<string, unknown>>) =>
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({ data: { data: byId[url.split("/").pop() as string] } }),
+      );
+    const manager = (id = "org1", over: Partial<typeof EMPTY_ORG> = {}) =>
+      setOrg({ id, permissions: ["settings.view", "settings.manage"], ...over });
+    const radio = (name: "Generic" | "Choir") =>
+      screen.getByRole("radio", { name: new RegExp(`^${name}`) });
+    const choose = async (name: "Generic" | "Choir") => {
+      const input = await screen.findByRole("radio", { name: new RegExp(`^${name}`) });
+      // Ark radios settle asynchronously: flush before clicking, then wait.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      act(() => input.click());
+      await waitFor(() => expect(input).toBeChecked());
+    };
+
+    it("loads generic for a new organisation, over a cached default", async () => {
+      serve({ org1: detail("org1", { attendanceShareTemplate: "generic" }) });
+      // The persisted selected organisation predates the setting.
+      manager();
+      renderPage();
+      expect(
+        await screen.findByRole("heading", { name: "Attendance sharing" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("radiogroup", { name: "Sharing template" })).toBeInTheDocument();
+      await waitFor(() => expect(radio("Generic")).toBeChecked());
+      expect(radio("Choir")).not.toBeChecked();
+      expect(
+        screen.getByText("Bro/Sis when known, voice-part grouping and choir messages"),
+      ).toBeInTheDocument();
+    });
+
+    it("loads choir for a legacy organisation the backend resolves to choir", async () => {
+      serve({ org1: detail("org1", { attendanceShareTemplate: "choir" }) });
+      manager("org1", { attendanceShareTemplate: "generic" });
+      renderPage();
+      await waitFor(() => expect(radio("Choir")).toBeChecked());
+      expect(radio("Generic")).not.toBeChecked();
+    });
+
+    it("saves the choice with every other setting intact and keeps RBAC", async () => {
+      serve({ org1: detail("org1") });
+      manager("org1", { roleName: "Owner", isOwner: true });
+      // The PUT reply omits the template; the submitted value still applies.
+      mockPut.mockResolvedValue({ data: { data: { id: "org1", name: "Org org1" } } });
+      queryClient.setQueryData(queryKeys.allOrganisations, []);
+      renderPage();
+      await choose("Generic");
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0][0]).toBe("/organisations/org1");
+      expect(mockPut.mock.calls[0][1]).toEqual({
+        name: "Org org1",
+        image: "",
+        collapseAttendanceByDay: true,
+        maxAttendanceEdits: 4,
+        attendanceStatuses: CUSTOM_STATUSES,
+        attendanceEligibilityEnabled: true,
+        welfareSettings: { reviewWindowDays: 21 },
+        terminology: { ...DEFAULT_TERMINOLOGY, memberPlural: "Players" },
+        featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY, finance: false },
+        attendanceShareTemplate: "generic",
+      });
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.attendanceShareTemplate).toBe("generic"),
+      );
+      const org = useGlobalStore.getState().organisation;
+      expect(org.roleName).toBe("Owner");
+      expect(org.isOwner).toBe(true);
+      expect(org.permissions).toEqual(["settings.view", "settings.manage"]);
+      expect(queryClient.getQueryState(queryKeys.allOrganisations)?.isInvalidated).toBe(true);
+    });
+
+    it("prefers the backend's stored value from the save reply", async () => {
+      serve({ org1: detail("org1") });
+      manager();
+      mockPut.mockResolvedValue({
+        data: { data: { id: "org1", name: "Org org1", attendanceShareTemplate: "choir" } },
+      });
+      renderPage();
+      await choose("Generic");
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(useGlobalStore.getState().organisation.attendanceShareTemplate).toBe("choir"),
+      );
+    });
+
+    it("is read-only for a view-only officer", async () => {
+      serve({ org1: detail("org1", { attendanceShareTemplate: "generic" }) });
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderPage();
+      await waitFor(() => expect(radio("Generic")).toBeChecked());
+      expect(radio("Generic")).toBeDisabled();
+      expect(radio("Choir")).toBeDisabled();
+      expect(screen.queryByRole("button", { name: /Save/ })).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["omits the setting", undefined],
+      ["returns an unknown value", "band"],
+    ])("neither shows nor sends it when the backend %s", async (_case, value) => {
+      serve({ org1: detail("org1", { attendanceShareTemplate: value }) });
+      manager();
+      renderPage();
+      await screen.findByLabelText(/Organisation name/);
+      expect(screen.queryByRole("heading", { name: "Attendance sharing" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("radio", { name: /^Generic/ })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      const body = mockPut.mock.calls[0][1];
+      expect(body).not.toHaveProperty("attendanceShareTemplate");
+      expect(body.welfareSettings).toEqual({ reviewWindowDays: 21 });
+      expect(body.attendanceEligibilityEnabled).toBe(true);
+      // Sharing keeps the familiar choir layout for that organisation.
+      await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+      expect(
+        effectiveAttendanceShareTemplate(useGlobalStore.getState().organisation),
+      ).toBe("choir");
+    });
+
+    it("keeps an unsaved choice across a background refetch", async () => {
+      serve({ org1: detail("org1") });
+      manager();
+      renderPage();
+      await choose("Generic");
+      await act(async () => {
+        await queryClient.refetchQueries({ queryKey: queryKeys.organisation("org1") });
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(radio("Generic")).toBeChecked();
+    });
+
+    it("keeps each organisation's choice across A -> B -> A", async () => {
+      serve({
+        orgA: detail("orgA", { attendanceShareTemplate: "generic" }),
+        orgB: detail("orgB", { attendanceShareTemplate: "choir" }),
+      });
+      manager("orgA");
+      renderPage();
+      await waitFor(() => expect(radio("Generic")).toBeChecked());
+
+      act(() => manager("orgB"));
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgB"),
+      );
+      await waitFor(() => expect(radio("Choir")).toBeChecked());
+
+      act(() => manager("orgA"));
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Org orgA"),
+      );
+      await waitFor(() => expect(radio("Generic")).toBeChecked());
+    });
+
+    it("ignores a save reply for an organisation the officer has switched away from", async () => {
+      let reply: (value: unknown) => void = () => undefined;
+      mockPut.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            reply = resolve;
+          }),
+      );
+      serve({ org1: detail("org1"), org2: detail("org2") });
+      manager();
+      renderPage();
+      await choose("Generic");
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+
+      act(() =>
+        setOrg({
+          id: "org2",
+          name: "Band",
+          permissions: ["settings.view"],
+          attendanceShareTemplate: "choir",
+        }),
+      );
+      await act(async () => {
+        reply({
+          data: { data: { id: "org1", name: "Org org1", attendanceShareTemplate: "generic" } },
+        });
+      });
+
+      const org = useGlobalStore.getState().organisation;
+      expect(org.id).toBe("org2");
+      expect(org.attendanceShareTemplate).toBe("choir");
     });
   });
 });

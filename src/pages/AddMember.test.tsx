@@ -10,7 +10,7 @@ import AddMember from "pages/AddMember";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { queryKeys } from "services/api/queryKeys";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
-import { toggle, confirmInDialog } from "test-utils/render";
+import { toggle, confirmInDialog, shownValue } from "test-utils/render";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -80,8 +80,8 @@ describe("<AddMember> with display labels", () => {
 
   it("prefills an existing member's saved value after a label-only rename", async () => {
     renderAt("/member/update/m1");
-    const part = (await screen.findByLabelText("Voice Part")) as HTMLSelectElement;
-    await waitFor(() => expect(part.value).toBe("Alto"));
+    const part = await screen.findByLabelText("Voice Part");
+    await waitFor(() => expect(shownValue(part)).toBe("Alto"));
 
     const [, body] = await confirmSubmit();
 
@@ -137,7 +137,7 @@ describe("<AddMember> with custom terminology", () => {
     renderAt("/member/update/m1");
     await screen.findByLabelText("Voice Part");
     await waitFor(() =>
-      expect((screen.getByLabelText("Voice Part") as HTMLSelectElement).value).toBe("Alto"),
+      expect(shownValue(screen.getByLabelText("Voice Part"))).toBe("Alto"),
     );
 
     await confirmSubmit();
@@ -341,7 +341,7 @@ describe("<AddMember> loading, dates and errors", () => {
     renderAt("/member/update/m1");
 
     await waitFor(() => expect(screen.getByLabelText(/Full Name/)).toHaveValue("Fresh Ada"));
-    expect(screen.getByLabelText("Voice Part")).toHaveValue("Soprano");
+    expect(shownValue(screen.getByLabelText("Voice Part"))).toBe("Soprano");
     const [, body] = await confirmSubmit();
     expect(body).toMatchObject({ name: "Fresh Ada", part: "Soprano" });
   });

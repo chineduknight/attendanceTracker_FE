@@ -1,4 +1,5 @@
-import { Badge, Box, Button, Checkbox, Flex, Input, NativeSelect, Stack, Text, Field } from "@chakra-ui/react";
+import { Badge, Box, Button, Checkbox, Flex, Input, Stack, Text, Field } from "@chakra-ui/react";
+import { OptionSelect } from "components/ui/themed-select";
 import { FaLock, FaTimesCircle } from "react-icons/fa";
 import { MEMBER_FIELD_TYPES } from "helpers/memberFields";
 import { EditorField, FieldErrors } from "helpers/memberModelEditor";
@@ -83,18 +84,11 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
 
       <Field.Root id={`${id}-type`} disabled={keyLocked}>
         <Field.Label mb="1">Field type</Field.Label>
-        <NativeSelect.Root>
-          <NativeSelect.Field
-            value={field.type}
-            onChange={(e) => onChange({ type: e.target.value })}>
-            {MEMBER_FIELD_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </NativeSelect.Field>
-          <NativeSelect.Indicator />
-        </NativeSelect.Root>
+        <OptionSelect
+          options={MEMBER_FIELD_TYPES.map((type) => ({ value: type, label: type }))}
+          value={field.type}
+          onChange={(type) => onChange({ type })}
+        />
         {saved && !isPinned && (
           <Field.HelperText>A saved field's type can't be changed.</Field.HelperText>
         )}
