@@ -153,10 +153,23 @@ const nextMultiFilter = (values: string[]): string[] => {
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
 
 // The two filters share a 320px row: drop the separator and tighten the
-// padding so an "All" chip (with its 44px ✕) fits in each half.
+// padding. "All" has no ✕ — removing it only puts it back — so a tap on the
+// chip, in the middle of a narrow control, opens the menu instead.
 const COMPACT_FILTER_STYLES: StylesConfig<StatusOption, true> = {
-  valueContainer: (base) => ({ ...base, paddingLeft: 8, paddingRight: 2 }),
+  valueContainer: (base) => ({
+    ...base,
+    paddingLeft: 8,
+    paddingRight: 2,
+    // The 1px focus input of a non-searchable select stays for keyboard use
+    // but takes no room, so it never wraps onto a line of its own after a
+    // chip that fills the row.
+    "& > input": { position: "absolute" },
+  }),
   indicatorSeparator: () => ({ display: "none" }),
+  multiValueLabel: (base, { data }) =>
+    data.value === ALL ? { ...base, paddingRight: 6 } : base,
+  multiValueRemove: (base, { data }) =>
+    data.value === ALL ? { display: "none" } : base,
 };
 
 const Attendance = () => {
@@ -546,6 +559,9 @@ const Attendance = () => {
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
                   isClearable={false}
+                  // A few statuses need no typing, and on a phone the text
+                  // box would pop the keyboard and wrap onto its own line.
+                  isSearchable={false}
                   styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
@@ -561,6 +577,9 @@ const Attendance = () => {
                   options={statusOptions}
                   value={selectedStatusOptions}
                   isClearable={false}
+                  // A few statuses need no typing, and on a phone the text
+                  // box would pop the keyboard and wrap onto its own line.
+                  isSearchable={false}
                   styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>

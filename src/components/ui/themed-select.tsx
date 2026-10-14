@@ -29,15 +29,26 @@ const themedStyles = <Option, IsMulti extends boolean, Group extends GroupBase<O
     alignItems: "center",
   }),
   multiValueLabel: (base) => ({ ...base, color: token("fg"), fontSize: 14 }),
-  // The chip's ✕ is a real button; react-select's default is ~22x27. 44px
-  // square (the chip grows with it) so it can be tapped without hitting the
-  // control behind it.
+  // The chip's ✕ is a real button. It stays chip-sized so a selected value
+  // doesn't make the control taller than a 44px field (a 44px ✕ grew it to
+  // ~54px and every wrapped row by 48px), while an invisible ::before zone
+  // keeps the tap target 44x44 without hitting the control behind it.
   multiValueRemove: (base) => ({
     ...base,
-    minWidth: 44,
-    minHeight: 44,
+    position: "relative",
+    minWidth: 32,
+    // The chip's full height (~26px), so the zone below reaches 44px.
+    alignSelf: "stretch",
     justifyContent: "center",
     color: token("fg.muted"),
+    "&::before": {
+      content: '""',
+      position: "absolute",
+      top: -9,
+      bottom: -9,
+      left: -6,
+      right: -6,
+    },
     "&:hover": { background: token("red.subtle"), color: token("red.fg") },
   }),
   indicatorSeparator: (base) => ({ ...base, background: token("border") }),
