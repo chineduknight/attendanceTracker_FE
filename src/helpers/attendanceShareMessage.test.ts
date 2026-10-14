@@ -91,7 +91,11 @@ describe("buildAttendanceShareMessage", () => {
   it("lists an unresolved present member under a neutral placeholder, never Bro/Sis", () => {
     const message = build([unresolved("present")]);
 
-    expect(message).toContain("*Other — 1*\nFormer member (profile unavailable)");
+    // No present member has a voice part, so there is no lone "Other" group.
+    expect(message).toContain(
+      "*PRESENT MEMBERS — 1*\n\nFormer member (profile unavailable)",
+    );
+    expect(message).not.toContain("*Other —");
     expect(message).toContain("✅ Present: 1");
     expect(message).not.toMatch(/Bro Former|Sis Former/);
   });
@@ -99,8 +103,10 @@ describe("buildAttendanceShareMessage", () => {
   it("lists an unresolved excused member in the combined excused list", () => {
     const message = build([unresolved("excused"), member("Chidi", "excused")]);
 
-    expect(message).toContain("*EXCUSED — 2*");
-    expect(message).toContain("Former member (profile unavailable) — Other");
+    expect(message).toContain(
+      "*EXCUSED — 2*\nBro Chidi — Tenor\nFormer member (profile unavailable)",
+    );
+    expect(message).not.toContain("— Other");
     expect(message).not.toMatch(/Bro Former|Sis Former/);
   });
 
@@ -211,4 +217,361 @@ describe("buildAttendanceShareMessage", () => {
 
     expect(message).toContain("Former student (profile unavailable)");
   });
+});
+
+const CHOIR_WORDS = /choir|music|rehears|voice|sound|perform|🎶|\bBro\b|\bSis\b|\bOther\b/i;
+
+const roster = (
+  definitions: ReturnType<typeof statusDefinition>[],
+  members: ShareMember[],
+  over: Partial<Parameters<typeof buildAttendanceShareMessage>[0]> = {},
+) =>
+  buildAttendanceShareMessage({
+    orgName: "Lakeside Tennis Club",
+    sessionName: "Squad Training",
+    formattedDate: "Tue 06 Oct 26",
+    members,
+    statuses: createStatusConfig(definitions),
+    random: () => 0,
+    ...over,
+  });
+
+describe("buildAttendanceShareMessage — generic template", () => {
+  const TENNIS_STATUSES = [
+    statusDefinition({ key: "played", label: "Played", color: "green" }),
+    statusDefinition({ key: "late", label: "Late", color: "yellow" }),
+    statusDefinition({ key: "injured", label: "Injured", color: "orange", behavior: "excused" }),
+    statusDefinition({ key: "away", label: "Away at Tournament", color: "orange", behavior: "excused" }),
+    statusDefinition({ key: "apology", label: "Apology", color: "orange", behavior: "excused" }),
+    statusDefinition({ key: "absent", label: "Absent", color: "red", behavior: "absent", isDefault: true }),
+  ];
+  const TENNIS_TERMS = {
+    ...DEFAULT_TERMINOLOGY,
+    memberSingular: "Player",
+    memberPlural: "Players",
+    attendanceSingular: "Session",
+  };
+  const tennis = (members: ShareMember[], random: () => number = () => 0) =>
+    roster(TENNIS_STATUSES, members, {
+      terminology: TENNIS_TERMS,
+      template: "generic",
+      random,
+    });
+
+  // Gender and part are present on purpose: the generic template ignores them.
+  const TENNIS_ROSTER = [
+    member("Babatunde Fasina", "played", { gender: "male", part: "tenor" }),
+    member("Adaeze Ezeani", "played", { gender: "female", part: "" }),
+    member("Chika Obi", "late", { gender: "female", part: "soprano" }),
+    member("Ovie Edewor", "injured"),
+    member("Obiageli Chukwu", "away", { gender: "female" }),
+    member("Halima Tanko", "apology", { gender: " FEMALE " }),
+    member("Dayo Ade", "absent", { status: "inactive" }),
+  ];
+
+  it("lays out a tennis club session with plain names and configured labels", () => {
+    const message = tennis(TENNIS_ROSTER);
+
+    expect(message).toBe(
+      [
+        "*LAKESIDE TENNIS CLUB SESSION*",
+        "*Squad Training*\n📅 Tue 06 Oct 26",
+        "✅ Played: 2  |  ✅ Late: 1  |  🟡 Injured: 1  |  🟡 Away at Tournament: 1  |  🟡 Apology: 1",
+        "*PRESENT PLAYERS — 3*",
+        "Adaeze Ezeani\nBabatunde Fasina\nChika Obi",
+        "*EXCUSED — 3*\nHalima Tanko — Apology\nObiageli Chukwu — Away at Tournament\nOvie Edewor — Injured",
+        "🔴 *Absent Players: 1*",
+        // 3 of 7 present and 3 excused: the excused-heavy tone.
+        "_Thank you to everyone who was present and to those who let us know they could not attend. Let us keep growing in consistency and commitment._",
+      ].join("\n\n"),
+    );
+    expect(message).not.toMatch(CHOIR_WORDS);
+  });
+
+  it("treats Attended and Attended Online as present and Work Commitment as excused", () => {
+    const message = roster(
+      [
+        statusDefinition({ key: "attended", label: "Attended", color: "green" }),
+        statusDefinition({ key: "online", label: "Attended Online", color: "teal" }),
+        statusDefinition({ key: "work", label: "Work Commitment", color: "orange", behavior: "excused" }),
+        statusDefinition({ key: "absent", label: "Absent", color: "red", behavior: "absent", isDefault: true }),
+      ],
+      [
+        member("Ngozi Eze", "attended"),
+        member("Femi Bello", "online", { gender: "male" }),
+        member("Kemi Ade", "online"),
+        member("Tunde Ola", "work", { gender: "male", part: "bass" }),
+        member("Ifeoma Nwosu", "absent"),
+      ],
+      { orgName: "Lagos Product Network", template: "generic" },
+    );
+
+    expect(message).toContain("*LAGOS PRODUCT NETWORK ATTENDANCE*");
+    expect(message).toContain("✅ Attended: 1  |  ✅ Attended Online: 2  |  🟡 Work Commitment: 1");
+    expect(message).toContain(
+      "*PRESENT MEMBERS — 3*\n\nFemi Bello\nKemi Ade\nNgozi Eze",
+    );
+    expect(message).toContain("*WORK COMMITMENT — 1*\nTunde Ola");
+    expect(message).toContain("*Absent Members: 1*");
+    expect(message).not.toMatch(CHOIR_WORDS);
+  });
+
+  it("names a single excused status in the heading for a youth fellowship", () => {
+    const message = roster(
+      [
+        statusDefinition({ key: "present", label: "Present", color: "green" }),
+        statusDefinition({ key: "apology", label: "Apology", color: "orange", behavior: "excused" }),
+        statusDefinition({ key: "absent", label: "Absent", color: "red", behavior: "absent", isDefault: true }),
+      ],
+      [
+        member("Zainab Musa", "present"),
+        member("Uche Okafor", "apology"),
+        member("Amaka Obi", "apology", { gender: "female" }),
+      ],
+      {
+        orgName: "St Mary's Youth Fellowship",
+        template: "generic",
+        terminology: {
+          ...DEFAULT_TERMINOLOGY,
+          memberSingular: "Youth Member",
+          memberPlural: "Youth Members",
+          attendanceSingular: "Meeting",
+        },
+      },
+    );
+
+    expect(message).toContain("*ST MARY'S YOUTH FELLOWSHIP MEETING*");
+    expect(message).toContain("*PRESENT YOUTH MEMBERS — 1*\n\nZainab Musa");
+    expect(message).toContain("*APOLOGY — 2*\nAmaka Obi\nUche Okafor");
+    expect(message).not.toMatch(/\(Apology\)|— Apology/);
+    expect(message).toContain("*Absent Youth Members: 0*");
+  });
+
+  it("uses a neutral header when the organisation has no name", () => {
+    const message = roster(TENNIS_STATUSES, [member("Ada", "played")], {
+      orgName: "",
+      template: "generic",
+    });
+    expect(message.startsWith("*ORGANISATION ATTENDANCE*")).toBe(true);
+  });
+
+  it("says nobody was present without an empty list", () => {
+    const message = tennis([member("Ada", "absent")]);
+    expect(message).toContain("*PRESENT PLAYERS — 0*\n\nNo players recorded as present.");
+  });
+
+  it("keeps manual additions, unresolved entries and unknown keys in the counts", () => {
+    const entries: ShareMember[] = [
+      member("Ada", "played"),
+      member("Bayo", "late"), // e.g. a manual addition: present behaviour
+      unresolved("played"),
+      unresolved("injured"),
+      member("Chidi", "mystery"), // unknown historical key fails closed
+      unresolved("absent"),
+    ];
+    const message = tennis(entries);
+
+    expect(message).toContain(
+      "*PRESENT PLAYERS — 3*\n\nAda\nBayo\nFormer player (profile unavailable)",
+    );
+    expect(message).toContain("*INJURED — 1*\nFormer player (profile unavailable)");
+    expect(message).toContain("*Absent Players: 2*");
+    // 3 present + 1 excused + 2 absent = the six saved entries.
+    expect(3 + 1 + 2).toBe(entries.length);
+    expect(message).not.toMatch(CHOIR_WORDS);
+  });
+
+  it.each([
+    ["strong", ["played", "played", "played", "played", "absent"], "Thank you for showing up and contributing to today's session."],
+    ["low", ["played", "absent", "absent", "absent"], "Every person's presence makes a difference."],
+    ["excused-heavy", ["played", "played", "apology", "apology", "absent"], "Thank you to everyone who was present and to those who let us know"],
+    ["general", ["played", "played", "played", "absent", "absent"], "Thank you to everyone who attended or communicated their absence."],
+  ])("picks a generic %s closing line from the saved totals", (_tone, keys, expected) => {
+    const message = tennis(keys.map((key, i) => member(`M${i}`, key)));
+    expect(message).toContain(expected);
+    expect(message).not.toMatch(CHOIR_WORDS);
+  });
+
+  it("only ever picks closing lines free of choir language", () => {
+    const sessions = [
+      ["played", "played", "played"],
+      ["absent", "absent", "played"],
+      ["played", "apology", "absent"],
+      ["played", "played", "apology", "absent", "absent"],
+    ];
+    sessions.forEach((keys) =>
+      [0, 0.5, 0.99].forEach((r) => {
+        const message = tennis(keys.map((key, i) => member(`M${i}`, key)), () => r);
+        expect(message).not.toMatch(CHOIR_WORDS);
+      }),
+    );
+  });
+});
+
+describe("buildAttendanceShareMessage — choir template", () => {
+  const choir = (members: ShareMember[], random: () => number = () => 0) =>
+    buildAttendanceShareMessage({
+      orgName: "VOB Choir",
+      sessionName: "Rehearsal",
+      formattedDate: "Tue 01 Sep 26",
+      members,
+      statuses: createStatusConfig(CUSTOM_STATUSES),
+      template: "choir",
+      random,
+    });
+
+  it("is the template used when none is given", () => {
+    const entries = [member("Ada", "present"), member("Bayo", "excused")];
+    expect(build(entries)).toBe(choir(entries));
+  });
+
+  it.each([
+    ["male", "Bro Ada"],
+    ["female", "Sis Ada"],
+    ["MALE", "Bro Ada"],
+    ["  Female ", "Sis Ada"],
+    ["", "Ada"],
+    [undefined, "Ada"],
+    ["nonbinary", "Ada"],
+    ["other", "Ada"],
+  ])("titles gender %p as %p", (gender, expected) => {
+    const message = choir([member("Ada", "present", { gender })]);
+    expect(message).toContain(`*Tenor — 1*\n${expected}`);
+    expect(message.split("\n")).toContain(expected);
+  });
+
+  it("never guesses Sis for a member without a gender", () => {
+    const message = choir([
+      member("Ada", "present", { gender: undefined }),
+      member("Bimpe", "excused", { gender: "" }),
+    ]);
+    expect(message).not.toMatch(/\bSis\b|\bBro\b/);
+  });
+
+  it.each([
+    ["Bro John", "female"],
+    ["Bro. John", "male"],
+    ["sis Mary", "female"],
+    ["Sis Mary", "male"],
+  ])("keeps the saved title of %p (gender %p) without doubling it", (name, gender) => {
+    const message = choir([member(name, "present", { gender })]);
+    expect(message.split("\n")).toContain(name);
+    expect(message).not.toMatch(/(Bro|Sis) (Bro|Sis)/i);
+  });
+
+  it("does not mistake a name that starts like a title for one", () => {
+    expect(choir([member("Brooke", "present", { gender: "female" })])).toContain("Sis Brooke");
+    expect(choir([member("Sisi", "present", { gender: "female" })])).toContain("Sis Sisi");
+  });
+
+  it("orders voice parts Soprano, Alto, Tenor, Bass, then other parts, then Other", () => {
+    const message = choir([
+      member("Tade", "present", { part: "Tenor" }),
+      member("Bola", "present", { part: "bass" }),
+      member("Ama", "late", { part: "alto", gender: "female" }),
+      member("Sade", "present", { part: "SOPRANO", gender: "female" }),
+      member("Bari", "present", { part: "Baritone" }),
+      member("Nobody", "present", { part: "  " }),
+      member("Ayo", "present", { part: "tenor" }),
+    ]);
+
+    expect(message).toContain(
+      [
+        "*PRESENT MEMBERS*",
+        "*Soprano — 1*\nSis Sade",
+        "*Alto — 1*\nSis Ama",
+        "*Tenor — 2*\nBro Ayo\nBro Tade",
+        "*Bass — 1*\nBro Bola",
+        "*Baritone — 1*\nBro Bari",
+        "*Other — 1*\nBro Nobody",
+      ].join("\n\n"),
+    );
+  });
+
+  it("lists names plainly when no present member has a voice part", () => {
+    const message = choir([
+      member("Bayo", "present", { part: undefined }),
+      member("Ada", "late", { part: "" }),
+    ]);
+    expect(message).toContain("*PRESENT MEMBERS — 2*\n\nBro Ada\nBro Bayo");
+    expect(message).not.toContain("*Other —");
+  });
+
+  it("shows an excused member's voice part only when one exists", () => {
+    const message = choir([
+      member("Ada", "excused", { part: "alto", gender: "female" }),
+      member("Bayo", "excused", { part: undefined }),
+    ]);
+    expect(message).toContain("*EXCUSED — 2*\nSis Ada — Alto\nBro Bayo");
+    expect(message).not.toContain("— Other");
+  });
+
+  it("keeps the music-themed header and closing lines", () => {
+    const strong = choir([member("Ada", "present")]);
+    expect(strong.startsWith("🎶 *VOB CHOIR ATTENDANCE*")).toBe(true);
+    expect(strong).toContain("Great music is built long before the performance");
+    expect(choir([member("Ada", "present")], () => 0.99)).toContain(
+      "we become stronger as one choir",
+    );
+  });
+
+  it("keeps the choir fallback header for an unnamed organisation", () => {
+    expect(
+      buildAttendanceShareMessage({
+        orgName: "",
+        sessionName: "Rehearsal",
+        formattedDate: "Tue 01 Sep 26",
+        members: [],
+        statuses: createStatusConfig(CUSTOM_STATUSES),
+        template: "choir",
+        random: () => 0,
+      }),
+    ).toContain("🎶 *CHOIR ATTENDANCE*");
+  });
+});
+
+describe("buildAttendanceShareMessage — both templates count the same roster", () => {
+  const ENTRIES: ShareMember[] = [
+    member("Ada", "present"),
+    member("Bayo", "late", { status: "associate" }),
+    member("Chidi", "excused"),
+    member("Dayo", "no_show", { status: "inactive" }),
+    member("Efe", "remote"), // inactive historical status, present behaviour
+    member("Fola", "mystery"), // unknown key: absent
+    unresolved("present"),
+    unresolved("excused"),
+    unresolved("no_show"),
+  ];
+
+  it.each(["generic", "choir"] as const)(
+    "%s: present + excused + absent equals the saved roster",
+    (template) => {
+      const message = buildAttendanceShareMessage({
+        orgName: "Org",
+        sessionName: "Session",
+        formattedDate: "Tue 01 Sep 26",
+        members: ENTRIES,
+        statuses: createStatusConfig(CUSTOM_STATUSES),
+        template,
+        random: () => 0,
+      });
+
+      expect(message).toContain(
+        // Configured order; the inactive historical status is still listed.
+        "✅ Present: 2  |  ✅ Late: 1  |  🟡 Excused: 2  |  ✅ Remote: 1",
+      );
+      expect(message).toContain("*EXCUSED — 2*");
+      expect(message).toContain("*Absent Members: 3*");
+      // 4 present + 2 excused + 3 absent = 9 saved entries.
+      expect(4 + 2 + 3).toBe(ENTRIES.length);
+      // Neither template invents a title for an unresolved profile.
+      expect(message).not.toMatch(/(Bro|Sis) Former/);
+      // 4 of 9 present (44%) with 22% excused: the excused-heavy tone.
+      expect(message).toContain(
+        template === "choir"
+          ? "Let us keep growing in consistency and readiness."
+          : "Let us keep growing in consistency and commitment.",
+      );
+    },
+  );
 });
