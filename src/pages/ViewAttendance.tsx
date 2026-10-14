@@ -27,7 +27,7 @@ import {
   FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { MultiValue } from "react-select";
+import { MultiValue, StylesConfig } from "react-select";
 import { ThemedSelect } from "components/ui/themed-select";
 import { queryKeys } from "services/api/queryKeys";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
@@ -151,6 +151,13 @@ const nextMultiFilter = (values: string[]): string[] => {
   return values.filter((v) => v !== ALL);
 };
 const activeFilterValues = (filter: string[]) => filter.filter((v) => v !== ALL);
+
+// The two filters share a 320px row: drop the separator and tighten the
+// padding so an "All" chip (with its 44px ✕) fits in each half.
+const COMPACT_FILTER_STYLES: StylesConfig<StatusOption, true> = {
+  valueContainer: (base) => ({ ...base, paddingLeft: 8, paddingRight: 2 }),
+  indicatorSeparator: () => ({ display: "none" }),
+};
 
 const Attendance = () => {
   const { confirm, confirmDialog } = useConfirm();
@@ -525,9 +532,10 @@ const Attendance = () => {
                 inclusion={attendanceInfo.analyticsInclusion}
               />
             )}
-            {/* Stacked on phones (side by side, each half of 320px showed only
-                "A…"); side by side from sm up. */}
-            <Flex mt="4" gap={2} direction={{ base: "column", sm: "row" }}>
+            {/* Side by side at every width. Neither filter has a clear-all ✕:
+                choosing "All" (or a chip's own ✕) already resets it, and the
+                44px button left half of a 320px screen showing only "A…". */}
+            <Flex mt="4" gap={2}>
               <Box flex="1" minW={0}>
                 <ThemedSelect
                   isMulti
@@ -537,6 +545,8 @@ const Attendance = () => {
                   placeholder={`${terms.attendanceSingular} status`}
                   options={attendanceOptions}
                   value={selectedAttendanceOptions}
+                  isClearable={false}
+                  styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setAttendanceFilter(nextMultiFilter(selected.map((o) => o.value)))
@@ -550,6 +560,8 @@ const Attendance = () => {
                   placeholder={`${terms.memberSingular} status`}
                   options={statusOptions}
                   value={selectedStatusOptions}
+                  isClearable={false}
+                  styles={COMPACT_FILTER_STYLES}
                   closeMenuOnSelect={false}
                   onChange={(selected: MultiValue<StatusOption>) =>
                     setStatusFilter(nextMultiFilter(selected.map((o) => o.value)))
