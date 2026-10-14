@@ -14,6 +14,12 @@ import {
   LEGACY_ATTENDANCE_SHARE_TEMPLATE,
 } from "helpers/attendanceShareTemplate";
 import { unresolvedMemberLabel } from "helpers/storedRoster";
+import {
+  AttendanceAvailability,
+  isAvailabilityActiveOn,
+  isValidAvailabilityDate,
+} from "helpers/attendanceAvailability";
+import { formatSessionDate } from "helpers/sessionDate";
 
 /*
  * WhatsApp summary for one attendance session.
@@ -27,6 +33,10 @@ import { unresolvedMemberLabel } from "helpers/storedRoster";
  * The organisation's share template only changes presentation: the Choir
  * template adds Bro/Sis titles, voice-part grouping and music-themed closing
  * lines; the Generic template lists plain names. Both count identically.
+ *
+ * Both templates can also list AWAY members: people recorded as unavailable
+ * on the session date who are not on its saved roster. AWAY is not an
+ * attendance behavior and never changes a figure.
  */
 
 export interface ShareMember {
@@ -49,6 +59,14 @@ export interface ShareMember {
   } | null;
 }
 
+/** One line of the AWAY section. */
+export interface ShareAwayMember {
+  /** The member's current name, exactly as the availability API returns it. */
+  name: string;
+  /** Last day of the unavailability period (YYYY-MM-DD), not the session date. */
+  endDate: string;
+}
+
 export interface ShareMessageInput {
   orgName: string;
   sessionName: string;
@@ -59,6 +77,8 @@ export interface ShareMessageInput {
   terminology?: OrganisationTerminology;
   /** The organisation's share layout; choir when not given. */
   template?: AttendanceShareTemplate;
+  /** Already filtered, de-duplicated and ordered by awayForShare. */
+  away?: readonly ShareAwayMember[];
   /** Injectable for deterministic tests. */
   random?: () => number;
 }
@@ -237,6 +257,62 @@ const closingTone = (present: number, excused: number, absent: number): Tone => 
   return "general";
 };
 
+const byName = (a: string, b: string) =>
+  a.toLowerCase().localeCompare(b.toLowerCase());
+
+/**
+ * The AWAY list for a session: availability periods covering the session
+ * date, minus everyone on the complete saved roster — whatever their status,
+ * manual additions and unresolved entries included — so nobody is listed
+ * twice. Periods are read fresh for each message and never stored with the
+ * session, so a period edited or archived later changes the next message,
+ * never the attendance record.
+ *
+ * Only the member's name and end date are used: never the reason, start
+ * date, ids or audit fields. Malformed rows are skipped rather than shown
+ * with an invented name.
+ */
+export const awayForShare = (
+  periods: readonly AttendanceAvailability[],
+  {
+    sessionDate,
+    rosterMemberIds,
+  }: { sessionDate: string; rosterMemberIds: readonly string[] },
+): ShareAwayMember[] => {
+  const onRoster = new Set(rosterMemberIds.map(String));
+  // Keyed by member id, not name: two people can share a name.
+  const byMember = new Map<string, ShareAwayMember>();
+  periods.forEach((period) => {
+    const memberId = typeof period.memberId === "string" ? period.memberId : "";
+    const name =
+      typeof period.member?.name === "string" ? period.member.name.trim() : "";
+    if (!memberId || !name || onRoster.has(memberId)) return;
+    if (
+      !isValidAvailabilityDate(period.startDate) ||
+      !isValidAvailabilityDate(period.endDate) ||
+      !isAvailabilityActiveOn(period, sessionDate)
+    ) {
+      return;
+    }
+    // Overlapping periods keep the latest end date, so the message never
+    // suggests an earlier return than recorded.
+    const listed = byMember.get(memberId);
+    if (!listed || period.endDate > listed.endDate) {
+      byMember.set(memberId, { name, endDate: period.endDate });
+    }
+  });
+  // Alphabetical; equal names fall back to end date, then id, so the order
+  // never depends on the API's.
+  return Array.from(byMember.entries())
+    .sort(
+      ([idA, a], [idB, b]) =>
+        byName(a.name, b.name) ||
+        a.endDate.localeCompare(b.endDate) ||
+        idA.localeCompare(idB),
+    )
+    .map(([, member]) => member);
+};
+
 export const buildAttendanceShareMessage = ({
   orgName,
   sessionName,
@@ -245,6 +321,7 @@ export const buildAttendanceShareMessage = ({
   statuses,
   terminology = DEFAULT_TERMINOLOGY,
   template = LEGACY_ATTENDANCE_SHARE_TEMPLATE,
+  away = [],
   random = Math.random,
 }: ShareMessageInput): string => {
   const style = TEMPLATE_STYLES[template];
@@ -325,6 +402,18 @@ export const buildAttendanceShareMessage = ({
       ].join("\n")
     : "";
 
+  // AWAY sits apart from the roster: it is left out of the summary line, the
+  // totals and the closing tone, and omitted entirely when nobody is away.
+  const awaySection = away.length
+    ? [
+        `*AWAY — ${away.length}*`,
+        ...away.map(
+          ({ name, endDate }) =>
+            `${name} — Until ${formatSessionDate(endDate, "dd MMM yyyy")}`,
+        ),
+      ].join("\n")
+    : "";
+
   const absentSection = `🔴 *${BEHAVIOR_META.absent.label} ${terminology.memberPlural}: ${absentCount}*`;
   const pool =
     style.closingMessages[
@@ -338,6 +427,7 @@ export const buildAttendanceShareMessage = ({
     summaryBlock,
     presentSection,
     excusedSection,
+    awaySection,
     absentSection,
     closingSection,
   ]

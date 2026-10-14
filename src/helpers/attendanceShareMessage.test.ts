@@ -1,7 +1,9 @@
 import {
+  awayForShare,
   buildAttendanceShareMessage,
   ShareMember,
 } from "helpers/attendanceShareMessage";
+import { AttendanceAvailability } from "helpers/attendanceAvailability";
 import { createStatusConfig } from "helpers/attendanceStatuses";
 import {
   CUSTOM_STATUSES,
@@ -574,4 +576,231 @@ describe("buildAttendanceShareMessage — both templates count the same roster",
       );
     },
   );
+});
+
+describe("awayForShare", () => {
+  const SESSION_DATE = "2026-10-06";
+  // Shaped like GET /attendance/:organisationId/availability?date=… rows.
+  const period = (
+    memberId: string,
+    name: string | null,
+    startDate: string,
+    endDate: string,
+    over: Partial<AttendanceAvailability> = {},
+  ): AttendanceAvailability => ({
+    id: `${memberId}-${startDate}`,
+    organisationId: "org1",
+    memberId,
+    member: name === null ? undefined : { id: memberId, name },
+    startDate,
+    endDate,
+    reason: "Medical leave",
+    createdBy: { id: "u1", username: "officer" },
+    updatedBy: null,
+    createdAt: "2026-09-20T10:00:00.000Z",
+    updatedAt: "2026-09-20T10:00:00.000Z",
+    ...over,
+  });
+  const away = (
+    periods: AttendanceAvailability[],
+    rosterMemberIds: string[] = [],
+    sessionDate = SESSION_DATE,
+  ) => awayForShare(periods, { sessionDate, rosterMemberIds });
+
+  it("lists names alphabetically with each period's end date", () => {
+    expect(
+      away([
+        period("m2", "Chidi Bello", "2026-10-01", "2026-11-10"),
+        period("m1", "Ada Okafor", "2026-10-06", "2026-10-25"),
+      ]),
+    ).toEqual([
+      { name: "Ada Okafor", endDate: "2026-10-25" },
+      { name: "Chidi Bello", endDate: "2026-11-10" },
+    ]);
+  });
+
+  it.each([
+    ["first day", "2026-10-06", "2026-10-20"],
+    ["last day", "2026-09-30", "2026-10-06"],
+    ["a one-day period", "2026-10-06", "2026-10-06"],
+  ])("includes a period covering the session on its %s", (_case, start, end) => {
+    expect(away([period("m1", "Ada", start, end)])).toEqual([
+      { name: "Ada", endDate: end },
+    ]);
+  });
+
+  it.each([
+    ["ended the day before", "2026-09-01", "2026-10-05"],
+    ["starts the day after", "2026-10-07", "2026-10-20"],
+    ["has a malformed start", "06/10/2026", "2026-10-20"],
+    ["has an impossible end", "2026-10-01", "2026-10-32"],
+    ["ends on a timestamp", "2026-10-01", "2026-10-20T00:00:00.000Z"],
+  ])("skips a period that %s", (_case, start, end) => {
+    expect(away([period("m1", "Ada", start, end)])).toEqual([]);
+  });
+
+  it("lists nobody for an invalid session date", () => {
+    expect(away([period("m1", "Ada", "2026-10-01", "2026-10-20")], [], "")).toEqual([]);
+  });
+
+  it("leaves out everyone on the saved roster, whatever their status", () => {
+    // m1 present, m2 excused, m3 absent, m4 a manual Present addition, m5 an
+    // entry whose profile no longer resolves: only m6 is away.
+    const periods = ["m1", "m2", "m3", "m4", "m5", "m6"].map((id) =>
+      period(id, `Name ${id}`, "2026-10-01", "2026-10-20"),
+    );
+    expect(away(periods, ["m1", "m2", "m3", "m4", "m5"])).toEqual([
+      { name: "Name m6", endDate: "2026-10-20" },
+    ]);
+  });
+
+  it("lists a member once, with the latest end date of overlapping periods", () => {
+    expect(
+      away([
+        period("m1", "Ada", "2026-10-01", "2026-10-20"),
+        period("m1", "Ada", "2026-10-05", "2026-12-01"),
+        period("m1", "Ada", "2026-10-06", "2026-10-10"),
+      ]),
+    ).toEqual([{ name: "Ada", endDate: "2026-12-01" }]);
+  });
+
+  it("keeps two people who share a name, in a stable order", () => {
+    const first = period("m1", "Ada Okafor", "2026-10-01", "2026-10-20");
+    const second = period("m2", "Ada Okafor", "2026-10-01", "2026-10-20");
+    const expected = [
+      { name: "Ada Okafor", endDate: "2026-10-20" },
+      { name: "Ada Okafor", endDate: "2026-10-20" },
+    ];
+    expect(away([first, second])).toEqual(expected);
+    expect(away([second, first])).toEqual(expected);
+  });
+
+  it("skips rows without a member id or a name rather than inventing one", () => {
+    expect(
+      away([
+        period("", "Ghost", "2026-10-01", "2026-10-20"),
+        period("m2", null, "2026-10-01", "2026-10-20"),
+        period("m3", "   ", "2026-10-01", "2026-10-20"),
+        { ...period("m4", "Nameless", "2026-10-01", "2026-10-20"), member: null as never },
+        period("m5", "Efe", "2026-10-01", "2026-10-20"),
+      ]),
+    ).toEqual([{ name: "Efe", endDate: "2026-10-20" }]);
+  });
+
+  it("keeps a saved title as part of the name", () => {
+    expect(away([period("m1", "Bro Tunde", "2026-10-01", "2026-10-20")])).toEqual([
+      { name: "Bro Tunde", endDate: "2026-10-20" },
+    ]);
+  });
+});
+
+describe("buildAttendanceShareMessage — AWAY section", () => {
+  const TENNIS_STATUSES = [
+    statusDefinition({ key: "played", label: "Played", color: "green" }),
+    statusDefinition({ key: "away", label: "Away at Tournament", color: "orange", behavior: "excused" }),
+    statusDefinition({ key: "absent", label: "Absent", color: "red", behavior: "absent", isDefault: true }),
+  ];
+  const ROSTER = [
+    member("Babatunde Fasina", "played"),
+    member("Obiageli Chukwu", "away", { gender: "female" }),
+    member("Dayo Ade", "absent"),
+  ];
+  const AWAY = [
+    { name: "Ada Okafor", endDate: "2026-10-25" },
+    { name: "Chidi Bello", endDate: "2026-11-10" },
+  ];
+  const message = (
+    template: "generic" | "choir",
+    away?: { name: string; endDate: string }[],
+    random: () => number = () => 0,
+  ) => roster(TENNIS_STATUSES, ROSTER, { template, away, random });
+
+  it.each(["generic", "choir"] as const)(
+    "%s: lists AWAY after Excused and before the Absent count",
+    (template) => {
+      const text = message(template, AWAY);
+      const away = "*AWAY — 2*\nAda Okafor — Until 25 Oct 2026\nChidi Bello — Until 10 Nov 2026";
+      expect(text).toContain(`${away}\n\n🔴 *Absent Members: 1*`);
+      expect(text.indexOf("*AWAY AT TOURNAMENT — 1*")).toBeLessThan(text.indexOf(away));
+      // Plain names in both templates: never a guessed title.
+      expect(text).not.toMatch(/(Bro|Sis) (Ada|Chidi)/);
+    },
+  );
+
+  it("adds no figure in either template and lists AWAY identically in both", () => {
+    const figures = (text: string) =>
+      text
+        .split("\n")
+        .filter((line) => /: \d|— \d/.test(line) && !line.startsWith("*AWAY"));
+    const generic = message("generic", AWAY);
+    const choir = message("choir", AWAY);
+    expect(figures(generic)).toEqual(figures(message("generic")));
+    expect(figures(choir)).toEqual(figures(message("choir")));
+    expect(generic.match(/\*AWAY — 2\*[^]*?\n\n/)?.[0]).toBe(
+      choir.match(/\*AWAY — 2\*[^]*?\n\n/)?.[0],
+    );
+  });
+
+  it.each(["generic", "choir"] as const)(
+    "%s: is byte-for-byte unchanged with nobody away",
+    (template) => {
+      expect(message(template, [])).toBe(message(template));
+    },
+  );
+
+  it("keeps an excused 'Away at Tournament' status in Excused, with no AWAY section", () => {
+    const text = message("generic");
+    expect(text).toContain("🟡 Away at Tournament: 1");
+    expect(text).toContain("*AWAY AT TOURNAMENT — 1*\nObiageli Chukwu");
+    expect(text).not.toMatch(/^\*AWAY — /m);
+  });
+
+  it("does not change the closing tone, however many are away", () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      name: `Member ${i}`,
+      endDate: "2026-10-25",
+    }));
+    for (const template of ["generic", "choir"] as const) {
+      const closing = (text: string) => text.split("\n\n").pop();
+      expect(closing(message(template, many))).toBe(closing(message(template)));
+    }
+  });
+
+  it("formats the end date the same in any device timezone", () => {
+    const original = process.env.TZ;
+    try {
+      for (const tz of ["Pacific/Honolulu", "UTC", "Africa/Lagos", "Pacific/Kiritimati"]) {
+        process.env.TZ = tz;
+        expect(message("generic", [{ name: "Ada", endDate: "2026-10-25" }])).toContain(
+          "Ada — Until 25 Oct 2026",
+        );
+      }
+    } finally {
+      process.env.TZ = original;
+    }
+  });
+
+  it("never prints a reason, start date or id", () => {
+    const periods: AttendanceAvailability[] = [
+      {
+        id: "avail-77",
+        organisationId: "org1",
+        memberId: "member-42",
+        member: { id: "member-42", name: "Ada Okafor" },
+        startDate: "2026-10-01",
+        endDate: "2026-10-25",
+        reason: "Surgery recovery",
+        createdBy: "user-9",
+        updatedBy: null,
+        createdAt: "2026-09-20T10:00:00.000Z",
+        updatedAt: "2026-09-20T10:00:00.000Z",
+      },
+    ];
+    const text = message(
+      "choir",
+      awayForShare(periods, { sessionDate: "2026-10-06", rosterMemberIds: [] }),
+    );
+    expect(text).toContain("*AWAY — 1*\nAda Okafor — Until 25 Oct 2026");
+    expect(text).not.toMatch(/Surgery|avail-77|member-42|user-9|org1|01 Oct|2026-10-01/);
+  });
 });

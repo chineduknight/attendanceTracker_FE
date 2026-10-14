@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import axiosInstance from "services/api";
 import {
   deleteRequest,
   postRequest,
@@ -105,6 +106,27 @@ export const useAttendanceAvailabilityForDate = (
     isError,
     refetch,
   };
+};
+
+/**
+ * Always a fresh network read of the periods covering `date` — never an
+ * earlier cached answer, which an edit or archive since could have made
+ * wrong. For one-off reads such as preparing a share message. The answer is
+ * cached under the same key as useAttendanceAvailabilityForDate, so the
+ * existing per-organisation invalidation still covers it.
+ */
+export const fetchAttendanceAvailabilityForDate = async (
+  organisationId: string,
+  date: string
+): Promise<AttendanceAvailability[]> => {
+  const response = await queryClient.fetchQuery<AvailabilityResponse>({
+    queryKey: queryKeys.attendanceAvailability.date(organisationId, date),
+    queryFn: async () =>
+      (await axiosInstance.get(availabilityListUrl(organisationId, { date })))
+        .data,
+    staleTime: 0,
+  });
+  return Array.isArray(response?.data) ? response.data : emptyPeriods;
 };
 
 export const useAttendanceAvailabilityMutations = (organisationId: string) => {

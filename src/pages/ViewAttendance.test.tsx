@@ -985,9 +985,39 @@ describe("<ViewAttendance> sharing the session report", () => {
     attendance: [rosterEntry("t1", "Tolu", "present")],
   };
 
-  const sharedText = (open: jest.SpyInstance): string => {
-    const url = String(open.mock.calls[0][0]);
+  const sharedText = (open: jest.SpyInstance, call = 0): string => {
+    const url = String(open.mock.calls[call][0]);
     return decodeURIComponent(url.replace("https://wa.me/?text=", ""));
+  };
+
+  // Availability periods recorded for the session date, as the API returns
+  // them (reason and audit fields included — the message must ignore them).
+  let availability: Record<string, unknown>[] = [];
+  const awayPeriod = (memberId: string, name: string, endDate: string) => ({
+    id: `${memberId}-period`,
+    organisationId: "org1",
+    memberId,
+    member: { id: memberId, name },
+    startDate: "2026-08-20",
+    endDate,
+    reason: "Hospital stay",
+    createdBy: "officer-1",
+    updatedBy: null,
+    createdAt: "2026-08-19T10:00:00.000Z",
+    updatedAt: "2026-08-19T10:00:00.000Z",
+  });
+  const isAvailability = (url: string) => url.includes("/availability?");
+  const availabilityCalls = () =>
+    mockGet.mock.calls.filter(([url]) => isAvailability(url));
+
+  // Share prepares the message (fetching who is away); Share now sends it.
+  const shareReport = async () => {
+    // A previous preview finishes closing first.
+    await waitFor(() =>
+      expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Share now" }));
   };
 
   const WithSessionSwitcher = () => {
@@ -1005,6 +1035,7 @@ describe("<ViewAttendance> sharing the session report", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    availability = [];
     useGlobalStore.setState({
       organisation: {
         ...EMPTY_ORG,
@@ -1014,7 +1045,13 @@ describe("<ViewAttendance> sharing the session report", () => {
     });
     mockGet.mockImplementation((url: string) =>
       Promise.resolve({
-        data: { data: url.endsWith("/model") ? { fields: [] } : SHARE_SESSION },
+        data: {
+          data: url.endsWith("/model")
+            ? { fields: [] }
+            : isAvailability(url)
+            ? availability
+            : SHARE_SESSION,
+        },
       })
     );
   });
@@ -1033,7 +1070,7 @@ describe("<ViewAttendance> sharing the session report", () => {
       target: { value: "Ada" },
     });
     expect(screen.queryByText("Bayo")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await shareReport();
 
     const text = sharedText(open);
     // Present-behavior: Ada + late Bayo + manual Efe + the unresolved present
@@ -1066,7 +1103,7 @@ describe("<ViewAttendance> sharing the session report", () => {
     renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
     await screen.findByText("Ada");
 
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await shareReport();
     const text = sharedText(open);
     expect(text.startsWith("*LAKESIDE TENNIS CLUB ATTENDANCE*")).toBe(true);
     // Same Stage 1 figures, plain names, no grouping or titles.
@@ -1085,7 +1122,7 @@ describe("<ViewAttendance> sharing the session report", () => {
     await screen.findByText("Ada");
     const sessionLoads = mockGet.mock.calls.filter(([url]) => url.includes("/att1")).length;
 
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await shareReport();
     expect(sharedText(open)).toContain("Bro Ada");
 
     // Organisation Settings saved Generic for this organisation.
@@ -1098,7 +1135,7 @@ describe("<ViewAttendance> sharing the session report", () => {
       });
     });
     open.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await shareReport();
     const text = sharedText(open);
     expect(text).toContain("*PRESENT MEMBERS — 5*\n\nAda\nBayo\nEfe");
     expect(text).not.toContain("Bro ");
@@ -1119,6 +1156,7 @@ describe("<ViewAttendance> sharing the session report", () => {
           failSecond = reject;
         });
       }
+      if (isAvailability(url)) return Promise.resolve({ data: { data: [] } });
       return Promise.resolve({ data: { data: SHARE_SESSION } });
     });
     renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
@@ -1170,7 +1208,7 @@ describe("<ViewAttendance> sharing the session report", () => {
     await screen.findByText("Tolu");
     expect(screen.queryByText("Ada")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await shareReport();
     const text = sharedText(open);
     expect(text).toContain("Bro Tolu");
     expect(text).toContain("*Absent Members: 0*");
@@ -1185,6 +1223,7 @@ describe("<ViewAttendance> sharing the session report", () => {
         return Promise.resolve({ data: { data: { fields: [] } } });
       }
       if (url.includes("/org2/")) return new Promise(() => undefined);
+      if (isAvailability(url)) return Promise.resolve({ data: { data: [] } });
       return Promise.resolve({ data: { data: SHARE_SESSION } });
     });
     renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
@@ -1207,6 +1246,362 @@ describe("<ViewAttendance> sharing the session report", () => {
       screen.queryByRole("button", { name: "Share" })
     ).not.toBeInTheDocument();
     expect(open).not.toHaveBeenCalled();
+  });
+
+  describe("AWAY members", () => {
+    // Resolves availability requests one at a time, in the test's order.
+    const deferAvailability = () => {
+      const pending: {
+        url: string;
+        resolve: (periods: unknown[]) => void;
+        reject: (error: unknown) => void;
+      }[] = [];
+      mockGet.mockImplementation((url: string) => {
+        if (isAvailability(url)) {
+          return new Promise((resolve, reject) => {
+            pending.push({
+              url,
+              resolve: (periods) => resolve({ data: { data: periods } }),
+              reject,
+            });
+          });
+        }
+        return Promise.resolve({
+          data: {
+            data: url.endsWith("/model")
+              ? { fields: [] }
+              : url.includes("/att2")
+              ? OTHER_SESSION
+              : SHARE_SESSION,
+          },
+        });
+      });
+      return pending;
+    };
+
+    it("fetches the session date's availability and lists AWAY in the shared message", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      availability = [
+        awayPeriod("a2", "Chidi Bello", "2026-09-30"),
+        awayPeriod("a1", "Ada Okafor", "2026-09-14"),
+        // Efe was manually added and marked present: never also AWAY.
+        awayPeriod("s5", "Efe", "2026-09-10"),
+        // Chidi (excused) and an unresolved roster entry are on the roster too.
+        awayPeriod("s3", "Chidi", "2026-09-10"),
+        awayPeriod("s7", "Former Someone", "2026-09-10"),
+      ];
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      expect(
+        await screen.findByRole("button", { name: /preparing message/i }),
+      ).toBeDisabled();
+      const preview = await screen.findByTestId("share-preview");
+      expect(availabilityCalls().map(([url]) => url)).toEqual([
+        "/attendance/org1/availability?date=2026-09-01",
+      ]);
+      expect(open).not.toHaveBeenCalled();
+      expect(preview).toHaveTextContent("AWAY — 2");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share now" }));
+      const text = sharedText(open);
+      expect(text).toContain(
+        "*EXCUSED — 2*\nBro Chidi — Tenor\nFormer member (profile unavailable)\n\n" +
+          "*AWAY — 2*\nAda Okafor — Until 14 Sep 2026\nChidi Bello — Until 30 Sep 2026\n\n" +
+          "🔴 *Absent Members: 1*",
+      );
+      // The same Stage 1 figures; nothing about the periods but name and end.
+      expect(text).toContain("✅ Present: 3  |  ✅ Late: 2  |  🟡 Excused: 2");
+      expect(text).not.toMatch(/Hospital|20 Aug|2026-08-20|officer-1|\ba[12]\b|Bro Ada Okafor|Efe — Until/);
+      // Shared once, then the preview closes.
+      await waitFor(() =>
+        expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument(),
+      );
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps AWAY and the figures the same while page filters are applied", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      availability = [awayPeriod("a1", "Ada Okafor", "2026-09-14")];
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      await shareReport();
+      const unfiltered = sharedText(open);
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "zzz" } });
+      await shareReport();
+      expect(sharedText(open, 1)).toBe(unfiltered);
+      expect(unfiltered).toContain("*AWAY — 1*\nAda Okafor — Until 14 Sep 2026");
+    });
+
+    it("lists AWAY with the generic template too", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      useGlobalStore.setState({
+        organisation: {
+          ...EMPTY_ORG,
+          id: "org1",
+          name: "Lakeside Tennis Club",
+          attendanceStatuses: CUSTOM_STATUSES,
+          attendanceShareTemplate: "generic",
+        },
+      });
+      availability = [awayPeriod("a1", "Ada Okafor", "2026-09-14")];
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      await shareReport();
+      expect(sharedText(open)).toContain(
+        "*EXCUSED — 2*\nChidi\nFormer member (profile unavailable)\n\n" +
+          "*AWAY — 1*\nAda Okafor — Until 14 Sep 2026\n\n🔴 *Absent Members: 1*",
+      );
+    });
+
+    it("reads availability afresh for every share", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      availability = [awayPeriod("a1", "Ada Okafor", "2026-09-14")];
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      await shareReport();
+      expect(sharedText(open, 0)).toContain("Ada Okafor — Until 14 Sep 2026");
+
+      // The period is extended…
+      availability = [awayPeriod("a1", "Ada Okafor", "2026-10-02")];
+      await shareReport();
+      expect(sharedText(open, 1)).toContain("*AWAY — 1*\nAda Okafor — Until 02 Oct 2026");
+
+      // …then archived: the section disappears.
+      availability = [];
+      await shareReport();
+      expect(sharedText(open, 2)).not.toContain("AWAY");
+      expect(availabilityCalls()).toHaveLength(3);
+    });
+
+    it("never shares when availability fails, and retries on request", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      const pending = deferAvailability();
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      await act(async () => {
+        pending[0].reject({ response: { status: 500, data: { error: "Server busy" } } });
+      });
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Couldn't prepare the report. Nothing was shared.");
+      expect(alert).toHaveTextContent("Server busy");
+      expect(screen.queryByRole("button", { name: "Share now" })).not.toBeInTheDocument();
+      expect(open).not.toHaveBeenCalled();
+
+      fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+      await waitFor(() => expect(pending).toHaveLength(2));
+      await act(async () => {
+        pending[1].resolve([awayPeriod("a1", "Ada Okafor", "2026-09-14")]);
+      });
+      fireEvent.click(await screen.findByRole("button", { name: "Share now" }));
+      expect(sharedText(open)).toContain("*AWAY — 1*");
+      expect(screen.queryByText(/Nothing was shared/)).not.toBeInTheDocument();
+    });
+
+    it("lets the officer cancel a failed share without changing anything", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      const pending = deferAvailability();
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      await act(async () => pending[0].reject(new Error("offline")));
+      fireEvent.click(
+        within(await screen.findByRole("alert")).getByRole("button", { name: "Cancel" }),
+      );
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(open).not.toHaveBeenCalled();
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockPatch).not.toHaveBeenCalled();
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+
+    it("sends one request per preparation and ignores an older response", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      const pending = deferAvailability();
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      const preparing = await screen.findByRole("button", { name: /preparing message/i });
+      fireEvent.click(preparing);
+      fireEvent.click(preparing);
+      await waitFor(() => expect(pending).toHaveLength(1));
+
+      // Fails, is retried, and the retry answers first.
+      await act(async () => pending[0].reject(new Error("offline")));
+      fireEvent.click(
+        within(await screen.findByRole("alert")).getByRole("button", { name: "Retry" }),
+      );
+      await waitFor(() => expect(pending).toHaveLength(2));
+      await act(async () => {
+        pending[1].resolve([awayPeriod("a1", "Newest Answer", "2026-09-14")]);
+      });
+      expect(await screen.findByTestId("share-preview")).toHaveTextContent("Newest Answer");
+      expect(availabilityCalls()).toHaveLength(2);
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it("discards a pending report when the session changes", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      const pending = deferAvailability();
+      renderRoute(<WithSessionSwitcher />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      fireEvent.click(screen.getByRole("button", { name: "open other session" }));
+      await screen.findByText("Tolu");
+
+      await act(async () => {
+        pending[0].resolve([awayPeriod("a1", "Ada Okafor", "2026-09-14")]);
+      });
+      expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Share now" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it("discards a prepared report when the organisation changes", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      const pending = deferAvailability();
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      await act(async () => {
+        pending[0].resolve([awayPeriod("a1", "Ada Okafor", "2026-09-14")]);
+      });
+      const shareNow = await screen.findByRole("button", { name: "Share now" });
+
+      act(() => {
+        useGlobalStore.setState({
+          organisation: { ...EMPTY_ORG, id: "org2", attendanceStatuses: CUSTOM_STATUSES },
+        });
+      });
+      // Even a tap that lands on the closing preview sends nothing.
+      fireEvent.click(shareNow);
+      await waitFor(() =>
+        expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument(),
+      );
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it("discards a pending report when the organisation changes", async () => {
+      const open = jest.spyOn(window, "open").mockImplementation(() => null);
+      const pending = deferAvailability();
+      renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+      await screen.findByText("Ada");
+
+      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      await waitFor(() => expect(pending).toHaveLength(1));
+      act(() => {
+        useGlobalStore.setState({
+          organisation: { ...EMPTY_ORG, id: "org2", attendanceStatuses: CUSTOM_STATUSES },
+        });
+      });
+      await act(async () => {
+        pending[0].resolve([awayPeriod("a1", "Ada Okafor", "2026-09-14")]);
+      });
+
+      expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument();
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    describe("with the device share sheet", () => {
+      const nativeShare = jest.fn();
+      beforeEach(() => {
+        nativeShare.mockReset();
+        Object.defineProperty(navigator, "share", {
+          configurable: true,
+          value: nativeShare,
+        });
+      });
+      afterEach(() => {
+        delete (navigator as { share?: unknown }).share;
+      });
+
+      it("hands the prepared message to navigator.share in the Share now tap", async () => {
+        const open = jest.spyOn(window, "open").mockImplementation(() => null);
+        nativeShare.mockResolvedValue(undefined);
+        availability = [awayPeriod("a1", "Ada Okafor", "2026-09-14")];
+        renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+        await screen.findByText("Ada");
+
+        fireEvent.click(screen.getByRole("button", { name: "Share" }));
+        const shareNow = await screen.findByRole("button", { name: "Share now" });
+        expect(nativeShare).not.toHaveBeenCalled();
+        fireEvent.click(shareNow);
+
+        // Called synchronously by the click itself.
+        expect(nativeShare).toHaveBeenCalledTimes(1);
+        expect(nativeShare.mock.calls[0][0].text).toContain(
+          "*AWAY — 1*\nAda Okafor — Until 14 Sep 2026",
+        );
+        expect(open).not.toHaveBeenCalled();
+        await waitFor(() =>
+          expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument(),
+        );
+      });
+
+      it("opens the share sheet once for a double tap", async () => {
+        let finish: () => void = () => undefined;
+        nativeShare.mockImplementation(
+          () => new Promise<void>((resolve) => (finish = resolve)),
+        );
+        renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+        await screen.findByText("Ada");
+
+        await shareReport();
+        fireEvent.click(screen.getByRole("button", { name: "Share now" }));
+        expect(nativeShare).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/couldn't open its share options/)).not.toBeInTheDocument();
+        await act(async () => finish());
+        await waitFor(() =>
+          expect(screen.queryByTestId("share-preview")).not.toBeInTheDocument(),
+        );
+      });
+
+      it("keeps the preview open when the officer dismisses the share sheet", async () => {
+        nativeShare.mockRejectedValue(Object.assign(new Error("cancelled"), { name: "AbortError" }));
+        renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+        await screen.findByText("Ada");
+
+        await shareReport();
+        await act(async () => undefined);
+        expect(screen.getByRole("button", { name: "Share now" })).toBeInTheDocument();
+        expect(screen.queryByText(/couldn't open its share options/)).not.toBeInTheDocument();
+      });
+
+      it("offers WhatsApp from a fresh tap when the share sheet fails", async () => {
+        const open = jest.spyOn(window, "open").mockImplementation(() => null);
+        nativeShare.mockRejectedValue(Object.assign(new Error("denied"), { name: "NotAllowedError" }));
+        renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
+        await screen.findByText("Ada");
+
+        await shareReport();
+        expect(
+          await screen.findByText(/couldn't open its share options. Nothing was shared/),
+        ).toBeInTheDocument();
+        expect(open).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Share via WhatsApp" }));
+        expect(open).toHaveBeenCalledTimes(1);
+        expect(sharedText(open)).toContain("*Absent Members: 1*");
+        expect(nativeShare).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 });
 
