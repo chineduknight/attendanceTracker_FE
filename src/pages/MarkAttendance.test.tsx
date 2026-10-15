@@ -12,6 +12,7 @@ import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
+import ProtectedLayout from "components/ProtectedLayout";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
 import { ROSTER as ELIGIBILITY_ROSTER } from "test-utils/eligibilityFixtures";
 import { toast } from "react-toastify";
@@ -1871,7 +1872,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(writes()).toBe(0);
       expect(screen.getByText("Dayo")).toBeInTheDocument();
       expect(
-        within(screen.getByRole("region", { name: "Removing when you tap Update" })).getByText(
+        within(screen.getByRole("region", { name: "Members removed from this attendance when you tap Update" })).getByText(
           "Efe",
         ),
       ).toBeInTheDocument();
@@ -1901,7 +1902,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("cancels an addition removed again before Update, without asking", async () => {
       await start({ ...RECORD, editsRemaining: 3 });
       await addManually("Dayo", "late");
-      expect(screen.getByText("Added in this edit: saved when you tap Update")).toBeInTheDocument();
+      expect(screen.getByText("Added to this attendance in this edit: saved when you tap Update")).toBeInTheDocument();
       fireEvent.click(removeRow("Dayo"));
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
@@ -1913,13 +1914,13 @@ describe("<MarkAttendance> manual per-session additions", () => {
     it("undoes a pending removal, restoring the saved entry", async () => {
       await start({ ...RECORD, editsRemaining: 3 });
       await removeSaved("Chidi");
-      const pending = screen.getByRole("region", { name: "Removing when you tap Update" });
+      const pending = screen.getByRole("region", { name: "Members removed from this attendance when you tap Update" });
       expect(within(pending).getByText("Chidi")).toBeInTheDocument();
       expect(updateButton()).toBeEnabled();
 
       fireEvent.click(screen.getByRole("button", { name: "Undo removing Chidi" }));
       expect(
-        screen.queryByRole("region", { name: "Removing when you tap Update" }),
+        screen.queryByRole("region", { name: "Members removed from this attendance when you tap Update" }),
       ).not.toBeInTheDocument();
       expect(manualBadgeOn("Chidi")).toBeInTheDocument();
       expect(statusOfRow("Chidi")).toBe("Late");
@@ -1953,23 +1954,122 @@ describe("<MarkAttendance> manual per-session additions", () => {
       });
     });
 
-    it("blocks every change once no edits remain", async () => {
+    // Tries every control that edits; none may change what is shown.
+    const expectReadOnly = () => {
+      const names = ["Ada", "Bola", "Chidi"];
+      const before = names.map(statusOfRow);
+      const pencil = screen.getByRole("button", { name: "Edit attendance details" });
+      const reset = screen.getByRole("button", { name: /^Reset \d+ visible to / });
+      const chips = within(
+        screen.getByRole("group", { name: /^Tap a member to/ }),
+      ).getAllByRole("button");
+      [addButton(), removeRow("Chidi"), updateButton(), pencil, reset, ...chips].forEach(
+        (control) => expect(control).toBeDisabled(),
+      );
+      fireEvent.click(reset);
+      chips.forEach((chip) => fireEvent.click(chip));
+      fireEvent.click(pencil);
+      names.forEach(tapRow);
+      expect(names.map(statusOfRow)).toEqual(before);
+      expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Rehearsal" })).toBeInTheDocument();
+      // Reading still works.
+      fireEvent.change(screen.getByPlaceholderText("Search member"), {
+        target: { value: "Bol" },
+      });
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(screen.getByText("Bola")).toBeInTheDocument();
+    };
+
+    it("lets nothing change the attendance once no edits remain", async () => {
       await start({ ...RECORD, editCount: 3, editsRemaining: 0 });
       expect(screen.getByText("No edits remain for this attendance.")).toBeInTheDocument();
-      expect(addButton()).toBeDisabled();
-      expect(removeRow("Chidi")).toBeDisabled();
-      expect(updateButton()).toBeDisabled();
-      const before = statusOfRow("Bola");
-      tapRow("Bola");
-      expect(statusOfRow("Bola")).toBe(before);
+      expectReadOnly();
     });
 
-    it("blocks every change while editing is locked", async () => {
+    it("lets nothing change the attendance while editing is locked", async () => {
       await start({ ...RECORD, editsLocked: true, editsRemaining: 2 });
       expect(screen.getByText("Editing is locked for this attendance.")).toBeInTheDocument();
-      expect(addButton()).toBeDisabled();
-      expect(removeRow("Chidi")).toBeDisabled();
-      expect(updateButton()).toBeDisabled();
+      expectReadOnly();
+    });
+
+    it("names pending changes in the organisation's own terms", async () => {
+      useGlobalStore.setState({
+        organisation: {
+          ...useGlobalStore.getState().organisation,
+          terminology: {
+            ...DEFAULT_TERMINOLOGY,
+            memberSingular: "Student",
+            memberPlural: "Students",
+            attendanceSingular: "Rehearsal",
+            attendancePlural: "Rehearsals",
+          },
+        },
+      });
+      await start({ ...RECORD, editsRemaining: 3 });
+      fireEvent.click(screen.getByRole("button", { name: "Remove Chidi from this rehearsal" }));
+      fireEvent.click(
+        (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" }),
+      );
+      expect(
+        await screen.findByText("Students removed from this rehearsal when you tap Update"),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Add student to this rehearsal" }));
+      await screen.findByRole("dialog");
+      fireEvent.change(dialog().getByLabelText(/^Student/), { target: { value: "Day" } });
+      fireEvent.click(await screen.findByText("Dayo"));
+      await chooseOption(dialog().getByLabelText(/^Rehearsal status/), "Late");
+      fireEvent.click(dialog().getByRole("button", { name: "Add student" }));
+      expect(
+        await screen.findByText("Added to this rehearsal in this edit: saved when you tap Update"),
+      ).toBeInTheDocument();
+    });
+
+    it("asks before switching organisation from the menu discards pending changes", async () => {
+      record = { ...RECORD, editsRemaining: 3 };
+      const org = useGlobalStore.getState().organisation;
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: {
+            data: url.endsWith("/att5")
+              ? record
+              : url === "/organisations"
+                ? [org]
+                : url.includes("/members")
+                  ? ALL_MEMBERS
+                  : [],
+          },
+        }),
+      );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/mark/att5"]}>
+            <Routes>
+              <Route element={<ProtectedLayout />}>
+                <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+                <Route path="/organisations" element={<div>organisation list</div>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Chidi");
+      await removeSaved("Chidi");
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Organisations" }));
+
+      expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(screen.queryByText("organisation list")).not.toBeInTheDocument();
+      expect(
+        screen.getByText("Members removed from this attendance when you tap Update"),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Organisations" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Discard changes" }));
+      expect(await screen.findByText("organisation list")).toBeInTheDocument();
     });
 
     it("keeps unresolved historical entries out of the request so the backend preserves them", async () => {
@@ -2013,7 +2113,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
       await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
       expect(statusOfRow("Bola")).toBe(bolaStatus);
       expect(
-        screen.getByRole("region", { name: "Removing when you tap Update" }),
+        screen.getByRole("region", { name: "Members removed from this attendance when you tap Update" }),
       ).toBeInTheDocument();
 
       // Reloading shows the latest saved version and drops the local changes.
@@ -2024,7 +2124,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
       await waitFor(() => expect(manualBadgeOn("Chidi")).toBeInTheDocument());
       expect(statusOfRow("Bola")).toBe("Present");
       expect(
-        screen.queryByRole("region", { name: "Removing when you tap Update" }),
+        screen.queryByRole("region", { name: "Members removed from this attendance when you tap Update" }),
       ).not.toBeInTheDocument();
     });
 
@@ -2090,7 +2190,7 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
       await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-      expect(screen.getByText("Removing when you tap Update")).toBeInTheDocument();
+      expect(screen.getByText("Members removed from this attendance when you tap Update")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Undo removing Chidi" }));
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

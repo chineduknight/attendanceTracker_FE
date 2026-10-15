@@ -16,6 +16,8 @@ interface VisibleBulkActionsProps {
   onApply: () => void;
   onReset: () => void;
   onUndo: () => void;
+  /** Every action is off, e.g. a saved attendance with no edits left. */
+  disabled?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ const VisibleBulkActions = ({
   onApply,
   onReset,
   onUndo,
+  disabled = false,
 }: VisibleBulkActionsProps) => (
   <Flex mt="3" gap={2} flexWrap="wrap">
     {selectedStatus && (
@@ -38,7 +41,7 @@ const VisibleBulkActions = ({
         size="sm"
         minH="44px"
         colorPalette={selectedStatus.color}
-        disabled={applyCount === 0}
+        disabled={disabled || applyCount === 0}
         onClick={onApply}
       >
         {`Apply ${selectedStatus.label} to ${applyCount} visible`}
@@ -48,13 +51,13 @@ const VisibleBulkActions = ({
       size="sm"
       minH="44px"
       variant="outline"
-      disabled={resetCount === 0}
+      disabled={disabled || resetCount === 0}
       onClick={onReset}
     >
       {`Reset ${resetCount} visible to ${defaultStatus.label}`}
     </Button>
     {canUndo && (
-      <Button size="sm" minH="44px" variant="ghost" onClick={onUndo}><FaUndo aria-hidden />Undo bulk change
+      <Button size="sm" minH="44px" variant="ghost" disabled={disabled} onClick={onUndo}><FaUndo aria-hidden />Undo bulk change
               </Button>
     )}
   </Flex>

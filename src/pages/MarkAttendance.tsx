@@ -287,6 +287,7 @@ const MarkAttendanceRoster = ({
   });
 
   const onDetailsChange = (next: AttendanceDetails) => {
+    if (editingLocked) return;
     setAttendance({
       ...session,
       name: next.name,
@@ -476,6 +477,10 @@ const MarkAttendanceRoster = ({
   // Editing a stored record: statuses, details and manual adds/removes are
   // all held here and saved together by one Update, which uses one edit.
   const canSave = isUpdate && baseline !== null && canSaveEdit(baseline);
+  // A saved attendance with no edit left (or locked) is read-only here: every
+  // control that could change a status, the roster or the details is off, and
+  // each handler checks again. Searching and scrolling still work.
+  const editingLocked = isUpdate && !canSave;
   const removalIds = useMemo(
     () => pendingRemovals.map((member) => member.id),
     [pendingRemovals],
@@ -570,6 +575,7 @@ const MarkAttendanceRoster = ({
   // stale, so it is discarded.
   const markMember = useCallback(
     (memberId: string) => {
+      if (editingLocked) return;
       const isManual = manualIds.has(memberId);
       if (selectedStatus && !mayTakeStatus(memberId, selectedStatus.key)) {
         return;
@@ -588,6 +594,7 @@ const MarkAttendanceRoster = ({
     [
       commitManual,
       commitMembers,
+      editingLocked,
       manualIds,
       mayTakeStatus,
       selectedStatus,
@@ -605,6 +612,7 @@ const MarkAttendanceRoster = ({
     );
 
   const setVisibleStatus = (status: string) => {
+    if (editingLocked) return;
     const targets = bulkTargets(status);
     const snapshot = new Map<string, string>();
     const apply = <T extends MemberType>(current: T[]) => {
@@ -618,7 +626,7 @@ const MarkAttendanceRoster = ({
   };
 
   const undoBulkChange = () => {
-    if (!undoSnapshot) return;
+    if (!undoSnapshot || editingLocked) return;
     commitMembers((current) => restoreStatuses(current, undoSnapshot));
     commitManual((current) => restoreStatuses(current, undoSnapshot));
     setUndoSnapshot(null);
@@ -644,7 +652,7 @@ const MarkAttendanceRoster = ({
     reason: string;
   }) => {
     const member = manualCandidateList.find((m) => m.id === memberId);
-    if (!member || !isActivePresentStatus(statuses, status)) return;
+    if (editingLocked || !member || !isActivePresentStatus(statuses, status)) return;
     const trimmed = reason.trim();
     commitManual((current) => [
       ...current.filter((m) => m.id !== memberId),
@@ -665,6 +673,7 @@ const MarkAttendanceRoster = ({
   // In an edit, removing a stored manual entry is held until Update (and can
   // be undone); removing one added in this edit just cancels that addition.
   const removeFromEdit = async (member: ManualDraftMember) => {
+    if (editingLocked) return;
     if (!baseline?.manualIds.has(member.id)) {
       removeManualMember(member.id);
       return;
@@ -679,7 +688,9 @@ const MarkAttendanceRoster = ({
     removeManualMember(member.id);
     setPendingRemovals((current) => [...current, member]);
   };
+  const removalsHeading = `${terms.memberPlural} removed from this ${sessionTerm} when you tap Update`;
   const undoRemoval = (member: ManualDraftMember) => {
+    if (editingLocked) return;
     setPendingRemovals((current) => current.filter((m) => m.id !== member.id));
     commitManual((current) => [...current, member]);
   };
@@ -861,6 +872,7 @@ const MarkAttendanceRoster = ({
               colorPalette="blue"
               minW="44px"
               h="44px"
+              disabled={editingLocked}
               onClick={detailsDrawer.onOpen}
             >
               <FaPencilAlt />
@@ -922,7 +934,7 @@ const MarkAttendanceRoster = ({
             size="sm"
             minH="44px"
             variant="outline"
-            disabled={isUpdate && !canSave}
+            disabled={editingLocked}
             onClick={() => setIsAddingMember(true)}
           >
             <FaUserPlus />
@@ -943,6 +955,7 @@ const MarkAttendanceRoster = ({
             statuses={statuses.active}
             mode={selectedStatus?.key ?? null}
             onModeChange={setQuickMarkMode}
+            disabled={editingLocked}
           />
           <VisibleBulkActions
             applyCount={
@@ -957,6 +970,7 @@ const MarkAttendanceRoster = ({
             }
             onReset={() => setVisibleStatus(statuses.defaultStatus.key)}
             onUndo={undoBulkChange}
+            disabled={editingLocked}
           />
           {filteredMembers.some((member) => manualIds.has(member.id)) && (
             <Text mt="2" fontSize="sm" color="fg.muted">
@@ -1010,14 +1024,14 @@ const MarkAttendanceRoster = ({
                   name={item.name}
                   status={statuses.resolve(item.attendanceStatus)}
                   onToggle={
-                    (isManual && manualRowsLocked) || (isUpdate && !canSave)
+                    (isManual && manualRowsLocked) || editingLocked
                       ? undefined
                       : markMember
                   }
                   isManual={isManual}
                   note={
                     isUpdate && isManual && !baseline?.manualIds.has(item.id)
-                      ? "Added in this edit: saved when you tap Update"
+                      ? `Added to this ${sessionTerm} in this edit: saved when you tap Update`
                       : undefined
                   }
                   accessory={
@@ -1029,7 +1043,7 @@ const MarkAttendanceRoster = ({
                         variant="ghost"
                         colorPalette="red"
                         aria-label={`Remove ${item.name} from this ${sessionTerm}`}
-                        disabled={isUpdate && !canSave}
+                        disabled={editingLocked}
                         onClick={() => {
                           if (!isUpdate) return removeManualMember(item.id);
                           const member = manualMembers.find((m) => m.id === item.id);
@@ -1045,9 +1059,9 @@ const MarkAttendanceRoster = ({
             })}
           </Box>
           {pendingRemovals.length > 0 && (
-            <Box mt={4} role="region" aria-label="Removing when you tap Update">
+            <Box mt={4} role="region" aria-label={removalsHeading}>
               <Text fontSize="sm" fontWeight="semibold">
-                Removing when you tap Update
+                {removalsHeading}
               </Text>
               {pendingRemovals.map((member) => (
                 <Flex
@@ -1066,6 +1080,7 @@ const MarkAttendanceRoster = ({
                     variant="ghost"
                     colorPalette="blue"
                     aria-label={`Undo removing ${member.name}`}
+                    disabled={editingLocked}
                     onClick={() => undoRemoval(member)}
                   >
                     Undo
