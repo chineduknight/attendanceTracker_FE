@@ -10,6 +10,7 @@ import { system } from "styles/theme";
 import { renderRoute } from "test-utils/renderWithProviders";
 import { chooseMenuItem, generatedCss, toggle } from "test-utils/render";
 import { toast } from "react-toastify";
+import { format, parseISO } from "date-fns";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
@@ -326,6 +327,38 @@ describe("<ViewMembers> audit fields", () => {
     expect(screen.getByText("Updated by")).toBeInTheDocument();
     expect(screen.getByText("04-Mar-2001")).toBeInTheDocument();
     expect(screen.queryByText(/object Object/)).not.toBeInTheDocument();
+  });
+
+  it("shows when a member was created and last updated beside who did it", async () => {
+    const createdAt = "2026-01-05T08:02:00.000Z";
+    const updatedAt = "2026-10-14T15:18:00.000Z";
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/model"))
+        return Promise.resolve({ data: { data: { fields: [] } } });
+      return Promise.resolve({
+        data: {
+          data: [
+            {
+              id: "m1",
+              name: "Ada",
+              createdBy: { id: "u1", name: "knight" },
+              createdAt,
+              updatedBy: { id: "u2", name: "bayo" },
+              updatedAt,
+            },
+          ],
+        },
+      });
+    });
+    renderPage();
+    await screen.findByText("Ada");
+    // Rendered in local time, so the expectations use the same formatter.
+    const shown = (timestamp: string) =>
+      format(parseISO(timestamp), "dd-MMM-yyyy, h:mm a");
+    expect(screen.getByText("knight")).toBeInTheDocument();
+    expect(screen.getByText(shown(createdAt))).toBeInTheDocument();
+    expect(screen.getByText("bayo")).toBeInTheDocument();
+    expect(screen.getByText(shown(updatedAt))).toBeInTheDocument();
   });
 
   const exportMembersList = async () => {
