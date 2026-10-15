@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { useNavigate } from "react-router-dom";
-import { chooseOption, confirmInDialog, optionLabels } from "test-utils/render";
+import { confirmInDialog } from "test-utils/render";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
@@ -573,13 +573,6 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     { id: "m9", name: "Tunde", part: "tenor" },
     { id: "m10", name: "Ngozi", part: "soprano" },
   ];
-  const REHEARSAL_TERMS = {
-    ...DEFAULT_TERMINOLOGY,
-    memberSingular: "Student",
-    memberPlural: "Students",
-    attendanceSingular: "Rehearsal",
-    attendancePlural: "Rehearsals",
-  };
   const MANAGER: PermissionKey[] = ["attendance.view", "attendance.manage"];
 
   let session: Record<string, unknown>;
@@ -597,24 +590,9 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     renderRoute(<ViewAttendance />, "/attendance/:id", "/attendance/att1");
     await screen.findByText("Zara");
   };
-  // v3 dialogs open a tick after the click, so wait for one to appear.
-  const dialog = async () => within(await screen.findByRole("dialog"));
-  // Removal asks through the shared ConfirmDialog (role="alertdialog").
-  const confirmation = async () => within(await screen.findByRole("alertdialog"));
   const rowContainer = (name: string) =>
     screen.getByText(name).closest("div.chakra-button")
       ?.parentElement as HTMLElement;
-  const addButton = (name = "Add member to this attendance") =>
-    screen.getByRole("button", { name });
-  const openAddDialog = async (name?: string) => {
-    fireEvent.click(addButton(name));
-    await screen.findByRole("dialog");
-  };
-  const chooseMember = async (name: string) => {
-    const input = (await dialog()).getByLabelText(/^(Member|Student)/);
-    fireEvent.change(input, { target: { value: name.slice(0, 3) } });
-    fireEvent.click(await screen.findByText(name));
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -668,6 +646,16 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("never offers add or remove, even to a manager: roster changes belong to Edit", async () => {
+    setup(MANAGER);
+    await renderPage();
+    expect(within(rowContainer("Tolu")).getByText("Added manually")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Add member/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Remove .* from this attendance$/ })
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps manual rows in filters and status counts, and the manual count when filtered out", async () => {
     setup(["attendance.view"]);
     await renderPage();
@@ -693,181 +681,6 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(
       screen.queryByRole("button", { name: "Clear search" })
     ).not.toBeInTheDocument();
-  });
-
-  it("explains the one-session semantics and lists only off-roster candidates", async () => {
-    setup(MANAGER);
-    await renderPage();
-    await openAddDialog();
-    expect((await dialog()).getByText("Add member to this attendance")).toBeInTheDocument();
-    expect(
-      (await dialog()).getByText(
-        "Use this only when the member was not expected for this attendance but physically attended."
-      )
-    ).toBeInTheDocument();
-    expect(
-      (await dialog()).getByText(
-        "This changes this attendance only. It does not change eligibility, leave, or future attendance."
-      )
-    ).toBeInTheDocument();
-
-    fireEvent.keyDown((await dialog()).getByLabelText(/^Member/), { key: "ArrowDown" });
-    await screen.findByText("Tunde");
-    const menu = document.querySelector(".manual-member__menu") as HTMLElement;
-    // The tenor fails the session's rules and is still offered; members
-    // already on the roster (expected or manual) never are.
-    expect(
-      within(menu)
-        .getAllByText(/.+/)
-        .filter((node) => node.children.length === 0)
-        .map((node) => node.textContent)
-    ).toEqual(["Ngozi", "Tunde"]);
-  });
-
-  it("offers only active present-behavior statuses and a 200-character reason", async () => {
-    setup(MANAGER);
-    await renderPage();
-    await openAddDialog();
-    const statusSelect = (await dialog()).getByLabelText(/^Attendance status/);
-    expect(await optionLabels(statusSelect)).toEqual(["Present", "Late"]);
-    const reason = (await dialog()).getByLabelText("Reason (optional)");
-    expect(reason).toHaveAttribute("maxLength", "200");
-    fireEvent.change(reason, { target: { value: "Leave ended" } });
-    expect((await dialog()).getByText("11/200 characters")).toBeInTheDocument();
-  });
-
-  it("posts the chosen member, status and reason, then refreshes the session", async () => {
-    setup(MANAGER);
-    mockPost.mockImplementation(() => {
-      session = {
-        ...WITH_MANUAL,
-        attendance: [
-          ...WITH_MANUAL.attendance,
-          { ...entry("m9", "Tunde", "present"), manuallyAdded: true },
-        ],
-      };
-      return Promise.resolve({ data: { data: {} } });
-    });
-    await renderPage();
-    await openAddDialog();
-    const add = (await dialog()).getByRole("button", { name: "Add member" });
-    expect(add).toBeDisabled();
-    await chooseMember("Tunde");
-    await chooseOption((await dialog()).getByLabelText(/^Attendance status/), "Present");
-    fireEvent.change((await dialog()).getByLabelText("Reason (optional)"), {
-      target: { value: "  On leave but came  " },
-    });
-    fireEvent.click(add);
-
-    await waitFor(() =>
-      expect(mockPost).toHaveBeenCalledWith("/attendance/org1/att1/manual-members", {
-        memberId: "m9",
-        status: "present",
-        reason: "On leave but came",
-      })
-    );
-    await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Member added to this attendance.")
-    );
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    );
-    expect(await screen.findByText("Tunde")).toBeInTheDocument();
-    expect(screen.getByText("Added manually: 2")).toBeInTheDocument();
-    expect(screen.getByText("Expected members: 6")).toBeInTheDocument();
-  });
-
-  it("keeps the dialog and the screen unchanged when the backend refuses an add", async () => {
-    setup(MANAGER);
-    mockPost.mockRejectedValue({
-      response: { status: 422, data: { error: "Member is already on this session's roster." } },
-    });
-    await renderPage();
-    await openAddDialog();
-    await chooseMember("Tunde");
-    await chooseOption((await dialog()).getByLabelText(/^Attendance status/), "Late");
-    fireEvent.click((await dialog()).getByRole("button", { name: "Add member" }));
-
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        "Member is already on this session's roster."
-      )
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.queryByText("Tunde", { selector: "p" })).not.toBeInTheDocument();
-    expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
-    expect(toast.success).not.toHaveBeenCalled();
-  });
-
-  it("offers removal only on manual rows, behind an explicit confirmation", async () => {
-    setup(MANAGER);
-    await renderPage();
-    const removes = screen.getAllByRole("button", { name: /^Remove .* from this attendance$/ });
-    expect(removes).toHaveLength(1);
-    expect(removes[0]).toHaveAccessibleName("Remove Tolu from this attendance");
-
-    fireEvent.click(removes[0]);
-    expect((await confirmation()).getByText("Remove Tolu from this attendance?")).toBeInTheDocument();
-    expect(
-      (await confirmation()).getByText(
-        "Tolu was manually added to this attendance. Removing them deletes this historical attendance entry from this attendance only."
-      )
-    ).toBeInTheDocument();
-    expect(mockDelete).not.toHaveBeenCalled();
-  });
-
-  it("deletes on the manual-member route and refreshes after confirmation", async () => {
-    setup(MANAGER);
-    mockDelete.mockImplementation(() => {
-      session = SESSION;
-      return Promise.resolve({ data: { data: {} } });
-    });
-    await renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this attendance" }));
-    fireEvent.click((await confirmation()).getByRole("button", { name: "Remove from this attendance" }));
-
-    await waitFor(() =>
-      expect(mockDelete).toHaveBeenCalledWith(
-        "/attendance/org1/att1/manual-members/m7",
-        { data: undefined }
-      )
-    );
-    await waitFor(() => expect(screen.queryByText("Tolu")).not.toBeInTheDocument());
-    expect(screen.queryByText(/Added manually/)).not.toBeInTheDocument();
-  });
-
-  it("keeps the row visible when the backend refuses a removal", async () => {
-    setup(MANAGER);
-    mockDelete.mockRejectedValue({
-      response: { status: 422, data: { error: "Attendance edits are locked." } },
-    });
-    await renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this attendance" }));
-    fireEvent.click((await confirmation()).getByRole("button", { name: "Remove from this attendance" }));
-
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("Attendance edits are locked.")
-    );
-    expect(screen.getByText("Tolu")).toBeInTheDocument();
-    expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
-  });
-
-  it("disables add and remove once no edits remain", async () => {
-    session = { ...WITH_MANUAL, editsRemaining: 0, editCount: 3 };
-    setup(MANAGER);
-    await renderPage();
-    expect(addButton()).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Remove Tolu from this attendance" })
-    ).toBeDisabled();
-    expect(screen.getByText("No edits remain for this attendance.")).toBeInTheDocument();
-  });
-
-  it("disables add and remove while edits are locked", async () => {
-    session = { ...WITH_MANUAL, editsLocked: true, editsRemaining: 2 };
-    setup(MANAGER);
-    await renderPage();
-    expect(addButton()).toBeDisabled();
   });
 
   it("keeps an unresolvable manual entry identified as manual", async () => {
@@ -907,25 +720,6 @@ describe("<ViewAttendance> manual per-session attendance", () => {
     expect(options.some((text) => /manual/i.test(text ?? ""))).toBe(false);
   });
 
-  it("uses organisation terms throughout", async () => {
-    setup(MANAGER, REHEARSAL_TERMS);
-    await renderPage();
-    await openAddDialog("Add student to this rehearsal");
-    expect((await dialog()).getByText("Add student to this rehearsal")).toBeInTheDocument();
-    expect(
-      (await dialog()).getByText(
-        "This changes this rehearsal only. It does not change eligibility, leave, or future rehearsals."
-      )
-    ).toBeInTheDocument();
-    fireEvent.click((await dialog()).getByRole("button", { name: "Cancel" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Remove Tolu from this rehearsal" }));
-    expect(
-      (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" })
-    ).toBeInTheDocument();
-  });
 });
 
 describe("<ViewAttendance> sharing the session report", () => {

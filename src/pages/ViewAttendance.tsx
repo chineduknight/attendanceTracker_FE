@@ -25,7 +25,6 @@ import {
   FaFileExcel,
   FaShareAlt,
   FaTrash,
-  FaUserPlus,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { MultiValue, StylesConfig } from "react-select";
@@ -68,12 +67,6 @@ import {
   toAnalyticsInclusion,
 } from "helpers/attendanceAnalyticsInclusion";
 import { Can } from "rbac/Can";
-import { ConfirmDialog } from "components/ui/confirm-dialog";
-import ManualMemberDialog from "components/attendance/ManualMemberDialog";
-import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
-import { useMembers } from "hooks/useMembers";
-import { manualCandidates } from "helpers/manualAttendance";
-import { canChangeStoredRoster } from "helpers/attendanceEdits";
 import { fetchAttendanceAvailabilityForDate } from "hooks/useAttendanceAvailability";
 import { isValidAvailabilityDate } from "helpers/attendanceAvailability";
 import { useShareReport } from "hooks/useShareReport";
@@ -145,8 +138,6 @@ type AttendanceInfoType = {
   rosterCount: number;
   /** Every stored member id, resolvable or not — never a manual candidate. */
   rosterMemberIds: string[];
-  /** Display hint only; the backend decides whether an edit is still allowed. */
-  canChangeRoster: boolean;
   unresolved: UnresolvedRosterEntry[];
   eligibilityRules: AttendanceEligibilityRule[];
   analyticsInclusion: AnalyticsInclusion;
@@ -236,7 +227,6 @@ const Attendance = () => {
       rosterMemberIds: data.data.attendance.map(
         (entry: MemberType) => entry.memberId,
       ),
-      canChangeRoster: canChangeStoredRoster(data.data),
       unresolved,
       eligibilityRules: normalizeEligibilityRules(data.data.eligibilityRules),
       analyticsInclusion: toAnalyticsInclusion(data.data),
@@ -442,24 +432,6 @@ const Attendance = () => {
       },
     );
 
-  // Manual one-session exceptions. The roster on screen only changes once the
-  // backend confirms and the session is refetched.
-  const session = lowerTerm(terms.attendanceSingular);
-  const memberTerm = lowerTerm(terms.memberSingular);
-  const [isAddingMember, setIsAddingMember] = useState(false);
-  const [removing, setRemoving] = useState<MemberType | null>(null);
-  const { addMember, removeMember, isAdding, isRemoving } =
-    useManualAttendanceMember(org.id, param.id as string);
-  const {
-    members: currentMembers,
-    isLoading: membersLoading,
-    isError: membersFailed,
-  } = useMembers(org.id, { enabled: isAddingMember });
-  const candidates = useMemo(
-    () => manualCandidates(currentMembers, attendanceInfo?.rosterMemberIds ?? []),
-    [currentMembers, attendanceInfo?.rosterMemberIds],
-  );
-  const canChangeRoster = attendanceInfo?.canChangeRoster ?? false;
 
   const handleDelete = async () => {
     const confirmed = await confirm({
@@ -550,22 +522,6 @@ const Attendance = () => {
               />
             )}
             {attendanceInfo && (
-              <Can perm="attendance.manage">
-                <Button
-                  mt="3"
-                  size="sm"
-                  minH="44px"
-                  variant="outline"
-                  disabled={!canChangeRoster}
-                  onClick={() => setIsAddingMember(true)}><FaUserPlus />{`Add ${memberTerm} to this ${session}`}</Button>
-                {!canChangeRoster && (
-                  <Text fontSize="sm" color="fg.muted" mt={1}>
-                    {`No edits remain for this ${session}.`}
-                  </Text>
-                )}
-              </Can>
-            )}
-            {attendanceInfo && (
               <AnalyticsInclusionPanel
                 organisationId={org.id}
                 attendanceId={param.id as string}
@@ -650,24 +606,6 @@ const Attendance = () => {
                   status={statuses.resolve(item.attendanceStatus)}
                   isManual={isManualEntry(item)}
                   note={manualAdditionNote(item)}
-                  accessory={
-                    isManualEntry(item) ? (
-                      <Can perm="attendance.manage">
-                        <Button
-                          size="sm"
-                          minH="44px"
-                          minW="44px"
-                          variant="ghost"
-                          colorPalette="red"
-                          aria-label={`Remove ${item.member.name} from this ${session}`}
-                          disabled={!canChangeRoster}
-                          onClick={() => setRemoving(item)}
-                        >
-                          Remove
-                        </Button>
-                      </Can>
-                    ) : undefined
-                  }
                 />
               ))}
             </Box>
@@ -690,38 +628,6 @@ const Attendance = () => {
           </>
         )}
 
-      <ManualMemberDialog
-        isOpen={isAddingMember}
-        candidates={candidates}
-        statuses={statuses}
-        isLoadingCandidates={membersLoading}
-        candidatesFailed={membersFailed}
-        isSaving={isAdding}
-        onSubmit={(input) =>
-          addMember(input, () => {
-            toast.success(`${terms.memberSingular} added to this ${session}.`);
-            setIsAddingMember(false);
-          })
-        }
-        onClose={() => setIsAddingMember(false)}
-      />
-      <ConfirmDialog
-        open={removing !== null}
-        title={`Remove ${removing?.member.name ?? ""} from this ${session}?`}
-        body={`${removing?.member.name ?? ""} was manually added to this ${session}. Removing them deletes this historical attendance entry from this ${session} only.`}
-        cancelLabel="Cancel"
-        confirmLabel={`Remove from this ${session}`}
-        confirmPalette="red"
-        loading={isRemoving}
-        onConfirm={() =>
-          removing &&
-          removeMember(removing.memberId, () => {
-            toast.success(`${terms.memberSingular} removed from this ${session}.`);
-            setRemoving(null);
-          })
-        }
-        onClose={() => !isRemoving && setRemoving(null)}
-      />
       <ShareReportDialog
         open={share.state.phase === "ready"}
         message={share.state.phase === "ready" ? share.state.message : ""}

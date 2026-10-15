@@ -24,7 +24,7 @@ jest.mock("react-toastify", () => ({
 jest.mock("services/api", () => ({
   __esModule: true,
   ...jest.requireActual("services/api/request"),
-  default: { get: jest.fn(), post: jest.fn(), put: jest.fn() },
+  default: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -32,6 +32,7 @@ const mockedAxios = require("services/api").default;
 const mockGet: jest.Mock = mockedAxios.get;
 const mockPost: jest.Mock = mockedAxios.post;
 const mockPut: jest.Mock = mockedAxios.put;
+const mockDelete: jest.Mock = mockedAxios.delete;
 
 // Configured order is the tap-cycle order.
 const STATUSES = [
@@ -1697,15 +1698,30 @@ describe("<MarkAttendance> manual per-session additions", () => {
       ],
     };
 
-    const start = async () => {
+    // What the backend currently stores; a saved add or remove replaces it.
+    let record: Record<string, unknown>;
+    const start = async (stored: Record<string, unknown> = RECORD) => {
+      record = stored;
       mockGet.mockImplementation((url: string) =>
         Promise.resolve({
-          data: { data: url === "/attendance/org1/att5" ? RECORD : [] },
+          data: {
+            data:
+              url === "/attendance/org1/att5"
+                ? record
+                : url.includes("/members")
+                  ? MEMBERS
+                  : [],
+          },
         }),
       );
       renderAt("/mark/att5");
       await screen.findByText("Chidi");
     };
+    const addButton = () =>
+      screen.getByRole("button", { name: "Add member to this attendance" });
+    const removeChidi = () =>
+      screen.getByRole("button", { name: "Remove Chidi from this attendance" });
+    const confirmation = async () => within(await screen.findByRole("alertdialog"));
 
     it("keeps manual provenance and counts on load, without re-running rules", async () => {
       await start();
@@ -1715,12 +1731,140 @@ describe("<MarkAttendance> manual per-session additions", () => {
         screen.getByText("Expected roster: 2 members"),
       ).toBeInTheDocument();
       expect(screen.getByText("Added manually: 1")).toBeInTheDocument();
-      expect(
-        screen.queryByRole("button", { name: /Add member/ }),
-      ).not.toBeInTheDocument();
+      // Roster changes live here now, but the member list is only read once
+      // the officer opens the add dialog.
+      expect(addButton()).toBeEnabled();
       expect(mockGet.mock.calls.some(([url]) => url.includes("/members"))).toBe(
         false,
       );
+    });
+
+    it("offers only members not already on the stored roster", async () => {
+      await start();
+      fireEvent.click(addButton());
+      await screen.findByRole("dialog");
+      fireEvent.keyDown(dialog().getByLabelText(/^Member/), { key: "ArrowDown" });
+      await screen.findByText("Dayo");
+      expect(await optionLabels(dialog().getByLabelText(/^Member/))).toEqual(["Dayo"]);
+    });
+
+    it("saves an addition at once and keeps the officer's unsaved statuses", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      tapRow("Bola");
+      const bolaStatus = statusOfRow("Bola");
+      expect(bolaStatus).not.toBe("Present");
+      mockPost.mockImplementation(() => {
+        record = {
+          ...RECORD,
+          editsRemaining: 2,
+          attendance: [
+            ...RECORD.attendance,
+            { memberId: "m4", member: { name: "Dayo" }, attendanceStatus: "late", manuallyAdded: true },
+          ],
+        };
+        return Promise.resolve({ data: { data: {} } });
+      });
+      await addManually("Dayo", "late", "Came late");
+
+      await waitFor(() =>
+        expect(mockPost).toHaveBeenCalledWith("/attendance/org1/att5/manual-members", {
+          memberId: "m4",
+          status: "late",
+          reason: "Came late",
+        }),
+      );
+      expect(await screen.findByText("Dayo")).toBeInTheDocument();
+      expect(manualBadgeOn("Dayo")).toBeInTheDocument();
+      expect(statusOfRow("Bola")).toBe(bolaStatus);
+      expect(toast.success).toHaveBeenCalledWith("Member added to this attendance.");
+      expect(screen.getByText("Added manually: 2")).toBeInTheDocument();
+    });
+
+    it("removes a manual member after confirmation and keeps unsaved statuses", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      tapRow("Bola");
+      const bolaStatus = statusOfRow("Bola");
+      // Only manual rows can be removed.
+      expect(
+        screen.getAllByRole("button", { name: /^Remove .* from this attendance$/ }),
+      ).toHaveLength(1);
+      mockDelete.mockImplementation(() => {
+        record = {
+          ...RECORD,
+          editsRemaining: 2,
+          attendance: RECORD.attendance.filter((entry) => entry.memberId !== "m3"),
+        };
+        return Promise.resolve({ data: { data: {} } });
+      });
+      fireEvent.click(removeChidi());
+      expect(
+        (await confirmation()).getByText(
+          "Chidi was manually added to this attendance. Removing them deletes this historical attendance entry from this attendance only, saves straight away and uses one edit.",
+        ),
+      ).toBeInTheDocument();
+      expect(mockDelete).not.toHaveBeenCalled();
+      fireEvent.click(
+        (await confirmation()).getByRole("button", { name: "Remove from this attendance" }),
+      );
+
+      await waitFor(() =>
+        expect(mockDelete).toHaveBeenCalledWith("/attendance/org1/att5/manual-members/m3", {
+          data: undefined,
+        }),
+      );
+      await waitFor(() => expect(screen.queryByText("Chidi")).not.toBeInTheDocument());
+      expect(statusOfRow("Bola")).toBe(bolaStatus);
+    });
+
+    it("keeps the row when the backend refuses a removal", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      mockDelete.mockRejectedValue({
+        response: { status: 422, data: { error: "Attendance edits are locked." } },
+      });
+      fireEvent.click(removeChidi());
+      fireEvent.click(
+        (await confirmation()).getByRole("button", { name: "Remove from this attendance" }),
+      );
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith("Attendance edits are locked."),
+      );
+      expect(screen.getByText("Chidi")).toBeInTheDocument();
+    });
+
+    it("says how many edits are left and what each roster change uses", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      expect(
+        screen.getByText(
+          "3 edits left. Adding or removing a member saves straight away and uses one; Update uses another.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("blocks a roster change that would use the last edit while changes are unsaved", async () => {
+      await start({ ...RECORD, editsRemaining: 1 });
+      expect(addButton()).toBeEnabled();
+      tapRow("Bola");
+      expect(addButton()).toBeDisabled();
+      expect(removeChidi()).toBeDisabled();
+      expect(
+        screen.getByText(
+          "Tap Update to save your changes first: adding or removing a member saves straight away and would use this attendance's last edit.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("disables add, remove and Update once no edits remain", async () => {
+      await start({ ...RECORD, editsRemaining: 0, editCount: 3 });
+      expect(addButton()).toBeDisabled();
+      expect(removeChidi()).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
+      expect(screen.getByText("No edits remain for this attendance.")).toBeInTheDocument();
+    });
+
+    it("disables add and remove while edits are locked", async () => {
+      await start({ ...RECORD, editsLocked: true, editsRemaining: 2 });
+      expect(addButton()).toBeDisabled();
+      expect(removeChidi()).toBeDisabled();
     });
 
     it("moves a manual row between present statuses but never to Excused or No Show", async () => {
