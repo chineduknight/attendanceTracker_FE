@@ -70,6 +70,9 @@ const MemberAnalyticsPage: React.FC = () => {
   const statuses = useAttendanceStatuses(analytics?.attendanceStatuses);
   const statusCode = (error as any)?.response?.status;
   const hasData = Boolean(analytics && analytics.summary.totalSessions > 0);
+  // Only a first load replaces the page: a background refetch (window focus,
+  // revisit) keeps the analytics on screen instead of flashing a loader.
+  const isFirstLoad = isFetching && !response;
 
   const excelUrl = useMemo(() => {
     if (!canQuery) return "";
@@ -128,27 +131,27 @@ const MemberAnalyticsPage: React.FC = () => {
         handleDateChange={handleDateChange}
       />
 
-      {isFetching && <PageLoader h="30vh" />}
-      {!isFetching && statusCode === 404 && (
+      {isFirstLoad && <PageLoader h="30vh" />}
+      {!isFirstLoad && statusCode === 404 && (
         <EmptyState
           icon={<FiUserX />}
           title={`${terms.memberSingular} not found in this organisation.`}
         />
       )}
-      {!isFetching && Boolean(error) && statusCode !== 404 && (
+      {!isFirstLoad && Boolean(error) && statusCode !== 404 && (
         <ErrorState
           title={`Error loading ${lowerTerm(terms.memberSingular)} analytics.`}
           description={errorMessage(error)}
           onRetry={() => refetch()}
         />
       )}
-      {!isFetching && !error && analytics && !hasData && (
+      {!isFirstLoad && !error && analytics && !hasData && (
         <EmptyState
           icon={<FiBarChart2 />}
           title={`No included ${lowerTerm(terms.attendanceSingular)} records for this range.`}
         />
       )}
-      {!isFetching && !error && hasData && analytics && (
+      {!isFirstLoad && !error && hasData && analytics && (
         <Flex direction="column" gap={4}>
           <MemberHero name={analytics.member.name} fields={analytics.member.fields} />
           <StreakCard

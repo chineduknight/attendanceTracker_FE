@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import MemberAnalytics from "pages/MemberAnalytics";
@@ -61,6 +61,21 @@ describe("<MemberAnalytics>", () => {
     expect(screen.getByRole("menuitem", { name: "Export PDF" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("From date")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("To date")).toBeInTheDocument();
+  });
+
+  it("keeps the analytics on screen while a background refetch runs", async () => {
+    renderPage();
+    await screen.findByText("Ada Obi");
+    // A refetch (window focus, revisit) that has not answered yet.
+    mockGet.mockImplementation(() => new Promise(() => undefined));
+    // React Query reports the fetching state on its next tick.
+    await act(async () => {
+      void queryClient.refetchQueries();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Ada Obi")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("shows behavior tiles and configured, inactive and unknown history", async () => {
