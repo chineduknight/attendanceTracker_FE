@@ -37,7 +37,8 @@ import { MultiValue } from "react-select";
 import { ThemedSelect } from "components/ui/themed-select";
 import { useMemberModel } from "hooks/useMemberModel";
 import { MemberRecord, useMembers } from "hooks/useMembers";
-import { EmptyState, ErrorState } from "components/ui/states";
+import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import { toast } from "react-toastify";
 import PageContainer from "components/layout/PageContainer";
 import PinnedSearchBar from "components/PinnedSearchBar";
 import { usePinnedSearch } from "hooks/usePinnedSearch";
@@ -131,6 +132,13 @@ const openExport = (response: { data?: string }) => {
   if (response?.data) window.open(response.data, "_blank");
 };
 
+const exportFailed = (error: unknown) => {
+  // 401 is handled by the global axios interceptor.
+  if ((error as { response?: { status?: number } })?.response?.status === 401)
+    return;
+  toast.error(errorMessage(error) ?? "Couldn't export. Please try again.");
+};
+
 const ViewMembers: React.FC = () => {
   const terms = useTerms();
   const [org] = useGlobalStore((state) => [state.organisation]);
@@ -150,7 +158,7 @@ const ViewMembers: React.FC = () => {
 
   const { members, isLoading, isError, refetch: refetchMembers } = useMembers(org.id);
   // Display labels only; filters, query params and saved columns keep storage keys.
-  const { fields: modelFields } = useMemberModel(org.id);
+  const { fields: modelFields, hasData: hasModel } = useMemberModel(org.id);
   const labelFor = useMemo(() => {
     const modelLabel = memberFieldLabeler(modelFields);
     return (key: string) => SYSTEM_FIELD_LABELS[key] ?? modelLabel(key);
@@ -195,13 +203,17 @@ const ViewMembers: React.FC = () => {
   const url = convertParamsToString(orgRequest.MEMBERS, {
     organisationId: org.id,
   });
-  const exportFields = useMemo(
-    () =>
-      Array.from(
-        new Set([...REQUIRED_EXPORT_FIELDS, ...shownFields.filter(Boolean)])
-      ),
-    [shownFields]
-  );
+  // The export endpoint accepts member-model fields only: server-owned keys
+  // shown as columns (createdBy, updatedBy, financialStartDate) are rejected.
+  const exportFields = useMemo(() => {
+    const exportable = new Set(modelFields.map((field) => field.name));
+    return Array.from(
+      new Set([
+        ...REQUIRED_EXPORT_FIELDS,
+        ...shownFields.filter((field) => exportable.has(field)),
+      ])
+    );
+  }, [shownFields, modelFields]);
   const exportQueryString = useMemo(() => {
     const queryParams = new URLSearchParams();
     activeFilters.forEach(([field, values]) => {
@@ -223,7 +235,7 @@ const ViewMembers: React.FC = () => {
         exportFields.join(","),
       ],
       `${url}/export${exportQueryString}`,
-      { enabled: false, onSuccess: openExport }
+      { enabled: false, onSuccess: openExport, onError: exportFailed }
     );
   const { refetch: exportMembersPdf, isFetching: isExportingMembersPdf } =
     useQueryWrapper(
@@ -234,9 +246,9 @@ const ViewMembers: React.FC = () => {
         exportFields.join(","),
       ],
       `${url}/export/pdf${exportQueryString}`,
-      { enabled: false, onSuccess: openExport }
+      { enabled: false, onSuccess: openExport, onError: exportFailed }
     );
-  const exportUnavailable = !org.id || isLoading || isError;
+  const exportUnavailable = !org.id || isLoading || isError || !hasModel;
 
   const filteredMembers = useMemo(() => {
     const query = searchQuery.toLowerCase();

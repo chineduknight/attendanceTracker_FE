@@ -8,7 +8,8 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import ViewMembers from "pages/ViewMembers";
 import { system } from "styles/theme";
 import { renderRoute } from "test-utils/renderWithProviders";
-import { generatedCss, toggle } from "test-utils/render";
+import { chooseMenuItem, generatedCss, toggle } from "test-utils/render";
+import { toast } from "react-toastify";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
@@ -325,5 +326,82 @@ describe("<ViewMembers> audit fields", () => {
     expect(screen.getByText("Updated by")).toBeInTheDocument();
     expect(screen.getByText("04-Mar-2001")).toBeInTheDocument();
     expect(screen.queryByText(/object Object/)).not.toBeInTheDocument();
+  });
+
+  const exportMembersList = async () => {
+    await screen.findByText("Ada");
+    const exportButton = screen.getByRole("button", { name: "Export" });
+    await waitFor(() => expect(exportButton).toBeEnabled());
+    fireEvent.click(exportButton);
+    await chooseMenuItem(
+      await screen.findByRole("menuitem", { name: "Export Member List" })
+    );
+  };
+
+  const mockMembersWithAuditFields = (exportResponse: () => Promise<unknown>) =>
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/export")) return exportResponse();
+      if (url.includes("/model"))
+        return Promise.resolve({
+          data: {
+            data: {
+              fields: [
+                { name: "name", type: "string" },
+                { name: "dob", type: "date" },
+              ],
+            },
+          },
+        });
+      return Promise.resolve({
+        data: {
+          data: [
+            {
+              id: "m1",
+              name: "Ada",
+              dob: "2001-03-04",
+              financialStartDate: null,
+              createdBy: { id: "u1", name: "knight" },
+              updatedBy: null,
+            },
+          ],
+        },
+      });
+    });
+
+  it("exports only member-model fields, never server-owned keys", async () => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    mockMembersWithAuditFields(() =>
+      Promise.resolve({ data: { data: "https://files/members.xlsx" } })
+    );
+    renderPage();
+    await exportMembersList();
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith("https://files/members.xlsx", "_blank")
+    );
+    const exportUrl: string = mockGet.mock.calls
+      .map(([url]) => url as string)
+      .find((url) => url.includes("/export"))!;
+    const fields = new URLSearchParams(exportUrl.split("?")[1]).get("fields");
+    expect(fields?.split(",")).toEqual(["name", "dob"]);
+    open.mockRestore();
+  });
+
+  it("shows the backend's error when an export fails", async () => {
+    const toastError = jest.spyOn(toast, "error");
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mockMembersWithAuditFields(() =>
+      Promise.reject({
+        response: { status: 400, data: { error: "Invalid field(s): x" } },
+      })
+    );
+    renderPage();
+    await exportMembersList();
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Invalid field(s): x")
+    );
+    toastError.mockRestore();
+    consoleError.mockRestore();
   });
 });
