@@ -19,6 +19,7 @@ import { attendanceRequest } from "services";
 import {
   postRequest,
   putRequest,
+  queryClient,
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
@@ -393,9 +394,13 @@ const MarkAttendanceRoster = ({
   // or remove saves) fold the roster change in instead of re-seeding, which
   // would wipe the officer's unsaved statuses and details.
   const seededFor = useRef<string | null>(null);
+  // Set once a save succeeds: a load that lands after it (the save clears this
+  // session's cache on the way to View) must not refill the working state.
+  const savedRef = useRef(false);
 
   // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
+    if (savedRef.current) return;
     const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
     const toRow = (attend: typeof resolved[number]): MemberType => ({
       id: attend.memberId,
@@ -638,8 +643,9 @@ const MarkAttendanceRoster = ({
 
   const navigate = useNavigate();
   const isSubmittingRef = useRef(false);
-  const onSubmitSuccess = () => {
+  const onSubmitSuccess = (response?: { data?: { id?: string } }) => {
     isSubmittingRef.current = false;
+    savedRef.current = true;
     setUndoSnapshot(null);
     if (!isUpdate) {
       // Only a stored create finishes the draft: its metadata and both roster
@@ -654,7 +660,31 @@ const MarkAttendanceRoster = ({
         ? `${terms.attendanceSingular} Updated`
         : `${terms.attendanceSingular} Created successfully`,
     );
-    navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+    // Open the saved session, where the officer checks and shares it.
+    const savedId = isUpdate ? params.attendanceId : response?.data?.id;
+    if (!savedId) {
+      navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+      return;
+    }
+    // The edit loaded this session into the same cache View reads; drop it so
+    // View never opens on the statuses from before the save.
+    queryClient.removeQueries({
+      queryKey: queryKeys.attendance(org.id, savedId),
+      exact: true,
+    });
+    [
+      queryKeys.attendances(org.id),
+      queryKeys.attendanceExport(org.id, savedId),
+      queryKeys.analytics.root(org.id),
+      queryKeys.analytics.memberRoot(org.id),
+    ].forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
+    const viewPath = convertParamsToString(PROTECTED_PATHS.ATTENDANCE, {
+      id: savedId,
+    });
+    // Back from the session returns to All Attendance, never to a finished
+    // edit or the spent create form.
+    if (!isUpdate) navigate(PROTECTED_PATHS.ALL_ATTENDANCE, { replace: true });
+    navigate(viewPath, { replace: isUpdate });
   };
 
   const { mutate, isLoading } = useMutationWrapper(
