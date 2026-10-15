@@ -3,9 +3,9 @@ import { generatedCss, render } from "test-utils/render";
 import AnalyticsMemberList from "components/analytics/AnalyticsMemberList";
 
 const ROWS = [
-  { memberId: "m1", name: "Ada", counts: { present: 6, excused: 2, absent: 2 } },
-  { memberId: "m2", name: "Bola", counts: { present: 0, excused: 0, absent: 0 } },
-  { name: "Unlinked", counts: { present: 1, excused: 0, absent: 0 } },
+  { memberId: "m1", name: "Ada", rank: 1, counts: { present: 6, excused: 2, absent: 2 } },
+  { memberId: "m2", name: "Bola", rank: 2, counts: { present: 0, excused: 0, absent: 0 } },
+  { name: "Unlinked", rank: 3, counts: { present: 1, excused: 0, absent: 0 } },
 ];
 
 describe("<AnalyticsMemberList>", () => {
