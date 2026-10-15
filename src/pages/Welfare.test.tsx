@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
 import {
@@ -274,6 +275,20 @@ describe("<Welfare>", () => {
     expect(String(overviewCall?.[0])).toBe(
       `/welfare/org1/overview?asOf=${TODAY}`,
     );
+  });
+
+  it("starts the overview at once when the member model is already cached", async () => {
+    // The layout preloads the model; the page's own refresh of it is slow.
+    queryClient.setQueryData(queryKeys.memberModel("org1"), MEMBER_MODEL);
+    const answer = serve().getMockImplementation()!;
+    mockGet.mockImplementation((url: string) =>
+      String(url).includes("/model") ? new Promise(() => undefined) : answer(url),
+    );
+    renderPage();
+    expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
+    expect(
+      mockGet.mock.calls.some(([url]) => String(url).startsWith("/welfare/org1/overview")),
+    ).toBe(true);
   });
 
   it("shows the backend summary counts as cards", async () => {
