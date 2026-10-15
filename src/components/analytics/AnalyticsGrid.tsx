@@ -41,6 +41,8 @@ const NOT_ON_ROSTER = (session: string) =>
 export interface AnalyticsGridRow {
   memberId?: string;
   name: string;
+  /** Position in the backend's ranking; kept when the grid is searched. */
+  rank: number;
   counts: BehaviorCounts;
   /** Session column key → stored status key; missing means N/A. */
   cells: Record<string, string | undefined>;
@@ -109,7 +111,7 @@ const AnalyticsGrid = ({ rows, dateKeys, statuses, onOpen }: AnalyticsGridProps)
                 }}
               >
                 <Table.Cell textAlign="end" color="fg.muted" {...pinned("0")}>
-                  {index + 1}
+                  {row.rank}
                 </Table.Cell>
                 <Table.Cell
                   {...pinned(SN_WIDTH)}

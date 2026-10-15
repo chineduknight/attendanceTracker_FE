@@ -15,6 +15,8 @@ export type BehaviorCounts = Record<AttendanceBehavior, number>;
 export interface AnalyticsListRow {
   memberId?: string;
   name: string;
+  /** Position in the backend's ranking; kept when the list is searched. */
+  rank: number;
   counts: BehaviorCounts;
 }
 
@@ -36,7 +38,7 @@ const AnalyticsMemberList = ({ rows, onOpen }: AnalyticsMemberListProps) => {
   const session = lowerTerm(terms.attendanceSingular);
   return (
     <GroupedList>
-      {rows.map((row, index) => {
+      {rows.map((row) => {
         const total = ATTENDANCE_BEHAVIORS.reduce((sum, b) => sum + row.counts[b], 0);
         const summary = ATTENDANCE_BEHAVIORS.map(
           (b) => `${BEHAVIOR_META[b].label} ${row.counts[b]}`,
@@ -47,7 +49,7 @@ const AnalyticsMemberList = ({ rows, onOpen }: AnalyticsMemberListProps) => {
               w="2ch" flexShrink={0} textAlign="end" fontSize="sm"
               color="fg.muted" fontVariantNumeric="tabular-nums"
             >
-              {index + 1}
+              {row.rank}
             </Text>
             <Box flex="1" minW={0}>
               <Text fontWeight="semibold" lineClamp={1}>{row.name}</Text>
@@ -87,7 +89,7 @@ const AnalyticsMemberList = ({ rows, onOpen }: AnalyticsMemberListProps) => {
           </Flex>
         );
         return (
-          <GroupedListItem key={row.memberId ?? `${row.name}-${index}`} px={0} py={0}>
+          <GroupedListItem key={row.memberId ?? `${row.name}-${row.rank}`} px={0} py={0}>
             {row.memberId ? (
               <Box
                 as="button"

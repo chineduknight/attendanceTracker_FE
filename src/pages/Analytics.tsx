@@ -35,6 +35,8 @@ import AnalyticsMemberList, {
 } from "components/analytics/AnalyticsMemberList";
 import AnalyticsGrid, { AnalyticsGridRow } from "components/analytics/AnalyticsGrid";
 import PageContainer from "components/layout/PageContainer";
+import PinnedSearchBar from "components/PinnedSearchBar";
+import { usePinnedSearch } from "hooks/usePinnedSearch";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { ThemedSelect } from "components/ui/themed-select";
@@ -91,6 +93,8 @@ const AttendanceAnalyticsPage: React.FC = () => {
   // wider screens start on the grid. The officer's choice then sticks.
   const isWide = useBreakpointValue({ base: false, md: true }, { ssr: false });
   const [chosenView, setChosenView] = useState<View | null>(null);
+  const [nameQuery, setNameQuery] = useState("");
+  const pinnedSearch = usePinnedSearch(nameQuery);
   const view: View = chosenView ?? (isWide ? "grid" : "list");
 
   const goToMemberAnalytics = (memberId: string) => {
@@ -269,9 +273,10 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
   const memberRows = useMemo<AnalyticsGridRow[]>(
     () =>
-      rows.map((row) => ({
+      rows.map((row, index) => ({
         memberId: row.memberId,
         name: row.name,
+        rank: index + 1,
         counts: Object.fromEntries(
           ATTENDANCE_BEHAVIORS.map((b) => [b, behaviorCountOf(row, b)])
         ) as BehaviorCounts,
@@ -279,6 +284,16 @@ const AttendanceAnalyticsPage: React.FC = () => {
       })),
     [rows, dateKeys]
   );
+
+  // Finds members in the report on screen. It narrows what is shown only:
+  // ranks, totals, the legend and exports stay the whole report's.
+  const visibleRows = useMemo(() => {
+    const query = nameQuery.trim().toLowerCase();
+    return query
+      ? memberRows.filter((row) => row.name.toLowerCase().includes(query))
+      : memberRows;
+  }, [memberRows, nameQuery]);
+  const isNarrowed = visibleRows.length !== memberRows.length;
 
   // Legend: active statuses plus any inactive/unknown key in these results.
   const legend = useMemo(() => {
@@ -408,27 +423,62 @@ const AttendanceAnalyticsPage: React.FC = () => {
             />
           )}
 
-          {rows.length > 0 && view === "list" && (
-            <AnalyticsMemberList rows={memberRows} onOpen={goToMemberAnalytics} />
+          {rows.length > 0 && (
+            <PinnedSearchBar
+              pinnedSearch={pinnedSearch}
+              value={nameQuery}
+              onChange={setNameQuery}
+              placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
+              maxW={{ md: "400px" }}
+              mb={2}
+            />
           )}
 
-          {rows.length > 0 && view === "grid" && (
-            <>
-              <Flex mb={3} gap={4} flexWrap="wrap">
-                {legend.map((status) => (
-                  <Flex key={status.key} align="center" gap={1}>
-                    <Badge colorPalette={status.color}>{status.shortLabel}</Badge>
-                    <Text fontSize="sm">{status.label}</Text>
+          {rows.length > 0 && (
+            <Box ref={pinnedSearch.resultsRef} minH={pinnedSearch.resultsMinH}>
+              {isNarrowed && (
+                <Text fontSize="sm" color="fg.muted" mb={2} role="status">
+                  {`Showing ${visibleRows.length} of ${memberRows.length} ${lowerTerm(
+                    memberRows.length === 1 ? terms.memberSingular : terms.memberPlural
+                  )}`}
+                </Text>
+              )}
+
+              {visibleRows.length === 0 && (
+                <EmptyState
+                  title={`No ${lowerTerm(terms.memberSingular)} found`}
+                  description={`Nothing matches "${nameQuery.trim()}".`}
+                  action={
+                    <Button variant="outline" onClick={() => setNameQuery("")}>
+                      Clear search
+                    </Button>
+                  }
+                />
+              )}
+
+              {visibleRows.length > 0 && view === "list" && (
+                <AnalyticsMemberList rows={visibleRows} onOpen={goToMemberAnalytics} />
+              )}
+
+              {visibleRows.length > 0 && view === "grid" && (
+                <>
+                  <Flex mb={3} gap={4} flexWrap="wrap">
+                    {legend.map((status) => (
+                      <Flex key={status.key} align="center" gap={1}>
+                        <Badge colorPalette={status.color}>{status.shortLabel}</Badge>
+                        <Text fontSize="sm">{status.label}</Text>
+                      </Flex>
+                    ))}
                   </Flex>
-                ))}
-              </Flex>
-              <AnalyticsGrid
-                rows={memberRows}
-                dateKeys={dateKeys}
-                statuses={statuses}
-                onOpen={goToMemberAnalytics}
-              />
-            </>
+                  <AnalyticsGrid
+                    rows={visibleRows}
+                    dateKeys={dateKeys}
+                    statuses={statuses}
+                    onOpen={goToMemberAnalytics}
+                  />
+                </>
+              )}
+            </Box>
           )}
         </>
       )}

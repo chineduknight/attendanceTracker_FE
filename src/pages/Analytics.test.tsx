@@ -110,6 +110,47 @@ describe("<Analytics> with configured statuses", () => {
     ]);
   });
 
+  it("finds a member by name and keeps their backend rank", async () => {
+    await search();
+    fireEvent.change(screen.getByLabelText("Search member"), {
+      target: { value: "  CHI " },
+    });
+    const rows = screen.getAllByRole("button", { name: /View member analytics/ });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAccessibleName(/^Chi:/);
+    // Chi is third in the backend's ranking, not first of the matches.
+    expect(within(rows[0]).getByText("3")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 3 members");
+  });
+
+  it("keeps the backend rank in the grid while searching", async () => {
+    await searchGrid();
+    fireEvent.change(screen.getByLabelText("Search member"), {
+      target: { value: "bola" },
+    });
+    // Body rows are buttons (they open member analytics); headers are not.
+    const rows = within(screen.getByRole("table")).getAllByRole("button");
+    expect(rows).toHaveLength(1);
+    // Bola is second in the backend's ranking, not first of the matches.
+    expect(rows[0]).toHaveTextContent(/^2Bola/);
+    // The legend still describes the whole report.
+    expect(screen.getAllByText("Tardy").length).toBeGreaterThan(0);
+  });
+
+  it("says when no member matches and clears the search", async () => {
+    await search();
+    fireEvent.change(screen.getByLabelText("Search member"), {
+      target: { value: "zed" },
+    });
+    expect(screen.getByText("No member found")).toBeInTheDocument();
+    expect(screen.getByText('Nothing matches "zed".')).toBeInTheDocument();
+    // The empty state's button; the bar's own clear button is an icon.
+    fireEvent.click(screen.getByText("Clear search"));
+    expect(
+      screen.getAllByRole("button", { name: /View member analytics/ })
+    ).toHaveLength(3);
+  });
+
   it("opens member analytics for the same range from a list row", async () => {
     await search();
     fireEvent.click(screen.getByRole("button", { name: /^Bola:/ }));
