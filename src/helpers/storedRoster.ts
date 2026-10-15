@@ -72,34 +72,3 @@ export const splitStoredRoster = <T extends StoredRosterEntry>(
     rosterCount: attendance.length,
   };
 };
-
-interface EditedRow {
-  id: string;
-  attendanceStatus: string;
-}
-
-/**
- * Folds a refetched stored roster into the rows an officer is editing. Who is
- * on the roster follows the server (a manual add or remove that has just been
- * saved), while statuses the officer changed but has not submitted are kept.
- */
-export const mergeStoredRoster = <T extends EditedRow>(
-  editing: readonly T[],
-  stored: readonly T[],
-): T[] => {
-  const local = new Map(editing.map((row) => [row.id, row.attendanceStatus]));
-  return stored.map((row) =>
-    local.has(row.id) ? { ...row, attendanceStatus: local.get(row.id)! } : row,
-  );
-};
-
-/** Whether any row's status differs from the stored record's. */
-export const hasUnsavedStatusChanges = (
-  editing: readonly EditedRow[],
-  stored: readonly Pick<StoredRosterEntry, "memberId" | "attendanceStatus">[],
-): boolean => {
-  const saved = new Map(stored.map((entry) => [entry.memberId, entry.attendanceStatus]));
-  return editing.some(
-    (row) => saved.has(row.id) && saved.get(row.id) !== row.attendanceStatus,
-  );
-};
