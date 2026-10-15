@@ -128,6 +128,21 @@ const formatFieldValue = (value: unknown): string => {
   return text === "" ? "—" : text;
 };
 
+// An audit "by" field is shown with the timestamp of that change. These are
+// timestamps, not business dates, so local time is right.
+const AUDIT_TIMESTAMP_KEYS: Record<string, string> = {
+  createdBy: "createdAt",
+  updatedBy: "updatedAt",
+};
+
+const formatAuditTime = (member: MemberRecord, key: string) => {
+  const timestampKey = AUDIT_TIMESTAMP_KEYS[key];
+  const timestamp = timestampKey ? member[timestampKey] : undefined;
+  if (!isPersonRef(member[key]) || typeof timestamp !== "string") return null;
+  const parsed = parseISO(timestamp);
+  return isValid(parsed) ? format(parsed, "dd-MMM-yyyy, h:mm a") : null;
+};
+
 const openExport = (response: { data?: string }) => {
   if (response?.data) window.open(response.data, "_blank");
 };
@@ -621,6 +636,7 @@ const ViewMembers: React.FC = () => {
                           >
                             {fields.map((key) => {
                               const value = formatFieldValue(member[key]);
+                              const auditTime = formatAuditTime(member, key);
                               // Option values are a fixed set, so they read
                               // as tags; free text stays plain.
                               const asTag =
@@ -647,6 +663,11 @@ const ViewMembers: React.FC = () => {
                                     <TruncatedText fontSize="sm">
                                       {value}
                                     </TruncatedText>
+                                  )}
+                                  {auditTime && (
+                                    <Text fontSize="xs" color="fg.muted">
+                                      {auditTime}
+                                    </Text>
                                   )}
                                 </Box>
                               );

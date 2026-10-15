@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
 import { toggle, chooseOption, openOption } from "test-utils/render";
@@ -266,6 +266,9 @@ describe("WelfareFollowUpDialog — manual create", () => {
   it("sends an optional next date when one is chosen", async () => {
     const create = jest.fn();
     renderDialog({ create });
+    // The next date cannot precede the record date, which defaults to today,
+    // so a fixed date would start failing once it is in the past.
+    const nextDate = format(addDays(new Date(), 7), "yyyy-MM-dd");
 
     await pickMember("Ada Okafor");
     fireEvent.change(screen.getByLabelText(/^Reason/), {
@@ -273,7 +276,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
     });
     await toggle(screen.getByLabelText("Keep open for follow-up"));
     fireEvent.change(screen.getByLabelText("Next follow-up date"), {
-      target: { value: "2026-10-14" },
+      target: { value: nextDate },
     });
     fireEvent.change(screen.getByLabelText("Note"), {
       target: { value: "  Reach out after the trip.  " },
@@ -282,7 +285,7 @@ describe("WelfareFollowUpDialog — manual create", () => {
 
     expect(create.mock.calls[0][0]).toMatchObject({
       workflowStatus: "open",
-      nextFollowUpDate: "2026-10-14",
+      nextFollowUpDate: nextDate,
       note: "Reach out after the trip.",
     });
   });
