@@ -23,7 +23,7 @@ import {
   useQueryWrapper,
 } from "services/api/apiHelper";
 import useGlobalStore, { currentAttendanceType } from "zStore";
-import { useConfirm } from "components/ui/confirm-dialog";
+import { ConfirmDialog, useConfirm } from "components/ui/confirm-dialog";
 import _ from "lodash";
 import { toast } from "react-toastify";
 import PageLoader from "components/PageLoader";
@@ -69,6 +69,8 @@ import {
   isManualEntry,
   splitStoredRoster,
   UnresolvedRosterEntry,
+  hasUnsavedStatusChanges,
+  mergeStoredRoster,
 } from "helpers/storedRoster";
 import {
   restoreStatuses,
@@ -87,8 +89,15 @@ import {
   nextPresentStatus,
   reconcileManualDraft,
   toManualAdditionPayload,
+  ManualAdditionInput,
 } from "helpers/manualAttendance";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
+import { useManualAttendanceMember } from "hooks/useManualAttendanceMember";
+import {
+  canChangeStoredRoster,
+  canEditAttendance,
+  resolveEditsRemaining,
+} from "helpers/attendanceEdits";
 
 export type MemberType = {
   /** A configured status key of the selected organisation. */
@@ -324,7 +333,8 @@ const MarkAttendanceRoster = ({
     isSuccess: membersLoaded,
     isError: membersFailed,
     refetch: refetchMembers,
-  } = useMembers(org.id, { enabled: !isUpdate });
+    isLoading: membersLoading,
+  } = useMembers(org.id, { enabled: !isUpdate || isAddingMember });
   const [rosterReady, setRosterReady] = useState(false);
 
   // Only members expected under the session's rules are kept, then any
@@ -379,8 +389,29 @@ const MarkAttendanceRoster = ({
     commitManual,
   ]);
 
+  // The record this edit was seeded from. Later refetches (after a manual add
+  // or remove saves) fold the roster change in instead of re-seeding, which
+  // would wipe the officer's unsaved statuses and details.
+  const seededFor = useRef<string | null>(null);
+
   // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
+    const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
+    const toRow = (attend: typeof resolved[number]): MemberType => ({
+      id: attend.memberId,
+      name: attend.member.name,
+      // Kept verbatim, even when the status has since been deactivated.
+      attendanceStatus: attend.attendanceStatus,
+    });
+    const expected = resolved.filter((attend) => !isManualEntry(attend)).map(toRow);
+    const manual = resolved.filter(isManualEntry).map(toRow);
+    setUnresolvedEntries(unresolved);
+    if (seededFor.current === params.attendanceId) {
+      commitMembers((current) => mergeStoredRoster(current, expected));
+      commitManual((current) => mergeStoredRoster(current, manual));
+      return;
+    }
+    seededFor.current = params.attendanceId ?? null;
     const currentAtt = _.pick(res.data, [
       "name",
       "date",
@@ -394,18 +425,8 @@ const MarkAttendanceRoster = ({
     // the frozen roster as read-only placeholders.
     // The stored roster is historical truth: rules and availability are never
     // re-run, and manual entries stay manual whatever the current rules say.
-    const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
-    setUnresolvedEntries(unresolved);
-    const toRow = (attend: typeof resolved[number]): MemberType => ({
-      id: attend.memberId,
-      name: attend.member.name,
-      // Kept verbatim, even when the status has since been deactivated.
-      attendanceStatus: attend.attendanceStatus,
-    });
-    commitMembers(() =>
-      resolved.filter((attend) => !isManualEntry(attend)).map(toRow),
-    );
-    commitManual(() => resolved.filter(isManualEntry).map(toRow));
+    commitMembers(() => expected);
+    commitManual(() => manual);
   };
 
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -444,6 +465,33 @@ const MarkAttendanceRoster = ({
   // empty roster (Submit is already blocked on an empty roster).
   const storedLoadFailed =
     isUpdate && attendanceLoadErrored && !storedAttendance;
+
+  // Editing a stored roster: a manual add or remove saves straight away
+  // through its own endpoint and uses one of the record's edits, while
+  // statuses and details wait for Update, which uses another.
+  const storedRecord = isUpdate ? storedAttendance?.data : undefined;
+  const editsLeft = storedRecord ? resolveEditsRemaining(storedRecord) : 0;
+  const canChangeRoster = storedRecord ? canChangeStoredRoster(storedRecord) : false;
+  const hasUnsavedEdits = storedRecord
+    ? hasUnsavedStatusChanges(sessionRoster, storedRecord.attendance ?? []) ||
+      details.name !== (storedRecord.name ?? "") ||
+      details.date !== (storedRecord.date ?? "").slice(0, 10) ||
+      details.categoryId !== (storedRecord.categoryId ?? "") ||
+      details.subCategoryId !== (storedRecord.subCategoryId ?? "")
+    : false;
+  // Spending the last edit on the roster would leave Update nothing to save
+  // the officer's other changes with.
+  const rosterChangeWouldStrandEdits = hasUnsavedEdits && editsLeft <= 1;
+  const storedRosterIds = useMemo<string[]>(
+    () =>
+      (storedRecord?.attendance ?? []).map(
+        (entry: { memberId: string }) => entry.memberId,
+      ),
+    [storedRecord],
+  );
+  const { addMember: saveManualMember, removeMember: deleteManualMember, isAdding, isRemoving } =
+    useManualAttendanceMember(org.id, params.attendanceId as string);
+  const [removing, setRemoving] = useState<MemberType | null>(null);
   // Retrying a failed load only refetches. Unlike Refresh in edit mode, it
   // never discards a draft or reloads the page.
   const retryRoster = () =>
@@ -542,13 +590,15 @@ const MarkAttendanceRoster = ({
   };
 
   // New session only: manual additions live in the draft until submit.
+  const sessionTerm = lowerTerm(terms.attendanceSingular);
   const manualCandidateList = useMemo(
     () =>
-      manualCandidates(
-        currentMembers,
-        sessionRoster.map((member) => member.id),
-      ),
-    [currentMembers, sessionRoster],
+      manualCandidates(currentMembers, [
+        ...sessionRoster.map((member) => member.id),
+        // Unresolved stored entries are still on the roster.
+        ...storedRosterIds,
+      ]),
+    [currentMembers, sessionRoster, storedRosterIds],
   );
   const addManualMember = ({
     memberId,
@@ -578,7 +628,13 @@ const MarkAttendanceRoster = ({
     commitManual((current) => current.filter((m) => m.id !== memberId));
     setUndoSnapshot(null);
   };
-  const sessionTerm = lowerTerm(terms.attendanceSingular);
+  // In an edit the roster on screen only changes once the backend confirms
+  // and the record is refetched (merged in, keeping unsaved statuses).
+  const saveManualAddition = (input: ManualAdditionInput) =>
+    saveManualMember(input, () => {
+      toast.success(`${terms.memberSingular} added to this ${sessionTerm}.`);
+      setIsAddingMember(false);
+    });
 
   const navigate = useNavigate();
   const isSubmittingRef = useRef(false);
@@ -752,17 +808,31 @@ const MarkAttendanceRoster = ({
             manualCount={manualCount}
             rosterCount={expectedRosterSize + manualCount}
           />
-          {!isUpdate && (
-            <Button
-              mt="3"
-              size="sm"
-              minH="44px"
-              variant="outline"
-              onClick={() => setIsAddingMember(true)}
-            >
-              <FaUserPlus />
-              {`Add ${lowerTerm(terms.memberSingular)} to this ${sessionTerm}`}
-            </Button>
+          <Button
+            mt="3"
+            size="sm"
+            minH="44px"
+            variant="outline"
+            disabled={
+              isUpdate && (!canChangeRoster || rosterChangeWouldStrandEdits)
+            }
+            onClick={() => setIsAddingMember(true)}
+          >
+            <FaUserPlus />
+            {`Add ${lowerTerm(terms.memberSingular)} to this ${sessionTerm}`}
+          </Button>
+          {storedRecord && (
+            <Text fontSize="sm" color="fg.muted" mt={1}>
+              {!canEditAttendance(storedRecord)
+                ? `No edits remain for this ${sessionTerm}.`
+                : rosterChangeWouldStrandEdits
+                  ? `Tap Update to save your changes first: adding or removing a ${lowerTerm(
+                      terms.memberSingular,
+                    )} saves straight away and would use this ${sessionTerm}'s last edit.`
+                  : `${editsLeft} ${editsLeft === 1 ? "edit" : "edits"} left. Adding or removing a ${lowerTerm(
+                      terms.memberSingular,
+                    )} saves straight away and uses one; Update uses another.`}
+            </Text>
           )}
           <QuickMarkToolbar
             statuses={statuses.active}
@@ -839,7 +909,7 @@ const MarkAttendanceRoster = ({
                   }
                   isManual={isManual}
                   accessory={
-                    isManual && !isUpdate ? (
+                    isManual ? (
                       <Button
                         size="sm"
                         minH="44px"
@@ -847,7 +917,13 @@ const MarkAttendanceRoster = ({
                         variant="ghost"
                         colorPalette="red"
                         aria-label={`Remove ${item.name} from this ${sessionTerm}`}
-                        onClick={() => removeManualMember(item.id)}
+                        disabled={
+                          isUpdate &&
+                          (!canChangeRoster || rosterChangeWouldStrandEdits)
+                        }
+                        onClick={() =>
+                          isUpdate ? setRemoving(item) : removeManualMember(item.id)
+                        }
                       >
                         Remove
                       </Button>
@@ -890,7 +966,8 @@ const MarkAttendanceRoster = ({
               loading={isLoading}
               disabled={
                 sessionRoster.length === 0 ||
-                (isUpdate && (!details.name.trim() || !details.date))
+                (isUpdate && (!details.name.trim() || !details.date)) ||
+                (storedRecord !== undefined && !canEditAttendance(storedRecord))
               }
             >
               {isUpdate ? "Update" : "Submit"}
@@ -899,13 +976,34 @@ const MarkAttendanceRoster = ({
         </>
       )}
 
-      {!isUpdate && (
-        <ManualMemberDialog
-          isOpen={isAddingMember}
-          candidates={manualCandidateList}
-          statuses={statuses}
-          onSubmit={addManualMember}
-          onClose={() => setIsAddingMember(false)}
+      {/* A new session adds to its draft; an edit saves the addition now. */}
+      <ManualMemberDialog
+        isOpen={isAddingMember}
+        candidates={manualCandidateList}
+        statuses={statuses}
+        isLoadingCandidates={isUpdate && membersLoading}
+        candidatesFailed={isUpdate && membersFailed}
+        isSaving={isUpdate && isAdding}
+        onSubmit={isUpdate ? saveManualAddition : addManualMember}
+        onClose={() => setIsAddingMember(false)}
+      />
+      {isUpdate && (
+        <ConfirmDialog
+          open={removing !== null}
+          title={`Remove ${removing?.name ?? ""} from this ${sessionTerm}?`}
+          body={`${removing?.name ?? ""} was manually added to this ${sessionTerm}. Removing them deletes this historical attendance entry from this ${sessionTerm} only, saves straight away and uses one edit.`}
+          cancelLabel="Cancel"
+          confirmLabel={`Remove from this ${sessionTerm}`}
+          confirmPalette="red"
+          loading={isRemoving}
+          onConfirm={() =>
+            removing &&
+            deleteManualMember(removing.id, () => {
+              toast.success(`${terms.memberSingular} removed from this ${sessionTerm}.`);
+              setRemoving(null);
+            })
+          }
+          onClose={() => !isRemoving && setRemoving(null)}
         />
       )}
 
