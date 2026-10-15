@@ -6,7 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { render, chooseOption, confirmInDialog, optionLabels } from "test-utils/render";
-import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
@@ -86,13 +86,26 @@ const HISTORICAL = {
   ],
 };
 
-const renderAt = (path: string) =>
+// Stands in for View Attendance, with the header's Back.
+const SavedSession = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return (
+    <div>
+      <p>{`viewing ${id}`}</p>
+      <button onClick={() => navigate(-1)}>Back</button>
+    </div>
+  );
+};
+
+const renderAt = (path: string, history: string[] = []) =>
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[...history, path]}>
         <Routes>
           <Route path="/mark" element={<MarkAttendance />} />
           <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+          <Route path="/attendance/:id" element={<SavedSession />} />
           <Route path="/all-attendance" element={<div>all attendance</div>} />
           <Route
             path="/create-attendance"
@@ -232,6 +245,49 @@ describe("<MarkAttendance> with configured statuses", () => {
     expect(body).not.toHaveProperty("members");
     expect(body).not.toHaveProperty("presentMembers");
     expect(body).not.toHaveProperty("apologisedMembers");
+  });
+
+  it("opens the new session after creating it, with Back going to All Attendance", async () => {
+    mockPost.mockImplementation(() =>
+      Promise.resolve({ data: { data: { id: "att9" } } }),
+    );
+    renderAt("/mark");
+    await screen.findByText("Ada");
+    await submitAndConfirm();
+    // Save, confirm and navigate can outlast the default wait under a full run.
+    expect(
+      await screen.findByText("viewing att9", undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    // Let the page finish mounting: React Router ignores a navigate() made
+    // before its effects have run, which a busy test run can hit.
+    await act(() => Promise.resolve());
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByText("all attendance")).toBeInTheDocument();
+  });
+
+  it("opens the session after an update, leaving the finished edit out of history", async () => {
+    mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+    renderAt("/mark/att1", ["/all-attendance"]);
+    await screen.findByText("Ada");
+    await submitAndConfirm();
+    // Save, confirm and navigate can outlast the default wait under a full run.
+    expect(
+      await screen.findByText("viewing att1", undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    // Clearing the session's cache reloads it while the edit is still
+    // mounted; that late load must never refill the working state.
+    const loads = () =>
+      mockGet.mock.calls.filter(([url]) => url === "/attendance/org1/att1").length;
+    await waitFor(() => expect(loads()).toBe(2));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(useGlobalStore.getState().currentAttendance).toEqual(
+      EMPTY_CURRENT_ATTENDANCE,
+    );
+    // Let the page finish mounting: React Router ignores a navigate() made
+    // before its effects have run, which a busy test run can hit.
+    await act(() => Promise.resolve());
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByText("all attendance")).toBeInTheDocument();
   });
 
   it("can submit a session with no present-behavior members", async () => {
