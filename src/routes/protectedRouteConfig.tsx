@@ -1,40 +1,29 @@
-import WithSuspense from "components/HOC/WithSuspense";
-import { lazy } from "react";
+import { lazyPage } from "./lazyPage";
 import { PermissionKey } from "rbac/permissions";
 import { PROTECTED_PATHS } from "./pagePath";
 import { OptionalFeature } from "helpers/organisationPresentation";
 import { LABELS, PresentationText } from "config/presentationLabels";
 
-const Dashboard = WithSuspense(lazy(() => import("pages/Dashboard")));
-const UserModel = WithSuspense(lazy(() => import("pages/UserModel")));
-const Category = WithSuspense(lazy(() => import("pages/Category")));
-const SubCategory = WithSuspense(lazy(() => import("pages/SubCategory")));
-const MarkAttendance = WithSuspense(lazy(() => import("pages/MarkAttendance")));
-const CreateAttendance = WithSuspense(
-  lazy(() => import("pages/CreateAttendance"))
-);
-const AddMember = WithSuspense(lazy(() => import("pages/AddMember")));
-const Attendance = WithSuspense(lazy(() => import("pages/ViewAttendance")));
-const OrgList = WithSuspense(lazy(() => import("pages/Organisations")));
-const AllAttendance = WithSuspense(lazy(() => import("pages/AllAttendance")));
-const ViewMembers = WithSuspense(lazy(() => import("pages/ViewMembers")));
-const Analytics = WithSuspense(lazy(() => import("pages/Analytics")));
-const MemberAnalytics = WithSuspense(
-  lazy(() => import("pages/MemberAnalytics"))
-);
-const Birthday = WithSuspense(lazy(() => import("pages/Birthday")));
-const Finance = WithSuspense(lazy(() => import("pages/Finance")));
-const Welfare = WithSuspense(lazy(() => import("pages/Welfare")));
-const OfficersRoles = WithSuspense(lazy(() => import("pages/OfficersRoles")));
-const AddOrganisation = WithSuspense(
-  lazy(() => import("pages/AddOrganisation"))
-);
-const OrganisationSettings = WithSuspense(
-  lazy(() => import("pages/OrganisationSettings"))
-);
-const MemberAttendanceAvailability = WithSuspense(
-  lazy(() => import("pages/MemberAttendanceAvailability"))
-);
+const Dashboard = lazyPage(() => import("pages/Dashboard"));
+const UserModel = lazyPage(() => import("pages/UserModel"));
+const Category = lazyPage(() => import("pages/Category"));
+const SubCategory = lazyPage(() => import("pages/SubCategory"));
+const MarkAttendance = lazyPage(() => import("pages/MarkAttendance"));
+const CreateAttendance = lazyPage(() => import("pages/CreateAttendance"));
+const AddMember = lazyPage(() => import("pages/AddMember"));
+const Attendance = lazyPage(() => import("pages/ViewAttendance"));
+const OrgList = lazyPage(() => import("pages/Organisations"));
+const AllAttendance = lazyPage(() => import("pages/AllAttendance"));
+const ViewMembers = lazyPage(() => import("pages/ViewMembers"));
+const Analytics = lazyPage(() => import("pages/Analytics"));
+const MemberAnalytics = lazyPage(() => import("pages/MemberAnalytics"));
+const Birthday = lazyPage(() => import("pages/Birthday"));
+const Finance = lazyPage(() => import("pages/Finance"));
+const Welfare = lazyPage(() => import("pages/Welfare"));
+const OfficersRoles = lazyPage(() => import("pages/OfficersRoles"));
+const AddOrganisation = lazyPage(() => import("pages/AddOrganisation"));
+const OrganisationSettings = lazyPage(() => import("pages/OrganisationSettings"));
+const MemberAttendanceAvailability = lazyPage(() => import("pages/MemberAttendanceAvailability"));
 
 const {
   DASHBOARD,

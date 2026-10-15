@@ -218,6 +218,20 @@ describe("<Birthday> proactive experience", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the list on screen while a background refetch runs", async () => {
+    renderPage();
+    expect(await screen.findByText("Ada Okafor")).toBeInTheDocument();
+    // A refetch (window focus, revisit) that has not answered yet.
+    mockGet.mockImplementation(() => new Promise(() => undefined));
+    // React Query reports the fetching state on its next tick.
+    await act(async () => {
+      void queryClient.refetchQueries();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByText("Ada Okafor")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("keeps relative labels and the today accent on the list rows", async () => {
     renderPage();
     await screen.findByText("Ada Okafor");
