@@ -382,7 +382,8 @@ const Birthday: React.FC = () => {
   };
 
   const listBody = () => {
-    if (list.isFetching) return <PageLoader h="20vh" />;
+    // Only a first load replaces the list: a background refetch keeps it.
+    if (list.isFetching && !list.isSuccess) return <PageLoader h="20vh" />;
     if (list.isError) {
       return (
         <ErrorState

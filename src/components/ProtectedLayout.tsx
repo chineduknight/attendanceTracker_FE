@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Box } from "@chakra-ui/react";
 import { Outlet, useLocation, matchRoutes } from "react-router-dom";
 import AppHeader from "components/AppHeader";
@@ -6,11 +7,23 @@ import { useSyncSelectedOrg } from "rbac/useSyncSelectedOrg";
 import { useTerms } from "hooks/useOrgPresentation";
 import { resolveText } from "config/presentationLabels";
 import { APP_NAME } from "config/app";
+import { preloadPages } from "routes/lazyPage";
+
+// Long enough for the page the officer opened to fetch its own code and data
+// first; the other pages then download in the background.
+const PRELOAD_DELAY_MS = 2000;
 
 const ProtectedLayout = () => {
   const location = useLocation();
   useSyncSelectedOrg();
   const terms = useTerms();
+
+  // Fetch every page's code once signed in, so moving between pages does not
+  // wait on a download and show "Loading page..." before the page's own loader.
+  useEffect(() => {
+    const timer = window.setTimeout(preloadPages, PRELOAD_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const matches = matchRoutes(PAGE_ROUTES, location.pathname);
   // react-router-dom 6.3's matchRoutes() is not generic, so RouteMatch.route
