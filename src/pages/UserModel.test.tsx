@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { system } from "styles/theme";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
@@ -12,6 +12,9 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { generatedCss, toggle, chooseOption, confirmInDialog } from "test-utils/render";
+import { useState } from "react";
+import { useConfirm } from "components/ui/confirm-dialog";
+import { useDiscardChangesGuard } from "hooks/useUnsavedChangesGuard";
 import userEvent from "@testing-library/user-event";
 import {
   ELSEWHERE,
@@ -578,6 +581,74 @@ describe("<UserModel> leaving with unsaved changes", () => {
       expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
       (console.error as jest.Mock).mockRestore();
     });
+  });
+
+  it("a save reply after leaving neither navigates nor unguards the next form", async () => {
+    // Any other screen with its own unsaved changes.
+    const OtherForm = () => {
+      const [value, setValue] = useState("");
+      const { confirm, confirmDialog } = useConfirm();
+      useDiscardChangesGuard(value !== "", "the other form", confirm);
+      return (
+        <>
+          <Link to="/third">Go third</Link>
+          <input aria-label="Other field" value={value} onChange={(e) => setValue(e.target.value)} />
+          {confirmDialog}
+        </>
+      );
+    };
+    const post = deferred();
+    mockPost.mockImplementation(() => post.promise);
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/user-model"]}>
+            <Routes>
+              <Route
+                path="/user-model"
+                element={
+                  <>
+                    <LeaveLink />
+                    <UserModel />
+                  </>
+                }
+              />
+              <Route path={ELSEWHERE} element={<OtherForm />} />
+              <Route path="/third" element={<div>third</div>} />
+              <Route path={PROTECTED_PATHS.ADD_MEMBER} element={<div>add member page</div>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Voice Part" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+
+    leave();
+    await confirmInDialog("Discard changes");
+    fireEvent.change(await screen.findByLabelText("Other field"), { target: { value: "typed" } });
+
+    await act(async () => post.resolve({ data: { data: "ok" } }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(toast.success).toHaveBeenCalledWith("Member Model updated successfully");
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.memberModel("orgA") });
+    invalidate.mockRestore();
+    // No stray navigation, so no surprise question from the new form either.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("add member page")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Other field")).toHaveValue("typed");
+
+    const answer = askToLogOut();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("the other form");
+    await expect(answer).resolves.toBe(false);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText("Go third"));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("the other form");
   });
 
   it("keeps asking, with the edit intact, after a background refetch", async () => {

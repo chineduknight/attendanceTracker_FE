@@ -143,9 +143,17 @@ const AddOrUpdateMemberForm = () => {
     if (params.memberId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
     }
-    // Saved: moving on to the list must not ask.
-    releaseLeaveGuard();
-    navigate(PROTECTED_PATHS.VIEW_MEMBER);
+  };
+
+  // Passed per call, so it only runs while this form is still open: an
+  // officer who left mid-request is never pulled back to the list, and the
+  // leave guard of whatever screen they are on now is left alone.
+  const leaveForList = {
+    onSuccess: () => {
+      // Saved or deleted: moving on to the list must not ask.
+      releaseLeaveGuard();
+      navigate(PROTECTED_PATHS.VIEW_MEMBER);
+    },
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
@@ -162,10 +170,7 @@ const AddOrUpdateMemberForm = () => {
       };
     }
     // Add new member
-    mutate({
-      url,
-      data,
-    });
+    mutate({ url, data }, leaveForList);
   };
 
   const { mutate: deleteMember, isLoading: isDeleting } = useMutationWrapper(
@@ -174,10 +179,6 @@ const AddOrUpdateMemberForm = () => {
       toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       queryClient.removeQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
-      // Deleted after its own confirmation: there is nothing left to discard.
-      // A failed delete keeps the form and its guard.
-      releaseLeaveGuard();
-      navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
       const message =
@@ -200,7 +201,9 @@ const AddOrUpdateMemberForm = () => {
       confirmLabel: "Delete",
       destructive: true,
     });
-    if (confirmed) deleteMember({ url });
+    // Deleted after its own confirmation: there is nothing left to discard.
+    // A failed delete keeps the form and its guard.
+    if (confirmed) deleteMember({ url }, leaveForList);
   };
 
   // Locked while a save or delete is in flight: either one navigates away on
@@ -409,14 +412,16 @@ const AddOrUpdateMemberForm = () => {
 };
 
 /**
- * Remounted per organisation, so the loaded member, the form's values and
- * its unsaved-changes baseline never carry over from one organisation to
- * another (the form's values are keyed by field name, which organisations
- * share).
+ * Remounted per organisation and per member, so the loaded member, the
+ * form's values and its unsaved-changes baseline never carry over to another
+ * organisation or member (values are keyed by field name, which they share).
+ * Add and Update are the same component to the router, so without this a
+ * save still in flight from Update would count as the new Add form's own.
  */
 const AddOrUpdateMember = () => {
   const organisationId = useGlobalStore((state) => state.organisation.id);
-  return <AddOrUpdateMemberForm key={organisationId} />;
+  const { memberId } = useParams();
+  return <AddOrUpdateMemberForm key={`${organisationId}:${memberId ?? "new"}`} />;
 };
 
 export default AddOrUpdateMember;

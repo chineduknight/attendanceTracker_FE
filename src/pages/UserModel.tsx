@@ -91,9 +91,6 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
       const model = LABELS.memberModel(terms);
       toast.success(`${model} ${isUpdating ? "updated" : "created"} successfully`);
-      // Saved: moving on to Add Member must not ask.
-      releaseLeaveGuard();
-      navigate(PROTECTED_PATHS.ADD_MEMBER);
     },
     (error: any) => {
       if (error?.response?.status === 401) return;
@@ -113,10 +110,21 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
       toast.error("Fix the highlighted fields before saving.");
       return;
     }
-    mutate({
-      url: convertParamsToString(orgRequest.CONFIG_MODEL, { organisationId }),
-      data: { fields: toModelPayload(fields) },
-    });
+    mutate(
+      {
+        url: convertParamsToString(orgRequest.CONFIG_MODEL, { organisationId }),
+        data: { fields: toModelPayload(fields) },
+      },
+      {
+        // Per call, so it only runs while this form is still open: an
+        // officer who left mid-save is never pulled back to Add Member.
+        onSuccess: () => {
+          // Saved: moving on to Add Member must not ask.
+          releaseLeaveGuard();
+          navigate(PROTECTED_PATHS.ADD_MEMBER);
+        },
+      },
+    );
   };
 
   return (

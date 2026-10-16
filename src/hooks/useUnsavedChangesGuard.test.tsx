@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
-import { useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { confirmLeaveWork, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
 
 const ask = () => Promise.resolve(false);
 
@@ -77,5 +77,34 @@ describe("useUnsavedChangesGuard on reload or closing the tab", () => {
       </BrowserRouter>,
     );
     expect(reloadPrompts()).toBe(true);
+  });
+});
+
+describe("useUnsavedChangesGuard release", () => {
+  // Captures each screen's release so a test can call it late, as a save
+  // reply arriving after the officer moved on would.
+  const releases: Record<string, () => void> = {};
+  const Screen = ({ name, answer }: { name: string; answer: boolean }) => {
+    releases[name] = useUnsavedChangesGuard(true, () => Promise.resolve(answer));
+    return null;
+  };
+
+  it("never clears a newer screen's Logout question", async () => {
+    const { rerender } = render(
+      <BrowserRouter>
+        <Screen key="old" name="old" answer />
+      </BrowserRouter>,
+    );
+    // The officer leaves the old screen and makes changes on another.
+    rerender(
+      <BrowserRouter>
+        <Screen key="new" name="new" answer={false} />
+      </BrowserRouter>,
+    );
+    releases.old();
+    await expect(confirmLeaveWork("logout")).resolves.toBe(false);
+
+    releases.new();
+    await expect(confirmLeaveWork("logout")).resolves.toBe(true);
   });
 });
