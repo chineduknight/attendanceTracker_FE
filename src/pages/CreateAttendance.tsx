@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { queryClient } from "services/api/apiHelper";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { formatSessionDate } from "helpers/sessionDate";
@@ -43,6 +43,8 @@ import {
   readNewAttendanceDraft,
   writeNewAttendanceDraft,
 } from "helpers/newAttendanceDraft";
+import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { attendanceLeaveQuestion } from "helpers/leaveQuestions";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -92,10 +94,28 @@ const CreateAttendanceForm = ({
     isError: memberModelFailed,
   } = useMemberModel(organisationId, { enabled: eligibilityEnabled });
   const { members, isSuccess: membersLoaded } = useMembers(organisationId);
-  const [details, setDetails] = useState<AttendanceDetails>(initialDetails);
+  // The untouched form, kept so leaving only asks once something was entered.
+  const [initial] = useState<AttendanceDetails>(initialDetails);
+  const [details, setDetails] = useState<AttendanceDetails>(initial);
   const [eligibilityRules, setEligibilityRules] = useState<
     AttendanceEligibilityRule[]
   >([]);
+  // Nothing here is saved until Continue writes the draft, so leaving with
+  // entered details (typed, or filled in by a template) loses them.
+  const hasSetupChanges =
+    details.name !== initial.name ||
+    details.date !== initial.date ||
+    details.categoryId !== initial.categoryId ||
+    details.subCategoryId !== initial.subCategoryId ||
+    eligibilityRules.length > 0;
+  const releaseLeaveGuard = useUnsavedChangesGuard(
+    hasSetupChanges,
+    useCallback(
+      (reason: LeaveReason) =>
+        confirm(attendanceLeaveQuestion("setup", reason, terms)),
+      [confirm, terms],
+    ),
+  );
   const {
     unavailableMemberIds,
     isLoading: availabilityLoading,
@@ -171,6 +191,8 @@ const CreateAttendanceForm = ({
     queryClient.invalidateQueries({
       queryKey: queryKeys.members(organisationId),
     });
+    // The details now live in the draft: moving on to marking must not ask.
+    releaseLeaveGuard();
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
@@ -384,6 +406,7 @@ const CreateAttendanceForm = ({
           Continue
         </Button>
       </Stack>
+      {confirmDialog}
     </PageContainer>
   );
 };

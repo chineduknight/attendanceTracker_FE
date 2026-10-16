@@ -12,6 +12,7 @@ import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG, EMPTY_USER } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
+import CreateAttendance from "pages/CreateAttendance";
 import ProtectedLayout from "components/ProtectedLayout";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
 import { ROSTER as ELIGIBILITY_ROSTER } from "test-utils/eligibilityFixtures";
@@ -2731,5 +2732,218 @@ describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
       date: "2026-10-01",
     });
     silence.mockRestore();
+  });
+});
+
+describe("<MarkAttendance> leaving a new session while marking", () => {
+  const META_KEY = "attendance-new-draft-org1";
+  const ROSTER_KEY = "attendance-draft-org1-2026-10-01-Rehearsal";
+  const SIGNED_IN = { ...EMPTY_USER, token: "token-1", username: "knight" };
+  const ORG1 = { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES };
+  const ORG2 = { ...EMPTY_ORG, id: "org2", attendanceStatuses: STATUSES };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    seedNewDraft("org1");
+    useGlobalStore.setState({
+      user: SIGNED_IN,
+      organisation: ORG1,
+      currentAttendance: { ...EMPTY_CURRENT_ATTENDANCE },
+    });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: {
+          data:
+            url === "/organisations"
+              ? [useGlobalStore.getState().organisation]
+              : url.includes("/members")
+                ? ROSTER
+                : [],
+        },
+      }),
+    );
+    mockPost.mockImplementation(() =>
+      Promise.resolve({ data: { data: { id: "new1" } } }),
+    );
+  });
+
+  // Marking inside the real app shell (header Back, account menu, drawer),
+  // reached from Create Attendance as an officer would.
+  const renderInLayout = (path = "/mark-attendance") =>
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/create-attendance", path]}>
+          <Routes>
+            <Route element={<ProtectedLayout />}>
+              <Route path="/mark-attendance" element={<MarkAttendance />} />
+              <Route path="/create-attendance" element={<CreateAttendance />} />
+              <Route path="/dashboard" element={<div>dashboard</div>} />
+              <Route path="/all-attendance" element={<div>all attendance</div>} />
+              <Route path="/attendance/:id" element={<SavedSession />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  const openMenuItem = async (name: string) => {
+    fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+    fireEvent.click(await screen.findByRole("button", { name }));
+  };
+  const dialogClosed = () =>
+    waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  const savedStatuses = () =>
+    JSON.parse(localStorage.getItem(ROSTER_KEY) ?? "[]").map(
+      (m: { name: string; attendanceStatus: string }) =>
+        `${m.name}:${m.attendanceStatus}`,
+    );
+
+  it("asks before Logout, says the draft stays, and keeps marking on Keep marking", async () => {
+    renderInLayout();
+    await screen.findByText("Ada");
+    tap("Ada", 2); // Late
+
+    await openMenuItem("Logout");
+    const dialog = await confirmInDialog("Keep marking");
+    expect(dialog).toHaveTextContent("Log out while marking?");
+    expect(dialog).toHaveTextContent(
+      "Your progress on this attendance is saved on this device. Log back in on this browser and open Create Attendance here to continue marking it.",
+    );
+    expect(dialog).not.toHaveTextContent(/discard|lost|deleted/i);
+    await dialogClosed();
+    expect(useGlobalStore.getState().user).toEqual(SIGNED_IN);
+    expect(statusOf("Ada")).toBe("Late");
+  });
+
+  it("logs out on Log out, keeps the draft, and resumes it after logging back in", async () => {
+    const { unmount } = renderInLayout();
+    await screen.findByText("Ada");
+    tap("Ada", 2); // Late
+
+    await openMenuItem("Logout");
+    await confirmInDialog("Log out");
+    await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+    expect(useGlobalStore.getState().organisation).toEqual(EMPTY_ORG);
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+    expect(savedStatuses()).toEqual(["Ada:late", "Bola:no_show"]);
+    unmount();
+
+    // Signing back in on the same browser and opening Create Attendance.
+    useGlobalStore.setState({ user: SIGNED_IN, organisation: ORG1 });
+    renderInLayout("/create-attendance");
+    fireEvent.click(await screen.findByRole("button", { name: "Continue marking" }));
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("Late");
+    expect(statusOf("Bola")).toBe("No Show");
+  });
+
+  it("never offers organisation A's draft in organisation B", async () => {
+    const { unmount } = renderInLayout();
+    await screen.findByText("Ada");
+    await openMenuItem("Logout");
+    await confirmInDialog("Log out");
+    await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+    unmount();
+
+    useGlobalStore.setState({ user: SIGNED_IN, organisation: ORG2 });
+    renderInLayout("/create-attendance");
+    expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
+    expect(screen.queryByText("Unfinished attendance")).not.toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+  });
+
+  it("asks before Cancel leaves, and leaves the draft resumable", async () => {
+    const goBack = () => fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    renderInLayout();
+    await screen.findByText("Ada");
+    tap("Ada"); // Present
+
+    goBack();
+    const dialog = await confirmInDialog("Keep marking");
+    expect(dialog).toHaveTextContent("Stop marking for now?");
+    expect(dialog).toHaveTextContent(
+      "Your progress on this attendance is saved on this device. Open Create Attendance here to continue marking it.",
+    );
+    await dialogClosed();
+    expect(statusOf("Ada")).toBe("Present");
+
+    goBack();
+    await confirmInDialog("Leave");
+    // Back on Create Attendance, which offers the draft rather than a new form.
+    expect(await screen.findByText("Unfinished attendance")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue marking" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard and create new" })).toBeInTheDocument();
+    expect(savedStatuses()).toEqual(["Ada:present", "Bola:no_show"]);
+  });
+
+  it("asks before the header Back leaves", async () => {
+    renderInLayout();
+    await screen.findByText("Ada");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Stop marking for now?");
+    await confirmInDialog("Leave");
+    // A memory router has no browser history index, so Back goes to Dashboard.
+    expect(await screen.findByText("dashboard")).toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+  });
+
+  it("asks before the account menu leaves", async () => {
+    renderInLayout();
+    await screen.findByText("Ada");
+    await openMenuItem("Dashboard");
+    await confirmInDialog("Keep marking");
+    await dialogClosed();
+    expect(screen.queryByText("dashboard")).not.toBeInTheDocument();
+
+    await openMenuItem("Dashboard");
+    await confirmInDialog("Leave");
+    expect(await screen.findByText("dashboard")).toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).not.toBeNull();
+  });
+
+  it("still discards the draft only through its own explicit confirmation", async () => {
+    renderInLayout();
+    await screen.findByText("Ada");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await confirmInDialog("Leave");
+    fireEvent.click(await screen.findByRole("button", { name: "Discard and create new" }));
+    const dialog = await confirmInDialog("Discard");
+    expect(dialog).toHaveTextContent("Discard unfinished attendance?");
+    await waitFor(() => expect(localStorage.getItem(META_KEY)).toBeNull());
+    expect(localStorage.getItem(ROSTER_KEY)).toBeNull();
+  });
+
+  it("opens the saved session after Submit without asking", async () => {
+    renderInLayout();
+    await screen.findByText("Ada");
+    tap("Ada");
+    await submitAndConfirm();
+    expect(await screen.findByText("viewing new1")).toBeInTheDocument();
+    expect(screen.queryByText("Stop marking for now?")).not.toBeInTheDocument();
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+    // Nothing is left asking: Logout now signs out at once.
+    await openMenuItem("Logout");
+    await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("names the organisation's own terms", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...ORG1,
+        terminology: {
+          ...DEFAULT_TERMINOLOGY,
+          attendanceSingular: "Rehearsal",
+          attendancePlural: "Rehearsals",
+        },
+      },
+    });
+    renderInLayout();
+    await screen.findByText("Ada");
+    await openMenuItem("Logout");
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Your progress on this rehearsal is saved on this device. Log back in on this browser and open Create Rehearsal here to continue marking it.",
+    );
   });
 });

@@ -9,7 +9,8 @@ import {
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
+import { confirmLeaveWork } from "hooks/useUnsavedChangesGuard";
 import { system } from "styles/theme";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
@@ -21,6 +22,7 @@ import { AttendanceTemplate } from "helpers/attendanceTemplates";
 import { CategoryType } from "hooks/useCategories";
 import { MEMBER_MODEL, ROSTER } from "test-utils/eligibilityFixtures";
 import { format } from "date-fns";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -1540,5 +1542,170 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     renderPage();
     expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
+  });
+});
+
+describe("<CreateAttendance> leaving before Continue", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
+    selectOrg("orgA", { eligibility: true });
+    templatesByOrg = { orgA: [template({})], orgB: [] };
+    rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  // Any in-app navigation away (a link here; Back, the menu and Cancel go
+  // through the same history block).
+  const renderWithExit = () =>
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/create"]}>
+            <Routes>
+              <Route
+                path="/create"
+                element={
+                  <>
+                    <Link to="/elsewhere">Go elsewhere</Link>
+                    <CreateAttendance />
+                  </>
+                }
+              />
+              <Route path="/elsewhere" element={<div>elsewhere</div>} />
+              <Route
+                path={PROTECTED_PATHS.MARK_ATTENANCE}
+                element={<div>marking</div>}
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+  const leave = () => fireEvent.click(screen.getByText("Go elsewhere"));
+
+  it("leaves and logs out without asking while the form is untouched", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    await expect(confirmLeaveWork("logout")).resolves.toBe(true);
+    leave();
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("asks before leaving entered details, and keeps them on Keep editing", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    type(nameInput(), "Ad-hoc meeting");
+
+    leave();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Discard this new attendance?");
+    expect(dialog).toHaveTextContent(
+      "The details you entered haven't been saved. Leaving now discards them.",
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("elsewhere")).not.toBeInTheDocument();
+    expect(nameInput().value).toBe("Ad-hoc meeting");
+
+    leave();
+    await confirmInDialog("Discard");
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(localStorage.getItem("attendance-new-draft-orgA")).toBeNull();
+  });
+
+  it("asks before Logout discards entered details", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    type(dateInput(), "2026-10-01");
+
+    let answer: Promise<boolean> | undefined;
+    act(() => {
+      answer = confirmLeaveWork("logout");
+    });
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Logging out now discards them.");
+    await expect(answer).resolves.toBe(false);
+
+    act(() => {
+      answer = confirmLeaveWork("logout");
+    });
+    await confirmInDialog("Discard and log out");
+    await expect(answer).resolves.toBe(true);
+  });
+
+  it("counts an applied template as entered details", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Discard this new attendance?",
+    );
+  });
+
+  it("counts eligibility rules as entered details", async () => {
+    renderWithExit();
+    await waitForRoster();
+    await pickEligibility("Part", "Soprano");
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Discard this new attendance?",
+    );
+  });
+
+  it("moves on to marking from Continue without asking", async () => {
+    renderWithExit();
+    type(nameInput(), "Ad-hoc meeting");
+    type(dateInput(), "2026-10-01");
+    await waitForContinue();
+    fireEvent.click(button("Continue"));
+    expect(await screen.findByText("marking")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(localStorage.getItem("attendance-new-draft-orgA")).not.toBeNull();
+  });
+
+  it("does not ask over the unfinished-draft card", async () => {
+    localStorage.setItem(
+      "attendance-new-draft-orgA",
+      JSON.stringify({
+        version: 1,
+        organisationId: "orgA",
+        name: "Sunday Mass",
+        date: "2026-10-01",
+        categoryId: null,
+        subCategoryId: null,
+        eligibilityRules: [],
+      }),
+    );
+    renderWithExit();
+    await screen.findByText("Unfinished attendance");
+    leave();
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+  });
+
+  it("names the organisation's own term", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...useGlobalStore.getState().organisation,
+        terminology: {
+          ...DEFAULT_TERMINOLOGY,
+          attendanceSingular: "Session",
+          attendancePlural: "Sessions",
+        },
+      },
+    });
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    type(nameInput(), "Ad-hoc meeting");
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Discard this new session?",
+    );
   });
 });

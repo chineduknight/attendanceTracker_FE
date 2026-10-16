@@ -91,6 +91,7 @@ import {
 } from "helpers/manualAttendance";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
 import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { attendanceLeaveQuestion } from "helpers/leaveQuestions";
 import {
   buildAtomicEditPayload,
   canSaveEdit,
@@ -502,23 +503,18 @@ const MarkAttendanceRoster = ({
     ],
     [baseline, removalIds],
   );
+  // Leaving an edit loses its unsaved changes; leaving a new session only
+  // interrupts it, since its draft stays saved on this device until submit.
   const releaseLeaveGuard = useUnsavedChangesGuard(
-    isUpdate && hasUnsavedEdits,
+    !isUpdate || hasUnsavedEdits,
     useCallback(
       (reason: LeaveReason) =>
-        confirm({
-          title: "Discard your changes?",
-          body: `Your changes to this ${lowerTerm(
-            terms.attendanceSingular,
-          )} haven't been saved. ${
-            reason === "logout" ? "Log out" : "Leave"
-          } without saving them?`,
-          confirmLabel: reason === "logout" ? "Discard and log out" : "Discard changes",
-          cancelLabel: "Keep editing",
-          destructive: true,
-        }),
-      [confirm, terms.attendanceSingular],
+        confirm(
+          attendanceLeaveQuestion(isUpdate ? "edit" : "draft", reason, terms),
+        ),
+      [confirm, isUpdate, terms],
     ),
+    { savedLocally: !isUpdate },
   );
   // Retrying a failed load only refetches. Unlike Refresh in edit mode, it
   // never discards a draft or reloads the page.
