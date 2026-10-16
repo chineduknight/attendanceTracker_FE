@@ -45,6 +45,7 @@ import {
 } from "helpers/newAttendanceDraft";
 import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
 import { attendanceLeaveQuestion } from "helpers/leaveQuestions";
+import { signedInUserId } from "utils/auth";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -72,11 +73,14 @@ const CreateAttendanceForm = ({
     (state) => [state.currentAttendance, state.clearCurrentAttendance],
   );
   const { confirm, confirmDialog } = useConfirm();
-  // The organisation's unfinished draft, read once per mount: this page only
-  // resolves it (continue or discard), never edits it. The component is keyed
-  // by organisation id, so switching organisations re-reads it.
+  const officerId = useGlobalStore((state) => signedInUserId(state.user));
+  // The unfinished draft this officer may continue here (their own, or a
+  // legacy unowned one; never another officer's), read once per mount: this
+  // page only resolves it (continue or discard), never edits it. The
+  // component is keyed by organisation id, so switching organisations
+  // re-reads it, and signing in as someone else remounts it.
   const [draft, setDraft] = useState<NewAttendanceDraft | null>(() =>
-    readNewAttendanceDraft(organisationId),
+    readNewAttendanceDraft(organisationId, officerId),
   );
   // Off, the page behaves as if eligibility did not exist: no editor, no
   // member-field dependency, and every new session expects everyone.
@@ -172,6 +176,12 @@ const CreateAttendanceForm = ({
       toast.error("Name and date are required");
       return;
     }
+    // Drafts belong to the officer who starts them; without a known officer
+    // there is nobody to save it for.
+    if (!officerId) {
+      toast.error("Your account details are still loading. Try again in a moment.");
+      return;
+    }
     const payload: currentAttendanceType = {
       name: details.name.trim(),
       date: details.date,
@@ -187,7 +197,7 @@ const CreateAttendanceForm = ({
     // From here on the draft is real: it stays resumable (or discardable)
     // until a successful create clears it. Just opening this page — or
     // typing — never writes one.
-    writeNewAttendanceDraft(organisationId, payload);
+    writeNewAttendanceDraft(organisationId, officerId, payload);
     queryClient.invalidateQueries({
       queryKey: queryKeys.members(organisationId),
     });
@@ -250,8 +260,17 @@ const CreateAttendanceForm = ({
             </Text>
           </Box>
           <Text>
-            {`You started marking this ${session} but haven't submitted it yet.`}
+            {draft.ownerId
+              ? `You started marking this ${session} but haven't submitted it yet.`
+              : `This ${session} was started on this browser but hasn't been submitted yet.`}
           </Text>
+          {/* Saved before drafts had owners: whoever started it is unknown. */}
+          {!draft.ownerId && (
+            <Text fontSize="sm" color="fg.muted">
+              It was saved before drafts were tied to an account, so anyone
+              signed in here can continue or discard it.
+            </Text>
+          )}
           <Stack gap={3}>
             <Button w="full" size="lg" minH="44px" onClick={resumeDraft}>
               Continue marking

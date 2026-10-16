@@ -13,11 +13,24 @@ import { legacyShownFieldsStorageKey, shownFieldsStorageKey } from "helpers/memb
 
 const SESSION = { name: "Sunday Service", date: "2026-10-11" };
 const identity = newAttendanceDraftIdentity(SESSION);
+const OFFICER = "officerA";
+const OTHER_OFFICER = "officerB";
+const rosterKeys = (organisationId: string, ownerId: string | null) => [
+  expectedRosterDraftKey(organisationId, ownerId, identity),
+  manualRosterDraftKey(organisationId, ownerId, identity),
+];
 
+// Two officers' drafts and a legacy unowned one, as a shared browser holds.
 const seedDevice = (organisationId: string) => {
-  writeNewAttendanceDraft(organisationId, SESSION);
-  localStorage.setItem(expectedRosterDraftKey(organisationId, identity), "[]");
-  localStorage.setItem(manualRosterDraftKey(organisationId, identity), "[]");
+  writeNewAttendanceDraft(organisationId, OFFICER, SESSION);
+  writeNewAttendanceDraft(organisationId, OTHER_OFFICER, SESSION);
+  localStorage.setItem(
+    `attendance-new-draft-${organisationId}`,
+    JSON.stringify({ version: 1, organisationId, eligibilityRules: [], ...SESSION }),
+  );
+  [OFFICER, OTHER_OFFICER, null].forEach((ownerId) =>
+    rosterKeys(organisationId, ownerId).forEach((key) => localStorage.setItem(key, "[]")),
+  );
   localStorage.setItem(shownFieldsStorageKey(organisationId), '["part"]');
   localStorage.setItem(legacyShownFieldsStorageKey(organisationId), '["part"]');
   queryClient.setQueryData(queryKeys.members(organisationId), { data: [] });
@@ -46,9 +59,12 @@ describe("forgetOrganisation", () => {
     const state = useGlobalStore.getState();
     expect(state.organisation).toEqual(EMPTY_ORG);
     expect(state.currentAttendance.name).toBe("");
-    expect(readNewAttendanceDraft("orgA")).toBeNull();
-    expect(localStorage.getItem(expectedRosterDraftKey("orgA", identity))).toBeNull();
-    expect(localStorage.getItem(manualRosterDraftKey("orgA", identity))).toBeNull();
+    // Every officer's drafts and the legacy one: the organisation is gone.
+    expect(readNewAttendanceDraft("orgA", OFFICER)).toBeNull();
+    expect(readNewAttendanceDraft("orgA", OTHER_OFFICER)).toBeNull();
+    [OFFICER, OTHER_OFFICER, null].forEach((ownerId) =>
+      rosterKeys("orgA", ownerId).forEach((key) => expect(localStorage.getItem(key)).toBeNull()),
+    );
     expect(localStorage.getItem(shownFieldsStorageKey("orgA"))).toBeNull();
     expect(localStorage.getItem(legacyShownFieldsStorageKey("orgA"))).toBeNull();
     expect(queryClient.getQueryData(queryKeys.members("orgA"))).toBeUndefined();
@@ -59,9 +75,12 @@ describe("forgetOrganisation", () => {
     select("orgA", "orgA");
     forgetOrganisation("orgA");
 
-    expect(readNewAttendanceDraft("orgB")).not.toBeNull();
-    expect(localStorage.getItem(expectedRosterDraftKey("orgB", identity))).toBe("[]");
-    expect(localStorage.getItem(manualRosterDraftKey("orgB", identity))).toBe("[]");
+    expect(readNewAttendanceDraft("orgB", OFFICER)?.ownerId).toBe(OFFICER);
+    expect(readNewAttendanceDraft("orgB", OTHER_OFFICER)?.ownerId).toBe(OTHER_OFFICER);
+    expect(localStorage.getItem("attendance-new-draft-orgB")).not.toBeNull();
+    [OFFICER, OTHER_OFFICER, null].forEach((ownerId) =>
+      rosterKeys("orgB", ownerId).forEach((key) => expect(localStorage.getItem(key)).toBe("[]")),
+    );
     expect(localStorage.getItem(shownFieldsStorageKey("orgB"))).toBe('["part"]');
     expect(queryClient.getQueryData(queryKeys.members("orgB"))).toEqual({ data: [] });
     expect(queryClient.getQueryData(queryKeys.allOrganisations)).toEqual({ data: [] });
@@ -74,7 +93,7 @@ describe("forgetOrganisation", () => {
     const state = useGlobalStore.getState();
     expect(state.organisation.id).toBe("orgB");
     expect(state.currentAttendance.name).toBe("In progress");
-    expect(readNewAttendanceDraft("orgA")).toBeNull();
+    expect(readNewAttendanceDraft("orgA", OFFICER)).toBeNull();
   });
 
   it("clears an unstamped session only when the selected organisation is deleted", () => {
@@ -94,20 +113,23 @@ describe("forgetOrganisation", () => {
 
     expect(useGlobalStore.getState().organisation.id).toBe("org10");
     expect(useGlobalStore.getState().currentAttendance.name).toBe("In progress");
-    expect(readNewAttendanceDraft("org10")).not.toBeNull();
-    expect(localStorage.getItem(expectedRosterDraftKey("org10", identity))).toBe("[]");
-    expect(localStorage.getItem(manualRosterDraftKey("org10", identity))).toBe("[]");
+    expect(readNewAttendanceDraft("org10", OFFICER)?.ownerId).toBe(OFFICER);
+    expect(localStorage.getItem("attendance-new-draft-org10")).not.toBeNull();
+    rosterKeys("org10", OFFICER).forEach((key) => expect(localStorage.getItem(key)).toBe("[]"));
+    rosterKeys("org10", null).forEach((key) => expect(localStorage.getItem(key)).toBe("[]"));
     expect(localStorage.getItem(shownFieldsStorageKey("org10"))).toBe('["part"]');
     expect(queryClient.getQueryData(queryKeys.members("org10"))).toEqual({ data: [] });
-    expect(readNewAttendanceDraft("org1")).toBeNull();
-    expect(localStorage.getItem(expectedRosterDraftKey("org1", identity))).toBeNull();
+    expect(readNewAttendanceDraft("org1", OFFICER)).toBeNull();
+    rosterKeys("org1", OFFICER).forEach((key) => expect(localStorage.getItem(key)).toBeNull());
   });
 
   it("removes roster drafts even when their draft metadata is already gone", () => {
     localStorage.removeItem("attendance-new-draft-orgA");
+    localStorage.removeItem("attendance-new-draft-orgA-by-officerA");
     select("orgB");
     forgetOrganisation("orgA");
-    expect(localStorage.getItem(expectedRosterDraftKey("orgA", identity))).toBeNull();
-    expect(localStorage.getItem(manualRosterDraftKey("orgA", identity))).toBeNull();
+    [OFFICER, null].forEach((ownerId) =>
+      rosterKeys("orgA", ownerId).forEach((key) => expect(localStorage.getItem(key)).toBeNull()),
+    );
   });
 });

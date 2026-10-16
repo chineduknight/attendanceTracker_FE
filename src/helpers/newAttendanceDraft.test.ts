@@ -5,34 +5,50 @@ import {
   manualRosterDraftKey,
   newAttendanceDraftIdentity,
   newAttendanceDraftToSession,
+  organisationDraftKeys,
   readNewAttendanceDraft,
   writeNewAttendanceDraft,
 } from "helpers/newAttendanceDraft";
 
 const ORG = "orgA";
-const META_KEY = "attendance-new-draft-orgA";
+const OFFICER = "officerA";
+const OTHER_OFFICER = "officerB";
+// Keys are asserted as literals on purpose: they are what browsers already
+// hold, and legacy drafts must keep resolving to exactly these.
+const META_KEY = "attendance-new-draft-orgA-by-officerA";
+const LEGACY_META_KEY = "attendance-new-draft-orgA";
 const SESSION = {
-  version: 1,
-  organisationId: ORG,
   name: "Sunday Mass",
   date: "2026-10-01",
   categoryId: "c1",
   subCategoryId: "s1",
   eligibilityRules: [{ field: "part", values: ["soprano"] }],
 };
+/** A record as the pre-ownership frontend wrote it. */
+const LEGACY_RECORD = { version: 1, organisationId: ORG, ...SESSION };
 
-const stored = () => JSON.parse(localStorage.getItem(META_KEY) as string);
+const stored = (key = META_KEY) => JSON.parse(localStorage.getItem(key) as string);
 
 beforeEach(() => localStorage.clear());
 
 describe("newAttendanceDraft keys", () => {
-  it("derives the same identity and roster keys the marking pages use", () => {
+  it("scopes an officer's roster keys to them", () => {
     const identity = newAttendanceDraftIdentity(SESSION);
     expect(identity).toBe("2026-10-01-Sunday Mass");
-    expect(expectedRosterDraftKey(ORG, identity)).toBe(
+    expect(expectedRosterDraftKey(ORG, OFFICER, identity)).toBe(
+      "attendance-draft-orgA-by-officerA-2026-10-01-Sunday Mass",
+    );
+    expect(manualRosterDraftKey(ORG, OFFICER, identity)).toBe(
+      "attendance-manual-draft-orgA-by-officerA-2026-10-01-Sunday Mass",
+    );
+  });
+
+  it("keeps a legacy draft's original roster keys", () => {
+    const identity = newAttendanceDraftIdentity(SESSION);
+    expect(expectedRosterDraftKey(ORG, null, identity)).toBe(
       "attendance-draft-orgA-2026-10-01-Sunday Mass",
     );
-    expect(manualRosterDraftKey(ORG, identity)).toBe(
+    expect(manualRosterDraftKey(ORG, null, identity)).toBe(
       "attendance-manual-draft-orgA-2026-10-01-Sunday Mass",
     );
   });
@@ -49,23 +65,24 @@ describe("newAttendanceDraft keys", () => {
 });
 
 describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
-  it("stores a stable normalised record and reads it back", () => {
-    writeNewAttendanceDraft(ORG, SESSION);
+  it("stores a stable normalised record owned by the officer and reads it back", () => {
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
 
     expect(stored()).toEqual({
       version: 1,
       organisationId: ORG,
+      ownerId: OFFICER,
       name: "Sunday Mass",
       date: "2026-10-01",
       categoryId: "c1",
       subCategoryId: "s1",
       eligibilityRules: [{ field: "part", values: ["soprano"] }],
     });
-    expect(readNewAttendanceDraft(ORG)).toEqual(stored());
+    expect(readNewAttendanceDraft(ORG, OFFICER)).toEqual(stored());
   });
 
   it("stores absent category values as null and rules as an array", () => {
-    writeNewAttendanceDraft(ORG, {
+    writeNewAttendanceDraft(ORG, OFFICER, {
       name: "Rehearsal",
       date: "2026-10-01",
     });
@@ -73,6 +90,7 @@ describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
     expect(stored()).toEqual({
       version: 1,
       organisationId: ORG,
+      ownerId: OFFICER,
       name: "Rehearsal",
       date: "2026-10-01",
       categoryId: null,
@@ -82,45 +100,83 @@ describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
   });
 
   it("keeps drafts apart per organisation", () => {
-    writeNewAttendanceDraft(ORG, SESSION);
-    expect(readNewAttendanceDraft("orgB")).toBeNull();
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    expect(readNewAttendanceDraft("orgB", OFFICER)).toBeNull();
+  });
+
+  it("never gives one officer another officer's draft", () => {
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)).toBeNull();
+    expect(readNewAttendanceDraft(ORG, null)).toBeNull();
+  });
+
+  it("keeps two officers' drafts side by side, neither overwriting the other", () => {
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    writeNewAttendanceDraft(ORG, OTHER_OFFICER, { name: "Vigil", date: "2026-10-02" });
+    expect(readNewAttendanceDraft(ORG, OFFICER)?.name).toBe("Sunday Mass");
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)?.name).toBe("Vigil");
+  });
+
+  it("offers a legacy unowned draft to any officer, unchanged and unmigrated", () => {
+    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    const legacy = { ...LEGACY_RECORD, ownerId: null };
+    expect(readNewAttendanceDraft(ORG, OFFICER)).toEqual(legacy);
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)).toEqual(legacy);
+    // Reading never moves or rewrites it.
+    expect(stored(LEGACY_META_KEY)).toEqual(LEGACY_RECORD);
+    expect(localStorage.getItem(META_KEY)).toBeNull();
+  });
+
+  it("prefers the officer's own draft over a legacy one", () => {
+    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    writeNewAttendanceDraft(ORG, OFFICER, { name: "Vigil", date: "2026-10-02" });
+    expect(readNewAttendanceDraft(ORG, OFFICER)?.name).toBe("Vigil");
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)?.ownerId).toBeNull();
+  });
+
+  it.each([
+    ["an owner other than its key's", META_KEY, { ...SESSION, version: 1, organisationId: ORG, ownerId: OTHER_OFFICER }],
+    ["an owner under the legacy key", LEGACY_META_KEY, { ...LEGACY_RECORD, ownerId: OTHER_OFFICER }],
+  ])("ignores a record naming %s", (_label, key, record) => {
+    localStorage.setItem(key, JSON.stringify(record));
+    expect(readNewAttendanceDraft(ORG, OFFICER)).toBeNull();
   });
 
   it.each([
     ["missing record", null],
     ["broken json", "{ nope"],
     ["not an object", JSON.stringify("Sunday")],
-    ["wrong version", JSON.stringify({ ...SESSION, version: 2 })],
+    ["wrong version", JSON.stringify({ ...LEGACY_RECORD, version: 2 })],
     [
       "foreign organisation",
-      JSON.stringify({ ...SESSION, organisationId: "orgB" }),
+      JSON.stringify({ ...LEGACY_RECORD, organisationId: "orgB" }),
     ],
-    ["blank name", JSON.stringify({ ...SESSION, name: "   " })],
-    ["missing date", JSON.stringify({ ...SESSION, date: undefined })],
-    ["wrong date shape", JSON.stringify({ ...SESSION, date: "10/01/2026" })],
-    ["impossible date", JSON.stringify({ ...SESSION, date: "2026-10-32" })],
+    ["blank name", JSON.stringify({ ...LEGACY_RECORD, name: "   " })],
+    ["missing date", JSON.stringify({ ...LEGACY_RECORD, date: undefined })],
+    ["wrong date shape", JSON.stringify({ ...LEGACY_RECORD, date: "10/01/2026" })],
+    ["impossible date", JSON.stringify({ ...LEGACY_RECORD, date: "2026-10-32" })],
     [
       "rules not an array",
-      JSON.stringify({ ...SESSION, eligibilityRules: "all" }),
+      JSON.stringify({ ...LEGACY_RECORD, eligibilityRules: "all" }),
     ],
     [
       "unreadable rules",
       JSON.stringify({
-        ...SESSION,
+        ...LEGACY_RECORD,
         eligibilityRules: [{ field: "part", values: [] }],
       }),
     ],
   ])("ignores %s", (_label, value) => {
-    if (value !== null) localStorage.setItem(META_KEY, value);
-    expect(readNewAttendanceDraft(ORG)).toBeNull();
+    if (value !== null) localStorage.setItem(LEGACY_META_KEY, value);
+    expect(readNewAttendanceDraft(ORG, OFFICER)).toBeNull();
   });
 
   it("coerces non-string category values to null instead of failing the draft", () => {
     localStorage.setItem(
-      META_KEY,
-      JSON.stringify({ ...SESSION, categoryId: 7, subCategoryId: {} }),
+      LEGACY_META_KEY,
+      JSON.stringify({ ...LEGACY_RECORD, categoryId: 7, subCategoryId: {} }),
     );
-    expect(readNewAttendanceDraft(ORG)).toMatchObject({
+    expect(readNewAttendanceDraft(ORG, OFFICER)).toMatchObject({
       categoryId: null,
       subCategoryId: null,
     });
@@ -129,8 +185,8 @@ describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
 
 describe("newAttendanceDraftToSession", () => {
   it("shapes the working state exactly like the Continue payload", () => {
-    writeNewAttendanceDraft(ORG, { name: "Rehearsal", date: "2026-10-01" });
-    expect(newAttendanceDraftToSession(readNewAttendanceDraft(ORG)!)).toEqual({
+    writeNewAttendanceDraft(ORG, OFFICER, { name: "Rehearsal", date: "2026-10-01" });
+    expect(newAttendanceDraftToSession(readNewAttendanceDraft(ORG, OFFICER)!)).toEqual({
       name: "Rehearsal",
       date: "2026-10-01",
       organisationId: ORG,
@@ -139,8 +195,8 @@ describe("newAttendanceDraftToSession", () => {
   });
 
   it("keeps stored category ids and rules", () => {
-    writeNewAttendanceDraft(ORG, SESSION);
-    expect(newAttendanceDraftToSession(readNewAttendanceDraft(ORG)!)).toEqual({
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    expect(newAttendanceDraftToSession(readNewAttendanceDraft(ORG, OFFICER)!)).toEqual({
       name: "Sunday Mass",
       date: "2026-10-01",
       organisationId: ORG,
@@ -152,50 +208,80 @@ describe("newAttendanceDraftToSession", () => {
 });
 
 describe("draft cleanup", () => {
-  it("clearNewAttendanceDraft removes only the metadata", () => {
-    writeNewAttendanceDraft(ORG, SESSION);
-    const identity = newAttendanceDraftIdentity(SESSION);
-    localStorage.setItem(expectedRosterDraftKey(ORG, identity), "[]");
-    localStorage.setItem(manualRosterDraftKey(ORG, identity), "[]");
+  const identity = newAttendanceDraftIdentity(SESSION);
+  const seedRosters = (organisationId: string, ownerId: string | null) => {
+    localStorage.setItem(expectedRosterDraftKey(organisationId, ownerId, identity), "[]");
+    localStorage.setItem(manualRosterDraftKey(organisationId, ownerId, identity), "[]");
+  };
+  const rostersOf = (organisationId: string, ownerId: string | null) => [
+    localStorage.getItem(expectedRosterDraftKey(organisationId, ownerId, identity)),
+    localStorage.getItem(manualRosterDraftKey(organisationId, ownerId, identity)),
+  ];
 
-    clearNewAttendanceDraft(ORG);
+  it("clearNewAttendanceDraft removes only the metadata", () => {
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    seedRosters(ORG, OFFICER);
+
+    clearNewAttendanceDraft(ORG, OFFICER);
 
     expect(localStorage.getItem(META_KEY)).toBeNull();
-    expect(localStorage.getItem(expectedRosterDraftKey(ORG, identity))).toBe(
-      "[]",
-    );
-    expect(localStorage.getItem(manualRosterDraftKey(ORG, identity))).toBe(
-      "[]",
-    );
+    expect(rostersOf(ORG, OFFICER)).toEqual(["[]", "[]"]);
   });
 
-  it("discardNewAttendanceDraft removes the metadata and both roster drafts, leaving other organisations alone", () => {
-    writeNewAttendanceDraft(ORG, SESSION);
-    writeNewAttendanceDraft("orgB", {
-      ...SESSION,
-      name: "Vigil",
-    });
-    const identity = newAttendanceDraftIdentity(SESSION);
-    localStorage.setItem(expectedRosterDraftKey(ORG, identity), "[]");
-    localStorage.setItem(manualRosterDraftKey(ORG, identity), "[]");
-    const otherIdentity = newAttendanceDraftIdentity({
-      date: "2026-10-02",
-      name: "Vigil",
-    });
-    localStorage.setItem(expectedRosterDraftKey("orgB", otherIdentity), "[]");
+  it("discardNewAttendanceDraft removes only that officer's draft", () => {
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    writeNewAttendanceDraft(ORG, OTHER_OFFICER, SESSION);
+    writeNewAttendanceDraft("orgB", OFFICER, SESSION);
+    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    seedRosters(ORG, OFFICER);
+    seedRosters(ORG, OTHER_OFFICER);
+    seedRosters(ORG, null);
+    seedRosters("orgB", OFFICER);
 
-    discardNewAttendanceDraft(ORG, SESSION);
+    discardNewAttendanceDraft(ORG, { ...SESSION, ownerId: OFFICER });
 
     expect(localStorage.getItem(META_KEY)).toBeNull();
-    expect(
-      localStorage.getItem(expectedRosterDraftKey(ORG, identity)),
-    ).toBeNull();
-    expect(
-      localStorage.getItem(manualRosterDraftKey(ORG, identity)),
-    ).toBeNull();
-    expect(readNewAttendanceDraft("orgB")).not.toBeNull();
-    expect(
-      localStorage.getItem(expectedRosterDraftKey("orgB", otherIdentity)),
-    ).toBe("[]");
+    expect(rostersOf(ORG, OFFICER)).toEqual([null, null]);
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)?.ownerId).toBe(OTHER_OFFICER);
+    expect(rostersOf(ORG, OTHER_OFFICER)).toEqual(["[]", "[]"]);
+    expect(stored(LEGACY_META_KEY)).toEqual(LEGACY_RECORD);
+    expect(rostersOf(ORG, null)).toEqual(["[]", "[]"]);
+    expect(readNewAttendanceDraft("orgB", OFFICER)).not.toBeNull();
+    expect(rostersOf("orgB", OFFICER)).toEqual(["[]", "[]"]);
+  });
+
+  it("discards a legacy draft by its original keys", () => {
+    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    seedRosters(ORG, null);
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    seedRosters(ORG, OFFICER);
+
+    discardNewAttendanceDraft(ORG, { ...SESSION, ownerId: null });
+
+    expect(localStorage.getItem(LEGACY_META_KEY)).toBeNull();
+    expect(rostersOf(ORG, null)).toEqual([null, null]);
+    expect(readNewAttendanceDraft(ORG, OFFICER)?.ownerId).toBe(OFFICER);
+    expect(rostersOf(ORG, OFFICER)).toEqual(["[]", "[]"]);
+  });
+
+  it("organisationDraftKeys lists every officer's and the legacy draft keys, for that organisation only", () => {
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    seedRosters(ORG, OFFICER);
+    seedRosters(ORG, null);
+    writeNewAttendanceDraft("orgA2", OFFICER, SESSION);
+    seedRosters("orgA2", OFFICER);
+    localStorage.setItem("unrelated", "1");
+
+    expect(organisationDraftKeys(ORG).sort()).toEqual(
+      [
+        META_KEY,
+        LEGACY_META_KEY,
+        expectedRosterDraftKey(ORG, OFFICER, identity),
+        manualRosterDraftKey(ORG, OFFICER, identity),
+        expectedRosterDraftKey(ORG, null, identity),
+        manualRosterDraftKey(ORG, null, identity),
+      ].sort(),
+    );
   });
 });

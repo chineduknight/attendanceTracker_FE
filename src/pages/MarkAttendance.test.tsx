@@ -2738,7 +2738,8 @@ describe("<MarkAttendance> resuming an unfinished new-session draft", () => {
 describe("<MarkAttendance> leaving a new session while marking", () => {
   const META_KEY = "attendance-new-draft-org1";
   const ROSTER_KEY = "attendance-draft-org1-2026-10-01-Rehearsal";
-  const SIGNED_IN = { ...EMPTY_USER, token: "token-1", username: "knight" };
+  const SIGNED_IN = { ...EMPTY_USER, token: "token-1", id: "officerA", username: "knight" };
+  const OFFICER_B = { ...EMPTY_USER, token: "token-2", id: "officerB", username: "bisi" };
   const ORG1 = { ...EMPTY_ORG, id: "org1", attendanceStatuses: STATUSES };
   const ORG2 = { ...EMPTY_ORG, id: "org2", attendanceStatuses: STATUSES };
 
@@ -2837,6 +2838,55 @@ describe("<MarkAttendance> leaving a new session while marking", () => {
     expect(statusOf("Ada")).toBe("Late");
     expect(statusOf("Bola")).toBe("No Show");
   });
+
+  it("never offers officer A's draft to officer B on the same browser and organisation", async () => {
+    // Officer A starts a new attendance from Create Attendance.
+    localStorage.clear();
+    const { unmount } = renderInLayout("/create-attendance");
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: "Vigil" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Ada");
+    tap("Ada", 2); // Late
+    await openMenuItem("Logout");
+    await confirmInDialog("Log out");
+    await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+    unmount();
+
+    // Officer B, also an attendance manager in org1, signs in on this browser.
+    useGlobalStore.setState({ user: OFFICER_B, organisation: ORG1 });
+    let view = renderInLayout("/create-attendance");
+    expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
+    expect(screen.queryByText("Unfinished attendance")).not.toBeInTheDocument();
+    view.unmount();
+    // Nor can B reach it by opening Mark Attendance directly.
+    view = renderInLayout("/mark-attendance");
+    expect(await screen.findByText("No attendance in progress")).toBeInTheDocument();
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    view.unmount();
+
+    // B's own session with the same name and date starts clean.
+    view = renderInLayout("/create-attendance");
+    fireEvent.change(await screen.findByLabelText(/Name/), { target: { value: "Vigil" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("No Show");
+    tap("Bola"); // Present, in B's draft only
+    await openMenuItem("Logout");
+    await confirmInDialog("Log out");
+    await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+    view.unmount();
+
+    // Officer A signs back in and resumes exactly where they left off.
+    useGlobalStore.setState({ user: SIGNED_IN, organisation: ORG1 });
+    renderInLayout("/create-attendance");
+    fireEvent.click(await screen.findByRole("button", { name: "Continue marking" }));
+    await screen.findByText("Ada");
+    expect(statusOf("Ada")).toBe("Late");
+    expect(statusOf("Bola")).toBe("No Show");
+  });
+
 
   it("never offers organisation A's draft in organisation B", async () => {
     const { unmount } = renderInLayout();

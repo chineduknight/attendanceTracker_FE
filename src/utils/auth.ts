@@ -10,6 +10,7 @@
 
 interface JwtPayload {
   exp?: number; // seconds since epoch
+  id?: string; // the signed-in user's id
 }
 
 /** Decode a JWT payload without verifying the signature. Returns null if it isn't a decodable JWT. */
@@ -42,4 +43,16 @@ export const isTokenExpired = (token: string): boolean => {
   const payload = decodeJwtPayload(token);
   if (!payload?.exp) return false;
   return Date.now() >= payload.exp * 1000;
+};
+
+/**
+ * The signed-in officer's id, or null when signed out. Signup stores the
+ * token before /users/me fills in `id`, so the token's own `id` claim covers
+ * that gap.
+ */
+export const signedInUserId = (user: { id: string; token: string }): string | null => {
+  if (user.id) return user.id;
+  if (!user.token) return null;
+  const id = decodeJwtPayload(user.token)?.id;
+  return typeof id === "string" && id ? id : null;
 };
