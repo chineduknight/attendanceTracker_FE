@@ -19,6 +19,7 @@ import { attendanceRequest } from "services";
 import {
   postRequest,
   putRequest,
+  queryClient,
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
@@ -89,6 +90,14 @@ import {
   toManualAdditionPayload,
 } from "helpers/manualAttendance";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
+import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import {
+  buildAtomicEditPayload,
+  canSaveEdit,
+  EditBaseline,
+  hasPendingEdits,
+  toEditBaseline,
+} from "helpers/attendanceEditDraft";
 
 export type MemberType = {
   /** A configured status key of the selected organisation. */
@@ -278,6 +287,7 @@ const MarkAttendanceRoster = ({
   });
 
   const onDetailsChange = (next: AttendanceDetails) => {
+    if (editingLocked) return;
     setAttendance({
       ...session,
       name: next.name,
@@ -324,7 +334,8 @@ const MarkAttendanceRoster = ({
     isSuccess: membersLoaded,
     isError: membersFailed,
     refetch: refetchMembers,
-  } = useMembers(org.id, { enabled: !isUpdate });
+    isLoading: membersLoading,
+  } = useMembers(org.id, { enabled: !isUpdate || isAddingMember });
   const [rosterReady, setRosterReady] = useState(false);
 
   // Only members expected under the session's rules are kept, then any
@@ -379,8 +390,36 @@ const MarkAttendanceRoster = ({
     commitManual,
   ]);
 
+  // The record this edit was seeded from. Nothing is written until Update, so
+  // a later refetch (reconnect, a stale cache) is ignored: re-seeding would
+  // wipe the officer's pending changes. Only a deliberate reload re-seeds.
+  const seededFor = useRef<string | null>(null);
+  // The stored record as loaded, fixed for this edit: Update's
+  // expectedEditCount and the pending-change comparison both come from it.
+  const [baseline, setBaseline] = useState<EditBaseline | null>(null);
+  // Stored manual entries the officer removed in this edit, kept so a removal
+  // can be undone before Update.
+  const [pendingRemovals, setPendingRemovals] = useState<ManualDraftMember[]>([]);
+  // Set once a save succeeds: a load that lands after it (the save clears this
+  // session's cache on the way to View) must not refill the working state.
+  const savedRef = useRef(false);
+
   // Callback when updating attendance – load saved attendance data
   const onGetAttandanceSuccess = (res) => {
+    if (savedRef.current || seededFor.current === params.attendanceId) return;
+    seededFor.current = params.attendanceId ?? null;
+    const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
+    const toRow = (attend: typeof resolved[number]): MemberType => ({
+      id: attend.memberId,
+      name: attend.member.name,
+      // Kept verbatim, even when the status has since been deactivated.
+      attendanceStatus: attend.attendanceStatus,
+    });
+    const expected = resolved.filter((attend) => !isManualEntry(attend)).map(toRow);
+    const manual = resolved.filter(isManualEntry).map(toRow);
+    setUnresolvedEntries(unresolved);
+    setBaseline(toEditBaseline(res.data));
+    setPendingRemovals([]);
     const currentAtt = _.pick(res.data, [
       "name",
       "date",
@@ -394,18 +433,8 @@ const MarkAttendanceRoster = ({
     // the frozen roster as read-only placeholders.
     // The stored roster is historical truth: rules and availability are never
     // re-run, and manual entries stay manual whatever the current rules say.
-    const { resolved, unresolved } = splitStoredRoster(res.data.attendance);
-    setUnresolvedEntries(unresolved);
-    const toRow = (attend: typeof resolved[number]): MemberType => ({
-      id: attend.memberId,
-      name: attend.member.name,
-      // Kept verbatim, even when the status has since been deactivated.
-      attendanceStatus: attend.attendanceStatus,
-    });
-    commitMembers(() =>
-      resolved.filter((attend) => !isManualEntry(attend)).map(toRow),
-    );
-    commitManual(() => resolved.filter(isManualEntry).map(toRow));
+    commitMembers(() => expected);
+    commitManual(() => manual);
   };
 
   const attendUrl = convertParamsToString(attendanceRequest.GET_ATTENDANCE, {
@@ -444,6 +473,53 @@ const MarkAttendanceRoster = ({
   // empty roster (Submit is already blocked on an empty roster).
   const storedLoadFailed =
     isUpdate && attendanceLoadErrored && !storedAttendance;
+
+  // Editing a stored record: statuses, details and manual adds/removes are
+  // all held here and saved together by one Update, which uses one edit.
+  const canSave = isUpdate && baseline !== null && canSaveEdit(baseline);
+  // A saved attendance with no edit left (or locked) is read-only here: every
+  // control that could change a status, the roster or the details is off, and
+  // each handler checks again. Searching and scrolling still work.
+  const editingLocked = isUpdate && !canSave;
+  const removalIds = useMemo(
+    () => pendingRemovals.map((member) => member.id),
+    [pendingRemovals],
+  );
+  const hasUnsavedEdits =
+    baseline !== null &&
+    hasPendingEdits(baseline, {
+      details,
+      rows: sessionRoster,
+      manual: manualMembers,
+      removals: removalIds,
+    });
+  // Everyone the add dialog must not offer: the roster as edited, unresolved
+  // stored entries, and removals (undo those instead of re-adding).
+  const notAddableIds = useMemo<string[]>(
+    () => [
+      ...(baseline ? Array.from(baseline.statuses.keys()) : []),
+      ...removalIds,
+    ],
+    [baseline, removalIds],
+  );
+  const releaseLeaveGuard = useUnsavedChangesGuard(
+    isUpdate && hasUnsavedEdits,
+    useCallback(
+      (reason: LeaveReason) =>
+        confirm({
+          title: "Discard your changes?",
+          body: `Your changes to this ${lowerTerm(
+            terms.attendanceSingular,
+          )} haven't been saved. ${
+            reason === "logout" ? "Log out" : "Leave"
+          } without saving them?`,
+          confirmLabel: reason === "logout" ? "Discard and log out" : "Discard changes",
+          cancelLabel: "Keep editing",
+          destructive: true,
+        }),
+      [confirm, terms.attendanceSingular],
+    ),
+  );
   // Retrying a failed load only refetches. Unlike Refresh in edit mode, it
   // never discards a draft or reloads the page.
   const retryRoster = () =>
@@ -455,9 +531,23 @@ const MarkAttendanceRoster = ({
   const onRefresh = () => {
     setUndoSnapshot(null);
     if (isUpdate) {
-      // An edit has no persisted draft to discard; reloading re-reads the
-      // stored record.
-      window.location.reload();
+      // An edit has no persisted draft; reloading re-reads the stored record
+      // and discards pending changes, so it asks first.
+      void (async () => {
+        if (
+          hasUnsavedEdits &&
+          !(await confirm({
+            title: "Discard your changes?",
+            body: "Reloading shows the saved version and discards the changes you haven't saved.",
+            confirmLabel: "Discard and reload",
+            cancelLabel: "Keep editing",
+            destructive: true,
+          }))
+        )
+          return;
+        releaseLeaveGuard();
+        window.location.reload();
+      })();
       return;
     }
     setRosterReady(false);
@@ -487,6 +577,7 @@ const MarkAttendanceRoster = ({
   // stale, so it is discarded.
   const markMember = useCallback(
     (memberId: string) => {
+      if (editingLocked) return;
       const isManual = manualIds.has(memberId);
       if (selectedStatus && !mayTakeStatus(memberId, selectedStatus.key)) {
         return;
@@ -505,6 +596,7 @@ const MarkAttendanceRoster = ({
     [
       commitManual,
       commitMembers,
+      editingLocked,
       manualIds,
       mayTakeStatus,
       selectedStatus,
@@ -522,6 +614,7 @@ const MarkAttendanceRoster = ({
     );
 
   const setVisibleStatus = (status: string) => {
+    if (editingLocked) return;
     const targets = bulkTargets(status);
     const snapshot = new Map<string, string>();
     const apply = <T extends MemberType>(current: T[]) => {
@@ -535,20 +628,21 @@ const MarkAttendanceRoster = ({
   };
 
   const undoBulkChange = () => {
-    if (!undoSnapshot) return;
+    if (!undoSnapshot || editingLocked) return;
     commitMembers((current) => restoreStatuses(current, undoSnapshot));
     commitManual((current) => restoreStatuses(current, undoSnapshot));
     setUndoSnapshot(null);
   };
 
   // New session only: manual additions live in the draft until submit.
+  const sessionTerm = lowerTerm(terms.attendanceSingular);
   const manualCandidateList = useMemo(
     () =>
-      manualCandidates(
-        currentMembers,
-        sessionRoster.map((member) => member.id),
-      ),
-    [currentMembers, sessionRoster],
+      manualCandidates(currentMembers, [
+        ...sessionRoster.map((member) => member.id),
+        ...notAddableIds,
+      ]),
+    [currentMembers, sessionRoster, notAddableIds],
   );
   const addManualMember = ({
     memberId,
@@ -560,7 +654,7 @@ const MarkAttendanceRoster = ({
     reason: string;
   }) => {
     const member = manualCandidateList.find((m) => m.id === memberId);
-    if (!member || !isActivePresentStatus(statuses, status)) return;
+    if (editingLocked || !member || !isActivePresentStatus(statuses, status)) return;
     const trimmed = reason.trim();
     commitManual((current) => [
       ...current.filter((m) => m.id !== memberId),
@@ -578,12 +672,38 @@ const MarkAttendanceRoster = ({
     commitManual((current) => current.filter((m) => m.id !== memberId));
     setUndoSnapshot(null);
   };
-  const sessionTerm = lowerTerm(terms.attendanceSingular);
+  // In an edit, removing a stored manual entry is held until Update (and can
+  // be undone); removing one added in this edit just cancels that addition.
+  const removeFromEdit = async (member: ManualDraftMember) => {
+    if (editingLocked) return;
+    if (!baseline?.manualIds.has(member.id)) {
+      removeManualMember(member.id);
+      return;
+    }
+    const confirmed = await confirm({
+      title: `Remove ${member.name} from this ${sessionTerm}?`,
+      body: `${member.name} was manually added to this ${sessionTerm}. They'll be removed when you tap Update, which deletes this historical attendance entry from this ${sessionTerm} only.`,
+      confirmLabel: `Remove from this ${sessionTerm}`,
+      destructive: true,
+    });
+    if (!confirmed) return;
+    removeManualMember(member.id);
+    setPendingRemovals((current) => [...current, member]);
+  };
+  const removalsHeading = `${terms.memberPlural} removed from this ${sessionTerm} when you tap Update`;
+  const undoRemoval = (member: ManualDraftMember) => {
+    if (editingLocked) return;
+    setPendingRemovals((current) => current.filter((m) => m.id !== member.id));
+    commitManual((current) => [...current, member]);
+  };
 
   const navigate = useNavigate();
   const isSubmittingRef = useRef(false);
-  const onSubmitSuccess = () => {
+  const onSubmitSuccess = (response?: { data?: { id?: string } }) => {
     isSubmittingRef.current = false;
+    savedRef.current = true;
+    // Everything is saved: leave without asking.
+    releaseLeaveGuard();
     setUndoSnapshot(null);
     if (!isUpdate) {
       // Only a stored create finishes the draft: its metadata and both roster
@@ -598,7 +718,47 @@ const MarkAttendanceRoster = ({
         ? `${terms.attendanceSingular} Updated`
         : `${terms.attendanceSingular} Created successfully`,
     );
-    navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+    // Open the saved session, where the officer checks and shares it.
+    const savedId = isUpdate ? params.attendanceId : response?.data?.id;
+    if (!savedId) {
+      navigate(PROTECTED_PATHS.ALL_ATTENDANCE);
+      return;
+    }
+    // The edit loaded this session into the same cache View reads; drop it so
+    // View never opens on the statuses from before the save.
+    queryClient.removeQueries({
+      queryKey: queryKeys.attendance(org.id, savedId),
+      exact: true,
+    });
+    [
+      queryKeys.attendances(org.id),
+      queryKeys.attendanceExport(org.id, savedId),
+      queryKeys.analytics.root(org.id),
+      queryKeys.analytics.memberRoot(org.id),
+    ].forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
+    const viewPath = convertParamsToString(PROTECTED_PATHS.ATTENDANCE, {
+      id: savedId,
+    });
+    // Back from the session returns to All Attendance, never to a finished
+    // edit or the spent create form.
+    if (!isUpdate) navigate(PROTECTED_PATHS.ALL_ATTENDANCE, { replace: true });
+    navigate(viewPath, { replace: isUpdate });
+  };
+
+  // Someone else saved this record after it loaded: nothing was written and
+  // the officer's changes stay on screen. Reloading is their choice.
+  const resolveConflict = async () => {
+    const reload = await confirm({
+      title: `This ${sessionTerm} was changed by someone else`,
+      body: `Nothing was saved, and your changes are still here. Reload to see the latest version (this discards your changes), or keep editing to note them first.`,
+      confirmLabel: "Reload latest",
+      cancelLabel: "Keep my changes",
+      destructive: true,
+    });
+    if (!reload) return;
+    seededFor.current = null;
+    setUndoSnapshot(null);
+    void refetchAttendance();
   };
 
   const { mutate, isLoading } = useMutationWrapper(
@@ -606,7 +766,13 @@ const MarkAttendanceRoster = ({
     onSubmitSuccess,
     (error: any) => {
       isSubmittingRef.current = false;
-      if (error?.response?.status === 401) return;
+      const status = error?.response?.status;
+      if (status === 401) return;
+      // A refused Update (400/409/422) leaves every pending change in place.
+      if (isUpdate && status === 409) {
+        void resolveConflict();
+        return;
+      }
       const message = error?.response?.data?.error;
       toast.error(`${message ?? "An error occured"}`);
     },
@@ -634,13 +800,24 @@ const MarkAttendanceRoster = ({
       );
     // Only the session fields the API accepts — never stray persisted state.
     // Rules only define a NEW session's roster; an update never re-resolves it.
-    const data = {
-      ..._.pick(session, ["name", "date", "categoryId", "subCategoryId"]),
-      organisationId: org.id,
-      ...(isUpdate ? {} : { eligibilityRules: sessionRules }),
-      memberStatuses: (isUpdate ? sessionRoster : allMembers).map(toStatus),
-      ...(!isUpdate && manualAdditions.length ? { manualAdditions } : {}),
-    };
+    // An update carries every pending change in one request (one edit).
+    const data =
+      isUpdate && baseline
+        ? buildAtomicEditPayload({
+            organisationId: org.id,
+            session,
+            expected: allMembers,
+            manual: manualMembers,
+            removals: removalIds,
+            baseline,
+          })
+        : {
+            ..._.pick(session, ["name", "date", "categoryId", "subCategoryId"]),
+            organisationId: org.id,
+            eligibilityRules: sessionRules,
+            memberStatuses: allMembers.map(toStatus),
+            ...(manualAdditions.length ? { manualAdditions } : {}),
+          };
     const upateUrl = convertParamsToString(
       attendanceRequest.UPDATE_ATTENDANCE,
       {
@@ -654,13 +831,14 @@ const MarkAttendanceRoster = ({
   }, [
     allMembers,
     manualMembers,
-    sessionRoster,
     session,
     org.id,
     params.attendanceId,
     mutate,
     isUpdate,
     sessionRules,
+    baseline,
+    removalIds,
   ]);
 
   const onSubmit = async () => {
@@ -696,6 +874,7 @@ const MarkAttendanceRoster = ({
               colorPalette="blue"
               minW="44px"
               h="44px"
+              disabled={editingLocked}
               onClick={detailsDrawer.onOpen}
             >
               <FaPencilAlt />
@@ -752,22 +931,33 @@ const MarkAttendanceRoster = ({
             manualCount={manualCount}
             rosterCount={expectedRosterSize + manualCount}
           />
-          {!isUpdate && (
-            <Button
-              mt="3"
-              size="sm"
-              minH="44px"
-              variant="outline"
-              onClick={() => setIsAddingMember(true)}
-            >
-              <FaUserPlus />
-              {`Add ${lowerTerm(terms.memberSingular)} to this ${sessionTerm}`}
-            </Button>
+          <Button
+            mt="3"
+            size="sm"
+            minH="44px"
+            variant="outline"
+            disabled={editingLocked}
+            onClick={() => setIsAddingMember(true)}
+          >
+            <FaUserPlus />
+            {`Add ${lowerTerm(terms.memberSingular)} to this ${sessionTerm}`}
+          </Button>
+          {baseline && (
+            <Text fontSize="sm" color="fg.muted" mt={1}>
+              {baseline.editsLocked
+                ? `Editing is locked for this ${sessionTerm}.`
+                : baseline.editsRemaining <= 0
+                  ? `No edits remain for this ${sessionTerm}.`
+                  : `You have ${baseline.editsRemaining} ${
+                      baseline.editsRemaining === 1 ? "edit" : "edits"
+                    } remaining. All changes will be saved together when you tap Update.`}
+            </Text>
           )}
           <QuickMarkToolbar
             statuses={statuses.active}
             mode={selectedStatus?.key ?? null}
             onModeChange={setQuickMarkMode}
+            disabled={editingLocked}
           />
           <VisibleBulkActions
             applyCount={
@@ -782,6 +972,7 @@ const MarkAttendanceRoster = ({
             }
             onReset={() => setVisibleStatus(statuses.defaultStatus.key)}
             onUndo={undoBulkChange}
+            disabled={editingLocked}
           />
           {filteredMembers.some((member) => manualIds.has(member.id)) && (
             <Text mt="2" fontSize="sm" color="fg.muted">
@@ -835,11 +1026,18 @@ const MarkAttendanceRoster = ({
                   name={item.name}
                   status={statuses.resolve(item.attendanceStatus)}
                   onToggle={
-                    isManual && manualRowsLocked ? undefined : markMember
+                    (isManual && manualRowsLocked) || editingLocked
+                      ? undefined
+                      : markMember
                   }
                   isManual={isManual}
+                  note={
+                    isUpdate && isManual && !baseline?.manualIds.has(item.id)
+                      ? `Added to this ${sessionTerm} in this edit: saved when you tap Update`
+                      : undefined
+                  }
                   accessory={
-                    isManual && !isUpdate ? (
+                    isManual ? (
                       <Button
                         size="sm"
                         minH="44px"
@@ -847,7 +1045,12 @@ const MarkAttendanceRoster = ({
                         variant="ghost"
                         colorPalette="red"
                         aria-label={`Remove ${item.name} from this ${sessionTerm}`}
-                        onClick={() => removeManualMember(item.id)}
+                        disabled={editingLocked}
+                        onClick={() => {
+                          if (!isUpdate) return removeManualMember(item.id);
+                          const member = manualMembers.find((m) => m.id === item.id);
+                          if (member) void removeFromEdit(member);
+                        }}
                       >
                         Remove
                       </Button>
@@ -857,6 +1060,37 @@ const MarkAttendanceRoster = ({
               );
             })}
           </Box>
+          {pendingRemovals.length > 0 && (
+            <Box mt={4} role="region" aria-label={removalsHeading}>
+              <Text fontSize="sm" fontWeight="semibold">
+                {removalsHeading}
+              </Text>
+              {pendingRemovals.map((member) => (
+                <Flex
+                  key={member.id}
+                  align="center"
+                  justify="space-between"
+                  gap={2}
+                  minH="44px"
+                >
+                  <Text color="fg.muted" textDecoration="line-through" lineClamp={1}>
+                    {member.name}
+                  </Text>
+                  <Button
+                    size="sm"
+                    minH="44px"
+                    variant="ghost"
+                    colorPalette="blue"
+                    aria-label={`Undo removing ${member.name}`}
+                    disabled={editingLocked}
+                    onClick={() => undoRemoval(member)}
+                  >
+                    Undo
+                  </Button>
+                </Flex>
+              ))}
+            </Box>
+          )}
           <UnresolvedRosterEntries
             entries={unresolvedEntries}
             statuses={statuses}
@@ -890,7 +1124,10 @@ const MarkAttendanceRoster = ({
               loading={isLoading}
               disabled={
                 sessionRoster.length === 0 ||
-                (isUpdate && (!details.name.trim() || !details.date))
+                (isUpdate && (!details.name.trim() || !details.date)) ||
+                // Nothing to save, or no edit to save it with: never send a
+                // no-op Update.
+                (isUpdate && (!canSave || !hasUnsavedEdits))
               }
             >
               {isUpdate ? "Update" : "Submit"}
@@ -899,15 +1136,17 @@ const MarkAttendanceRoster = ({
         </>
       )}
 
-      {!isUpdate && (
-        <ManualMemberDialog
-          isOpen={isAddingMember}
-          candidates={manualCandidateList}
-          statuses={statuses}
-          onSubmit={addManualMember}
-          onClose={() => setIsAddingMember(false)}
-        />
-      )}
+      {/* Both a new session and an edit add to the local roster; an edit
+          saves additions with everything else on Update. */}
+      <ManualMemberDialog
+        isOpen={isAddingMember}
+        candidates={manualCandidateList}
+        statuses={statuses}
+        isLoadingCandidates={isUpdate && membersLoading}
+        candidatesFailed={isUpdate && membersFailed}
+        onSubmit={addManualMember}
+        onClose={() => setIsAddingMember(false)}
+      />
 
       {isUpdate && (
         <Drawer.Root
