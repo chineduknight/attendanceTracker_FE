@@ -10,7 +10,7 @@ import { MemoryRouter, Routes, Route, useNavigate, useParams } from "react-route
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
-import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG } from "zStore";
+import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG, EMPTY_USER } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
 import ProtectedLayout from "components/ProtectedLayout";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
@@ -2023,6 +2023,74 @@ describe("<MarkAttendance> manual per-session additions", () => {
       expect(
         await screen.findByText("Added to this rehearsal in this edit: saved when you tap Update"),
       ).toBeInTheDocument();
+    });
+
+    // The edit inside the real app shell (header, account menu, drawer).
+    const renderInLayout = () => {
+      const org = useGlobalStore.getState().organisation;
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: {
+            data: url.endsWith("/att5")
+              ? record
+              : url === "/organisations"
+                ? [org]
+                : url.includes("/members")
+                  ? ALL_MEMBERS
+                  : [],
+          },
+        }),
+      );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/mark/att5"]}>
+            <Routes>
+              <Route element={<ProtectedLayout />}>
+                <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+                <Route path="/organisations" element={<div>organisation list</div>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    };
+    const logOutFromMenu = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    };
+    const SIGNED_IN = { ...EMPTY_USER, token: "token-1", username: "knight" };
+
+    it("asks before Logout throws pending changes away, and keeps everything on Keep editing", async () => {
+      useGlobalStore.setState({ user: SIGNED_IN });
+      record = { ...RECORD, editsRemaining: 3 };
+      renderInLayout();
+      await screen.findByText("Chidi");
+      await removeSaved("Chidi");
+
+      await logOutFromMenu();
+      expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(useGlobalStore.getState().user).toEqual(SIGNED_IN);
+      expect(useGlobalStore.getState().organisation.id).toBe("org1");
+      expect(
+        screen.getByText("Members removed from this attendance when you tap Update"),
+      ).toBeInTheDocument();
+
+      await logOutFromMenu();
+      fireEvent.click(await screen.findByRole("button", { name: "Discard and log out" }));
+      await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+      expect(useGlobalStore.getState().organisation).toEqual(EMPTY_ORG);
+    });
+
+    it("logs out at once when nothing is unsaved", async () => {
+      useGlobalStore.setState({ user: SIGNED_IN });
+      record = { ...RECORD, editsRemaining: 3 };
+      renderInLayout();
+      await screen.findByText("Chidi");
+      await logOutFromMenu();
+      await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+      expect(screen.queryByText("Discard your changes?")).not.toBeInTheDocument();
     });
 
     it("asks before switching organisation from the menu discards pending changes", async () => {

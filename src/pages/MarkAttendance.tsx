@@ -90,7 +90,7 @@ import {
   toManualAdditionPayload,
 } from "helpers/manualAttendance";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
-import { useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
 import {
   buildAtomicEditPayload,
   canSaveEdit,
@@ -505,13 +505,15 @@ const MarkAttendanceRoster = ({
   const releaseLeaveGuard = useUnsavedChangesGuard(
     isUpdate && hasUnsavedEdits,
     useCallback(
-      () =>
+      (reason: LeaveReason) =>
         confirm({
           title: "Discard your changes?",
           body: `Your changes to this ${lowerTerm(
             terms.attendanceSingular,
-          )} haven't been saved. Leave without saving them?`,
-          confirmLabel: "Discard changes",
+          )} haven't been saved. ${
+            reason === "logout" ? "Log out" : "Leave"
+          } without saving them?`,
+          confirmLabel: reason === "logout" ? "Discard and log out" : "Discard changes",
           cancelLabel: "Keep editing",
           destructive: true,
         }),
