@@ -12,11 +12,15 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { generatedCss, toggle, chooseOption, confirmInDialog } from "test-utils/render";
+import userEvent from "@testing-library/user-event";
 import {
   ELSEWHERE,
   LeaveLink,
   askToLogOut,
   browserWouldAsk,
+  deferred,
+  expectEveryControlLocked,
+  expectNothingLockedFor,
   leave,
   openAt,
 } from "test-utils/leaveGuard";
@@ -521,6 +525,59 @@ describe("<UserModel> leaving with unsaved changes", () => {
     leave();
     expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
     (console.error as jest.Mock).mockRestore();
+  });
+
+  describe("while Save is in flight", () => {
+    // A relabel and a new option field, so saved and unsaved cards (label,
+    // key, type, options, Required, Remove) are all on screen.
+    const startSave = async () => {
+      const post = deferred();
+      mockPost.mockImplementation(() => post.promise);
+      renderWithExit();
+      fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+        target: { value: "Voice Part" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+      const draft = card("New field");
+      fireEvent.change(labelInput(draft), { target: { value: "Range" } });
+      await chooseOption(within(draft).getByLabelText("Field type"), "option");
+      fireEvent.change(within(draft).getByLabelText(/Options/), { target: { value: "High, Low" } });
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+      return post;
+    };
+
+    it("locks every field, Add field, Remove and Cancel, so no edit can be lost", async () => {
+      await startSave();
+      await waitFor(() => expect(labelInput(card("Voice Part"))).toHaveAttribute("readonly"));
+      expect(expectEveryControlLocked()).toBeGreaterThan(10);
+
+      userEvent.type(labelInput(card("Voice Part")), "s");
+      expect(labelInput(card("Voice Part")).value).toBe("Voice Part");
+      fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+      expect(screen.queryByText("New field")).not.toBeInTheDocument();
+    });
+
+    it("moves on to Add Member after success without asking", async () => {
+      const post = await startSave();
+      await act(async () => post.resolve({ data: { data: "ok" } }));
+      expect(await screen.findByText("add member page")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    it("unlocks after a failure with every edit intact, and still asks", async () => {
+      jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const post = await startSave();
+      await act(async () =>
+        post.reject({ response: { status: 422, data: { error: "No" } } }),
+      );
+      const range = await waitFor(() => card("Range"));
+      expectNothingLockedFor(labelInput(range), labelInput(card("Voice Part")));
+      expect(within(range).getByLabelText(/Options/)).toHaveValue("High, Low");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+      (console.error as jest.Mock).mockRestore();
+    });
   });
 
   it("keeps asking, with the edit intact, after a background refetch", async () => {

@@ -40,6 +40,11 @@ interface AttendanceStatusesEditorProps {
   onChange: (rows: StatusRow[]) => void;
   errors: string[];
   isReadOnly: boolean;
+  /**
+   * Locked while a save is in flight: every control stays visible but none
+   * can change, so the save's reply can't overwrite edits made meanwhile.
+   */
+  disabled?: boolean;
 }
 
 const AttendanceStatusesEditor = ({
@@ -47,15 +52,17 @@ const AttendanceStatusesEditor = ({
   onChange,
   errors,
   isReadOnly,
+  disabled = false,
 }: AttendanceStatusesEditorProps) => {
   const terms = useTerms();
+  const locked = isReadOnly || disabled;
   const [newLabel, setNewLabel] = useState("");
 
   const updateRow = (key: string, patch: Partial<StatusRow>) =>
     onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
 
   const addRow = () => {
-    if (!newLabel.trim()) return;
+    if (disabled || !newLabel.trim()) return;
     onChange([...rows, createStatusRow(newLabel, rows)]);
     setNewLabel("");
   };
@@ -81,7 +88,7 @@ const AttendanceStatusesEditor = ({
       <RadioGroup.Root
         name="default-attendance-status"
         value={rows.find((row) => row.isDefault)?.key ?? null}
-        disabled={isReadOnly}
+        disabled={locked}
         onValueChange={({ value }) => value && onChange(setDefaultStatus(rows, value))}
         display="flex"
         flexDirection="column"
@@ -109,14 +116,14 @@ const AttendanceStatusesEditor = ({
                 variant="outline"
                 minW="44px"
                 h="44px"
-                disabled={isReadOnly || index === 0}
+                disabled={locked || index === 0}
                 onClick={() => onChange(moveStatusRow(rows, index, -1))}><FaArrowUp /></IconButton>
               <IconButton
                 aria-label={`Move ${row.label} down`}
                 variant="outline"
                 minW="44px"
                 h="44px"
-                disabled={isReadOnly || index === rows.length - 1}
+                disabled={locked || index === rows.length - 1}
                 onClick={() => onChange(moveStatusRow(rows, index, 1))}><FaArrowDown /></IconButton>
               {!row.persisted && !isReadOnly && (
                 <IconButton
@@ -125,6 +132,7 @@ const AttendanceStatusesEditor = ({
                   h="44px"
                   colorPalette="red"
                   variant="ghost"
+                  disabled={disabled}
                   onClick={() =>
                     onChange(rows.filter((other) => other.key !== row.key))
                   }><FaTrash /></IconButton>
@@ -140,7 +148,7 @@ const AttendanceStatusesEditor = ({
               <Input
                 maxLength={MAX_STATUS_LABEL_LENGTH}
                 value={row.label}
-                readOnly={isReadOnly}
+                readOnly={locked}
                 onChange={(e) => updateRow(row.key, { label: e.target.value })}
               />
             </Field.Root>
@@ -151,13 +159,13 @@ const AttendanceStatusesEditor = ({
               <Input
                 maxLength={MAX_STATUS_SHORT_LABEL_LENGTH}
                 value={row.shortLabel}
-                readOnly={isReadOnly}
+                readOnly={locked}
                 onChange={(e) =>
                   updateRow(row.key, { shortLabel: e.target.value })
                 }
               />
             </Field.Root>
-            <Field.Root flex="1 1 100px" disabled={isReadOnly}>
+            <Field.Root flex="1 1 100px" disabled={locked}>
               <Field.Label fontSize="xs" mb={1}>
                 Color
               </Field.Label>
@@ -170,7 +178,7 @@ const AttendanceStatusesEditor = ({
                 onChange={(color) => updateRow(row.key, { color })}
               />
             </Field.Root>
-            <Field.Root flex="1 1 110px" disabled={isReadOnly || row.persisted}>
+            <Field.Root flex="1 1 110px" disabled={locked || row.persisted}>
               <Field.Label fontSize="xs" mb={1}>
                 Behavior
               </Field.Label>
@@ -192,7 +200,7 @@ const AttendanceStatusesEditor = ({
               </Field.Label>
               <Switch
                 checked={row.active}
-                disabled={isReadOnly}
+                disabled={locked}
                 onCheckedChange={(active) => updateRow(row.key, { active })}
               />
             </Field.Root>
@@ -213,6 +221,7 @@ const AttendanceStatusesEditor = ({
             aria-label="New status label"
             maxLength={MAX_STATUS_LABEL_LENGTH}
             value={newLabel}
+            readOnly={disabled}
             onChange={(e) => setNewLabel(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -225,7 +234,7 @@ const AttendanceStatusesEditor = ({
             minH="44px"
             flexShrink={0}
             onClick={addRow}
-            disabled={!newLabel.trim() || rows.length >= MAX_ATTENDANCE_STATUSES}
+            disabled={disabled || !newLabel.trim() || rows.length >= MAX_ATTENDANCE_STATUSES}
           >
             Add status
           </Button>

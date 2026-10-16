@@ -106,6 +106,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   );
 
   const handleSubmit = () => {
+    if (isLoading) return;
     setSubmitted(true);
     setServerError(null);
     if (validateEditorFields(fields).size) {
@@ -141,6 +142,9 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
           field={field}
           errors={errors.get(field.reactKey)}
           onChange={(patch) => updateField(field.reactKey, patch)}
+          // Locked while saving: success navigates away, so an edit made
+          // meanwhile would be lost without a question.
+          disabled={isLoading}
           onRemove={
             field.pinned || field.persisted ? undefined : () => removeField(field.reactKey)
           }
@@ -150,6 +154,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         variant="outline"
         colorPalette="blue"
         w="max-content"
+        disabled={isLoading}
         onClick={() => setFields((current) => [...current, newDraftField()])}
       >
         <FaPlusCircle aria-hidden />
@@ -166,7 +171,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         >
           {isUpdating ? "Update" : "Submit"}
         </Button>
-        <Button variant="outline" onClick={() => navigate(-1)}>
+        <Button variant="outline" disabled={isLoading} onClick={() => navigate(-1)}>
           Cancel
         </Button>
       </Stack>

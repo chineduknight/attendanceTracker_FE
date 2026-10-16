@@ -14,11 +14,15 @@ import { isAttendanceEligibilityEnabled } from "helpers/attendanceEligibility";
 import { DEFAULT_ATTENDANCE_STATUSES } from "helpers/attendanceStatuses";
 import { effectiveAttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
+import userEvent from "@testing-library/user-event";
 import {
   ELSEWHERE,
   LeaveLink,
   askToLogOut,
   browserWouldAsk,
+  deferred,
+  expectEveryControlLocked,
+  expectNothingLockedFor,
   leave,
   openAt,
 } from "test-utils/leaveGuard";
@@ -1238,6 +1242,80 @@ describe("<OrganisationSettings>", () => {
       expect(nameInput()).toHaveValue("Taken name");
       leave();
       expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+    });
+
+    describe("while Save is in flight", () => {
+      // Every optional setting supported, so every kind of control renders.
+      const serveEverything = () =>
+        mockGet.mockImplementation(() =>
+          Promise.resolve({
+            data: {
+              data: {
+                id: "org1",
+                name: "VOB Choir",
+                image: "",
+                collapseAttendanceByDay: false,
+                maxAttendanceEdits: 3,
+                attendanceEligibilityEnabled: false,
+                welfareSettings: { reviewWindowDays: 14 },
+                attendanceShareTemplate: "choir",
+                terminology: { ...DEFAULT_TERMINOLOGY },
+                featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+              },
+            },
+          }),
+        );
+      const startSave = async () => {
+        const put = deferred();
+        mockPut.mockImplementation(() => put.promise);
+        manager();
+        serveEverything();
+        renderWithExit();
+        fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+          target: { value: "Renamed" },
+        });
+        addStatus("Late");
+        fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+        await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+        return put;
+      };
+
+      it("locks every control, status rows included, so nothing typed meanwhile can be lost", async () => {
+        await startSave();
+        await waitFor(() => expect(nameInput()).toHaveAttribute("readonly"));
+        // Fields, terms, switches, the share template, status rows (label,
+        // short label, colour, behaviour, active, default, move, remove) and
+        // the new-status row.
+        expect(expectEveryControlLocked()).toBeGreaterThan(40);
+
+        userEvent.type(nameInput(), " more");
+        userEvent.type(screen.getByLabelText("New status label"), "Early{enter}");
+        expect(nameInput()).toHaveValue("Renamed");
+        expect(screen.queryByTestId("status-row-early")).not.toBeInTheDocument();
+        // Enter can't send a second save either.
+        fireEvent.submit(nameInput());
+        expect(mockPut).toHaveBeenCalledTimes(1);
+      });
+
+      it("unlocks after success, and leaving no longer asks", async () => {
+        const put = await startSave();
+        await act(async () => put.resolve({ data: { data: { id: "org1", name: "Renamed" } } }));
+        await waitFor(() => expectNothingLockedFor(nameInput()));
+        await settle();
+        await leavesWithoutAsking();
+      });
+
+      it("unlocks after a failure with the edits intact, and still asks", async () => {
+        const put = await startSave();
+        await act(async () =>
+          put.reject({ response: { status: 422, data: { error: "Name taken" } } }),
+        );
+        await waitFor(() => expectNothingLockedFor(nameInput()));
+        expect(nameInput()).toHaveValue("Renamed");
+        expect(screen.getByTestId("status-row-late")).toBeInTheDocument();
+        leave();
+        expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+      });
     });
 
     it("never asks a view-only officer, who cannot save", async () => {

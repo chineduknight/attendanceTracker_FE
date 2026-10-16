@@ -48,7 +48,7 @@ const dateValue = (value: unknown) =>
 const maxDateFor = (field: MemberModelField) =>
   field.name === "dob" ? todayValue() : undefined;
 
-const AddOrUpdateMember = () => {
+const AddOrUpdateMemberForm = () => {
   const { confirm, confirmDialog } = useConfirm();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
@@ -203,7 +203,13 @@ const AddOrUpdateMember = () => {
     if (confirmed) deleteMember({ url });
   };
 
+  // Locked while a save or delete is in flight: either one navigates away on
+  // success, so an edit made meanwhile would be lost without a question.
+  const locked = isLoading || isDeleting;
+
   const onSubmit = handleSubmit(async (data) => {
+    // Enter in a field submits the form even while Update shows its spinner.
+    if (locked) return;
     const confirmed = await confirm({
       title: "Confirmation",
       body: `Are you sure you want to ${
@@ -224,6 +230,7 @@ const AddOrUpdateMember = () => {
           <Field.Root key={field._id ?? field.name} id={field.name}>
             <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
             <FormCheckbox
+              disabled={locked}
               control={control}
               name={field.name}
               label={displayMemberFieldLabel(field)}
@@ -252,6 +259,7 @@ const AddOrUpdateMember = () => {
                   onBlur={input.onBlur}
                   max={maxDateFor(field)}
                   clearable={!field.required}
+                  disabled={locked}
                 />
               )}
             />
@@ -270,6 +278,7 @@ const AddOrUpdateMember = () => {
               control={control}
               name={field.name}
               rules={{ required: field.required }}
+              isDisabled={locked}
               options={(Array.isArray(field.options) ? field.options : []).map(
                 (option) => ({ value: option, label: option }),
               )}
@@ -294,6 +303,7 @@ const AddOrUpdateMember = () => {
             <Input
               type={field.type}
               defaultValue={fieldValue}
+              readOnly={locked}
               {...register(field.name, { required: field.required })}
             />
           </Field.Root>
@@ -354,11 +364,12 @@ const AddOrUpdateMember = () => {
               fontWeight="bold"
               type="submit"
               loading={isLoading}
+              disabled={isDeleting}
             >
               {isUpdating ? "Update" : "Submit"}
             </Button>
           </Box>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" disabled={locked} onClick={() => navigate(-1)}>
             Cancel
           </Button>
           {isUpdating && (
@@ -369,6 +380,7 @@ const AddOrUpdateMember = () => {
                 w="full"
                 mt="6"
                 loading={isDeleting}
+                disabled={isLoading}
                 onClick={handleDeleteMember}><FaTrash />{`Delete ${terms.memberSingular}`}</Button>
             </Can>
           )}
@@ -385,6 +397,7 @@ const AddOrUpdateMember = () => {
             <Button
               colorPalette="blue"
               variant="outline"
+              disabled={locked}
               onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}><FaPlusSquare />{`Update ${LABELS.memberModel(terms)}`}</Button>
           </Flex>
         </Can>
@@ -393,6 +406,17 @@ const AddOrUpdateMember = () => {
       {confirmDialog}
     </PageContainer>
   );
+};
+
+/**
+ * Remounted per organisation, so the loaded member, the form's values and
+ * its unsaved-changes baseline never carry over from one organisation to
+ * another (the form's values are keyed by field name, which organisations
+ * share).
+ */
+const AddOrUpdateMember = () => {
+  const organisationId = useGlobalStore((state) => state.organisation.id);
+  return <AddOrUpdateMemberForm key={organisationId} />;
 };
 
 export default AddOrUpdateMember;

@@ -260,7 +260,13 @@ const OrganisationSettings = () => {
     if (statusErrors.length) setStatusErrors(validateStatusRows(rows));
   };
 
+  // While a save is in flight every control is locked: its reply re-seeds
+  // the form, which would silently drop anything typed meanwhile.
+  const locked = isSaving;
+
   const onSubmit = (form: OrgSettingsForm) => {
+    // Enter in a field submits the form even while Save shows its spinner.
+    if (locked) return;
     const errors = validateStatusRows(statusRows);
     setStatusErrors(errors);
     if (errors.length) return;
@@ -315,6 +321,7 @@ const OrganisationSettings = () => {
                   <Field.Label>Organisation name</Field.Label>
                   <Input
                     placeholder="Seat of wisdom presidium"
+                    readOnly={locked}
                     {...register("name", {
                       validate: (v) =>
                         v.trim().length > 0 || "Name is required",
@@ -336,6 +343,7 @@ const OrganisationSettings = () => {
                       type="url"
                       inputMode="url"
                       placeholder="https://cdn.example.com/logo.png"
+                      readOnly={locked}
                       {...register("image", {
                         validate: (v) =>
                           v.trim() === "" ||
@@ -355,7 +363,11 @@ const OrganisationSettings = () => {
                     <Field.Label mb="0">{`Collapse ${lowerTerm(
                       terms.attendanceSingular,
                     )} by day`}</Field.Label>
-                    <FormSwitch control={control} name="collapseAttendanceByDay" />
+                    <FormSwitch
+                      disabled={locked}
+                      control={control}
+                      name="collapseAttendanceByDay"
+                    />
                   </Flex>
                 </Field.Root>
 
@@ -367,6 +379,7 @@ const OrganisationSettings = () => {
                     type="number"
                     inputMode="numeric"
                     placeholder={`${DEFAULT_MAX_EDITS} (default)`}
+                    readOnly={locked}
                     {...register("maxAttendanceEdits", {
                       validate: (v) => {
                         if (v.trim() === "") return true;
@@ -395,7 +408,7 @@ const OrganisationSettings = () => {
                         )} eligibility rules`}
                       </Field.Label>
                       <FormSwitch
-                        disabled={!canManage}
+                        disabled={!canManage || locked}
                         control={control}
                         name="attendanceEligibilityEnabled"
                       />
@@ -421,6 +434,7 @@ const OrganisationSettings = () => {
                   onChange={onStatusRowsChange}
                   errors={statusErrors}
                   isReadOnly={!canManage}
+                  disabled={locked}
                 />
 
                 {shareTemplateSupported && (
@@ -428,7 +442,7 @@ const OrganisationSettings = () => {
                     <Separator />
                     <AttendanceShareTemplateSettings
                       control={control}
-                      isReadOnly={!canManage}
+                      isReadOnly={!canManage || locked}
                     />
                   </>
                 )}
@@ -452,7 +466,7 @@ const OrganisationSettings = () => {
                       <Input
                         type="number"
                         inputMode="numeric"
-                        readOnly={!canManage}
+                        readOnly={!canManage || locked}
                         placeholder={`${DEFAULT_WELFARE_REVIEW_WINDOW_DAYS} (default)`}
                         {...register("welfareReviewWindowDays", {
                           validate: (v) => welfareReviewWindowError(v) ?? true,
@@ -482,13 +496,13 @@ const OrganisationSettings = () => {
                     <TerminologySettings
                       register={register}
                       errors={errors}
-                      isReadOnly={!canManage}
+                      isReadOnly={!canManage || locked}
                     />
 
                     <Separator />
                     <FeatureVisibilitySettings
                       control={control}
-                      isReadOnly={!canManage}
+                      isReadOnly={!canManage || locked}
                     />
                   </>
                 )}

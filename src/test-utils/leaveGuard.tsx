@@ -34,3 +34,44 @@ export const browserWouldAsk = () => {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 };
+
+/** A request the test settles by hand, to act while it is in flight. */
+export const deferred = <T = unknown>() => {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+const CONTROL_ROLES = [
+  "textbox",
+  "spinbutton",
+  "checkbox",
+  "switch",
+  "radio",
+  "combobox",
+  "button",
+] as const;
+
+const isLocked = (control: HTMLElement) =>
+  control.hasAttribute("readonly") ||
+  control.hasAttribute("disabled") ||
+  control.getAttribute("aria-disabled") === "true";
+
+/**
+ * Every control on screen is read-only or disabled: nothing can be edited
+ * while a save is in flight. Returns how many were checked, so a test can
+ * prove it looked at the controls it meant to.
+ */
+export const expectEveryControlLocked = () => {
+  const controls = CONTROL_ROLES.flatMap((role) => screen.queryAllByRole(role));
+  expect(controls.filter((control) => !isLocked(control))).toEqual([]);
+  return controls.length;
+};
+
+/** No control is left locked once the save has settled. */
+export const expectNothingLockedFor = (...controls: HTMLElement[]) =>
+  controls.forEach((control) => expect(isLocked(control)).toBe(false));

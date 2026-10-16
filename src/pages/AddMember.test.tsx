@@ -11,11 +11,15 @@ import { PROTECTED_PATHS } from "routes/pagePath";
 import { queryKeys } from "services/api/queryKeys";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { toggle, confirmInDialog, shownValue, chooseOption } from "test-utils/render";
+import userEvent from "@testing-library/user-event";
 import {
   ELSEWHERE,
   LeaveLink,
   askToLogOut,
   browserWouldAsk,
+  deferred,
+  expectEveryControlLocked,
+  expectNothingLockedFor,
   leave,
   openAt,
 } from "test-utils/leaveGuard";
@@ -654,6 +658,134 @@ describe("<AddMember> leaving with unsaved changes", () => {
     await asks();
   });
 
+  describe("while a save or delete is in flight", () => {
+    const editAda = async () => {
+      await loadedAda();
+      fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+      fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "0802" } });
+    };
+    const startSave = async () => {
+      const post = deferred();
+      mockPost.mockImplementation(() => post.promise);
+      await editAda();
+      await confirmSubmit();
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      return post;
+    };
+    const startDelete = async () => {
+      const del = deferred();
+      mockDelete.mockImplementation(() => del.promise);
+      await editAda();
+      fireEvent.click(screen.getByRole("button", { name: "Delete Member" }));
+      await confirmInDialog("Delete");
+      await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      return del;
+    };
+    const lockedEverywhere = async () => {
+      await waitFor(() => expect(nameInput()).toHaveAttribute("readonly"));
+      // Text, custom, date, checkbox and dropdown fields, plus Cancel,
+      // Delete, Update and Update Member Model.
+      expect(expectEveryControlLocked()).toBeGreaterThan(8);
+      userEvent.type(nameInput(), " Byron");
+      expect(nameInput().value).toBe("Ada Lovelace");
+    };
+
+    it("locks every member field during a save", async () => {
+      await startSave();
+      await lockedEverywhere();
+      fireEvent.submit(nameInput());
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    it("goes to the list after the save succeeds, without asking", async () => {
+      const post = await startSave();
+      await act(async () => post.resolve({ data: { data: {} } }));
+      expect(await screen.findByText("members list")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    it("unlocks after a failed save with the edits intact, and still asks", async () => {
+      const post = await startSave();
+      await act(async () =>
+        post.reject({ response: { status: 500, data: { error: "Server down" } } }),
+      );
+      await waitFor(() => expectNothingLockedFor(nameInput(), screen.getByLabelText("Phone")));
+      expect(nameInput().value).toBe("Ada Lovelace");
+      expect(screen.getByLabelText("Phone")).toHaveValue("0802");
+      cancel();
+      await asks();
+    });
+
+    it("locks every member field during a delete, and unlocks if it fails", async () => {
+      const del = await startDelete();
+      await lockedEverywhere();
+      await act(async () =>
+        del.reject({ response: { status: 500, data: { error: "Cannot delete" } } }),
+      );
+      await waitFor(() => expectNothingLockedFor(nameInput()));
+      expect(nameInput().value).toBe("Ada Lovelace");
+      cancel();
+      await asks();
+    });
+  });
+
+  describe("switching organisation while the form is open", () => {
+    // Same member id and field keys in both organisations, different data.
+    const serveByOrg = () =>
+      mockGet.mockImplementation((url: string) => {
+        const org2 = url.includes("/org2/");
+        if (url.endsWith("/model")) return Promise.resolve({ data: { data: FULL_MODEL } });
+        return Promise.resolve({
+          data: { data: org2 ? { ...ADA_FULL, name: "Bea Other", phone: "0999" } : ADA_FULL },
+        });
+      });
+    const switchToOrg2 = () =>
+      act(() =>
+        useGlobalStore.setState({
+          organisation: { ...EMPTY_ORG, id: "org2", isOwner: true, permissions: [] },
+        }),
+      );
+
+    it("never carries a new member's entries from one organisation into another", async () => {
+      serveByOrg();
+      renderWithExit(PROTECTED_PATHS.ADD_MEMBER);
+      fireEvent.change(await screen.findByLabelText(/Full Name/), { target: { value: "Typed in org1" } });
+      switchToOrg2();
+      await waitFor(() => expect(nameInput().value).toBe(""));
+      expect(screen.getByLabelText("Phone")).toHaveValue("");
+      leave();
+      expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    it("loads the other organisation's member afresh, without org1's edits or baseline", async () => {
+      serveByOrg();
+      await loadedAda();
+      fireEvent.change(nameInput(), { target: { value: "Ada edited in org1" } });
+      switchToOrg2();
+      await waitFor(() => expect(nameInput().value).toBe("Bea Other"));
+      expect(screen.getByLabelText("Phone")).toHaveValue("0999");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      cancel();
+      expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    it("saves to the organisation now selected, with only its own values", async () => {
+      serveByOrg();
+      await loadedAda();
+      fireEvent.change(nameInput(), { target: { value: "Ada edited in org1" } });
+      switchToOrg2();
+      await waitFor(() => expect(nameInput().value).toBe("Bea Other"));
+      const [url, body] = await confirmSubmit();
+      expect(url).toBe("/organisations/org2/members");
+      expect(body).toMatchObject({ name: "Bea Other", phone: "0999", memberId: "m1" });
+    });
+  });
+
   describe("Delete", () => {
     const deleteMember = async () => {
       fireEvent.click(screen.getByRole("button", { name: "Delete Member" }));
@@ -676,6 +808,7 @@ describe("<AddMember> leaving with unsaved changes", () => {
       fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
       await deleteMember();
       await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Cannot delete"));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
       expect(nameInput().value).toBe("Ada Lovelace");
       cancel();
       await asks();
