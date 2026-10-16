@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { CloseButton,
   Drawer,
   Box,
@@ -20,6 +21,7 @@ import { useNavActions } from "hooks/useNavActions";
 import ChangePasswordModal from "components/auth/ChangePasswordModal";
 import ColorModeSwitcher from "components/ColorModeSwitcher";
 import { withSafeInset } from "styles/safeArea";
+import { confirmDiscardUnsaved } from "hooks/useUnsavedChangesGuard";
 
 interface NavDrawerProps {
   isOpen: boolean;
@@ -49,8 +51,19 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
     navigate(path);
   };
 
+  // An officer's own Logout asks first if a screen holds unsaved work (e.g.
+  // an attendance edit); automatic sign-outs never go through here. The
+  // question waits until the drawer has closed: asked while it closes, the
+  // drawer handing focus back would dismiss it at once.
+  const logoutRequested = useRef(false);
   const handleLogout = () => {
+    logoutRequested.current = true;
     onClose();
+  };
+  const finishLogout = async () => {
+    if (!logoutRequested.current) return;
+    logoutRequested.current = false;
+    if (!(await confirmDiscardUnsaved("logout"))) return;
     setUser(EMPTY_USER);
     updateOrganisation(EMPTY_ORG);
   };
@@ -68,7 +81,7 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
         if (!e.open) {
           onClose();
         }
-      }}>
+      }} onExitComplete={() => void finishLogout()}>
         <Portal>
 
           <Drawer.Backdrop />

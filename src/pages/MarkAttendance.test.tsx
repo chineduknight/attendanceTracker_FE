@@ -10,8 +10,9 @@ import { MemoryRouter, Routes, Route, useNavigate, useParams } from "react-route
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
-import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG } from "zStore";
+import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG, EMPTY_USER } from "zStore";
 import MarkAttendance from "pages/MarkAttendance";
+import ProtectedLayout from "components/ProtectedLayout";
 import { statusDefinition } from "test-utils/attendanceStatusFixtures";
 import { ROSTER as ELIGIBILITY_ROSTER } from "test-utils/eligibilityFixtures";
 import { toast } from "react-toastify";
@@ -269,6 +270,7 @@ describe("<MarkAttendance> with configured statuses", () => {
     mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
     renderAt("/mark/att1", ["/all-attendance"]);
     await screen.findByText("Ada");
+    tap("Ada");
     await submitAndConfirm();
     // Save, confirm and navigate can outlast the default wait under a full run.
     expect(
@@ -638,6 +640,8 @@ describe("<MarkAttendance> quick marking", () => {
       expect(undoButton()).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "open other" }));
+      // The reset is an unsaved change, so leaving asks first.
+      await confirmInDialog("Discard changes");
 
       await waitFor(() =>
         expect(mockGet).toHaveBeenCalledWith("/attendance/org1/att2"),
@@ -1223,6 +1227,9 @@ describe("<MarkAttendance> eligibility", () => {
 
     it("updates without eligibility rules", async () => {
       await open();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset 3 visible to Absent" }),
+      );
       await submitAndConfirm();
       await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
       expect(mockPut.mock.calls[0]).toEqual([
@@ -1232,10 +1239,12 @@ describe("<MarkAttendance> eligibility", () => {
           date: "2026-09-01T00:00:00.000Z",
           organisationId: "org1",
           memberStatuses: [
-            { memberId: "m1", status: "present" },
+            { memberId: "m1", status: "absent" },
             { memberId: "m2", status: "absent" },
-            { memberId: "m4", status: "remote" },
+            { memberId: "m4", status: "absent" },
           ],
+          // The legacy record has no editCount, which the backend reads as 0.
+          expectedEditCount: 0,
         },
       ]);
     });
@@ -1397,6 +1406,7 @@ describe("<MarkAttendance> with custom terminology", () => {
   it("uses the session term in updated success copy", async () => {
     renderAt("/mark/att1");
     await screen.findByText("Ada");
+    tap("Ada");
     await submitAndConfirm();
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -1754,29 +1764,66 @@ describe("<MarkAttendance> manual per-session additions", () => {
       ],
     };
 
-    // What the backend currently stores; a saved add or remove replaces it.
+    // A second manual entry, so one edit can remove two.
+    const TWO_MANUAL = {
+      ...RECORD,
+      editCount: 1,
+      editsRemaining: 3,
+      attendance: [
+        ...RECORD.attendance,
+        {
+          memberId: "m5",
+          member: { name: "Efe" },
+          attendanceStatus: "present",
+          manuallyAdded: true,
+        },
+      ],
+    };
+    const ALL_MEMBERS = [...MEMBERS, { id: "m5", name: "Efe" }, { id: "m6", name: "Femi" }];
+    const STATUS_KEYS: Record<string, string> = {
+      Present: "present",
+      Late: "late",
+      Excused: "excused",
+      "No Show": "no_show",
+      Remote: "remote",
+    };
+
+    // What the backend stores; nothing changes it until Update.
     let record: Record<string, unknown>;
     const start = async (stored: Record<string, unknown> = RECORD) => {
       record = stored;
       mockGet.mockImplementation((url: string) =>
         Promise.resolve({
           data: {
-            data:
-              url === "/attendance/org1/att5"
-                ? record
-                : url.includes("/members")
-                  ? MEMBERS
-                  : [],
+            data: /^\/attendance\/org\d\/att5$/.test(url)
+              ? record
+              : url.includes("/members")
+                ? ALL_MEMBERS
+                : [],
           },
         }),
       );
       renderAt("/mark/att5");
       await screen.findByText("Chidi");
     };
+    const removeRow = (name: string) =>
+      screen.getByRole("button", { name: `Remove ${name} from this attendance` });
+    const updateButton = () => screen.getByRole("button", { name: "Update" });
+    const writes = () =>
+      mockPost.mock.calls.length + mockPut.mock.calls.length + mockDelete.mock.calls.length;
+    // Removing a saved manual entry asks first; the change is still local.
+    const removeSaved = async (name: string) => {
+      fireEvent.click(removeRow(name));
+      fireEvent.click(
+        (await confirmation()).getByRole("button", { name: "Remove from this attendance" }),
+      );
+      // The removal lands once the confirmation's answer arrives, and the
+      // closing dialog (with its own Cancel) must be gone before going on.
+      await screen.findByRole("button", { name: `Undo removing ${name}` });
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    };
     const addButton = () =>
       screen.getByRole("button", { name: "Add member to this attendance" });
-    const removeChidi = () =>
-      screen.getByRole("button", { name: "Remove Chidi from this attendance" });
     const confirmation = async () => within(await screen.findByRole("alertdialog"));
 
     it("keeps manual provenance and counts on load, without re-running rules", async () => {
@@ -1801,126 +1848,443 @@ describe("<MarkAttendance> manual per-session additions", () => {
       await screen.findByRole("dialog");
       fireEvent.keyDown(dialog().getByLabelText(/^Member/), { key: "ArrowDown" });
       await screen.findByText("Dayo");
-      expect(await optionLabels(dialog().getByLabelText(/^Member/))).toEqual(["Dayo"]);
+      expect(await optionLabels(dialog().getByLabelText(/^Member/))).toEqual([
+        "Dayo",
+        "Efe",
+        "Femi",
+      ]);
     });
 
-    it("saves an addition at once and keeps the officer's unsaved statuses", async () => {
-      await start({ ...RECORD, editsRemaining: 3 });
+    it("holds two removals, one addition, a status and a detail change, then saves them in one PUT", async () => {
+      await start(TWO_MANUAL);
       tapRow("Bola");
       const bolaStatus = statusOfRow("Bola");
-      expect(bolaStatus).not.toBe("Present");
-      mockPost.mockImplementation(() => {
-        record = {
-          ...RECORD,
-          editsRemaining: 2,
-          attendance: [
-            ...RECORD.attendance,
-            { memberId: "m4", member: { name: "Dayo" }, attendanceStatus: "late", manuallyAdded: true },
-          ],
-        };
-        return Promise.resolve({ data: { data: {} } });
-      });
+      await removeSaved("Chidi");
+      await removeSaved("Efe");
       await addManually("Dayo", "late", "Came late");
+      fireEvent.click(screen.getByRole("button", { name: "Edit attendance details" }));
+      fireEvent.change(await screen.findByLabelText("Name"), {
+        target: { value: "Rehearsal (corrected)" },
+      });
+      fireEvent.keyDown(screen.getByLabelText("Name"), { key: "Escape" });
 
-      await waitFor(() =>
-        expect(mockPost).toHaveBeenCalledWith("/attendance/org1/att5/manual-members", {
-          memberId: "m4",
-          status: "late",
-          reason: "Came late",
-        }),
-      );
-      expect(await screen.findByText("Dayo")).toBeInTheDocument();
-      expect(manualBadgeOn("Dayo")).toBeInTheDocument();
-      expect(statusOfRow("Bola")).toBe(bolaStatus);
-      expect(toast.success).toHaveBeenCalledWith("Member added to this attendance.");
-      expect(screen.getByText("Added manually: 2")).toBeInTheDocument();
+      // Nothing has been written yet: every change is local until Update.
+      expect(writes()).toBe(0);
+      expect(screen.getByText("Dayo")).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("region", { name: "Members removed from this attendance when you tap Update" })).getByText(
+          "Efe",
+        ),
+      ).toBeInTheDocument();
+
+      mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+      await submitAndConfirm();
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPost).not.toHaveBeenCalled();
+      expect(mockDelete).not.toHaveBeenCalled();
+      const [url, body] = mockPut.mock.calls[0];
+      expect(url).toBe("/attendance/att5");
+      expect(body).toMatchObject({
+        name: "Rehearsal (corrected)",
+        organisationId: "org1",
+        expectedEditCount: 1,
+        // Every expected member who stays, changed or not.
+        memberStatuses: [
+          { memberId: "m1", status: "no_show" },
+          { memberId: "m2", status: STATUS_KEYS[bolaStatus as string] },
+        ],
+        manualAdditions: [{ memberId: "m4", status: "late", reason: "Came late" }],
+        manualRemovals: ["m3", "m5"],
+      });
+      expect(JSON.stringify(body)).not.toMatch(/eligibilityRules|manuallyAdded/);
     });
 
-    it("removes a manual member after confirmation and keeps unsaved statuses", async () => {
+    it("cancels an addition removed again before Update, without asking", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      await addManually("Dayo", "late");
+      expect(screen.getByText("Added to this attendance in this edit: saved when you tap Update")).toBeInTheDocument();
+      fireEvent.click(removeRow("Dayo"));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
+      // Added then removed: nothing left to save.
+      expect(updateButton()).toBeDisabled();
+      expect(writes()).toBe(0);
+    });
+
+    it("undoes a pending removal, restoring the saved entry", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      await removeSaved("Chidi");
+      const pending = screen.getByRole("region", { name: "Members removed from this attendance when you tap Update" });
+      expect(within(pending).getByText("Chidi")).toBeInTheDocument();
+      expect(updateButton()).toBeEnabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo removing Chidi" }));
+      expect(
+        screen.queryByRole("region", { name: "Members removed from this attendance when you tap Update" }),
+      ).not.toBeInTheDocument();
+      expect(manualBadgeOn("Chidi")).toBeInTheDocument();
+      expect(statusOfRow("Chidi")).toBe("Late");
+      expect(updateButton()).toBeDisabled();
+      // A removed member is undone here, never re-added as a new addition.
+      fireEvent.click(addButton());
+      await screen.findByRole("dialog");
+      fireEvent.keyDown(dialog().getByLabelText(/^Member/), { key: "ArrowDown" });
+      await screen.findByText("Dayo");
+      expect(await optionLabels(dialog().getByLabelText(/^Member/))).not.toContain("Chidi");
+    });
+
+    it("lets one remaining edit carry several changes in a single save", async () => {
+      await start({ ...RECORD, editCount: 2, editsRemaining: 1 });
+      expect(
+        screen.getByText(
+          "You have 1 edit remaining. All changes will be saved together when you tap Update.",
+        ),
+      ).toBeInTheDocument();
+      tapRow("Bola");
+      await removeSaved("Chidi");
+      expect(addButton()).toBeEnabled();
+      await addManually("Dayo", "present");
+      mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+      await submitAndConfirm();
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0][1]).toMatchObject({
+        expectedEditCount: 2,
+        manualRemovals: ["m3"],
+        manualAdditions: [{ memberId: "m4", status: "present" }],
+      });
+    });
+
+    // Tries every control that edits; none may change what is shown.
+    const expectReadOnly = () => {
+      const names = ["Ada", "Bola", "Chidi"];
+      const before = names.map(statusOfRow);
+      const pencil = screen.getByRole("button", { name: "Edit attendance details" });
+      const reset = screen.getByRole("button", { name: /^Reset \d+ visible to / });
+      const chips = within(
+        screen.getByRole("group", { name: /^Tap a member to/ }),
+      ).getAllByRole("button");
+      [addButton(), removeRow("Chidi"), updateButton(), pencil, reset, ...chips].forEach(
+        (control) => expect(control).toBeDisabled(),
+      );
+      fireEvent.click(reset);
+      chips.forEach((chip) => fireEvent.click(chip));
+      fireEvent.click(pencil);
+      names.forEach(tapRow);
+      expect(names.map(statusOfRow)).toEqual(before);
+      expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Rehearsal" })).toBeInTheDocument();
+      // Reading still works.
+      fireEvent.change(screen.getByPlaceholderText("Search member"), {
+        target: { value: "Bol" },
+      });
+      expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+      expect(screen.getByText("Bola")).toBeInTheDocument();
+    };
+
+    it("lets nothing change the attendance once no edits remain", async () => {
+      await start({ ...RECORD, editCount: 3, editsRemaining: 0 });
+      expect(screen.getByText("No edits remain for this attendance.")).toBeInTheDocument();
+      expectReadOnly();
+    });
+
+    it("lets nothing change the attendance while editing is locked", async () => {
+      await start({ ...RECORD, editsLocked: true, editsRemaining: 2 });
+      expect(screen.getByText("Editing is locked for this attendance.")).toBeInTheDocument();
+      expectReadOnly();
+    });
+
+    it("names pending changes in the organisation's own terms", async () => {
+      useGlobalStore.setState({
+        organisation: {
+          ...useGlobalStore.getState().organisation,
+          terminology: {
+            ...DEFAULT_TERMINOLOGY,
+            memberSingular: "Student",
+            memberPlural: "Students",
+            attendanceSingular: "Rehearsal",
+            attendancePlural: "Rehearsals",
+          },
+        },
+      });
+      await start({ ...RECORD, editsRemaining: 3 });
+      fireEvent.click(screen.getByRole("button", { name: "Remove Chidi from this rehearsal" }));
+      fireEvent.click(
+        (await confirmation()).getByRole("button", { name: "Remove from this rehearsal" }),
+      );
+      expect(
+        await screen.findByText("Students removed from this rehearsal when you tap Update"),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Add student to this rehearsal" }));
+      await screen.findByRole("dialog");
+      fireEvent.change(dialog().getByLabelText(/^Student/), { target: { value: "Day" } });
+      fireEvent.click(await screen.findByText("Dayo"));
+      await chooseOption(dialog().getByLabelText(/^Rehearsal status/), "Late");
+      fireEvent.click(dialog().getByRole("button", { name: "Add student" }));
+      expect(
+        await screen.findByText("Added to this rehearsal in this edit: saved when you tap Update"),
+      ).toBeInTheDocument();
+    });
+
+    // The edit inside the real app shell (header, account menu, drawer).
+    const renderInLayout = () => {
+      const org = useGlobalStore.getState().organisation;
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: {
+            data: url.endsWith("/att5")
+              ? record
+              : url === "/organisations"
+                ? [org]
+                : url.includes("/members")
+                  ? ALL_MEMBERS
+                  : [],
+          },
+        }),
+      );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/mark/att5"]}>
+            <Routes>
+              <Route element={<ProtectedLayout />}>
+                <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+                <Route path="/organisations" element={<div>organisation list</div>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    };
+    const logOutFromMenu = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+    };
+    const SIGNED_IN = { ...EMPTY_USER, token: "token-1", username: "knight" };
+
+    it("asks before Logout throws pending changes away, and keeps everything on Keep editing", async () => {
+      useGlobalStore.setState({ user: SIGNED_IN });
+      record = { ...RECORD, editsRemaining: 3 };
+      renderInLayout();
+      await screen.findByText("Chidi");
+      await removeSaved("Chidi");
+
+      await logOutFromMenu();
+      expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(useGlobalStore.getState().user).toEqual(SIGNED_IN);
+      expect(useGlobalStore.getState().organisation.id).toBe("org1");
+      expect(
+        screen.getByText("Members removed from this attendance when you tap Update"),
+      ).toBeInTheDocument();
+
+      await logOutFromMenu();
+      fireEvent.click(await screen.findByRole("button", { name: "Discard and log out" }));
+      await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+      expect(useGlobalStore.getState().organisation).toEqual(EMPTY_ORG);
+    });
+
+    it("logs out at once when nothing is unsaved", async () => {
+      useGlobalStore.setState({ user: SIGNED_IN });
+      record = { ...RECORD, editsRemaining: 3 };
+      renderInLayout();
+      await screen.findByText("Chidi");
+      await logOutFromMenu();
+      await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
+      expect(screen.queryByText("Discard your changes?")).not.toBeInTheDocument();
+    });
+
+    it("asks before switching organisation from the menu discards pending changes", async () => {
+      record = { ...RECORD, editsRemaining: 3 };
+      const org = useGlobalStore.getState().organisation;
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: {
+            data: url.endsWith("/att5")
+              ? record
+              : url === "/organisations"
+                ? [org]
+                : url.includes("/members")
+                  ? ALL_MEMBERS
+                  : [],
+          },
+        }),
+      );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/mark/att5"]}>
+            <Routes>
+              <Route element={<ProtectedLayout />}>
+                <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+                <Route path="/organisations" element={<div>organisation list</div>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Chidi");
+      await removeSaved("Chidi");
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Organisations" }));
+
+      expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(screen.queryByText("organisation list")).not.toBeInTheDocument();
+      expect(
+        screen.getByText("Members removed from this attendance when you tap Update"),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Organisations" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Discard changes" }));
+      expect(await screen.findByText("organisation list")).toBeInTheDocument();
+    });
+
+    it("keeps unresolved historical entries out of the request so the backend preserves them", async () => {
+      await start({
+        ...RECORD,
+        editsRemaining: 3,
+        attendance: [
+          ...RECORD.attendance,
+          { memberId: "gone", member: null, attendanceStatus: "present", manuallyAdded: true },
+        ],
+      });
+      expect(screen.getByText("Former member (profile unavailable)")).toBeInTheDocument();
+      tapRow("Bola");
+      mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+      await submitAndConfirm();
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      const body = mockPut.mock.calls[0][1];
+      expect(body.memberStatuses.map((s: { memberId: string }) => s.memberId)).toEqual([
+        "m1",
+        "m2",
+        "m3",
+      ]);
+      expect(JSON.stringify(body)).not.toMatch(/gone/);
+    });
+
+    it("keeps every pending change after a 409 and reloads only when asked", async () => {
       await start({ ...RECORD, editsRemaining: 3 });
       tapRow("Bola");
       const bolaStatus = statusOfRow("Bola");
-      // Only manual rows can be removed.
-      expect(
-        screen.getAllByRole("button", { name: /^Remove .* from this attendance$/ }),
-      ).toHaveLength(1);
-      mockDelete.mockImplementation(() => {
-        record = {
-          ...RECORD,
-          editsRemaining: 2,
-          attendance: RECORD.attendance.filter((entry) => entry.memberId !== "m3"),
-        };
-        return Promise.resolve({ data: { data: {} } });
+      await removeSaved("Chidi");
+      mockPut.mockRejectedValue({
+        response: {
+          status: 409,
+          data: { error: "This attendance record was changed by someone else. Reload it and try again." },
+        },
       });
-      fireEvent.click(removeChidi());
+      await submitAndConfirm();
+      // The conflict question replaces the closing count confirmation.
+      await screen.findByText("This attendance was changed by someone else");
+      fireEvent.click(screen.getByRole("button", { name: "Keep my changes" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(statusOfRow("Bola")).toBe(bolaStatus);
       expect(
-        (await confirmation()).getByText(
-          "Chidi was manually added to this attendance. Removing them deletes this historical attendance entry from this attendance only, saves straight away and uses one edit.",
-        ),
+        screen.getByRole("region", { name: "Members removed from this attendance when you tap Update" }),
       ).toBeInTheDocument();
-      expect(mockDelete).not.toHaveBeenCalled();
-      fireEvent.click(
-        (await confirmation()).getByRole("button", { name: "Remove from this attendance" }),
-      );
 
+      // Reloading shows the latest saved version and drops the local changes.
+      record = { ...RECORD, editCount: 1, editsRemaining: 2 };
+      await submitAndConfirm();
+      await screen.findByText("This attendance was changed by someone else");
+      fireEvent.click(screen.getByRole("button", { name: "Reload latest" }));
+      await waitFor(() => expect(manualBadgeOn("Chidi")).toBeInTheDocument());
+      expect(statusOfRow("Bola")).toBe("Present");
+      expect(
+        screen.queryByRole("region", { name: "Members removed from this attendance when you tap Update" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps the loaded version through a background refetch, so a stale edit gets a 409", async () => {
+      await start({ ...RECORD, editCount: 1, editsRemaining: 3 });
+      tapRow("Bola");
+      const bolaStatus = statusOfRow("Bola");
+      // Someone else saved meanwhile; a reconnect refetches the record.
+      record = { ...RECORD, editCount: 2, editsRemaining: 2 };
+      await act(() => queryClient.refetchQueries());
+      // React Query hands the result to the page a tick later.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      expect(statusOfRow("Bola")).toBe(bolaStatus);
+      mockPut.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+      await submitAndConfirm();
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+      expect(mockPut.mock.calls[0][1].expectedEditCount).toBe(1);
+    });
+
+    it("keeps the draft and shows the backend's message after a 422", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      await addManually("Dayo", "late");
+      mockPut.mockRejectedValue({
+        response: { status: 422, data: { error: "Member m4 is already on this session's roster." } },
+      });
+      await submitAndConfirm();
       await waitFor(() =>
-        expect(mockDelete).toHaveBeenCalledWith("/attendance/org1/att5/manual-members/m3", {
-          data: undefined,
+        expect(toast.error).toHaveBeenCalledWith("Member m4 is already on this session's roster."),
+      );
+      expect(screen.getByText("Dayo")).toBeInTheDocument();
+      expect(updateButton()).toBeEnabled();
+    });
+
+    it("sends one PUT when the confirmation is tapped twice", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      tapRow("Bola");
+      mockPut.mockImplementation(() => new Promise(() => undefined));
+      fireEvent.click(updateButton());
+      const confirm = (await confirmation()).getByRole("button", { name: "Update" });
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+      await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    });
+
+    it("asks before Cancel throws pending changes away, and not when there are none", async () => {
+      record = { ...RECORD, editsRemaining: 3 };
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({ data: { data: url.endsWith("/att5") ? record : [] } }),
+      );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/all-attendance", "/mark/att5"]}>
+            <Routes>
+              <Route path="/mark/:attendanceId" element={<MarkAttendance />} />
+              <Route path="/all-attendance" element={<div>all attendance</div>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Chidi");
+      await removeSaved("Chidi");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(screen.getByText("Members removed from this attendance when you tap Update")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo removing Chidi" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByText("all attendance")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+
+    it("never carries pending changes into another organisation", async () => {
+      await start({ ...RECORD, editsRemaining: 3 });
+      await addManually("Dayo", "late");
+      expect(screen.getByText("Dayo")).toBeInTheDocument();
+      act(() =>
+        useGlobalStore.setState({
+          organisation: { ...useGlobalStore.getState().organisation, id: "org2" },
         }),
       );
-      await waitFor(() => expect(screen.queryByText("Chidi")).not.toBeInTheDocument());
-      expect(statusOfRow("Bola")).toBe(bolaStatus);
-    });
-
-    it("keeps the row when the backend refuses a removal", async () => {
-      await start({ ...RECORD, editsRemaining: 3 });
-      mockDelete.mockRejectedValue({
-        response: { status: 422, data: { error: "Attendance edits are locked." } },
-      });
-      fireEvent.click(removeChidi());
-      fireEvent.click(
-        (await confirmation()).getByRole("button", { name: "Remove from this attendance" }),
+      await screen.findByText("Chidi");
+      expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
+      act(() =>
+        useGlobalStore.setState({
+          organisation: { ...useGlobalStore.getState().organisation, id: "org1" },
+        }),
       );
-      await waitFor(() =>
-        expect(toast.error).toHaveBeenCalledWith("Attendance edits are locked."),
-      );
-      expect(screen.getByText("Chidi")).toBeInTheDocument();
-    });
-
-    it("says how many edits are left and what each roster change uses", async () => {
-      await start({ ...RECORD, editsRemaining: 3 });
-      expect(
-        screen.getByText(
-          "3 edits left. Adding or removing a member saves straight away and uses one; Update uses another.",
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("blocks a roster change that would use the last edit while changes are unsaved", async () => {
-      await start({ ...RECORD, editsRemaining: 1 });
-      expect(addButton()).toBeEnabled();
-      tapRow("Bola");
-      expect(addButton()).toBeDisabled();
-      expect(removeChidi()).toBeDisabled();
-      expect(
-        screen.getByText(
-          "Tap Update to save your changes first: adding or removing a member saves straight away and would use this attendance's last edit.",
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("disables add, remove and Update once no edits remain", async () => {
-      await start({ ...RECORD, editsRemaining: 0, editCount: 3 });
-      expect(addButton()).toBeDisabled();
-      expect(removeChidi()).toBeDisabled();
-      expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
-      expect(screen.getByText("No edits remain for this attendance.")).toBeInTheDocument();
-    });
-
-    it("disables add and remove while edits are locked", async () => {
-      await start({ ...RECORD, editsLocked: true, editsRemaining: 2 });
-      expect(addButton()).toBeDisabled();
-      expect(removeChidi()).toBeDisabled();
+      await screen.findByText("Chidi");
+      expect(screen.queryByText("Dayo")).not.toBeInTheDocument();
+      expect(writes()).toBe(0);
     });
 
     it("moves a manual row between present statuses but never to Excused or No Show", async () => {

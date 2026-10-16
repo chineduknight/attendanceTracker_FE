@@ -1,5 +1,6 @@
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { render } from "test-utils/render";
+import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import NavDrawer from "components/NavDrawer";
@@ -27,6 +28,20 @@ const renderDrawer = (onClose = jest.fn()) =>
     </MemoryRouter>
   );
 
+// Closes for real, as AppHeader does: Logout finishes once the drawer is shut.
+const ClosableDrawer = ({ onClose }: { onClose: () => void }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <NavDrawer
+      isOpen={open}
+      onClose={() => {
+        onClose();
+        setOpen(false);
+      }}
+    />
+  );
+};
+
 describe("<NavDrawer>", () => {
   it("shows the signed-in user's profile info", () => {
     setState({});
@@ -42,13 +57,19 @@ describe("<NavDrawer>", () => {
     expect(screen.queryByText("Officers & Roles")).not.toBeInTheDocument();
   });
 
-  it("logs out and closes the drawer on Logout click", () => {
+  it("logs out and closes the drawer on Logout click", async () => {
     setState({});
     const onClose = jest.fn();
-    renderDrawer(onClose);
+    render(
+      <MemoryRouter>
+        <ClosableDrawer onClose={onClose} />
+      </MemoryRouter>
+    );
     fireEvent.click(screen.getByText("Logout"));
-    expect(useGlobalStore.getState().user).toEqual(EMPTY_USER);
     expect(onClose).toHaveBeenCalled();
+    // Once the drawer has closed, Logout checks for unsaved work (none here)
+    // and signs out.
+    await waitFor(() => expect(useGlobalStore.getState().user).toEqual(EMPTY_USER));
   });
 
   it("keeps the colour-mode control hidden while dark mode is off", () => {

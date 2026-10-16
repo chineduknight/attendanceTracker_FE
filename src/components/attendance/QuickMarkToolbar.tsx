@@ -13,6 +13,8 @@ interface QuickMarkToolbarProps {
   statuses: readonly AttendanceStatusDefinition[];
   mode: QuickMarkMode;
   onModeChange: (mode: QuickMarkMode) => void;
+  /** No mode can be chosen, e.g. a saved attendance with no edits left. */
+  disabled?: boolean;
 }
 
 interface ModeChipProps {
@@ -21,6 +23,7 @@ interface ModeChipProps {
   /** Shown while unselected; a selected chip always shows a tick. */
   idleIcon?: ReactElement;
   isSelected: boolean;
+  disabled: boolean;
   onClick: () => void;
   /** Overrides the scheme's solid fill when it cannot carry white text. */
   selectedBg?: string;
@@ -32,6 +35,7 @@ const ModeChip = ({
   colorScheme,
   idleIcon,
   isSelected,
+  disabled,
   onClick,
   selectedBg,
 }: ModeChipProps) => (
@@ -43,6 +47,7 @@ const ModeChip = ({
     colorPalette={colorScheme}
     variant={isSelected ? "solid" : "outline"}
     aria-pressed={isSelected}
+    disabled={disabled}
     onClick={onClick}
     {...(isSelected && selectedBg
       ? {
@@ -58,7 +63,12 @@ const ModeChip = ({
  * Chooses what tapping a member does: Cycle advances through the active
  * statuses as before, while a status chip assigns exactly that status.
  */
-const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProps) => {
+const QuickMarkToolbar = ({
+  statuses,
+  mode,
+  onModeChange,
+  disabled = false,
+}: QuickMarkToolbarProps) => {
   const terms = useTerms();
   return (
     <Flex direction="column" gap={1} mt="4">
@@ -82,6 +92,7 @@ const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProp
           selectedBg="gray.700"
           idleIcon={<FaSyncAlt aria-hidden />}
           isSelected={mode === null}
+          disabled={disabled}
           onClick={() => onModeChange(null)}
         />
         {statuses.map((status) => (
@@ -90,6 +101,7 @@ const QuickMarkToolbar = ({ statuses, mode, onModeChange }: QuickMarkToolbarProp
             label={status.label}
             colorScheme={status.color}
             isSelected={mode === status.key}
+            disabled={disabled}
             onClick={() => onModeChange(status.key)}
           />
         ))}
