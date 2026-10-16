@@ -1603,60 +1603,67 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
       expect(Object.keys(localStorage).filter((key) => key.startsWith("attendance-new-draft"))).toEqual([]);
     });
 
+    const legacyStorage = () =>
+      [LEGACY_META_KEY, LEGACY_ROSTER_KEY, LEGACY_MANUAL_KEY].map((key) =>
+        localStorage.getItem(key),
+      );
+
     it.each([
       ["its author", OFFICER],
       ["another officer", OFFICER_B],
-    ])("still offers a legacy unowned draft to %s, saying anyone here can continue it", async (_who, user) => {
+    ])("never offers a legacy unowned draft to %s, and leaves it untouched", async (_who, user) => {
       seedLegacy();
+      const before = legacyStorage();
       useGlobalStore.setState({ user });
+      renderPage();
+      expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
+      expect(card()).not.toBeInTheDocument();
+      expect(screen.queryByText("Sunday Mass")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Continue marking" }),
+      ).not.toBeInTheDocument();
+      expect(legacyStorage()).toEqual(before);
+    });
+
+    it("lets officer A start and resume their own draft while a legacy one exists, never touching it", async () => {
+      seedLegacy();
+      const before = legacyStorage();
+      const { unmount } = renderPage();
+      // The legacy session's own name and date: still a separate, owned draft.
+      type(await screen.findByLabelText(/Name/), "Sunday Mass");
+      type(dateInput(), "2026-10-01");
+      await waitForContinue();
+      fireEvent.click(button("Continue"));
+      await screen.findByText("marking");
+      expect(JSON.parse(localStorage.getItem(META_KEY) as string)).toMatchObject({
+        ownerId: "officerA",
+        name: "Sunday Mass",
+      });
+      unmount();
+
       renderPage();
       expect(await screen.findByText("Unfinished attendance")).toBeInTheDocument();
       expect(
-        screen.getByText(
-          "This attendance was started on this browser but hasn't been submitted yet.",
-        ),
+        screen.getByText("You started marking this attendance but haven't submitted it yet."),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          "It was saved before drafts were tied to an account, so anyone signed in here can continue or discard it.",
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("resumes a legacy draft in place, never migrating it", async () => {
-      seedLegacy();
-      const draftStorage = () =>
-        Object.fromEntries(
-          Object.keys(localStorage)
-            .filter((key) => key.startsWith("attendance-"))
-            .map((key) => [key, localStorage.getItem(key)]),
-        );
-      const before = draftStorage();
-      renderPage();
-      fireEvent.click(await screen.findByRole("button", { name: "Continue marking" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continue marking" }));
       expect(await screen.findByText("marking")).toBeInTheDocument();
-      expect(draftStorage()).toEqual(before);
+      expect(legacyStorage()).toEqual(before);
     });
 
-    it("discards a legacy draft by its original keys only after confirmation", async () => {
+    it("discards only the officer's own draft, never a legacy one", async () => {
       seedLegacy();
-      seedDraft({ ownerId: "officerB" });
-      localStorage.setItem(
-        "attendance-new-draft-orgA-by-officerB",
-        localStorage.getItem(META_KEY) as string,
-      );
-      localStorage.removeItem(META_KEY);
+      seedDraft();
+      const before = legacyStorage();
       renderPage();
       fireEvent.click(
         await screen.findByRole("button", { name: "Discard and create new" }),
       );
       await confirmInDialog("Discard");
       expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
-      expect(localStorage.getItem(LEGACY_META_KEY)).toBeNull();
-      expect(localStorage.getItem(LEGACY_ROSTER_KEY)).toBeNull();
-      expect(localStorage.getItem(LEGACY_MANUAL_KEY)).toBeNull();
-      // Officer B's own draft is not this discard's to remove.
-      expect(localStorage.getItem("attendance-new-draft-orgA-by-officerB")).not.toBeNull();
+      expect(localStorage.getItem(META_KEY)).toBeNull();
+      expect(localStorage.getItem(ROSTER_KEY)).toBeNull();
+      expect(legacyStorage()).toEqual(before);
     });
   });
 
@@ -1801,10 +1808,11 @@ describe("<CreateAttendance> leaving before Continue", () => {
 
   it("does not ask over the unfinished-draft card", async () => {
     localStorage.setItem(
-      "attendance-new-draft-orgA",
+      "attendance-new-draft-orgA-by-officerA",
       JSON.stringify({
         version: 1,
         organisationId: "orgA",
+        ownerId: "officerA",
         name: "Sunday Mass",
         date: "2026-10-01",
         categoryId: null,

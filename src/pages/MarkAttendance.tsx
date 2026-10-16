@@ -49,7 +49,6 @@ import QuickMarkToolbar, {
 import VisibleBulkActions from "components/attendance/VisibleBulkActions";
 import { usePersistedRoster } from "hooks/usePersistedRoster";
 import {
-  DraftOwner,
   NewAttendanceDraft,
   discardNewAttendanceDraft,
   expectedRosterDraftKey,
@@ -155,8 +154,8 @@ const NoUnfinishedSession = () => {
 /**
  * Decides what this screen marks, then hands it to the roster: an edit always
  * marks the live stored record; a new session is authorized ONLY by the
- * explicit unfinished-draft metadata this officer may continue (their own,
- * or a legacy unowned one), never another officer's.
+ * signed-in officer's own unfinished-draft metadata, never another
+ * officer's or a legacy unowned one.
  */
 const MarkAttendanceSession = () => {
   const [org, currentAttendance, updateCurrentAttendance] = useGlobalStore(
@@ -218,8 +217,8 @@ const MarkAttendanceRoster = ({
 }: {
   isUpdate: boolean;
   session: currentAttendanceType;
-  /** Whose draft a new session is saved in (null: legacy); unused by edits. */
-  draftOwner: DraftOwner;
+  /** Whose draft a new session is saved in; null for an edit, which has none. */
+  draftOwner: string | null;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
@@ -235,15 +234,18 @@ const MarkAttendanceRoster = ({
     (state) => state.clearCurrentAttendance,
   );
   const params = useParams();
-  // The roster draft identity: an edit uses the attendance id (its own key
-  // namespace); a new session uses its date-name identity, shared with
-  // Create Attendance and the discard cleanup.
-  const draftIdentity = isUpdate
-    ? (params.attendanceId as string)
-    : newAttendanceDraftIdentity(session);
-  const localStorageKey = expectedRosterDraftKey(org.id, draftOwner, draftIdentity);
+  // A new session's roster drafts are keyed by its owner and date-name
+  // identity, shared with Create Attendance and the discard cleanup. An edit
+  // never reads or writes a roster draft (persist: false below), so it has no
+  // storage key.
+  const draftIdentity = newAttendanceDraftIdentity(session);
+  const localStorageKey = draftOwner
+    ? expectedRosterDraftKey(org.id, draftOwner, draftIdentity)
+    : "";
   // Its own key, so drafts saved before manual additions existed stay valid.
-  const manualStorageKey = manualRosterDraftKey(org.id, draftOwner, draftIdentity);
+  const manualStorageKey = draftOwner
+    ? manualRosterDraftKey(org.id, draftOwner, draftIdentity)
+    : "";
   // Every roster change goes through commitMembers so the draft never diverges.
   // `allMembers` is only ever the expected roster. An edit keeps its roster in
   // memory only — it has no resumable draft, unlike a new session.
@@ -723,7 +725,9 @@ const MarkAttendanceRoster = ({
       // Only a stored create finishes the draft: its metadata and both roster
       // drafts go together. An update never touches them, so an unfinished
       // new session survives editing an old attendance.
-      discardNewAttendanceDraft(org.id, { ...session, ownerId: draftOwner });
+      if (draftOwner) {
+        discardNewAttendanceDraft(org.id, { ...session, ownerId: draftOwner });
+      }
     }
     // A finished (or updated) record is no longer the app's working state.
     clearCurrentAttendance();

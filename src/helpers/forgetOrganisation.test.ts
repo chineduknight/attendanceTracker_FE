@@ -15,10 +15,17 @@ const SESSION = { name: "Sunday Service", date: "2026-10-11" };
 const identity = newAttendanceDraftIdentity(SESSION);
 const OFFICER = "officerA";
 const OTHER_OFFICER = "officerB";
-const rosterKeys = (organisationId: string, ownerId: string | null) => [
-  expectedRosterDraftKey(organisationId, ownerId, identity),
-  manualRosterDraftKey(organisationId, ownerId, identity),
-];
+const rosterKeys = (organisationId: string, ownerId: string | null) =>
+  ownerId
+    ? [
+        expectedRosterDraftKey(organisationId, ownerId, identity),
+        manualRosterDraftKey(organisationId, ownerId, identity),
+      ]
+    : // A legacy unowned draft's original keys.
+      [
+        `attendance-draft-${organisationId}-${identity}`,
+        `attendance-manual-draft-${organisationId}-${identity}`,
+      ];
 
 // Two officers' drafts and a legacy unowned one, as a shared browser holds.
 const seedDevice = (organisationId: string) => {

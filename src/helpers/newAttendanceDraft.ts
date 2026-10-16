@@ -9,12 +9,15 @@
  * always touch exactly the same keys.
  *
  * Ownership: a browser can be shared by several officers. A draft belongs to
- * the officer who started it, and only they are offered it. Drafts saved
- * before drafts had owners (legacy, `ownerId: null`) keep their original keys
- * and stay available to any officer of the organisation on this browser, as
- * they always were: nobody can tell whose they are, and hiding them would
- * strand their author's marks. They are never migrated or deleted here; they
- * go when someone submits or discards them.
+ * the officer who started it, and only they are offered it.
+ *
+ * Legacy drafts — saved before drafts had owners, under
+ * `attendance-new-draft-<org>` and `attendance-draft-<org>-<identity>` — are
+ * deliberately never read: nothing records who started them, so offering one
+ * to whoever signs in next could hand an officer a colleague's session and
+ * marks. They are not resumable through the app. Their data is left exactly
+ * as it is (no migration, deletion or ownership guess) and goes only when
+ * its organisation is deleted (`organisationDraftKeys`).
  *
  * Update mode never reads or writes any of this: an edit of an existing
  * attendance has no resumable draft, the stored record is the only truth.
@@ -26,14 +29,12 @@ import {
 } from "helpers/attendanceEligibility";
 import { isValidAvailabilityDate } from "helpers/attendanceAvailability";
 
-/** The officer a draft belongs to; null only for a legacy, unowned draft. */
-export type DraftOwner = string | null;
-
 /** The session fields a draft metadata record captures. */
 export interface NewAttendanceDraft {
   version: 1;
   organisationId: string;
-  ownerId: DraftOwner;
+  /** The officer who started it; only they are offered it. */
+  ownerId: string;
   name: string;
   date: string;
   categoryId?: string | null;
@@ -50,13 +51,17 @@ export interface NewAttendanceDraftSource {
   eligibilityRules?: AttendanceEligibilityRule[];
 }
 
-// An owned draft's keys carry `-by-<officer id>` right after the organisation
-// id. A legacy key has a date or "undated" there, so the two never collide.
-const ownerSegment = (ownerId: DraftOwner) => (ownerId ? `-by-${ownerId}` : "");
+// A draft's keys carry `-by-<officer id>` right after the organisation id. A
+// legacy key has a date or "undated" there, so the two never collide.
+const ownerSegment = (ownerId: string) => `-by-${ownerId}`;
 
 /** The metadata key: one unfinished draft per organisation and officer. */
-const metadataKey = (organisationId: string, ownerId: DraftOwner) =>
+const metadataKey = (organisationId: string, ownerId: string) =>
   `attendance-new-draft-${organisationId}${ownerSegment(ownerId)}`;
+
+/** Where an unowned legacy draft's metadata sits; used only for cleanup. */
+const legacyMetadataKey = (organisationId: string) =>
+  `attendance-new-draft-${organisationId}`;
 
 /**
  * `${date}-${name}` — the identity of a NEW session's roster drafts, kept
@@ -71,14 +76,14 @@ export const newAttendanceDraftIdentity = (draft: {
 /** The expected-roster draft key for a new session. */
 export const expectedRosterDraftKey = (
   organisationId: string,
-  ownerId: DraftOwner,
+  ownerId: string,
   identity: string,
 ): string => `attendance-draft-${organisationId}${ownerSegment(ownerId)}-${identity}`;
 
 /** The manual-additions draft key for a new session. */
 export const manualRosterDraftKey = (
   organisationId: string,
-  ownerId: DraftOwner,
+  ownerId: string,
   identity: string,
 ): string =>
   `attendance-manual-draft-${organisationId}${ownerSegment(ownerId)}-${identity}`;
@@ -86,7 +91,7 @@ export const manualRosterDraftKey = (
 /** One stored metadata record, or null when it is missing or untrustworthy. */
 const readDraftAt = (
   organisationId: string,
-  ownerId: DraftOwner,
+  ownerId: string,
 ): NewAttendanceDraft | null => {
   const stored = localStorage.getItem(metadataKey(organisationId, ownerId));
   if (!stored) return null;
@@ -100,8 +105,8 @@ const readDraftAt = (
   const candidate = parsed as Partial<NewAttendanceDraft>;
   if (candidate.version !== 1) return null;
   if (candidate.organisationId !== organisationId) return null;
-  // The record must name the owner its key does (a legacy record names none).
-  if ((candidate.ownerId ?? null) !== ownerId) return null;
+  // The record must name the owner its key does.
+  if (candidate.ownerId !== ownerId) return null;
   if (typeof candidate.name !== "string" || !candidate.name.trim()) return null;
   if (
     typeof candidate.date !== "string" ||
@@ -128,18 +133,17 @@ const readDraftAt = (
 };
 
 /**
- * The unfinished draft `officerId` may continue in this organisation: their
- * own, otherwise a legacy unowned one, or null. Another officer's draft is
- * never returned. A malformed record is ignored — never guessed at — so
+ * `officerId`'s own unfinished draft in this organisation, or null. Another
+ * officer's draft and legacy unowned drafts are never returned, and nobody
+ * signed in has none. A malformed record is ignored — never guessed at — so
  * corrupted storage can never surface a phantom resume card or a session
  * whose eligibility rules have quietly widened to Everyone.
  */
 export const readNewAttendanceDraft = (
   organisationId: string,
-  officerId: DraftOwner,
+  officerId: string | null,
 ): NewAttendanceDraft | null =>
-  (officerId ? readDraftAt(organisationId, officerId) : null) ??
-  readDraftAt(organisationId, null);
+  officerId ? readDraftAt(organisationId, officerId) : null;
 
 /**
  * Saves `ownerId`'s unfinished draft metadata for the organisation. `session`
@@ -167,18 +171,19 @@ export const writeNewAttendanceDraft = (
 /** Removes one draft's metadata (nothing else). */
 export const clearNewAttendanceDraft = (
   organisationId: string,
-  ownerId: DraftOwner,
+  ownerId: string,
 ): void => {
   localStorage.removeItem(metadataKey(organisationId, ownerId));
 };
 
 /**
  * Forgets everything a new-session draft owns: its metadata and both roster
- * drafts. Other officers' and other organisations' drafts are untouched.
+ * drafts. Other officers', other organisations' and legacy drafts are
+ * untouched.
  */
 export const discardNewAttendanceDraft = (
   organisationId: string,
-  draft: { ownerId: DraftOwner; date?: string | null; name?: string | null },
+  draft: { ownerId: string; date?: string | null; name?: string | null },
 ): void => {
   const identity = newAttendanceDraftIdentity(draft);
   clearNewAttendanceDraft(organisationId, draft.ownerId);
@@ -192,7 +197,8 @@ export const discardNewAttendanceDraft = (
 
 /**
  * Every new-attendance draft key this browser holds for the organisation,
- * whoever owns it — for forgetting a deleted organisation only.
+ * whoever owns it and legacy ones included — for forgetting a deleted
+ * organisation only.
  */
 export const organisationDraftKeys = (organisationId: string): string[] => {
   const prefixes = [
@@ -200,7 +206,7 @@ export const organisationDraftKeys = (organisationId: string): string[] => {
     "attendance-draft-",
     "attendance-manual-draft-",
   ].map((prefix) => `${prefix}${organisationId}-`);
-  const legacyMetadata = metadataKey(organisationId, null);
+  const legacyMetadata = legacyMetadataKey(organisationId);
   return Object.keys(localStorage).filter(
     (key) =>
       key === legacyMetadata || prefixes.some((prefix) => key.startsWith(prefix)),

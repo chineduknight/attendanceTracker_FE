@@ -13,10 +13,12 @@ import {
 const ORG = "orgA";
 const OFFICER = "officerA";
 const OTHER_OFFICER = "officerB";
-// Keys are asserted as literals on purpose: they are what browsers already
-// hold, and legacy drafts must keep resolving to exactly these.
+// Keys are asserted as literals on purpose: they are what browsers hold.
 const META_KEY = "attendance-new-draft-orgA-by-officerA";
+// A draft saved before drafts had owners, under its original keys.
 const LEGACY_META_KEY = "attendance-new-draft-orgA";
+const LEGACY_ROSTER_KEY = "attendance-draft-orgA-2026-10-01-Sunday Mass";
+const LEGACY_MANUAL_KEY = "attendance-manual-draft-orgA-2026-10-01-Sunday Mass";
 const SESSION = {
   name: "Sunday Mass",
   date: "2026-10-01",
@@ -26,6 +28,15 @@ const SESSION = {
 };
 /** A record as the pre-ownership frontend wrote it. */
 const LEGACY_RECORD = { version: 1, organisationId: ORG, ...SESSION };
+/** A current record, owned by OFFICER. */
+const OWNED_RECORD = { ...LEGACY_RECORD, ownerId: OFFICER };
+const seedLegacy = () => {
+  localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+  localStorage.setItem(LEGACY_ROSTER_KEY, '[{"id":"m1","attendanceStatus":"late"}]');
+  localStorage.setItem(LEGACY_MANUAL_KEY, "[]");
+};
+const legacyStorage = () =>
+  [LEGACY_META_KEY, LEGACY_ROSTER_KEY, LEGACY_MANUAL_KEY].map((key) => localStorage.getItem(key));
 
 const stored = (key = META_KEY) => JSON.parse(localStorage.getItem(key) as string);
 
@@ -40,16 +51,6 @@ describe("newAttendanceDraft keys", () => {
     );
     expect(manualRosterDraftKey(ORG, OFFICER, identity)).toBe(
       "attendance-manual-draft-orgA-by-officerA-2026-10-01-Sunday Mass",
-    );
-  });
-
-  it("keeps a legacy draft's original roster keys", () => {
-    const identity = newAttendanceDraftIdentity(SESSION);
-    expect(expectedRosterDraftKey(ORG, null, identity)).toBe(
-      "attendance-draft-orgA-2026-10-01-Sunday Mass",
-    );
-    expect(manualRosterDraftKey(ORG, null, identity)).toBe(
-      "attendance-manual-draft-orgA-2026-10-01-Sunday Mass",
     );
   });
 
@@ -104,7 +105,7 @@ describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
     expect(readNewAttendanceDraft("orgB", OFFICER)).toBeNull();
   });
 
-  it("never gives one officer another officer's draft", () => {
+  it("never gives one officer another officer's draft, nor anyone signed out", () => {
     writeNewAttendanceDraft(ORG, OFFICER, SESSION);
     expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)).toBeNull();
     expect(readNewAttendanceDraft(ORG, null)).toBeNull();
@@ -117,26 +118,29 @@ describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
     expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)?.name).toBe("Vigil");
   });
 
-  it("offers a legacy unowned draft to any officer, unchanged and unmigrated", () => {
-    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
-    const legacy = { ...LEGACY_RECORD, ownerId: null };
-    expect(readNewAttendanceDraft(ORG, OFFICER)).toEqual(legacy);
-    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)).toEqual(legacy);
-    // Reading never moves or rewrites it.
-    expect(stored(LEGACY_META_KEY)).toEqual(LEGACY_RECORD);
+  it("never offers a legacy unowned draft to anyone, and leaves it exactly as it is", () => {
+    seedLegacy();
+    const before = legacyStorage();
+    expect(readNewAttendanceDraft(ORG, OFFICER)).toBeNull();
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)).toBeNull();
+    expect(readNewAttendanceDraft(ORG, null)).toBeNull();
+    // Reading never moves, rewrites or claims it.
+    expect(legacyStorage()).toEqual(before);
     expect(localStorage.getItem(META_KEY)).toBeNull();
   });
 
-  it("prefers the officer's own draft over a legacy one", () => {
-    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
-    writeNewAttendanceDraft(ORG, OFFICER, { name: "Vigil", date: "2026-10-02" });
-    expect(readNewAttendanceDraft(ORG, OFFICER)?.name).toBe("Vigil");
-    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)?.ownerId).toBeNull();
+  it("still saves and reads the officer's own draft beside a legacy one", () => {
+    seedLegacy();
+    const before = legacyStorage();
+    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
+    expect(readNewAttendanceDraft(ORG, OFFICER)?.ownerId).toBe(OFFICER);
+    expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)).toBeNull();
+    expect(legacyStorage()).toEqual(before);
   });
 
   it.each([
     ["an owner other than its key's", META_KEY, { ...SESSION, version: 1, organisationId: ORG, ownerId: OTHER_OFFICER }],
-    ["an owner under the legacy key", LEGACY_META_KEY, { ...LEGACY_RECORD, ownerId: OTHER_OFFICER }],
+    ["no owner under an owned key", META_KEY, LEGACY_RECORD],
   ])("ignores a record naming %s", (_label, key, record) => {
     localStorage.setItem(key, JSON.stringify(record));
     expect(readNewAttendanceDraft(ORG, OFFICER)).toBeNull();
@@ -146,35 +150,35 @@ describe("writeNewAttendanceDraft / readNewAttendanceDraft", () => {
     ["missing record", null],
     ["broken json", "{ nope"],
     ["not an object", JSON.stringify("Sunday")],
-    ["wrong version", JSON.stringify({ ...LEGACY_RECORD, version: 2 })],
+    ["wrong version", JSON.stringify({ ...OWNED_RECORD, version: 2 })],
     [
       "foreign organisation",
-      JSON.stringify({ ...LEGACY_RECORD, organisationId: "orgB" }),
+      JSON.stringify({ ...OWNED_RECORD, organisationId: "orgB" }),
     ],
-    ["blank name", JSON.stringify({ ...LEGACY_RECORD, name: "   " })],
-    ["missing date", JSON.stringify({ ...LEGACY_RECORD, date: undefined })],
-    ["wrong date shape", JSON.stringify({ ...LEGACY_RECORD, date: "10/01/2026" })],
-    ["impossible date", JSON.stringify({ ...LEGACY_RECORD, date: "2026-10-32" })],
+    ["blank name", JSON.stringify({ ...OWNED_RECORD, name: "   " })],
+    ["missing date", JSON.stringify({ ...OWNED_RECORD, date: undefined })],
+    ["wrong date shape", JSON.stringify({ ...OWNED_RECORD, date: "10/01/2026" })],
+    ["impossible date", JSON.stringify({ ...OWNED_RECORD, date: "2026-10-32" })],
     [
       "rules not an array",
-      JSON.stringify({ ...LEGACY_RECORD, eligibilityRules: "all" }),
+      JSON.stringify({ ...OWNED_RECORD, eligibilityRules: "all" }),
     ],
     [
       "unreadable rules",
       JSON.stringify({
-        ...LEGACY_RECORD,
+        ...OWNED_RECORD,
         eligibilityRules: [{ field: "part", values: [] }],
       }),
     ],
   ])("ignores %s", (_label, value) => {
-    if (value !== null) localStorage.setItem(LEGACY_META_KEY, value);
+    if (value !== null) localStorage.setItem(META_KEY, value);
     expect(readNewAttendanceDraft(ORG, OFFICER)).toBeNull();
   });
 
   it("coerces non-string category values to null instead of failing the draft", () => {
     localStorage.setItem(
-      LEGACY_META_KEY,
-      JSON.stringify({ ...LEGACY_RECORD, categoryId: 7, subCategoryId: {} }),
+      META_KEY,
+      JSON.stringify({ ...OWNED_RECORD, categoryId: 7, subCategoryId: {} }),
     );
     expect(readNewAttendanceDraft(ORG, OFFICER)).toMatchObject({
       categoryId: null,
@@ -209,11 +213,11 @@ describe("newAttendanceDraftToSession", () => {
 
 describe("draft cleanup", () => {
   const identity = newAttendanceDraftIdentity(SESSION);
-  const seedRosters = (organisationId: string, ownerId: string | null) => {
+  const seedRosters = (organisationId: string, ownerId: string) => {
     localStorage.setItem(expectedRosterDraftKey(organisationId, ownerId, identity), "[]");
     localStorage.setItem(manualRosterDraftKey(organisationId, ownerId, identity), "[]");
   };
-  const rostersOf = (organisationId: string, ownerId: string | null) => [
+  const rostersOf = (organisationId: string, ownerId: string) => [
     localStorage.getItem(expectedRosterDraftKey(organisationId, ownerId, identity)),
     localStorage.getItem(manualRosterDraftKey(organisationId, ownerId, identity)),
   ];
@@ -232,10 +236,10 @@ describe("draft cleanup", () => {
     writeNewAttendanceDraft(ORG, OFFICER, SESSION);
     writeNewAttendanceDraft(ORG, OTHER_OFFICER, SESSION);
     writeNewAttendanceDraft("orgB", OFFICER, SESSION);
-    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    seedLegacy();
+    const legacyBefore = legacyStorage();
     seedRosters(ORG, OFFICER);
     seedRosters(ORG, OTHER_OFFICER);
-    seedRosters(ORG, null);
     seedRosters("orgB", OFFICER);
 
     discardNewAttendanceDraft(ORG, { ...SESSION, ownerId: OFFICER });
@@ -244,31 +248,16 @@ describe("draft cleanup", () => {
     expect(rostersOf(ORG, OFFICER)).toEqual([null, null]);
     expect(readNewAttendanceDraft(ORG, OTHER_OFFICER)?.ownerId).toBe(OTHER_OFFICER);
     expect(rostersOf(ORG, OTHER_OFFICER)).toEqual(["[]", "[]"]);
-    expect(stored(LEGACY_META_KEY)).toEqual(LEGACY_RECORD);
-    expect(rostersOf(ORG, null)).toEqual(["[]", "[]"]);
+    // Legacy data sharing the same session identity is not this discard's.
+    expect(legacyStorage()).toEqual(legacyBefore);
     expect(readNewAttendanceDraft("orgB", OFFICER)).not.toBeNull();
     expect(rostersOf("orgB", OFFICER)).toEqual(["[]", "[]"]);
   });
 
-  it("discards a legacy draft by its original keys", () => {
-    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
-    seedRosters(ORG, null);
-    writeNewAttendanceDraft(ORG, OFFICER, SESSION);
-    seedRosters(ORG, OFFICER);
-
-    discardNewAttendanceDraft(ORG, { ...SESSION, ownerId: null });
-
-    expect(localStorage.getItem(LEGACY_META_KEY)).toBeNull();
-    expect(rostersOf(ORG, null)).toEqual([null, null]);
-    expect(readNewAttendanceDraft(ORG, OFFICER)?.ownerId).toBe(OFFICER);
-    expect(rostersOf(ORG, OFFICER)).toEqual(["[]", "[]"]);
-  });
-
   it("organisationDraftKeys lists every officer's and the legacy draft keys, for that organisation only", () => {
     writeNewAttendanceDraft(ORG, OFFICER, SESSION);
-    localStorage.setItem(LEGACY_META_KEY, JSON.stringify(LEGACY_RECORD));
+    seedLegacy();
     seedRosters(ORG, OFFICER);
-    seedRosters(ORG, null);
     writeNewAttendanceDraft("orgA2", OFFICER, SESSION);
     seedRosters("orgA2", OFFICER);
     localStorage.setItem("unrelated", "1");
@@ -279,8 +268,8 @@ describe("draft cleanup", () => {
         LEGACY_META_KEY,
         expectedRosterDraftKey(ORG, OFFICER, identity),
         manualRosterDraftKey(ORG, OFFICER, identity),
-        expectedRosterDraftKey(ORG, null, identity),
-        manualRosterDraftKey(ORG, null, identity),
+        LEGACY_ROSTER_KEY,
+        LEGACY_MANUAL_KEY,
       ].sort(),
     );
   });

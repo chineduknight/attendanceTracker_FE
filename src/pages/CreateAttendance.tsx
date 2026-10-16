@@ -74,11 +74,11 @@ const CreateAttendanceForm = ({
   );
   const { confirm, confirmDialog } = useConfirm();
   const officerId = useGlobalStore((state) => signedInUserId(state.user));
-  // The unfinished draft this officer may continue here (their own, or a
-  // legacy unowned one; never another officer's), read once per mount: this
-  // page only resolves it (continue or discard), never edits it. The
-  // component is keyed by organisation id, so switching organisations
-  // re-reads it, and signing in as someone else remounts it.
+  // This officer's own unfinished draft here (never another officer's or a
+  // legacy unowned one; see helpers/newAttendanceDraft), read once per
+  // mount: this page only resolves it (continue or discard), never edits
+  // it. The component is keyed by organisation id, so switching
+  // organisations re-reads it, and signing in as someone else remounts it.
   const [draft, setDraft] = useState<NewAttendanceDraft | null>(() =>
     readNewAttendanceDraft(organisationId, officerId),
   );
@@ -260,17 +260,8 @@ const CreateAttendanceForm = ({
             </Text>
           </Box>
           <Text>
-            {draft.ownerId
-              ? `You started marking this ${session} but haven't submitted it yet.`
-              : `This ${session} was started on this browser but hasn't been submitted yet.`}
+            {`You started marking this ${session} but haven't submitted it yet.`}
           </Text>
-          {/* Saved before drafts had owners: whoever started it is unknown. */}
-          {!draft.ownerId && (
-            <Text fontSize="sm" color="fg.muted">
-              It was saved before drafts were tied to an account, so anyone
-              signed in here can continue or discard it.
-            </Text>
-          )}
           <Stack gap={3}>
             <Button w="full" size="lg" minH="44px" onClick={resumeDraft}>
               Continue marking
