@@ -31,6 +31,9 @@ import {
   validateEditorFields,
 } from "helpers/memberModelEditor";
 import { LABELS } from "config/presentationLabels";
+import { useConfirm } from "components/ui/confirm-dialog";
+import { useDiscardChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { hasFormChanges } from "helpers/formChanges";
 
 const NO_ERRORS = new Map<string, FieldErrors>();
 
@@ -54,6 +57,17 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   // Initialised once from the loaded model, so a background refetch can't wipe
   // unsaved edits. The parent remounts this form on organisation change.
   const [fields, setFields] = useState<EditorField[]>(() => toEditorFields(savedFields));
+  // Compared as the payload Save would send, so draft React keys, error
+  // display and edit-tracking flags never count as changes, and adding a
+  // field then removing it is no change.
+  const [savedPayload] = useState(() => toModelPayload(fields));
+  const hasUnsavedChanges = hasFormChanges(savedPayload, toModelPayload(fields));
+  const { confirm, confirmDialog } = useConfirm();
+  const releaseLeaveGuard = useDiscardChangesGuard(
+    hasUnsavedChanges,
+    `the ${lowerTerm(LABELS.memberModel(terms))}`,
+    confirm,
+  );
   // Errors appear after the first save attempt, then track every edit.
   const [submitted, setSubmitted] = useState(false);
   const errors = useMemo(
@@ -77,7 +91,6 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
       const model = LABELS.memberModel(terms);
       toast.success(`${model} ${isUpdating ? "updated" : "created"} successfully`);
-      navigate(PROTECTED_PATHS.ADD_MEMBER);
     },
     (error: any) => {
       if (error?.response?.status === 401) return;
@@ -90,16 +103,28 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   );
 
   const handleSubmit = () => {
+    if (isLoading) return;
     setSubmitted(true);
     setServerError(null);
     if (validateEditorFields(fields).size) {
       toast.error("Fix the highlighted fields before saving.");
       return;
     }
-    mutate({
-      url: convertParamsToString(orgRequest.CONFIG_MODEL, { organisationId }),
-      data: { fields: toModelPayload(fields) },
-    });
+    mutate(
+      {
+        url: convertParamsToString(orgRequest.CONFIG_MODEL, { organisationId }),
+        data: { fields: toModelPayload(fields) },
+      },
+      {
+        // Per call, so it only runs while this form is still open: an
+        // officer who left mid-save is never pulled back to Add Member.
+        onSuccess: () => {
+          // Saved: moving on to Add Member must not ask.
+          releaseLeaveGuard();
+          navigate(PROTECTED_PATHS.ADD_MEMBER);
+        },
+      },
+    );
   };
 
   return (
@@ -125,6 +150,9 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
           field={field}
           errors={errors.get(field.reactKey)}
           onChange={(patch) => updateField(field.reactKey, patch)}
+          // Locked while saving: success navigates away, so an edit made
+          // meanwhile would be lost without a question.
+          disabled={isLoading}
           onRemove={
             field.pinned || field.persisted ? undefined : () => removeField(field.reactKey)
           }
@@ -134,6 +162,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         variant="outline"
         colorPalette="blue"
         w="max-content"
+        disabled={isLoading}
         onClick={() => setFields((current) => [...current, newDraftField()])}
       >
         <FaPlusCircle aria-hidden />
@@ -150,10 +179,11 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
         >
           {isUpdating ? "Update" : "Submit"}
         </Button>
-        <Button variant="outline" onClick={() => navigate(-1)}>
+        <Button variant="outline" disabled={isLoading} onClick={() => navigate(-1)}>
           Cancel
         </Button>
       </Stack>
+      {confirmDialog}
     </Stack>
   );
 };

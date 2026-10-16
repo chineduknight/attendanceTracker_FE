@@ -1,6 +1,8 @@
 import { useCallback, useContext, useLayoutEffect, useRef } from "react";
 import { UNSAFE_NavigationContext } from "react-router-dom";
 import type { History, Transition } from "history";
+import type { ConfirmOptions } from "components/ui/confirm-dialog";
+import { discardChangesQuestion } from "helpers/leaveQuestions";
 
 /** Why the officer is leaving, so the question can name the outcome. */
 export type LeaveReason = "navigate" | "logout";
@@ -53,6 +55,9 @@ export const useUnsavedChangesGuard = (
   const { navigator } = useContext(UNSAFE_NavigationContext);
   const unblockRef = useRef<(() => void) | null>(null);
   const releasedRef = useRef(false);
+  // This screen's registered Logout check, so releasing it never clears
+  // another screen's (e.g. a late save reply after the officer moved on).
+  const checkRef = useRef<((reason: LeaveReason) => Promise<boolean>) | null>(null);
 
   // A layout effect, so the block is in place as soon as the change that
   // needs it is on screen: a tap right after it can never slip through.
@@ -81,10 +86,12 @@ export const useUnsavedChangesGuard = (
     unblockRef.current = release;
     const check = (reason: LeaveReason) => confirmLeave(reason);
     activeLeaveCheck = check;
+    checkRef.current = check;
     return () => {
       release();
       if (unblockRef.current === release) unblockRef.current = null;
       if (activeLeaveCheck === check) activeLeaveCheck = null;
+      if (checkRef.current === check) checkRef.current = null;
     };
   }, [navigator, when, confirmLeave, savedLocally]);
 
@@ -92,6 +99,25 @@ export const useUnsavedChangesGuard = (
     releasedRef.current = true;
     unblockRef.current?.();
     unblockRef.current = null;
-    activeLeaveCheck = null;
+    if (activeLeaveCheck === checkRef.current) activeLeaveCheck = null;
+    checkRef.current = null;
   }, []);
 };
+
+/**
+ * The guard for a form whose changes live only in memory: while `dirty`,
+ * leaving or logging out asks "Discard your changes?" about `subject`.
+ * Returns the same `release()` as useUnsavedChangesGuard.
+ */
+export const useDiscardChangesGuard = (
+  dirty: boolean,
+  subject: string,
+  confirm: (options: ConfirmOptions) => Promise<boolean>,
+) =>
+  useUnsavedChangesGuard(
+    dirty,
+    useCallback(
+      (reason: LeaveReason) => confirm(discardChangesQuestion(subject, reason)),
+      [confirm, subject],
+    ),
+  );
