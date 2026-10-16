@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
 import { toast } from "react-toastify";
@@ -16,7 +16,8 @@ import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Welfare from "pages/Welfare";
 import { WelfareFollowUp } from "components/welfare/followUps/types";
-import { toggle } from "test-utils/render";
+import { confirmInDialog, toggle } from "test-utils/render";
+import { askToLogOut, deferred } from "test-utils/leaveGuard";
 import { PermissionKey } from "rbac/permissions";
 
 jest.mock("react-toastify", () => ({
@@ -885,8 +886,10 @@ describe("<Welfare> follow-ups — revision after an edit", () => {
     await editNote("Not saved.");
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Server error"));
-    // The editor stays open on a non-stale failure; the officer cancels it.
+    // The editor stays open on a non-stale failure, with the edit still
+    // unsaved; the officer cancels it and discards the edit.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await confirmInDialog("Discard changes");
     await waitFor(() =>
       expect(screen.queryByLabelText(/^Note/)).not.toBeInTheDocument(),
     );
@@ -1034,5 +1037,111 @@ describe("<Welfare> follow-ups — no side effects", () => {
     expect(callsTo("/analytics")).toHaveLength(0);
     expect(mockPut).not.toHaveBeenCalled();
     expect(mockDelete).not.toHaveBeenCalled();
+  }, 15000);
+});
+
+describe("<Welfare> follow-ups — unsaved changes in the dialog", () => {
+  const MANAGER: PermissionKey[] = [
+    "attendance.view",
+    "welfare.view",
+    "welfare.manage",
+    "members.view",
+  ];
+
+  it("a late save reply after leaving neither closes a newer dialog nor drops its guard", async () => {
+    setOrg({ permissions: MANAGER });
+    serve({ list: listFor([openRecord({ id: "f-open" })]) });
+    const patch = deferred();
+    mockPatch.mockImplementation(() => patch.promise);
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/welfare"]}>
+            <Routes>
+              <Route
+                path="/welfare"
+                element={
+                  <>
+                    <Link to="/elsewhere">Go elsewhere</Link>
+                    <Welfare />
+                  </>
+                }
+              />
+              <Route path="/elsewhere" element={<Link to="/welfare">Back to Welfare</Link>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+    await openFollowUpList();
+
+    // Save an edit, and leave the page while it is in flight.
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText("Go elsewhere"));
+    fireEvent.click(await screen.findByText("Back to Welfare"));
+
+    // A new follow-up with a private note.
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add welfare follow-up" }),
+    );
+    fireEvent.change(await screen.findByLabelText(/^Note/), {
+      target: { value: "Private context." },
+    });
+
+    await act(async () =>
+      patch.resolve({ data: { data: openRecord({ id: "f-open", revision: 2 }) } }),
+    );
+    await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    expect(screen.getByLabelText(/^Note/)).toHaveValue("Private context.");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+
+    const answer = askToLogOut();
+    await confirmInDialog("Keep editing");
+    await expect(answer).resolves.toBe(false);
+    expect(screen.getByLabelText(/^Note/)).toHaveValue("Private context.");
+  }, 15000);
+
+  it("drops a dirty dialog's private note on an organisation switch, without asking", async () => {
+    setOrg({ permissions: MANAGER });
+    serve({ list: listFor([]), org2List: EMPTY_LIST });
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add welfare follow-up" }),
+    );
+    fireEvent.change(await screen.findByLabelText(/^Note/), {
+      target: { value: "Org A private context." },
+    });
+
+    act(() => setOrg({ id: "org2", permissions: MANAGER }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/^Note/)).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Org A private context.")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Org A private context.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    // Its guard went with it: nothing is left to ask about.
+    await expect(askToLogOut()).resolves.toBe(true);
+  }, 15000);
+
+  it("guards an insight follow-up for a manager without members.view", async () => {
+    setOrg({ permissions: ["attendance.view", "welfare.view", "welfare.manage"] });
+    serve({ list: listFor([]) });
+    renderPage();
+    await screen.findByText("Ada Okafor");
+    expect(
+      screen.queryByRole("button", { name: "Add welfare follow-up" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add follow-up" }));
+    fireEvent.change(screen.getByLabelText(/^Note/), { target: { value: "Spoke briefly." } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const asked = await screen.findByRole("alertdialog", { name: "Discard your changes?" });
+    expect(asked).toHaveTextContent("Close without saving them?");
+    fireEvent.click(within(asked).getByRole("button", { name: "Discard changes" }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/^Note/)).not.toBeInTheDocument(),
+    );
+    expect(mockPost).not.toHaveBeenCalled();
   }, 15000);
 });

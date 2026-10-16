@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -6,11 +7,18 @@ import {
   within,
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
+import { BrowserRouter, MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { addDays, format, parseISO } from "date-fns";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
-import { toggle, chooseOption, openOption } from "test-utils/render";
+import { toggle, chooseOption, openOption, confirmInDialog } from "test-utils/render";
+import {
+  askToLogOut,
+  browserWouldAsk,
+  expectEveryControlLocked,
+  openAt,
+} from "test-utils/leaveGuard";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
@@ -155,7 +163,10 @@ const renderDialog = (over: RenderOverrides = {}) => {
   render(
     <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
-        <WelfareFollowUpDialog {...props} />
+        {/* The dialog's leave guard reads the router's history. */}
+        <MemoryRouter>
+          <WelfareFollowUpDialog {...props} />
+        </MemoryRouter>
       </QueryClientProvider>
     </ChakraProvider>,
   );
@@ -514,5 +525,503 @@ describe("WelfareFollowUpDialog — terminology", () => {
     renderDialog();
     expect(screen.getByLabelText(/^Chorister/)).toBeInTheDocument();
     expect(screen.queryByLabelText(/^Member$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("WelfareFollowUpDialog — unsaved changes", () => {
+  const QUESTION =
+    "Your changes to this welfare follow-up haven't been saved. Close without saving them?";
+
+  const editRequest = (
+    over: Partial<WelfareFollowUp> = {},
+  ): WelfareFollowUpDialogRequest => ({
+    mode: "edit",
+    organisationId: "org1",
+    record: { ...OPEN_RECORD, ...over },
+  });
+
+  /**
+   * Renders the dialog on a route reached from another one, so Back has
+   * somewhere to go, with a Back control like the browser's.
+   */
+  const renderOnRoute = (over: RenderOverrides = {}) => {
+    const props = {
+      request: over.request ?? MANUAL_REQUEST,
+      asOf: TODAY,
+      canManageAssignedOfficers: over.canManageAssignedOfficers ?? false,
+      onClose: over.onClose ?? jest.fn(),
+      create: over.create ?? jest.fn(),
+      update: over.update ?? jest.fn(),
+      archive: over.archive ?? jest.fn(),
+      isSaving: over.isSaving ?? false,
+    };
+    const Back = () => {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate(-1)}>Browser back</button>;
+    };
+    const ui = (isSaving: boolean) => (
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/before", "/welfare"]} initialIndex={1}>
+            <Routes>
+              <Route
+                path="/welfare"
+                element={
+                  <>
+                    <Back />
+                    <WelfareFollowUpDialog {...props} isSaving={isSaving} />
+                  </>
+                }
+              />
+              <Route path="/before" element={<div>previous page</div>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>
+    );
+    const view = render(ui(props.isSaving));
+    return { ...props, setSaving: (saving: boolean) => view.rerender(ui(saving)) };
+  };
+
+  const reasonInput = () => screen.getByLabelText(/^Reason/) as HTMLInputElement;
+  const noteInput = () => screen.getByLabelText(/^Note/) as HTMLTextAreaElement;
+  const cancel = () => fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  const formDialog = () => screen.getByRole("dialog", { name: /welfare follow-up/ });
+  // The dialog's own X (a date field's clear button is also named Close).
+  const closeX = () =>
+    within(formDialog())
+      .getAllByRole("button", { name: "Close" })
+      .find((button) => button.getAttribute("data-part") === "close-trigger") as HTMLElement;
+  // Ark registers a dialog's Escape layer just after it opens.
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+  /** The discard question, which must be the only one on screen. */
+  const question = async () => {
+    const asked = await screen.findByRole("alertdialog", { name: "Discard your changes?" });
+    expect(screen.getAllByRole("alertdialog")).toHaveLength(1);
+    expect(asked).toHaveTextContent(QUESTION);
+    return asked;
+  };
+  const closesWithoutAsking = async (onClose: jest.Mock) => {
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByRole("alertdialog", { name: "Discard your changes?" }),
+    ).not.toBeInTheDocument();
+  };
+  const asksBeforeClosing = async (onClose: jest.Mock) => {
+    cancel();
+    await question();
+    expect(onClose).not.toHaveBeenCalled();
+  };
+
+  describe("pristine forms close at once", () => {
+    it.each([
+      ["a manual create", MANUAL_REQUEST],
+      ["an insight create with its prefilled reason", ATTENTION_REQUEST],
+      ["an edit", EDIT_REQUEST],
+    ])("%s", async (_what, request) => {
+      const { onClose } = renderOnRoute({ request, canManageAssignedOfficers: true });
+      // Loaded members and officers are not changes.
+      await waitFor(() => expect(mockGet).toHaveBeenCalled());
+      await settle();
+      expect(browserWouldAsk()).toBe(false);
+      await expect(askToLogOut()).resolves.toBe(true);
+      cancel();
+      await closesWithoutAsking(onClose);
+    });
+
+    it.each([
+      ["Escape", () => fireEvent.keyDown(formDialog(), { key: "Escape" })],
+      ["the X", () => fireEvent.click(closeX())],
+    ])("closes on %s", async (_how, dismiss) => {
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST });
+      await settle();
+      dismiss();
+      await closesWithoutAsking(onClose);
+    });
+
+    it("lets Back leave the page", async () => {
+      renderOnRoute({ request: EDIT_REQUEST });
+      fireEvent.click(screen.getByText("Browser back"));
+      expect(await screen.findByText("previous page")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("every editable field counts, and putting it back clears it", () => {
+    it("the member, but not searching or filtering the picker", async () => {
+      const { onClose } = renderOnRoute({ request: MANUAL_REQUEST });
+      const input = screen.getByLabelText(/^Member/);
+      await waitFor(() => expect(input).not.toBeDisabled());
+      // Typing a search, and leaving it, is not a change.
+      fireEvent.change(input, { target: { value: "Chi" } });
+      fireEvent.change(input, { target: { value: "" } });
+      expect(browserWouldAsk()).toBe(false);
+
+      await pickMember("Chika Obi");
+      await asksBeforeClosing(onClose);
+      await confirmInDialog("Keep editing");
+      expect(screen.getByText("Chika Obi")).toBeInTheDocument();
+    });
+
+    it.each([
+      ["the date", () => fireEvent.change(screen.getByLabelText(/^Date/), { target: { value: "2026-10-01" } }),
+        () => fireEvent.change(screen.getByLabelText(/^Date/), { target: { value: "2026-10-05" } })],
+      ["the reason", () => fireEvent.change(reasonInput(), { target: { value: "Hospital visit" } }),
+        () => fireEvent.change(reasonInput(), { target: { value: "Bereavement" } })],
+      ["the note", () => fireEvent.change(noteInput(), { target: { value: "Visited." } }),
+        () => fireEvent.change(noteInput(), { target: { value: "Called the family." } })],
+      ["keep open", () => toggle(screen.getByLabelText("Keep open for follow-up")),
+        () => toggle(screen.getByLabelText("Keep open for follow-up"))],
+      ["the next date", () => fireEvent.change(screen.getByLabelText(/^Next follow-up date/), { target: { value: "2026-10-20" } }),
+        () => fireEvent.change(screen.getByLabelText(/^Next follow-up date/), { target: { value: "2026-10-12" } })],
+    ])("%s of an edit", async (_field, change, restore) => {
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST });
+      await change();
+      await asksBeforeClosing(onClose);
+      await confirmInDialog("Keep editing");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      await restore();
+      cancel();
+      await closesWithoutAsking(onClose);
+    });
+
+    it("the assignment, from the officer list or Assign to me", async () => {
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST, canManageAssignedOfficers: true });
+      await chooseOption(screen.getByLabelText("Assignment"), "Chairman");
+      await asksBeforeClosing(onClose);
+      await confirmInDialog("Keep editing");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      await chooseOption(screen.getByLabelText("Assignment"), "Welfare II");
+      cancel();
+      await closesWithoutAsking(onClose);
+    });
+
+    it("Assign to me without the officer list", async () => {
+      const { onClose } = renderOnRoute({ request: editRequest({ assignedTo: null }) });
+      fireEvent.click(screen.getByRole("button", { name: "Assign to me" }));
+      await asksBeforeClosing(onClose);
+    });
+
+    it("an insight's prefilled reason is the starting point", async () => {
+      const { onClose } = renderOnRoute({ request: ATTENTION_REQUEST });
+      expect(reasonInput()).toHaveValue("2 consecutive unexplained absences");
+      fireEvent.change(reasonInput(), { target: { value: "Called, all well" } });
+      await asksBeforeClosing(onClose);
+      await confirmInDialog("Keep editing");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      fireEvent.change(reasonInput(), { target: { value: "2 consecutive unexplained absences" } });
+      cancel();
+      await closesWithoutAsking(onClose);
+    });
+
+    it("a next date set while open and then hidden by closing is not a change", async () => {
+      const { onClose } = renderOnRoute({ request: MANUAL_REQUEST });
+      await toggle(screen.getByLabelText("Keep open for follow-up"));
+      fireEvent.change(screen.getByLabelText(/^Next follow-up date/), { target: { value: "2026-12-01" } });
+      await toggle(screen.getByLabelText("Keep open for follow-up"));
+      cancel();
+      await closesWithoutAsking(onClose);
+    });
+
+    it("whitespace the save would trim is not a change", async () => {
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST });
+      fireEvent.change(noteInput(), { target: { value: "Called the family.  " } });
+      cancel();
+      await closesWithoutAsking(onClose);
+    });
+  });
+
+  describe("every way of closing asks once, and the answer is kept", () => {
+    const dirtyEdit = () => {
+      const view = renderOnRoute({ request: EDIT_REQUEST });
+      fireEvent.change(noteInput(), { target: { value: "Visited at home." } });
+      fireEvent.change(reasonInput(), { target: { value: "Hospital visit" } });
+      return view;
+    };
+
+    it.each([
+      ["Cancel", () => cancel()],
+      ["the X", () => fireEvent.click(closeX())],
+      ["Escape", () => fireEvent.keyDown(formDialog(), { key: "Escape" })],
+    ])("%s: Keep editing keeps every value, Discard changes closes without saving", async (_how, dismiss) => {
+      const { onClose, update } = dirtyEdit();
+      await settle();
+      dismiss();
+      const asked = await question();
+      expect(within(asked).getByRole("button", { name: "Keep editing" })).toBeInTheDocument();
+      fireEvent.click(within(asked).getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(formDialog()).toBeInTheDocument();
+      expect(noteInput()).toHaveValue("Visited at home.");
+      expect(reasonInput()).toHaveValue("Hospital visit");
+      expect(onClose).not.toHaveBeenCalled();
+
+      dismiss();
+      await confirmInDialog("Discard changes");
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("a second close request while asking never opens a second question", async () => {
+      const { onClose } = dirtyEdit();
+      cancel();
+      await question();
+      // Another way out while the question is open gets the same question.
+      fireEvent.click(closeX());
+      fireEvent.click(screen.getByText("Browser back"));
+      await question();
+      await confirmInDialog("Keep editing");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(formDialog()).toBeInTheDocument();
+      expect(screen.queryByText("previous page")).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("Back asks; Keep editing stays, Discard changes leaves", async () => {
+      dirtyEdit();
+      fireEvent.click(screen.getByText("Browser back"));
+      await question();
+      await confirmInDialog("Keep editing");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(screen.queryByText("previous page")).not.toBeInTheDocument();
+      expect(noteInput()).toHaveValue("Visited at home.");
+
+      fireEvent.click(screen.getByText("Browser back"));
+      await confirmInDialog("Discard changes");
+      expect(await screen.findByText("previous page")).toBeInTheDocument();
+    });
+
+    it("Logout asks, and Keep editing keeps the edits", async () => {
+      dirtyEdit();
+      let answer = askToLogOut();
+      const asked = await screen.findByRole("alertdialog", { name: "Discard your changes?" });
+      expect(asked).toHaveTextContent("Log out without saving them?");
+      fireEvent.click(within(asked).getByRole("button", { name: "Keep editing" }));
+      await expect(answer).resolves.toBe(false);
+      expect(noteInput()).toHaveValue("Visited at home.");
+
+      answer = askToLogOut();
+      await confirmInDialog("Discard and log out");
+      await expect(answer).resolves.toBe(true);
+    });
+
+    it("the browser asks before a reload only while there are changes", () => {
+      // Only browser history adds the reload prompt.
+      openAt("/welfare");
+      render(
+        <ChakraProvider value={system}>
+          <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+              <WelfareFollowUpDialog
+                request={EDIT_REQUEST}
+                asOf={TODAY}
+                canManageAssignedOfficers={false}
+                onClose={jest.fn()}
+                create={jest.fn()}
+                update={jest.fn()}
+                archive={jest.fn()}
+                isSaving={false}
+              />
+            </BrowserRouter>
+          </QueryClientProvider>
+        </ChakraProvider>,
+      );
+      expect(browserWouldAsk()).toBe(false);
+      fireEvent.change(noteInput(), { target: { value: "Visited at home." } });
+      expect(browserWouldAsk()).toBe(true);
+      fireEvent.change(noteInput(), { target: { value: "Called the family." } });
+      expect(browserWouldAsk()).toBe(false);
+    });
+
+    it("a tap on the backdrop asks too", async () => {
+      const { onClose } = dirtyEdit();
+      await settle();
+      // eslint-disable-next-line testing-library/no-node-access
+      const backdrop = document.querySelector('[data-part="backdrop"]') as HTMLElement;
+      fireEvent.pointerDown(backdrop);
+      fireEvent.pointerUp(backdrop);
+      fireEvent.click(backdrop);
+      await question();
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Focus returning outside the dialog as the question closes is not a
+      // second request to close.
+      await confirmInDialog("Keep editing");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      fireEvent.focusIn(document.body);
+      await settle();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(noteInput()).toHaveValue("Visited at home.");
+    });
+
+    it("never puts the note in the question or in browser storage", async () => {
+      const setItem = jest.spyOn(Storage.prototype, "setItem");
+      dirtyEdit();
+      cancel();
+      const asked = await question();
+      expect(asked).not.toHaveTextContent("Visited at home.");
+      expect(
+        setItem.mock.calls.some(([, value]) => String(value).includes("Visited at home.")),
+      ).toBe(false);
+      setItem.mockRestore();
+    });
+  });
+
+  describe("saving", () => {
+    it("asks again after failed validation, with the entries kept", async () => {
+      const { onClose, create } = renderOnRoute({ request: MANUAL_REQUEST });
+      fireEvent.change(noteInput(), { target: { value: "No reason yet." } });
+      fireEvent.click(saveButton());
+      expect(create).not.toHaveBeenCalled();
+      expect(screen.getByText("Reason is required.")).toBeInTheDocument();
+      await asksBeforeClosing(onClose);
+    });
+
+    it("keeps the form and the question after a failed save", async () => {
+      const update = jest.fn((_id, _payload, callbacks) =>
+        callbacks?.onError?.({ response: { status: 500 } }),
+      );
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST, update });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(noteInput()).toHaveValue("Visited.");
+      await asksBeforeClosing(onClose);
+    });
+
+    it.each([
+      ["create", MANUAL_REQUEST],
+      ["update", EDIT_REQUEST],
+    ])("closes after a successful %s without asking", async (kind, request) => {
+      const succeed = jest.fn((...args: unknown[]) =>
+        (args[args.length - 1] as { onSuccess?: () => void })?.onSuccess?.(),
+      );
+      const { onClose } = renderOnRoute({ request, create: succeed, update: succeed });
+      if (kind === "create") await pickMember("Ada Okafor");
+      fireEvent.change(reasonInput(), { target: { value: "Hospital visit" } });
+      fireEvent.click(screen.getByRole("button", { name: kind === "create" ? "Save follow-up" : "Save changes" }));
+      await closesWithoutAsking(onClose);
+    });
+
+    it.each([409, 404])("a stale %i closes with no discard question", async (status) => {
+      const update = jest.fn((_id, _payload, callbacks) =>
+        callbacks?.onError?.({ response: { status } }),
+      );
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST, update });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await closesWithoutAsking(onClose);
+    });
+  });
+
+  describe("archive", () => {
+    const openArchive = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Archive record" }));
+      return screen.findByRole("alertdialog", { name: "Archive record" });
+    };
+
+    it("says archiving won't save unsaved edits, and Cancel keeps them", async () => {
+      const { onClose, archive } = renderOnRoute({ request: EDIT_REQUEST });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      const confirm = await openArchive();
+      expect(confirm).toHaveTextContent("Your unsaved changes to this follow-up will not be saved.");
+      fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(archive).not.toHaveBeenCalled();
+      expect(noteInput()).toHaveValue("Visited.");
+      await asksBeforeClosing(onClose);
+    });
+
+    it("doesn't mention edits when there are none", async () => {
+      renderOnRoute({ request: EDIT_REQUEST });
+      expect(await openArchive()).not.toHaveTextContent("unsaved");
+    });
+
+    it("closes after a confirmed archive with no discard question", async () => {
+      const archive = jest.fn((_id, _rev, callbacks) => callbacks?.onSuccess?.());
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST, archive });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      fireEvent.click(within(await openArchive()).getByRole("button", { name: "Yes, archive" }));
+      await closesWithoutAsking(onClose);
+      expect(toast.success).toHaveBeenCalledWith("Follow-up archived");
+    });
+
+    it("keeps the form and its edits when an archive fails", async () => {
+      const archive = jest.fn((_id, _rev, callbacks) =>
+        callbacks?.onError?.({ response: { status: 500 } }),
+      );
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST, archive });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      const confirm = await openArchive();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Yes, archive" }));
+      expect(archive).toHaveBeenCalledTimes(1);
+      fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(onClose).not.toHaveBeenCalled();
+      expect(noteInput()).toHaveValue("Visited.");
+    });
+
+    it("a stale archive closes with no discard question", async () => {
+      const archive = jest.fn((_id, _rev, callbacks) =>
+        callbacks?.onError?.({ response: { status: 404 } }),
+      );
+      const { onClose } = renderOnRoute({ request: EDIT_REQUEST, archive });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      fireEvent.click(within(await openArchive()).getByRole("button", { name: "Yes, archive" }));
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("alertdialog", { name: "Discard your changes?" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("while a save or archive is in flight", () => {
+    it("locks every control and ignores Escape, X and a second save", async () => {
+      const update = jest.fn();
+      const { onClose, setSaving } = renderOnRoute({ request: EDIT_REQUEST, update, canManageAssignedOfficers: true });
+      fireEvent.change(noteInput(), { target: { value: "Visited." } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(update).toHaveBeenCalledTimes(1);
+      setSaving(true);
+
+      expect(expectEveryControlLocked(formDialog())).toBeGreaterThan(8);
+      await settle();
+      fireEvent.keyDown(formDialog(), { key: "Escape" });
+      fireEvent.click(closeX());
+      await settle();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(noteInput()).toHaveValue("Visited.");
+    });
+
+    it("keeps the archive confirmation open while the archive runs", async () => {
+      const archive = jest.fn();
+      const { setSaving } = renderOnRoute({ request: EDIT_REQUEST, archive });
+      fireEvent.click(screen.getByRole("button", { name: "Archive record" }));
+      const confirm = await screen.findByRole("alertdialog", { name: "Archive record" });
+      fireEvent.click(within(confirm).getByRole("button", { name: "Yes, archive" }));
+      setSaving(true);
+      expect(within(confirm).getByRole("button", { name: "Cancel" })).toBeDisabled();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Close" }));
+      await settle();
+      // Still open, not merely still animating closed.
+      expect(confirm).toHaveAttribute("data-state", "open");
+      expect(screen.queryByRole("alertdialog", { name: "Discard your changes?" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("names the member with the organisation's term and still asks", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "org1",
+        owner: "owner-1",
+        terminology: { ...DEFAULT_TERMINOLOGY, memberSingular: "Chorister", memberPlural: "Choristers" },
+      },
+    });
+    const { onClose } = renderOnRoute({ request: MANUAL_REQUEST });
+    const input = screen.getByLabelText(/^Chorister/);
+    await waitFor(() => expect(input).not.toBeDisabled());
+    fireEvent.change(input, { target: { value: "Ada" } });
+    fireEvent.click(await screen.findByRole("option", { name: "Ada Okafor" }));
+    await asksBeforeClosing(onClose);
   });
 });
