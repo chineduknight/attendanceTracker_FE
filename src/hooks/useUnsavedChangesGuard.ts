@@ -1,6 +1,8 @@
 import { useCallback, useContext, useLayoutEffect, useRef } from "react";
 import { UNSAFE_NavigationContext } from "react-router-dom";
 import type { History, Transition } from "history";
+import type { ConfirmOptions } from "components/ui/confirm-dialog";
+import { discardChangesQuestion } from "helpers/leaveQuestions";
 
 /** Why the officer is leaving, so the question can name the outcome. */
 export type LeaveReason = "navigate" | "logout";
@@ -95,3 +97,21 @@ export const useUnsavedChangesGuard = (
     activeLeaveCheck = null;
   }, []);
 };
+
+/**
+ * The guard for a form whose changes live only in memory: while `dirty`,
+ * leaving or logging out asks "Discard your changes?" about `subject`.
+ * Returns the same `release()` as useUnsavedChangesGuard.
+ */
+export const useDiscardChangesGuard = (
+  dirty: boolean,
+  subject: string,
+  confirm: (options: ConfirmOptions) => Promise<boolean>,
+) =>
+  useUnsavedChangesGuard(
+    dirty,
+    useCallback(
+      (reason: LeaveReason) => confirm(discardChangesQuestion(subject, reason)),
+      [confirm, subject],
+    ),
+  );

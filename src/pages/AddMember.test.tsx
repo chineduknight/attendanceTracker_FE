@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
@@ -10,7 +10,15 @@ import AddMember from "pages/AddMember";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { queryKeys } from "services/api/queryKeys";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
-import { toggle, confirmInDialog, shownValue } from "test-utils/render";
+import { toggle, confirmInDialog, shownValue, chooseOption } from "test-utils/render";
+import {
+  ELSEWHERE,
+  LeaveLink,
+  askToLogOut,
+  browserWouldAsk,
+  leave,
+  openAt,
+} from "test-utils/leaveGuard";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -413,5 +421,275 @@ describe("<AddMember> loading, dates and errors", () => {
     mockGet.mockImplementation(() => Promise.resolve({ data: { data: MODEL } }));
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByLabelText(/Full Name/)).toBeInTheDocument();
+  });
+});
+
+describe("<AddMember> leaving with unsaved changes", () => {
+  // Every kind of input the member model can generate.
+  const FULL_MODEL = {
+    fields: [
+      ...MODEL.fields,
+      { _id: "f-bap", name: "baptised", label: "Baptised", type: "checkbox", required: false },
+      { _id: "f-dob", name: "dob", label: "Date of Birth", type: "date", required: false },
+      { _id: "f-phone", name: "phone", label: "Phone", type: "tel", required: false },
+    ],
+  };
+  const ADA_FULL = {
+    id: "m1", name: "Ada", part: "Alto", baptised: true, dob: "1990-03-04T00:00:00.000Z", phone: "0801",
+  };
+  const mockDelete: jest.Mock = mockedAxios.delete;
+  const serve = (member: Record<string, unknown> = ADA_FULL, model = FULL_MODEL) =>
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? model : member } }),
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", isOwner: true, permissions: [] },
+    });
+    serve();
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+    mockDelete.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  const routes = (
+    <Routes>
+      {[PROTECTED_PATHS.ADD_MEMBER, PROTECTED_PATHS.UPDATE_MEMBER].map((path) => (
+        <Route
+          key={path}
+          path={path}
+          element={
+            <>
+              <LeaveLink />
+              <AddMember />
+            </>
+          }
+        />
+      ))}
+      <Route path={ELSEWHERE} element={<div>elsewhere</div>} />
+      <Route path={PROTECTED_PATHS.VIEW_MEMBER} element={<div>members list</div>} />
+    </Routes>
+  );
+  // Opened from another screen, so Cancel (Back) has somewhere to go.
+  const renderWithExit = (path: string) =>
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={[ELSEWHERE, path]} initialIndex={1}>
+            {routes}
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+  const nameInput = () => screen.getByLabelText(/Full Name/) as HTMLInputElement;
+  const loadedAda = async () => {
+    renderWithExit("/member/update/m1");
+    await waitFor(() => expect(nameInput().value).toBe("Ada"));
+    await waitFor(() => expect(shownValue(screen.getByLabelText("Voice Part"))).toBe("Alto"));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+  };
+  const cancel = () => fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  const leftWithoutAsking = async (where = "elsewhere") => {
+    expect(await screen.findByText(where)).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  };
+  const asks = async () =>
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+
+  it("leaves a new, untouched form without asking", async () => {
+    renderWithExit(PROTECTED_PATHS.ADD_MEMBER);
+    await screen.findByLabelText(/Full Name/);
+    await expect(askToLogOut()).resolves.toBe(true);
+    cancel();
+    await leftWithoutAsking();
+  });
+
+  it("does not count loading an existing member as a change", async () => {
+    await loadedAda();
+    expect(screen.getByRole("checkbox", { name: "Baptised" })).toBeChecked();
+    cancel();
+    await leftWithoutAsking();
+  });
+
+  it("asks before leaving a new member, naming it with the member term", async () => {
+    useGlobalStore.setState({
+      organisation: { ...useGlobalStore.getState().organisation, terminology: SCHOOL_TERMS },
+    });
+    renderWithExit(PROTECTED_PATHS.ADD_MEMBER);
+    fireEvent.change(await screen.findByLabelText(/Full Name/), { target: { value: "Bola" } });
+    leave();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent(
+      "Your changes to this new student haven't been saved. Leave without saving them?",
+    );
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(nameInput().value).toBe("Bola");
+  });
+
+  it.each([
+    ["text", () => fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } })],
+    ["a custom field", () =>
+      fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "0802" } })],
+    ["a date", () =>
+      fireEvent.change(screen.getByLabelText("Date of Birth"), { target: { value: "1991-03-04" } })],
+    ["a checkbox", () => toggle(screen.getByRole("checkbox", { name: "Baptised" }))],
+    ["a dropdown", () => chooseOption(screen.getByLabelText("Voice Part"), "Soprano")],
+  ])("asks after a change to %s", async (_what, change) => {
+    await loadedAda();
+    await change();
+    cancel();
+    await asks();
+  });
+
+  it("keeps every edit on Keep editing, then leaves on Discard changes", async () => {
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "0802" } });
+    await toggle(screen.getByRole("checkbox", { name: "Baptised" }));
+    await chooseOption(screen.getByLabelText("Voice Part"), "Soprano");
+
+    cancel();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Your changes to this member haven't been saved.");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(nameInput().value).toBe("Ada Lovelace");
+    expect(screen.getByLabelText("Phone")).toHaveValue("0802");
+    expect(screen.getByRole("checkbox", { name: "Baptised" })).not.toBeChecked();
+    expect(shownValue(screen.getByLabelText("Voice Part"))).toBe("Soprano");
+
+    cancel();
+    await confirmInDialog("Discard changes");
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("stops asking once every change is put back", async () => {
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    await toggle(screen.getByRole("checkbox", { name: "Baptised" }));
+    await chooseOption(screen.getByLabelText("Voice Part"), "Soprano");
+    fireEvent.change(nameInput(), { target: { value: "Ada" } });
+    await toggle(screen.getByRole("checkbox", { name: "Baptised" }));
+    await chooseOption(screen.getByLabelText("Voice Part"), "Alto");
+    cancel();
+    await leftWithoutAsking();
+  });
+
+  it("asks before Logout; Keep editing keeps the edit", async () => {
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    let answer = askToLogOut();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Log out without saving them?");
+    await expect(answer).resolves.toBe(false);
+    expect(nameInput().value).toBe("Ada Lovelace");
+
+    answer = askToLogOut();
+    await confirmInDialog("Discard and log out");
+    await expect(answer).resolves.toBe(true);
+  });
+
+  it("protects reloading the tab only while there are changes", async () => {
+    openAt("/member/update/m1");
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>{routes}</BrowserRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+    await waitFor(() => expect(nameInput().value).toBe("Ada"));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(browserWouldAsk()).toBe(false);
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    expect(browserWouldAsk()).toBe(true);
+  });
+
+  it("keeps the form and its question when the submit confirmation is cancelled", async () => {
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await confirmInDialog("Cancel");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(nameInput().value).toBe("Ada Lovelace");
+    cancel();
+    await asks();
+  });
+
+  it("goes to the list after a successful save without asking", async () => {
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    const [, body] = await confirmSubmit();
+    expect(body).toMatchObject({ name: "Ada Lovelace", memberId: "m1" });
+    await leftWithoutAsking("members list");
+  });
+
+  it("keeps the edits and keeps asking when the save fails", async () => {
+    mockPost.mockImplementation(() =>
+      Promise.reject({ response: { status: 500, data: { error: "Server down" } } }),
+    );
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    await confirmSubmit();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(screen.queryByText("members list")).not.toBeInTheDocument();
+    expect(nameInput().value).toBe("Ada Lovelace");
+    cancel();
+    await asks();
+  });
+
+  it("keeps the edits and keeps asking across a background refetch", async () => {
+    await loadedAda();
+    fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+    serve({ ...ADA_FULL, name: "Renamed elsewhere" });
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: queryKeys.member("org1", "m1") });
+      await queryClient.refetchQueries({ queryKey: queryKeys.memberModel("org1") });
+    });
+    expect(nameInput().value).toBe("Ada Lovelace");
+    cancel();
+    await asks();
+  });
+
+  describe("Delete", () => {
+    const deleteMember = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete Member" }));
+      await confirmInDialog("Delete");
+    };
+
+    it("leaves for the list after a successful delete with no second question", async () => {
+      await loadedAda();
+      fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+      await deleteMember();
+      await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(1));
+      await leftWithoutAsking("members list");
+    });
+
+    it("keeps the form and its question when the delete fails", async () => {
+      mockDelete.mockImplementation(() =>
+        Promise.reject({ response: { status: 500, data: { error: "Cannot delete" } } }),
+      );
+      await loadedAda();
+      fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+      await deleteMember();
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Cannot delete"));
+      expect(nameInput().value).toBe("Ada Lovelace");
+      cancel();
+      await asks();
+    });
+
+    it("keeps the form and its question when the delete is cancelled", async () => {
+      await loadedAda();
+      fireEvent.change(nameInput(), { target: { value: "Ada Lovelace" } });
+      fireEvent.click(screen.getByRole("button", { name: "Delete Member" }));
+      await confirmInDialog("Cancel");
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(mockDelete).not.toHaveBeenCalled();
+      cancel();
+      await asks();
+    });
   });
 });

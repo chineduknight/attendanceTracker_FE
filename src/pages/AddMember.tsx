@@ -29,6 +29,8 @@ import { useTerms } from "hooks/useOrgPresentation";
 import { useMemberModel } from "hooks/useMemberModel";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { LABELS } from "config/presentationLabels";
+import { useDiscardChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { hasFormChanges, snapshotOf } from "helpers/formChanges";
 
 interface FormData {
   [fieldName: string]: string | boolean;
@@ -63,7 +65,7 @@ const AddOrUpdateMember = () => {
   const model = useMemberModel(org.id);
   const membersModel = model.fields as MemberModelField[];
 
-  const { register, control, handleSubmit, reset } = useForm<FormData>();
+  const { register, control, handleSubmit, reset, watch, getValues } = useForm<FormData>();
   // Seed the form once per member, from the first response fetched after
   // this page opened. A cached copy (served first, then refetched) may
   // predate the officer's last save; editing it would write old values back.
@@ -99,6 +101,36 @@ const AddOrUpdateMember = () => {
     setSeed({ memberId: params.memberId, values });
   }, [freshMember, params.memberId, model.hasData, membersModel, reset, seededFor]);
 
+  const memberLabel = lowerTerm(terms.memberSingular);
+  // Until the form is seeded from a fresh response: an error (even with a
+  // cached copy, which may be out of date) or the loader. After that, a
+  // background refetch, failed or not, keeps the form and the officer's edits.
+  const seeded = seededFor === params.memberId;
+
+  // The form as first shown: the loaded member (or a blank new one) after
+  // every field has mounted with its default, so neither loading nor an
+  // option's preselected first value counts as a change. Taken once per
+  // form; refetches of the member or the model never move it.
+  const formShown =
+    model.hasData && membersModel.length > 0 && (!isUpdating || seeded);
+  const formKey = formShown ? params.memberId ?? "new" : null;
+  const [baseline, setBaseline] = useState<{ key: string; values: FormData } | null>(null);
+  useEffect(() => {
+    if (formKey && baseline?.key !== formKey) {
+      setBaseline({ key: formKey, values: snapshotOf(getValues()) });
+    }
+  }, [formKey, baseline, getValues]);
+  const formValues = watch();
+  const hasUnsavedChanges =
+    formKey !== null &&
+    baseline?.key === formKey &&
+    hasFormChanges(baseline.values, formValues);
+  const releaseLeaveGuard = useDiscardChangesGuard(
+    hasUnsavedChanges,
+    isUpdating ? `this ${memberLabel}` : `this new ${memberLabel}`,
+    confirm,
+  );
+
   const onSuccess = () => {
     toast.success(
       isUpdating
@@ -111,6 +143,8 @@ const AddOrUpdateMember = () => {
     if (params.memberId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
     }
+    // Saved: moving on to the list must not ask.
+    releaseLeaveGuard();
     navigate(PROTECTED_PATHS.VIEW_MEMBER);
   };
 
@@ -140,6 +174,9 @@ const AddOrUpdateMember = () => {
       toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       queryClient.removeQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
+      // Deleted after its own confirmation: there is nothing left to discard.
+      // A failed delete keeps the form and its guard.
+      releaseLeaveGuard();
       navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
@@ -265,11 +302,6 @@ const AddOrUpdateMember = () => {
     });
   };
 
-  const memberLabel = lowerTerm(terms.memberSingular);
-  // Until the form is seeded from a fresh response: an error (even with a
-  // cached copy, which may be out of date) or the loader. After that, a
-  // background refetch, failed or not, keeps the form and the officer's edits.
-  const seeded = seededFor === params.memberId;
   const memberFailed = isUpdating && !seeded && memberQuery.isError;
   const memberLoading = isUpdating && !seeded && !memberFailed;
   const modelFailed = model.isError && !model.hasData;

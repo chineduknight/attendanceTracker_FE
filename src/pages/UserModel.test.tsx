@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import { system } from "styles/theme";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
@@ -11,7 +11,15 @@ import UserModel from "pages/UserModel";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { MemberModelField } from "helpers/memberFields";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
-import { generatedCss, toggle, chooseOption } from "test-utils/render";
+import { generatedCss, toggle, chooseOption, confirmInDialog } from "test-utils/render";
+import {
+  ELSEWHERE,
+  LeaveLink,
+  askToLogOut,
+  browserWouldAsk,
+  leave,
+  openAt,
+} from "test-utils/leaveGuard";
 
 jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn() } }));
 jest.mock("services/api", () => ({
@@ -321,3 +329,240 @@ describe("<UserModel>", () => {
   });
 });
 
+describe("<UserModel> leaving with unsaved changes", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    selectOrg("orgA");
+    mockGet.mockImplementation((url: string) => {
+      const org = url.split("/")[2];
+      return Promise.resolve({ data: { data: { fields: models[org] ?? [] } } });
+    });
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: "ok" } }));
+  });
+
+  // Opened from another screen, so Cancel (Back) has somewhere to go.
+  const routes = (
+    <Routes>
+      <Route
+        path="/user-model"
+        element={
+          <>
+            <LeaveLink />
+            <UserModel />
+          </>
+        }
+      />
+      <Route path={ELSEWHERE} element={<div>elsewhere</div>} />
+      <Route path={PROTECTED_PATHS.ADD_MEMBER} element={<div>add member page</div>} />
+    </Routes>
+  );
+  const renderWithExit = () =>
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={[ELSEWHERE, "/user-model"]} initialIndex={1}>
+            {routes}
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+  const cancel = () => fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  const leftWithoutAsking = async () => {
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  };
+
+  it("leaves from Cancel and logs out without asking while untouched", async () => {
+    renderWithExit();
+    await waitFor(() => card("Part"));
+    await expect(askToLogOut()).resolves.toBe(true);
+    cancel();
+    await leftWithoutAsking();
+  });
+
+  it("does not count a brand-new model's pinned name field as a change", async () => {
+    models.orgC = [];
+    selectOrg("orgC");
+    renderWithExit();
+    await waitFor(() => card("Name"));
+    leave();
+    await leftWithoutAsking();
+  });
+
+  it("asks on Cancel after a relabel, keeps it on Keep editing, then discards", async () => {
+    renderWithExit();
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Voice Part" },
+    });
+    cancel();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent(
+      "Your changes to the member model haven't been saved. Leave without saving them?",
+    );
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(screen.getByDisplayValue("Voice Part")).toBeInTheDocument();
+
+    cancel();
+    await confirmInDialog("Discard changes");
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+  });
+
+  it("keeps a new field's label, key, type and options on Keep editing", async () => {
+    renderWithExit();
+    await waitFor(() => card("Part"));
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    const draft = card("New field");
+    fireEvent.change(labelInput(draft), { target: { value: "Voice Range" } });
+    fireEvent.change(keyInput(draft), { target: { value: "range" } });
+    await chooseOption(within(draft).getByLabelText("Field type"), "option");
+    fireEvent.change(within(draft).getByLabelText(/Options/), { target: { value: "High, Low" } });
+
+    leave();
+    await confirmInDialog("Keep editing");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    const kept = card("Voice Range");
+    expect(labelInput(kept).value).toBe("Voice Range");
+    expect(keyInput(kept).value).toBe("range");
+    expect(within(kept).getByLabelText(/Options/)).toHaveValue("High, Low");
+  });
+
+  it.each([
+    ["adding a field", async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    }],
+    ["a saved field's options", async () => {
+      fireEvent.change(within(card("Part")).getByLabelText(/Options/), {
+        target: { value: "Soprano, Alto, Tenor" },
+      });
+    }],
+    ["Required", async () => {
+      await toggle(within(card("Part")).getByRole("checkbox", { name: "Required" }));
+    }],
+  ])("counts %s as a change", async (_what, change) => {
+    renderWithExit();
+    await waitFor(() => card("Part"));
+    await change();
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+  });
+
+  it("is clean again after adding a field and removing it, or restoring a label", async () => {
+    renderWithExit();
+    const part = await waitFor(() => card("Part"));
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.change(labelInput(card("New field")), { target: { value: "Shift" } });
+    fireEvent.click(within(card("Shift")).getByRole("button", { name: "Remove" }));
+    fireEvent.change(labelInput(part), { target: { value: "Voice Part" } });
+    fireEvent.change(labelInput(part), { target: { value: "Part" } });
+    leave();
+    await leftWithoutAsking();
+  });
+
+  it("asks before Logout; Keep editing keeps the edit", async () => {
+    renderWithExit();
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Voice Part" },
+    });
+    let answer = askToLogOut();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Log out without saving them?");
+    await expect(answer).resolves.toBe(false);
+    expect(screen.getByDisplayValue("Voice Part")).toBeInTheDocument();
+
+    answer = askToLogOut();
+    await confirmInDialog("Discard and log out");
+    await expect(answer).resolves.toBe(true);
+  });
+
+  it("protects reloading the tab only while there are changes", async () => {
+    openAt("/user-model");
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>{routes}</BrowserRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+    const part = await waitFor(() => card("Part"));
+    expect(browserWouldAsk()).toBe(false);
+    fireEvent.change(labelInput(part), { target: { value: "Voice Part" } });
+    expect(browserWouldAsk()).toBe(true);
+    fireEvent.change(labelInput(part), { target: { value: "Part" } });
+    expect(browserWouldAsk()).toBe(false);
+  });
+
+  it("moves on to Add Member after a successful save without asking", async () => {
+    renderWithExit();
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Voice Part" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(await screen.findByText("add member page")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["the backend rejects it", "Shift", () =>
+      mockPost.mockImplementation(() =>
+        Promise.reject({ response: { status: 422, data: { error: "No" } } }),
+      )],
+    // A new field without a label fails local validation and never posts.
+    ["local validation blocks it", "", () => undefined],
+  ])("keeps asking when Save fails because %s", async (_why, label, arrange) => {
+    arrange();
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    renderWithExit();
+    await waitFor(() => card("Part"));
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.change(labelInput(card("New field")), { target: { value: label } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+    (console.error as jest.Mock).mockRestore();
+  });
+
+  it("keeps asking, with the edit intact, after a background refetch", async () => {
+    renderWithExit();
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Voice Part" },
+    });
+    models.orgA = [...ORG_A, { _id: "a-new", name: "new", label: "Added elsewhere", type: "text", required: false }];
+    await act(() => queryClient.refetchQueries({ queryKey: queryKeys.memberModel("orgA") }));
+    models.orgA = ORG_A;
+    expect(screen.getByDisplayValue("Voice Part")).toBeInTheDocument();
+    leave();
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("drops organisation A's unsaved changes when switching to B", async () => {
+    renderWithExit();
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Unsaved A label" },
+    });
+    act(() => selectOrg("orgB"));
+    await waitFor(() => card("Section"));
+    leave();
+    await leftWithoutAsking();
+  });
+
+  it("names the model with the organisation's member term", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...EMPTY_ORG,
+        id: "orgA",
+        permissions: [],
+        terminology: { ...DEFAULT_TERMINOLOGY, memberSingular: "Student", memberPlural: "Students" },
+      },
+    });
+    renderWithExit();
+    fireEvent.change(labelInput(await waitFor(() => card("Part"))), {
+      target: { value: "Voice Part" },
+    });
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Your changes to the student model haven't been saved.",
+    );
+  });
+});

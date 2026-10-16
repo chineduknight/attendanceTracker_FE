@@ -31,6 +31,9 @@ import {
   validateEditorFields,
 } from "helpers/memberModelEditor";
 import { LABELS } from "config/presentationLabels";
+import { useConfirm } from "components/ui/confirm-dialog";
+import { useDiscardChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { hasFormChanges } from "helpers/formChanges";
 
 const NO_ERRORS = new Map<string, FieldErrors>();
 
@@ -54,6 +57,17 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
   // Initialised once from the loaded model, so a background refetch can't wipe
   // unsaved edits. The parent remounts this form on organisation change.
   const [fields, setFields] = useState<EditorField[]>(() => toEditorFields(savedFields));
+  // Compared as the payload Save would send, so draft React keys, error
+  // display and edit-tracking flags never count as changes, and adding a
+  // field then removing it is no change.
+  const [savedPayload] = useState(() => toModelPayload(fields));
+  const hasUnsavedChanges = hasFormChanges(savedPayload, toModelPayload(fields));
+  const { confirm, confirmDialog } = useConfirm();
+  const releaseLeaveGuard = useDiscardChangesGuard(
+    hasUnsavedChanges,
+    `the ${lowerTerm(LABELS.memberModel(terms))}`,
+    confirm,
+  );
   // Errors appear after the first save attempt, then track every edit.
   const [submitted, setSubmitted] = useState(false);
   const errors = useMemo(
@@ -77,6 +91,8 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.members(organisationId) });
       const model = LABELS.memberModel(terms);
       toast.success(`${model} ${isUpdating ? "updated" : "created"} successfully`);
+      // Saved: moving on to Add Member must not ask.
+      releaseLeaveGuard();
       navigate(PROTECTED_PATHS.ADD_MEMBER);
     },
     (error: any) => {
@@ -154,6 +170,7 @@ const ModelForm = ({ organisationId, savedFields }: ModelFormProps) => {
           Cancel
         </Button>
       </Stack>
+      {confirmDialog}
     </Stack>
   );
 };

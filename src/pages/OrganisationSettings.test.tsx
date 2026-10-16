@@ -1,6 +1,6 @@
 import { act, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { render, toggle } from "test-utils/render";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { confirmInDialog, render, toggle } from "test-utils/render";
+import { BrowserRouter, MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
@@ -14,6 +14,14 @@ import { isAttendanceEligibilityEnabled } from "helpers/attendanceEligibility";
 import { DEFAULT_ATTENDANCE_STATUSES } from "helpers/attendanceStatuses";
 import { effectiveAttendanceShareTemplate } from "helpers/attendanceShareTemplate";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
+import {
+  ELSEWHERE,
+  LeaveLink,
+  askToLogOut,
+  browserWouldAsk,
+  leave,
+  openAt,
+} from "test-utils/leaveGuard";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -1022,6 +1030,242 @@ describe("<OrganisationSettings>", () => {
       const org = useGlobalStore.getState().organisation;
       expect(org.id).toBe("org2");
       expect(org.attendanceShareTemplate).toBe("choir");
+    });
+  });
+  describe("leaving with unsaved changes", () => {
+    const manager = (id = "org1") =>
+      setOrg({ id, permissions: ["settings.view", "settings.manage"] });
+    const renderWithExit = () => {
+      openAt("/settings");
+      return render(
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <Routes>
+              <Route
+                path="/settings"
+                element={
+                  <>
+                    <LeaveLink />
+                    <OrganisationSettings />
+                  </>
+                }
+              />
+              <Route path={ELSEWHERE} element={<div>elsewhere</div>} />
+            </Routes>
+          </BrowserRouter>
+        </QueryClientProvider>,
+      );
+    };
+    const nameInput = () => screen.getByLabelText(/Organisation name/) as HTMLInputElement;
+    const addStatus = (label: string) => {
+      fireEvent.change(screen.getByLabelText("New status label"), { target: { value: label } });
+      fireEvent.click(screen.getByRole("button", { name: "Add status" }));
+    };
+    const leavesWithoutAsking = async () => {
+      leave();
+      expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    };
+    const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+    it("leaves, logs out and reloads without asking while untouched", async () => {
+      manager();
+      renderWithExit();
+      await screen.findByLabelText(/Organisation name/);
+      await settle();
+      expect(browserWouldAsk()).toBe(false);
+      await expect(askToLogOut()).resolves.toBe(true);
+      await leavesWithoutAsking();
+    });
+
+    it("asks before leaving several changes, keeps every one on Keep editing, then discards", async () => {
+      manager();
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "VOB Choir Lagos" },
+      });
+      fireEvent.change(screen.getByLabelText("Max attendance edits"), { target: { value: "7" } });
+      addStatus("Late");
+      expect(browserWouldAsk()).toBe(true);
+
+      leave();
+      const dialog = await confirmInDialog("Keep editing");
+      expect(dialog).toHaveTextContent("Discard your changes?");
+      expect(dialog).toHaveTextContent(
+        "Your changes to these settings haven't been saved. Leave without saving them?",
+      );
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(screen.queryByText("elsewhere")).not.toBeInTheDocument();
+      expect(nameInput()).toHaveValue("VOB Choir Lagos");
+      expect(screen.getByLabelText("Max attendance edits")).toHaveValue(7);
+      expect(screen.getByTestId("status-row-late")).toBeInTheDocument();
+
+      leave();
+      await confirmInDialog("Discard changes");
+      expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+      expect(mockPut).not.toHaveBeenCalled();
+    });
+
+    it("asks before Logout, and Keep editing keeps the officer signed in with the edits", async () => {
+      manager();
+      useGlobalStore.setState({
+        user: { ...useGlobalStore.getState().user, token: "t1" },
+      });
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "Renamed" },
+      });
+
+      let answer = askToLogOut();
+      const dialog = await confirmInDialog("Keep editing");
+      expect(dialog).toHaveTextContent("Log out without saving them?");
+      await expect(answer).resolves.toBe(false);
+      expect(useGlobalStore.getState().user.token).toBe("t1");
+      expect(nameInput()).toHaveValue("Renamed");
+
+      answer = askToLogOut();
+      await confirmInDialog("Discard and log out");
+      await expect(answer).resolves.toBe(true);
+    });
+
+    it.each([
+      ["a status label", () => {
+        fireEvent.change(within(screen.getByTestId("status-row-present")).getByLabelText("Label"), {
+          target: { value: "Here" },
+        });
+      }],
+      ["a status's active switch", async () => {
+        await toggle(within(screen.getByTestId("status-row-apology")).getByLabelText("Active"));
+      }],
+      ["a switch", async () => {
+        await toggle(screen.getByLabelText("Collapse attendance by day"));
+      }],
+      ["a term", () => {
+        fireEvent.change(screen.getByLabelText(/Member singular/), { target: { value: "Student" } });
+      }],
+    ])("counts a change to %s", async (_what, change) => {
+      manager();
+      renderWithExit();
+      await screen.findByTestId("status-row-present");
+      await change();
+      leave();
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+    });
+
+    it("stops asking once every change is reverted, a status row included", async () => {
+      manager();
+      renderWithExit();
+      const name = await screen.findByLabelText(/Organisation name/);
+      fireEvent.change(name, { target: { value: "Something else" } });
+      addStatus("Late");
+      fireEvent.click(screen.getByRole("button", { name: "Remove Late" }));
+      fireEvent.change(name, { target: { value: "VOB Choir" } });
+      expect(browserWouldAsk()).toBe(false);
+      await leavesWithoutAsking();
+    });
+
+    it("keeps asking after a background refetch, which leaves the edits alone", async () => {
+      manager();
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "Unsaved name" },
+      });
+      await act(async () => {
+        await queryClient.refetchQueries({ queryKey: queryKeys.organisation("org1") });
+      });
+      await settle();
+      expect(nameInput()).toHaveValue("Unsaved name");
+      leave();
+      expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    });
+
+    it("stops asking after a successful Save, including the backend's normalised values", async () => {
+      manager();
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "  VOB Choir Lagos  " },
+      });
+      addStatus("Late");
+      mockGet.mockImplementation(() =>
+        Promise.resolve({
+          data: {
+            data: {
+              id: "org1",
+              name: "VOB Choir Lagos",
+              maxAttendanceEdits: 3,
+              terminology: { ...DEFAULT_TERMINOLOGY },
+              featureVisibility: { ...DEFAULT_FEATURE_VISIBILITY },
+              attendanceStatuses: [
+                ...DEFAULT_ATTENDANCE_STATUSES,
+                { key: "late", label: "Late", shortLabel: "L", color: "blue", behavior: "present", active: true, isDefault: false },
+              ],
+            },
+          },
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(nameInput()).toHaveValue("VOB Choir Lagos"));
+      await settle();
+      expect(browserWouldAsk()).toBe(false);
+      await leavesWithoutAsking();
+    });
+
+    it("stops asking as soon as a Save succeeds, before the refresh lands", async () => {
+      manager();
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "VOB Choir Lagos" },
+      });
+      mockGet.mockImplementation(() => new Promise(() => undefined));
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      await settle();
+      await leavesWithoutAsking();
+    });
+
+    it("keeps the changes and keeps asking when Save fails", async () => {
+      manager();
+      mockPut.mockImplementation(() =>
+        Promise.reject({ response: { status: 422, data: { error: "Name taken" } } }),
+      );
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "Taken name" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+      await waitFor(() => expect(mockPut).toHaveBeenCalled());
+      await settle();
+      expect(nameInput()).toHaveValue("Taken name");
+      leave();
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard your changes?");
+    });
+
+    it("never asks a view-only officer, who cannot save", async () => {
+      setOrg({ id: "org1", permissions: ["settings.view"] });
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "Typed anyway" },
+      });
+      expect(browserWouldAsk()).toBe(false);
+      await leavesWithoutAsking();
+    });
+
+    it("does not carry organisation A's unsaved changes over to B", async () => {
+      mockGet.mockImplementation((url: string) => {
+        const id = url.split("/").pop();
+        return Promise.resolve({
+          data: { data: { id, name: id === "orgA" ? "Choir A" : "Band B", maxAttendanceEdits: 1 } },
+        });
+      });
+      manager("orgA");
+      renderWithExit();
+      fireEvent.change(await screen.findByLabelText(/Organisation name/), {
+        target: { value: "A unsaved" },
+      });
+      act(() => manager("orgB"));
+      await waitFor(() => expect(nameInput()).toHaveValue("Band B"));
+      await settle();
+      await leavesWithoutAsking();
     });
   });
 });

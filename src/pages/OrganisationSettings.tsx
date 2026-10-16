@@ -1,4 +1,7 @@
 import { useRef, useState } from "react";
+import { useConfirm } from "components/ui/confirm-dialog";
+import { useDiscardChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { hasFormChanges, snapshotOf } from "helpers/formChanges";
 import {
   Box,
   Flex,
@@ -64,6 +67,13 @@ import AttendanceShareTemplateSettings from "components/settings/AttendanceShare
 
 const DEFAULT_MAX_EDITS = 1;
 
+/** Everything the officer can change here, as Save would send it. */
+const settingsSnapshot = (form: OrgSettingsForm, rows: readonly StatusRow[]) => ({
+  form: snapshotOf(form),
+  attendanceStatuses: toStatusDefinitions(rows),
+});
+type SettingsSnapshot = ReturnType<typeof settingsSnapshot>;
+
 const isUrl = (value: string): boolean => {
   try {
     // eslint-disable-next-line no-new
@@ -92,6 +102,7 @@ const OrganisationSettings = () => {
     handleSubmit,
     reset,
     watch,
+    getValues,
     formState: { errors },
   } = useForm<OrgSettingsForm>({
     defaultValues: {
@@ -131,6 +142,17 @@ const OrganisationSettings = () => {
     undefined,
   );
 
+  // The settings as last loaded or saved, for this organisation only: the
+  // officer has unsaved changes when the form and status rows differ from it.
+  // Set from backend values (never the temporary defaults above) and moved
+  // only by a seed or a successful Save, so a failed Save stays dirty.
+  const [baseline, setBaseline] = useState<{
+    orgId: string;
+    snapshot: SettingsSnapshot;
+  } | null>(null);
+  // What a Save submitted; it becomes the baseline once the backend accepts it.
+  const savingSnapshot = useRef<SettingsSnapshot | null>(null);
+
   const url = convertParamsToString(orgRequest.ORGANISATION_ONE, { id: org.id });
 
   // The organisation whose saved settings the form holds. Until a fetch for
@@ -157,6 +179,7 @@ const OrganisationSettings = () => {
       resyncOrgId.current = null;
       seededOrgId.current = id;
       setSeededFor(id);
+      const seededRows = toStatusRows(data.attendanceStatuses);
       reset({
         name: data.name ?? "",
         image: data.image ?? "",
@@ -185,8 +208,9 @@ const OrganisationSettings = () => {
       setShareTemplateSupported(
         isAttendanceShareTemplate(data.attendanceShareTemplate),
       );
-      setStatusRows(toStatusRows(data.attendanceStatuses));
+      setStatusRows(seededRows);
       setStatusErrors([]);
+      setBaseline({ orgId: id, snapshot: settingsSnapshot(getValues(), seededRows) });
     },
   });
 
@@ -216,6 +240,10 @@ const OrganisationSettings = () => {
         ...res.data,
       });
       setStatusRows((rows) => rows.map((row) => ({ ...row, persisted: true })));
+      // What was submitted is now saved: leaving no longer asks about it.
+      if (savingSnapshot.current) {
+        setBaseline({ orgId: current.id, snapshot: savingSnapshot.current });
+      }
       // Refresh this organisation's detail only — never another tenant's —
       // and let that refresh re-seed the form with what the backend stored.
       resyncOrgId.current = savingOrgId.current;
@@ -243,11 +271,22 @@ const OrganisationSettings = () => {
       includeShareTemplate: shareTemplateSupported,
     });
     savingOrgId.current = org.id;
+    savingSnapshot.current = settingsSnapshot(form, statusRows);
     savingEligibility.current = data.attendanceEligibilityEnabled;
     savingWelfareWindow.current = data.welfareSettings?.reviewWindowDays;
     savingShareTemplate.current = data.attendanceShareTemplate;
     mutate({ url, data });
   };
+
+  // A view-only officer can't save, so there is nothing for them to lose.
+  const { confirm, confirmDialog } = useConfirm();
+  const formValues = watch();
+  const hasUnsavedChanges =
+    canManage &&
+    seeded &&
+    baseline?.orgId === org.id &&
+    hasFormChanges(baseline.snapshot, settingsSnapshot(formValues, statusRows));
+  useDiscardChangesGuard(hasUnsavedChanges, "these settings", confirm);
 
   return (
     <RequirePermission perm="settings.view">
@@ -479,6 +518,7 @@ const OrganisationSettings = () => {
             </form>
           </>
         )}
+        {confirmDialog}
       </PageContainer>
     </RequirePermission>
   );
