@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import useGlobalStore, { currentAttendanceType } from "zStore";
 import { queryClient } from "services/api/apiHelper";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { formatSessionDate } from "helpers/sessionDate";
@@ -43,6 +43,9 @@ import {
   readNewAttendanceDraft,
   writeNewAttendanceDraft,
 } from "helpers/newAttendanceDraft";
+import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { attendanceLeaveQuestion } from "helpers/leaveQuestions";
+import { signedInUserId } from "utils/auth";
 
 const NO_RULES: AttendanceEligibilityRule[] = [];
 
@@ -70,11 +73,14 @@ const CreateAttendanceForm = ({
     (state) => [state.currentAttendance, state.clearCurrentAttendance],
   );
   const { confirm, confirmDialog } = useConfirm();
-  // The organisation's unfinished draft, read once per mount: this page only
-  // resolves it (continue or discard), never edits it. The component is keyed
-  // by organisation id, so switching organisations re-reads it.
+  const officerId = useGlobalStore((state) => signedInUserId(state.user));
+  // This officer's own unfinished draft here (never another officer's or a
+  // legacy unowned one; see helpers/newAttendanceDraft), read once per
+  // mount: this page only resolves it (continue or discard), never edits
+  // it. The component is keyed by organisation id, so switching
+  // organisations re-reads it, and signing in as someone else remounts it.
   const [draft, setDraft] = useState<NewAttendanceDraft | null>(() =>
-    readNewAttendanceDraft(organisationId),
+    readNewAttendanceDraft(organisationId, officerId),
   );
   // Off, the page behaves as if eligibility did not exist: no editor, no
   // member-field dependency, and every new session expects everyone.
@@ -92,10 +98,28 @@ const CreateAttendanceForm = ({
     isError: memberModelFailed,
   } = useMemberModel(organisationId, { enabled: eligibilityEnabled });
   const { members, isSuccess: membersLoaded } = useMembers(organisationId);
-  const [details, setDetails] = useState<AttendanceDetails>(initialDetails);
+  // The untouched form, kept so leaving only asks once something was entered.
+  const [initial] = useState<AttendanceDetails>(initialDetails);
+  const [details, setDetails] = useState<AttendanceDetails>(initial);
   const [eligibilityRules, setEligibilityRules] = useState<
     AttendanceEligibilityRule[]
   >([]);
+  // Nothing here is saved until Continue writes the draft, so leaving with
+  // entered details (typed, or filled in by a template) loses them.
+  const hasSetupChanges =
+    details.name !== initial.name ||
+    details.date !== initial.date ||
+    details.categoryId !== initial.categoryId ||
+    details.subCategoryId !== initial.subCategoryId ||
+    eligibilityRules.length > 0;
+  const releaseLeaveGuard = useUnsavedChangesGuard(
+    hasSetupChanges,
+    useCallback(
+      (reason: LeaveReason) =>
+        confirm(attendanceLeaveQuestion("setup", reason, terms)),
+      [confirm, terms],
+    ),
+  );
   const {
     unavailableMemberIds,
     isLoading: availabilityLoading,
@@ -152,6 +176,12 @@ const CreateAttendanceForm = ({
       toast.error("Name and date are required");
       return;
     }
+    // Drafts belong to the officer who starts them; without a known officer
+    // there is nobody to save it for.
+    if (!officerId) {
+      toast.error("Your account details are still loading. Try again in a moment.");
+      return;
+    }
     const payload: currentAttendanceType = {
       name: details.name.trim(),
       date: details.date,
@@ -167,10 +197,12 @@ const CreateAttendanceForm = ({
     // From here on the draft is real: it stays resumable (or discardable)
     // until a successful create clears it. Just opening this page — or
     // typing — never writes one.
-    writeNewAttendanceDraft(organisationId, payload);
+    writeNewAttendanceDraft(organisationId, officerId, payload);
     queryClient.invalidateQueries({
       queryKey: queryKeys.members(organisationId),
     });
+    // The details now live in the draft: moving on to marking must not ask.
+    releaseLeaveGuard();
     navigate(PROTECTED_PATHS.MARK_ATTENANCE);
   };
 
@@ -384,6 +416,7 @@ const CreateAttendanceForm = ({
           Continue
         </Button>
       </Stack>
+      {confirmDialog}
     </PageContainer>
   );
 };

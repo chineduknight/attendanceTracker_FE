@@ -9,18 +9,20 @@ import {
 } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
+import { confirmLeaveWork } from "hooks/useUnsavedChangesGuard";
 import { system } from "styles/theme";
 import { toast } from "react-toastify";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
-import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG } from "zStore";
+import useGlobalStore, { EMPTY_CURRENT_ATTENDANCE, EMPTY_ORG, EMPTY_USER } from "zStore";
 import CreateAttendance from "pages/CreateAttendance";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { AttendanceTemplate } from "helpers/attendanceTemplates";
 import { CategoryType } from "hooks/useCategories";
 import { MEMBER_MODEL, ROSTER } from "test-utils/eligibilityFixtures";
 import { format } from "date-fns";
+import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
@@ -67,6 +69,10 @@ const template = (over: Partial<AttendanceTemplate>): AttendanceTemplate => ({
   updatedAt: "2026-10-01T00:00:00.000Z",
   ...over,
 });
+
+// The signed-in officer: new drafts are saved as theirs.
+const OFFICER = { ...EMPTY_USER, token: "token-a", id: "officerA", username: "ada" };
+beforeEach(() => useGlobalStore.setState({ user: OFFICER }));
 
 let templatesByOrg: Record<string, Partial<AttendanceTemplate>[]>;
 let rosterByOrg: Record<string, typeof ROSTER>;
@@ -1295,13 +1301,19 @@ describe("<CreateAttendance> with attendance eligibility off", () => {
 describe("<CreateAttendance> unfinished attendance resume", () => {
   // Keys are asserted as literals on purpose: resume and discard across pages
   // must keep deriving exactly these (the roster pages build them too).
-  const META_KEY = "attendance-new-draft-orgA";
+  // The signed-in officer's own draft.
+  const META_KEY = "attendance-new-draft-orgA-by-officerA";
   const IDENTITY = "2026-10-01-Sunday Mass";
-  const ROSTER_KEY = `attendance-draft-orgA-${IDENTITY}`;
-  const MANUAL_KEY = `attendance-manual-draft-orgA-${IDENTITY}`;
+  const ROSTER_KEY = `attendance-draft-orgA-by-officerA-${IDENTITY}`;
+  const MANUAL_KEY = `attendance-manual-draft-orgA-by-officerA-${IDENTITY}`;
+  // A draft saved before drafts had owners, under its original keys.
+  const LEGACY_META_KEY = "attendance-new-draft-orgA";
+  const LEGACY_ROSTER_KEY = `attendance-draft-orgA-${IDENTITY}`;
+  const LEGACY_MANUAL_KEY = `attendance-manual-draft-orgA-${IDENTITY}`;
   const draftMeta = (over: Record<string, unknown> = {}) => ({
     version: 1,
     organisationId: "orgA",
+    ownerId: "officerA",
     name: "Sunday Mass",
     date: "2026-10-01",
     categoryId: null,
@@ -1358,6 +1370,7 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     expect(JSON.parse(localStorage.getItem(META_KEY) as string)).toEqual({
       version: 1,
       organisationId: "orgA",
+      ownerId: "officerA",
       name: "Ad-hoc meeting",
       date: "2026-10-01",
       categoryId: null,
@@ -1454,7 +1467,7 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     });
     // Another organisation's unfinished draft must survive the discard.
     localStorage.setItem(
-      "attendance-new-draft-orgB",
+      "attendance-new-draft-orgB-by-officerA",
       JSON.stringify(draftMeta({ organisationId: "orgB", name: "B Vigil" })),
     );
 
@@ -1473,7 +1486,7 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     expect(useGlobalStore.getState().currentAttendance).toEqual(
       EMPTY_CURRENT_ATTENDANCE,
     );
-    expect(localStorage.getItem("attendance-new-draft-orgB")).not.toBeNull();
+    expect(localStorage.getItem("attendance-new-draft-orgB-by-officerA")).not.toBeNull();
   });
 
   it("does not clear a working session that belongs to another organisation", async () => {
@@ -1529,6 +1542,131 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     expect(card()).not.toBeInTheDocument();
   });
 
+  describe("on a browser shared by several officers", () => {
+    const OFFICER_B = { ...EMPTY_USER, token: "token-b", id: "officerB", username: "bisi" };
+    const seedLegacy = () => {
+      const { ownerId, ...legacy } = draftMeta();
+      localStorage.setItem(LEGACY_META_KEY, JSON.stringify(legacy));
+      localStorage.setItem(
+        LEGACY_ROSTER_KEY,
+        JSON.stringify([{ id: "m1", name: "Ada", attendanceStatus: "late" }]),
+      );
+      localStorage.setItem(LEGACY_MANUAL_KEY, "[]");
+    };
+
+    it("never shows another officer their colleague's draft, and keeps it for its owner", async () => {
+      seedDraft();
+      useGlobalStore.setState({ user: OFFICER_B });
+      const { unmount } = renderPage();
+      expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
+      expect(card()).not.toBeInTheDocument();
+      expect(screen.queryByText("Sunday Mass")).not.toBeInTheDocument();
+      unmount();
+
+      useGlobalStore.setState({ user: OFFICER });
+      renderPage();
+      expect(await screen.findByText("Unfinished attendance")).toBeInTheDocument();
+      expect(screen.getByText("Sunday Mass")).toBeInTheDocument();
+    });
+
+    it("lets another officer start their own draft without touching the first", async () => {
+      seedDraft();
+      const officerADraft = localStorage.getItem(META_KEY);
+      const officerARoster = localStorage.getItem(ROSTER_KEY);
+      useGlobalStore.setState({ user: OFFICER_B });
+      renderPage();
+      // Same name and date as officer A's draft: still a separate draft.
+      type(await screen.findByLabelText(/Name/), "Sunday Mass");
+      type(dateInput(), "2026-10-01");
+      await waitForContinue();
+      fireEvent.click(button("Continue"));
+      await screen.findByText("marking");
+
+      expect(
+        JSON.parse(localStorage.getItem("attendance-new-draft-orgA-by-officerB") as string),
+      ).toMatchObject({ ownerId: "officerB", name: "Sunday Mass" });
+      expect(localStorage.getItem(META_KEY)).toBe(officerADraft);
+      expect(localStorage.getItem(ROSTER_KEY)).toBe(officerARoster);
+    });
+
+    it("refuses Continue while the signed-in officer is unknown, saving nothing", async () => {
+      useGlobalStore.setState({ user: EMPTY_USER });
+      renderPage();
+      type(await screen.findByLabelText(/Name/), "Ad-hoc meeting");
+      type(dateInput(), "2026-10-01");
+      await waitForContinue();
+      fireEvent.click(button("Continue"));
+      expect(toast.error).toHaveBeenCalledWith(
+        "Your account details are still loading. Try again in a moment.",
+      );
+      expect(screen.queryByText("marking")).not.toBeInTheDocument();
+      expect(Object.keys(localStorage).filter((key) => key.startsWith("attendance-new-draft"))).toEqual([]);
+    });
+
+    const legacyStorage = () =>
+      [LEGACY_META_KEY, LEGACY_ROSTER_KEY, LEGACY_MANUAL_KEY].map((key) =>
+        localStorage.getItem(key),
+      );
+
+    it.each([
+      ["its author", OFFICER],
+      ["another officer", OFFICER_B],
+    ])("never offers a legacy unowned draft to %s, and leaves it untouched", async (_who, user) => {
+      seedLegacy();
+      const before = legacyStorage();
+      useGlobalStore.setState({ user });
+      renderPage();
+      expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
+      expect(card()).not.toBeInTheDocument();
+      expect(screen.queryByText("Sunday Mass")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Continue marking" }),
+      ).not.toBeInTheDocument();
+      expect(legacyStorage()).toEqual(before);
+    });
+
+    it("lets officer A start and resume their own draft while a legacy one exists, never touching it", async () => {
+      seedLegacy();
+      const before = legacyStorage();
+      const { unmount } = renderPage();
+      // The legacy session's own name and date: still a separate, owned draft.
+      type(await screen.findByLabelText(/Name/), "Sunday Mass");
+      type(dateInput(), "2026-10-01");
+      await waitForContinue();
+      fireEvent.click(button("Continue"));
+      await screen.findByText("marking");
+      expect(JSON.parse(localStorage.getItem(META_KEY) as string)).toMatchObject({
+        ownerId: "officerA",
+        name: "Sunday Mass",
+      });
+      unmount();
+
+      renderPage();
+      expect(await screen.findByText("Unfinished attendance")).toBeInTheDocument();
+      expect(
+        screen.getByText("You started marking this attendance but haven't submitted it yet."),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Continue marking" }));
+      expect(await screen.findByText("marking")).toBeInTheDocument();
+      expect(legacyStorage()).toEqual(before);
+    });
+
+    it("discards only the officer's own draft, never a legacy one", async () => {
+      seedLegacy();
+      seedDraft();
+      const before = legacyStorage();
+      renderPage();
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Discard and create new" }),
+      );
+      await confirmInDialog("Discard");
+      expect(await screen.findByLabelText(/Name/)).toBeInTheDocument();
+      expect(localStorage.getItem(META_KEY)).toBeNull();
+      expect(localStorage.getItem(ROSTER_KEY)).toBeNull();
+      expect(legacyStorage()).toEqual(before);
+    });
+  });
+
   it("does not treat a persisted working attendance as a resumable draft", async () => {
     useGlobalStore.setState({
       currentAttendance: {
@@ -1540,5 +1678,171 @@ describe("<CreateAttendance> unfinished attendance resume", () => {
     renderPage();
     expect(await screen.findByText(/No templates yet/)).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
+  });
+});
+
+describe("<CreateAttendance> leaving before Continue", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.getState().clearCurrentAttendance();
+    selectOrg("orgA", { eligibility: true });
+    templatesByOrg = { orgA: [template({})], orgB: [] };
+    rosterByOrg = { orgA: ROSTER, orgB: ROSTER.slice(0, 3) };
+    modelByOrg = { orgA: MEMBER_MODEL, orgB: MEMBER_MODEL };
+    mockApi();
+  });
+
+  // Any in-app navigation away (a link here; Back, the menu and Cancel go
+  // through the same history block).
+  const renderWithExit = () =>
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/create"]}>
+            <Routes>
+              <Route
+                path="/create"
+                element={
+                  <>
+                    <Link to="/elsewhere">Go elsewhere</Link>
+                    <CreateAttendance />
+                  </>
+                }
+              />
+              <Route path="/elsewhere" element={<div>elsewhere</div>} />
+              <Route
+                path={PROTECTED_PATHS.MARK_ATTENANCE}
+                element={<div>marking</div>}
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+  const leave = () => fireEvent.click(screen.getByText("Go elsewhere"));
+
+  it("leaves and logs out without asking while the form is untouched", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    await expect(confirmLeaveWork("logout")).resolves.toBe(true);
+    leave();
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("asks before leaving entered details, and keeps them on Keep editing", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    type(nameInput(), "Ad-hoc meeting");
+
+    leave();
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Discard this new attendance?");
+    expect(dialog).toHaveTextContent(
+      "The details you entered haven't been saved. Leaving now discards them.",
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("elsewhere")).not.toBeInTheDocument();
+    expect(nameInput().value).toBe("Ad-hoc meeting");
+
+    leave();
+    await confirmInDialog("Discard");
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(Object.keys(localStorage).filter((key) => key.startsWith("attendance-new-draft"))).toEqual([]);
+  });
+
+  it("asks before Logout discards entered details", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    type(dateInput(), "2026-10-01");
+
+    let answer: Promise<boolean> | undefined;
+    act(() => {
+      answer = confirmLeaveWork("logout");
+    });
+    const dialog = await confirmInDialog("Keep editing");
+    expect(dialog).toHaveTextContent("Logging out now discards them.");
+    await expect(answer).resolves.toBe(false);
+
+    act(() => {
+      answer = confirmLeaveWork("logout");
+    });
+    await confirmInDialog("Discard and log out");
+    await expect(answer).resolves.toBe(true);
+  });
+
+  it("counts an applied template as entered details", async () => {
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    await pick(templateSelect(), "t1");
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Discard this new attendance?",
+    );
+  });
+
+  it("counts eligibility rules as entered details", async () => {
+    renderWithExit();
+    await waitForRoster();
+    await pickEligibility("Part", "Soprano");
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Discard this new attendance?",
+    );
+  });
+
+  it("moves on to marking from Continue without asking", async () => {
+    renderWithExit();
+    type(nameInput(), "Ad-hoc meeting");
+    type(dateInput(), "2026-10-01");
+    await waitForContinue();
+    fireEvent.click(button("Continue"));
+    expect(await screen.findByText("marking")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(localStorage.getItem("attendance-new-draft-orgA-by-officerA")).not.toBeNull();
+  });
+
+  it("does not ask over the unfinished-draft card", async () => {
+    localStorage.setItem(
+      "attendance-new-draft-orgA-by-officerA",
+      JSON.stringify({
+        version: 1,
+        organisationId: "orgA",
+        ownerId: "officerA",
+        name: "Sunday Mass",
+        date: "2026-10-01",
+        categoryId: null,
+        subCategoryId: null,
+        eligibilityRules: [],
+      }),
+    );
+    renderWithExit();
+    await screen.findByText("Unfinished attendance");
+    leave();
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+  });
+
+  it("names the organisation's own term", async () => {
+    useGlobalStore.setState({
+      organisation: {
+        ...useGlobalStore.getState().organisation,
+        terminology: {
+          ...DEFAULT_TERMINOLOGY,
+          attendanceSingular: "Session",
+          attendancePlural: "Sessions",
+        },
+      },
+    });
+    renderWithExit();
+    await listed("Thursday Rehearsal");
+    type(nameInput(), "Ad-hoc meeting");
+    leave();
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Discard this new session?",
+    );
   });
 });

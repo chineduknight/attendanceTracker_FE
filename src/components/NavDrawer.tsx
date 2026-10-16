@@ -21,7 +21,7 @@ import { useNavActions } from "hooks/useNavActions";
 import ChangePasswordModal from "components/auth/ChangePasswordModal";
 import ColorModeSwitcher from "components/ColorModeSwitcher";
 import { withSafeInset } from "styles/safeArea";
-import { confirmDiscardUnsaved } from "hooks/useUnsavedChangesGuard";
+import { confirmLeaveWork } from "hooks/useUnsavedChangesGuard";
 
 interface NavDrawerProps {
   isOpen: boolean;
@@ -46,27 +46,29 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
     s.updateOrganisation,
   ]);
 
-  const goTo = (path: string) => {
+  // Leaving (a link, Organisations, Logout) runs once the drawer has closed:
+  // a screen with work in progress asks first, and a question asked while
+  // the drawer closes would be dismissed at once by the drawer handing focus
+  // back. Automatic sign-outs never go through here.
+  const afterClose = useRef<(() => void) | null>(null);
+  const closeThen = (action: () => void) => {
+    afterClose.current = action;
     onClose();
-    navigate(path);
+  };
+  const runAfterClose = () => {
+    const action = afterClose.current;
+    afterClose.current = null;
+    action?.();
   };
 
-  // An officer's own Logout asks first if a screen holds unsaved work (e.g.
-  // an attendance edit); automatic sign-outs never go through here. The
-  // question waits until the drawer has closed: asked while it closes, the
-  // drawer handing focus back would dismiss it at once.
-  const logoutRequested = useRef(false);
-  const handleLogout = () => {
-    logoutRequested.current = true;
-    onClose();
-  };
-  const finishLogout = async () => {
-    if (!logoutRequested.current) return;
-    logoutRequested.current = false;
-    if (!(await confirmDiscardUnsaved("logout"))) return;
+  const goTo = (path: string) => closeThen(() => navigate(path));
+
+  const logout = async () => {
+    if (!(await confirmLeaveWork("logout"))) return;
     setUser(EMPTY_USER);
     updateOrganisation(EMPTY_ORG);
   };
+  const handleLogout = () => closeThen(() => void logout());
 
   const ACCOUNT_ACTIONS: AccountAction[] = [
     { label: "Dashboard", icon: FaTachometerAlt, palette: "cyan", onClick: () => goTo(PROTECTED_PATHS.DASHBOARD) },
@@ -81,7 +83,7 @@ const NavDrawer = ({ isOpen, onClose }: NavDrawerProps) => {
         if (!e.open) {
           onClose();
         }
-      }} onExitComplete={() => void finishLogout()}>
+      }} onExitComplete={runAfterClose}>
         <Portal>
 
           <Drawer.Backdrop />
