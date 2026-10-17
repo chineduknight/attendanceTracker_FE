@@ -51,7 +51,7 @@ test("a levy pre-fills its current total and confirms before overwriting", async
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectLevy).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByText("Yes, update"));
-  expect(onCorrectLevy).toHaveBeenCalledWith(6000);
+  expect(onCorrectLevy).toHaveBeenCalledWith(6000, false);
 });
 
 test("locks paid months, pre-fills them, and gates entry sequentially", () => {
@@ -115,7 +115,7 @@ test("builds monthlyPaid in order with numbers, only after confirming", async ()
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectDues).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByText("Yes, update"));
-  expect(onCorrectDues).toHaveBeenCalledWith({ "1": 500, "2": 300 });
+  expect(onCorrectDues).toHaveBeenCalledWith({ "1": 500, "2": 300 }, false);
 });
 
 test("clearing everything asks for a destructive confirmation", async () => {
@@ -124,5 +124,25 @@ test("clearing everything asks for a destructive confirmation", async () => {
   fireEvent.click(screen.getByText("Save correction"));
   expect(onCorrectDues).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByText("Yes, clear"));
-  expect(onCorrectDues).toHaveBeenCalledWith({});
+  expect(onCorrectDues).toHaveBeenCalledWith({}, false);
+});
+
+test("shows retained credit and confirms it will be replaced before sending the flag", async () => {
+  const withCredit: ComplianceRow = {
+    ...paidJanToMar,
+    recordedTotal: 2500,
+    appliedTotal: 1500,
+    unappliedCredit: 1000,
+  };
+  const { onCorrectDues } = setup({ row: withCredit });
+  expect(
+    screen.getByText(/Recorded in total: .*2,500, including .*1,000 of unapplied credit/),
+  ).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Apr"), { target: { value: "500" } });
+  fireEvent.click(screen.getByText("Save correction"));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog).toHaveTextContent(/1,000 of unapplied credit on this record will be replaced too/);
+  fireEvent.click(await screen.findByText("Yes, update"));
+  expect(onCorrectDues).toHaveBeenCalledWith({ "1": 500, "2": 500, "3": 500, "4": 500 }, true);
 });

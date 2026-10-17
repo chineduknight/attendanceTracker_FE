@@ -29,6 +29,23 @@ describe("finance payload builders", () => {
     });
   });
 
+  it("adds replaceUnappliedCredit only when the officer confirmed it", () => {
+    const monthlyPaid = { "7": 1000 };
+    expect(buildDuesCorrectionPayload({ ...base, monthlyPaid, replaceUnappliedCredit: false })).not.toHaveProperty(
+      "replaceUnappliedCredit",
+    );
+    expect(buildDuesCorrectionPayload({ ...base, monthlyPaid, replaceUnappliedCredit: true })).toEqual({
+      ...base,
+      monthlyPaid,
+      replaceUnappliedCredit: true,
+    });
+    expect(buildLevyCorrectionPayload({ ...base, amountPaid: 0, replaceUnappliedCredit: true })).toEqual({
+      ...base,
+      amountPaid: 0,
+      replaceUnappliedCredit: true,
+    });
+  });
+
   it("builds a levy correction payload with amountPaid", () => {
     expect(buildLevyCorrectionPayload({ ...base, amountPaid: 10000 })).toEqual({
       organisationId: "org1",
@@ -45,7 +62,8 @@ describe("statusMeta", () => {
     expect(statusMeta("partial")).toEqual({ label: "Part paid", scheme: "orange" });
     expect(statusMeta("unpaid")).toEqual({ label: "Unpaid", scheme: "red" });
     expect(statusMeta("not-due")).toEqual({ label: "Not due", scheme: "gray" });
-    expect(statusMeta("unknown" as MonthStatus)).toEqual({ label: "Not due", scheme: "gray" });
+    expect(statusMeta("unknown")).toEqual({ label: "Unknown", scheme: "yellow" });
+    expect(statusMeta("mystery" as MonthStatus)).toEqual({ label: "Not due", scheme: "gray" });
   });
 });
 

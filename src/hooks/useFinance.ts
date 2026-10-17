@@ -147,15 +147,15 @@ export const usePaymentMutations = (target: PaymentTarget, onSaved: () => void) 
         url: financeRequest.PAYMENTS,
         data: buildRecordPaymentPayload({ ...target, amount }),
       }),
-    correctDues: (monthlyPaid: Record<string, number>) =>
+    correctDues: (monthlyPaid: Record<string, number>, replaceUnappliedCredit = false) =>
       correct({
         url: financeRequest.PAYMENTS,
-        data: buildDuesCorrectionPayload({ ...target, monthlyPaid }),
+        data: buildDuesCorrectionPayload({ ...target, monthlyPaid, replaceUnappliedCredit }),
       }),
-    correctLevy: (amountPaid: number) =>
+    correctLevy: (amountPaid: number, replaceUnappliedCredit = false) =>
       correct({
         url: financeRequest.PAYMENTS,
-        data: buildLevyCorrectionPayload({ ...target, amountPaid }),
+        data: buildLevyCorrectionPayload({ ...target, amountPaid, replaceUnappliedCredit }),
       }),
     isSaving: recording || correcting,
   };
@@ -173,9 +173,10 @@ export interface BulkResult {
 
 /**
  * Sets or clears members' financial start dates (finance-owned data). A
- * start-date change shifts liability and re-applies (or, when cleared,
- * archives) payments, so every finance view of this organisation is
- * refreshed — along with the members list the date lives on.
+ * start-date change shifts liability, which changes how much of each recorded
+ * payment applies (payments themselves are untouched), so every finance view
+ * of this organisation is refreshed — along with the members list the date
+ * lives on.
  */
 export const useFinancialStartDate = (organisationId: string) => {
   const { mutateAsync: patchOne, isLoading: savingOne } = useMutationWrapper(patchRequest);

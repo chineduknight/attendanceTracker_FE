@@ -14,7 +14,7 @@ import { MONTHS } from "helpers/financeConstants";
  * which stay backend-owned.
  */
 
-export type CollectFilter = "all" | "behind" | "owing" | "paid" | "not-set";
+export type CollectFilter = "all" | "behind" | "owing" | "paid" | "not-set" | "review";
 export type CollectSort = "name" | "behind" | "owing" | "progress";
 
 export const COLLECT_SORT_LABELS: Record<CollectSort, string> = {
@@ -34,8 +34,18 @@ export const todayBusinessDate = (now: Date = new Date()) => format(now, "yyyy-M
 export const hasArrearsLens = (rows: readonly ComplianceRow[]) =>
   rows.some((row) => row.accountable && row.arrears !== undefined);
 
+/**
+ * The stored payment amount is invalid, so what was paid (and so the balance,
+ * arrears and progress) is unknown. Never show such a row as unpaid, owing or
+ * paid; the figure helpers below only apply to rows where this is false.
+ */
+export const isUnknownAmount = (row: ComplianceRow) => row.status === "needs-review";
+/** Any record flagged for review, including members who owe nothing. */
+export const needsReview = (row: ComplianceRow) => !!row.invalidStoredAmount;
+
 export const arrearsOf = (row: ComplianceRow) => Math.max(0, row.arrears ?? 0);
-export const isBehind = (row: ComplianceRow) => isLiable(row) && arrearsOf(row) > 0;
+export const isBehind = (row: ComplianceRow) =>
+  isLiable(row) && !isUnknownAmount(row) && arrearsOf(row) > 0;
 
 export const isDuesObligation = (obligation?: Pick<Obligation, "type">) =>
   obligation?.type === "dues";
@@ -85,9 +95,11 @@ export const matchesFilter = (row: ComplianceRow, filter: CollectFilter) => {
     case "behind":
       return isBehind(row);
     case "paid":
-      return isLiable(row) && overallStatus(row) === "paid";
+      return isLiable(row) && !isUnknownAmount(row) && overallStatus(row) === "paid";
     case "owing":
-      return isLiable(row) && overallStatus(row) !== "paid";
+      return isLiable(row) && !isUnknownAmount(row) && overallStatus(row) !== "paid";
+    case "review":
+      return needsReview(row);
   }
 };
 
@@ -98,6 +110,7 @@ export const filterCounts = (rows: readonly ComplianceRow[]) => {
     owing: 0,
     paid: 0,
     "not-set": 0,
+    review: 0,
   };
   (Object.keys(counts) as CollectFilter[]).forEach((filter) => {
     counts[filter] = rows.filter((row) => matchesFilter(row, filter)).length;
@@ -132,15 +145,25 @@ export const visibleRows = (
     sort,
   );
 
-/** Share of what is due that has been collected, for the summary bar. */
+/**
+ * Value applied to the obligation under current start dates. The backend
+ * calls it totalCollected for compatibility, but it is not cash income:
+ * recorded value outside the current window is unapplied credit instead.
+ */
+export const appliedOf = (summary: Pick<ComplianceSummary, "totalCollected" | "totalApplied">) =>
+  summary.totalApplied ?? summary.totalCollected;
+
+/** Share of what is due that has been applied, for the summary bar. */
 export const collectionPct = (
-  summary: Pick<ComplianceSummary, "totalCollected" | "totalOutstanding" | "totalExpected">,
+  summary: Pick<ComplianceSummary, "totalCollected" | "totalApplied" | "totalOutstanding" | "totalExpected">,
 ) => {
-  const expected =
-    summary.totalExpected ?? summary.totalCollected + summary.totalOutstanding;
+  const applied = appliedOf(summary);
+  const expected = summary.totalExpected ?? applied + summary.totalOutstanding;
   if (!expected) return 0;
-  return Math.min(100, (summary.totalCollected / expected) * 100);
+  return Math.min(100, (applied / expected) * 100);
 };
+
+export const APPLIED_PROGRESS_LABEL = "Share applied of expected";
 
 export const monthLabel = (month: number) =>
   MONTHS.find((m) => m.value === month)?.label ?? String(month);
@@ -171,7 +194,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  */
 export const standingLabel = (row: ComplianceRow, obligation: Obligation) => {
   if (!row.accountable) return "No start date";
-  if (!isLiable(row)) return "Not liable for this levy";
+  if (!isLiable(row))
+    return isDuesObligation(obligation) ? "Not liable this year" : "Not liable for this levy";
+  if (isUnknownAmount(row)) return "Needs review · amount unknown";
   const status = overallStatus(row);
   if (status === "paid") return "Paid in full";
   const isDues = isDuesObligation(obligation);
@@ -294,12 +319,22 @@ export const matchesStartDateFilter = (member: FinanceMember, filter: StartDateF
   (filter === "missing" ? !member.financialStartDate : !!member.financialStartDate);
 
 /**
- * Consequences of start-date changes, worded from the backend's behaviour:
- * a new date re-applies the member's dues payments to the new liable window
- * (dropping anything that no longer fits the year); clearing the date
- * archives every payment the member has, on every obligation.
+ * Consequences of start-date changes, worded from the backend's behaviour: a
+ * start-date change only moves the period the member owes for. Recorded
+ * payments are never changed; whatever no longer applies is shown as
+ * unapplied credit, and moving the date back re-applies it.
  */
-export const REALLOCATION_WARNING =
-  "Their recorded dues payments will be re-applied from the new date, and any amount that no longer fits the year will be dropped.";
-export const CLEAR_WARNING =
-  "All of their recorded payments, on every obligation, will be cleared. This can't be undone.";
+export const START_DATE_CHANGE_NOTE =
+  "Their recorded payments are kept as they are. Any amount outside the new period will show as unapplied credit, and moving the date back re-applies it.";
+export const CLEAR_START_DATE_NOTE =
+  "Their recorded payments are kept, not deleted. They will show as unapplied credit until a start date is set again.";
+export const UNAPPLIED_CREDIT_EXPLANATION =
+  "Unapplied credit is recorded money beyond what this member owes under their current start date. It stays on record; it isn't refunded or moved to another obligation.";
+
+/** Recorded value that does not apply; 0 on older backends or when unknown. */
+export const unappliedCreditOf = (row: ComplianceRow) => row.unappliedCredit ?? 0;
+
+export const REVIEW_TOTALS_NOTE = (count: number) =>
+  `${count} payment ${count === 1 ? "record needs" : "records need"} review: the amount is invalid, so ${
+    count === 1 ? "it is" : "they are"
+  } left out of these totals.`;

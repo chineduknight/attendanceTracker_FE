@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Flex, Stack, Field } from "@chakra-ui/react";
 import { DateField } from "components/ui/date-field";
-import { CLEAR_WARNING, formatBusinessDate, REALLOCATION_WARNING } from "helpers/financeCompliance";
+import { CLEAR_START_DATE_NOTE, formatBusinessDate, START_DATE_CHANGE_NOTE } from "helpers/financeCompliance";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
 
 interface StartDateFormProps {
@@ -27,8 +27,8 @@ const StartDateForm = ({ memberName, current, isSaving, onSave }: StartDateFormP
 
   const confirmBody = (target: Pending) =>
     target.date
-      ? `Set ${memberName}'s financial start date to ${formatBusinessDate(target.date)}? They will be financially accountable from that month onward.${current ? ` ${REALLOCATION_WARNING}` : ""}`
-      : `Clear ${memberName}'s financial start date? They will no longer be financially accountable. ${CLEAR_WARNING}`;
+      ? `Set ${memberName}'s financial start date to ${formatBusinessDate(target.date)}? They will be financially accountable from that month onward.${current ? ` ${START_DATE_CHANGE_NOTE}` : ""}`
+      : `Clear ${memberName}'s financial start date? They will no longer be financially accountable. ${CLEAR_START_DATE_NOTE}`;
 
   return (
     <Stack gap={3}>

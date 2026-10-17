@@ -9,7 +9,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
 import Finance from "pages/Finance";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
-import { CLEAR_WARNING, todayBusinessDate } from "helpers/financeCompliance";
+import { CLEAR_START_DATE_NOTE, todayBusinessDate } from "helpers/financeCompliance";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn(), info: jest.fn(), warn: jest.fn() },
@@ -140,13 +140,63 @@ beforeEach(() => {
 });
 
 describe("Collect", () => {
+  it("shows an invalid payment record as needs review / unknown, never as unpaid or owing", async () => {
+    complianceRows = [
+      ...ARREARS_ROWS,
+      {
+        memberId: "dayo", name: "Dayo", accountable: true, liable: true, status: "needs-review",
+        invalidStoredAmount: true, months: months(Array(12).fill("unknown")),
+        totalExpected: 6000, dueToDate: 2000, totalPaid: null, balance: null, arrears: null,
+        compliance: null, paidUpToMonth: null, monthsBehind: null,
+        recordedTotal: null, appliedTotal: null, unappliedCredit: null,
+      },
+    ];
+    complianceSummary = { ...ARREARS_SUMMARY, invalidPaymentRows: 1, invalidRowsExpected: 6000 };
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    expect(await screen.findByText(/1 payment record needs review: the amount is invalid, so it is left out of these totals/))
+      .toBeInTheDocument();
+    expect(screen.getByText("Amount unknown")).toBeInTheDocument();
+    expect(screen.getByText("Needs review · amount unknown")).toBeInTheDocument();
+    const chips = screen.getByRole("group", { name: "Filter by payment status" });
+    expect(within(chips).getByText(/Needs review/)).toBeInTheDocument();
+    // Not counted as owing / not paid in full.
+    expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Dayo"));
+    const sheet = await screen.findByRole("dialog");
+    // Paid and Left to pay, plus all 12 month cells.
+    expect(within(sheet).getAllByText("Unknown")).toHaveLength(14);
+    expect(within(sheet).getByText(/New payments are paused for this record/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/what was paid is unknown/)).toBeInTheDocument();
+    expect(within(sheet).queryByText(/₦0/)).not.toBeInTheDocument();
+  });
+
+  it("distinguishes recorded, applied and unapplied credit when credit is held", async () => {
+    complianceSummary = {
+      ...SUMMARY, totalCollected: 6000, totalApplied: 6000, totalOutstanding: 6000, totalExpected: 12000,
+      totalRecorded: 8000, totalUnappliedCredit: 2000,
+    };
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    expect(await screen.findByText(/applied · 50%/)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded .*8,000 · Applied .*6,000 · Unapplied credit .*2,000/)).toBeInTheDocument();
+    expect(screen.getByText(/6,000 left to pay/)).toBeInTheDocument();
+  });
+
   it("opens on this year's dues with totals and status counts", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
 
-    expect(await screen.findByText(/collected · 63%/)).toBeInTheDocument();
+    expect(await screen.findByText(/applied · 63%/)).toBeInTheDocument();
     expect(shownValue(screen.getByLabelText("Obligation"))).toBe(`${YEAR} Dues`);
     expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Share applied of expected" })).toBeInTheDocument();
+    expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
+    // No credit in this summary, so no recorded / credit breakdown.
+    expect(screen.queryByText(/Unapplied credit/)).not.toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filter by payment status" });
     expect(within(chips).getByRole("button", { name: "Owing 1" })).toBeInTheDocument();
     expect(within(chips).getByRole("button", { name: "No start date 1" })).toBeInTheDocument();
@@ -241,7 +291,7 @@ describe("Obligations", () => {
     await openTab("Obligations");
 
     expect(await screen.findByText(/of .*12,000.* · 63%/)).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Share collected")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Share applied of expected")).toHaveLength(1);
   });
 
   it("shows amounts, not a member count that would include people not liable", async () => {
@@ -261,10 +311,31 @@ describe("Obligations", () => {
     renderFinance();
     await openTab("Obligations");
 
-    expect(await screen.findByText(/1,400 of .*2,000 · 70%$/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Share collected")).toBeInTheDocument();
+    expect(await screen.findByText(/1,400 applied of .*2,000 · 70%$/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Share applied of expected")).toBeInTheDocument();
     expect(screen.queryByText(/1 of 3/)).not.toBeInTheDocument();
     expect(screen.queryByText(/paid in full/)).not.toBeInTheDocument();
+  });
+
+  it("names the card figure as applied and shows unapplied credit separately", async () => {
+    serve([
+      levy,
+      {
+        ...duesNow,
+        summary: {
+          totalMembers: 3, accountableMembers: 2, paidMembers: 1,
+          totalExpected: 12000, totalCollected: 6000, totalOutstanding: 6000,
+          totalRecorded: 8000, totalUnappliedCredit: 2000,
+        },
+      },
+    ]);
+    setOrg("org1", "owner");
+    renderFinance();
+    await openTab("Obligations");
+
+    expect(await screen.findByText(/6,000 applied of .*12,000 · 50%$/)).toBeInTheDocument();
+    expect(screen.getByText(/2,000 unapplied credit held/)).toBeInTheDocument();
+    expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
   });
 
   it("opens an obligation in Collect when tapped", async () => {
@@ -345,7 +416,7 @@ describe("Start dates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set date" }));
 
     // Both already have a start date, so the confirm says payments move.
-    expect(await screen.findByText(/2 already have a start date\. Their recorded dues payments will be re-applied/))
+    expect(await screen.findByText(/2 already have a start date\. Their recorded payments are kept as they are/))
       .toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Yes, set 2" }));
 
@@ -359,7 +430,7 @@ describe("Start dates", () => {
     expect(screen.getByLabelText("Select Bola")).toBeChecked();
   });
 
-  it("warns that clearing a start date clears the member's payments", async () => {
+  it("tells the officer that clearing a start date keeps the member's payments", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
     await openTab("Start dates");
@@ -367,7 +438,7 @@ describe("Start dates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Clear" }));
 
     const dialog = await screen.findByRole("alertdialog", { name: "Clear financial start date" });
-    expect(dialog).toHaveTextContent(CLEAR_WARNING);
+    expect(dialog).toHaveTextContent(CLEAR_START_DATE_NOTE);
     fireEvent.click(within(dialog).getByRole("button", { name: "Yes, clear" }));
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith("/finance/members/ada/financial-start-date", {

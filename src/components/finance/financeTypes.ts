@@ -1,5 +1,6 @@
 export type ObligationType = "dues" | "levy";
-export type MonthStatus = "paid" | "partial" | "unpaid" | "not-due";
+/** `unknown`: the month depends on a payment record with an invalid amount. */
+export type MonthStatus = "paid" | "partial" | "unpaid" | "not-due" | "unknown";
 /** A member's standing across a whole obligation. */
 export type OverallStatus = "paid" | "partial" | "unpaid";
 
@@ -13,8 +14,20 @@ export interface ObligationSummary {
   accountableMembers: number;
   paidMembers: number;
   totalExpected: number;
+  /**
+   * Value APPLIED to this obligation under current start dates (named
+   * "collected" for compatibility). Not cash income; see totalRecorded.
+   */
   totalCollected: number;
+  /** Explicit name for totalCollected; absent on older backends. */
+  totalApplied?: number;
   totalOutstanding: number;
+  /** All value recorded on payment rows; absent on older backends. */
+  totalRecorded?: number;
+  /** Recorded value that does not apply under current start dates. */
+  totalUnappliedCredit?: number;
+  /** Rows with an invalid stored amount; the totals above exclude them. */
+  invalidPaymentRows?: number;
 }
 
 export interface Obligation {
@@ -32,38 +45,62 @@ export interface ComplianceRow {
   memberId: string;
   name: string;
   accountable: boolean;
-  /** Overall standing; older backends only send it for levies. */
-  status?: MonthStatus;
+  /**
+   * Overall standing; older backends only send it for levies.
+   * `needs-review`: the stored amount is invalid, so what was paid is unknown.
+   */
+  status?: MonthStatus | "needs-review";
   // dues
   months?: Record<string, MonthStatus>;
   totalExpected?: number;
-  totalPaid?: number;
-  balance?: number;
-  paidUpToMonth?: number;
-  compliance?: number;
-  creditMonths?: number[];
-  // levy
+  // null = unknown (invalidStoredAmount): never read it as 0.
+  totalPaid?: number | null;
+  balance?: number | null;
+  paidUpToMonth?: number | null;
+  /** Absent when the member owes nothing this year (`liable: false`); null when unknown. */
+  compliance?: number | null;
+  /** False when nothing is owed: a levy dated before the start date, or a
+   * dues year that ends before it. */
   liable?: boolean;
+  // levy
   expected?: number;
-  paid?: number;
+  paid?: number | null;
   // Arrears lens as of the requested date; absent on older backends and on
   // non-accountable rows. `balance` still covers the whole year.
   dueToDate?: number;
-  arrears?: number;
+  arrears?: number | null;
   /** Dues only: due months not fully paid. */
-  monthsBehind?: number;
+  monthsBehind?: number | null;
+  // Recorded vs applied, also on non-accountable rows; absent on older
+  // backends. Paid / balance figures above are the applied value.
+  /** Everything recorded on the payment row; null when it is invalid. */
+  recordedTotal?: number | null;
+  appliedTotal?: number | null;
+  /** Recorded value beyond what is owed under the current start date. */
+  unappliedCredit?: number | null;
+  /** The stored amount is invalid and needs an admin review. */
+  invalidStoredAmount?: boolean;
 }
 
 export interface ComplianceSummary {
   totalMembers: number;
   accountableMembers: number;
+  /** Applied value, as on ObligationSummary. */
   totalCollected: number;
+  totalApplied?: number;
   totalOutstanding: number;
   paidMembers?: number;
   totalExpected?: number;
   totalDueToDate?: number;
   totalArrears?: number;
   behindMembers?: number;
+  totalRecorded?: number;
+  totalUnappliedCredit?: number;
+  creditMembers?: number;
+  /** Rows with an invalid stored amount; money totals exclude them. */
+  invalidPaymentRows?: number;
+  /** What the members with invalid records are known to owe. */
+  invalidRowsExpected?: number;
 }
 
 /** Bulk start-date result: partial success is normal, not an error. */

@@ -7,8 +7,11 @@ import {
   expectedOf,
   isDuesObligation,
   isLiable,
+  isUnknownAmount,
   paidOf,
   standingLabel,
+  UNAPPLIED_CREDIT_EXPLANATION,
+  unappliedCreditOf,
 } from "helpers/financeCompliance";
 import { usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
@@ -35,6 +38,29 @@ const Figure = ({ label, value }: { label: string; value: string }) => (
   </Box>
 );
 
+/** Retained history the member's current start date doesn't apply. */
+const CreditNote = ({ row }: { row: ComplianceRow }) => {
+  const credit = unappliedCreditOf(row);
+  if (credit <= 0 && !row.invalidStoredAmount) return null;
+  return (
+    <Stack gap={1}>
+      {credit > 0 && (
+        <>
+          <Text fontSize="sm" fontWeight="medium">{`Unapplied credit: ${formatMoney(credit)}`}</Text>
+          <Text fontSize="xs" color="fg.muted">
+            {UNAPPLIED_CREDIT_EXPLANATION}
+          </Text>
+        </>
+      )}
+      {row.invalidStoredAmount && (
+        <Text fontSize="sm" color="fg.error">
+          This payment record holds an invalid amount, so what was paid is unknown. It needs an admin review.
+        </Text>
+      )}
+    </Stack>
+  );
+};
+
 /**
  * Everything about one member for one obligation: where they stand, and —
  * for finance managers — recording money, correcting the record, or setting
@@ -54,6 +80,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
       return (
         <Stack gap={4}>
           <Text>{`${row.name} has no financial start date, so nothing is due from them yet.`}</Text>
+          <CreditNote row={row} />
           {canManage && (
             <StartDateForm
               memberName={row.name}
@@ -70,11 +97,21 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
       );
     }
 
+    // An invalid stored amount means paid / behind / left to pay are unknown,
+    // not zero: show that instead of a misleading figure.
+    const unknown = isUnknownAmount(row);
+    const money = (value: number) => (unknown ? "Unknown" : formatMoney(value));
+
     return (
       <Stack gap={4}>
         <SimpleGrid columns={3} gap={3}>
-          <Figure label="Paid" value={formatMoney(paidOf(row))} />
-          {row.arrears !== undefined ? (
+          <Figure label="Paid" value={money(paidOf(row))} />
+          {unknown ? (
+            <>
+              <Figure label="Left to pay" value="Unknown" />
+              <Figure label="Due" value={formatMoney(expectedOf(row))} />
+            </>
+          ) : row.arrears !== undefined ? (
             <>
               <Figure label="Behind" value={formatMoney(arrearsOf(row))} />
               <Figure label="Left to pay" value={formatMoney(balanceOf(row))} />
@@ -86,10 +123,13 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
             </>
           )}
         </SimpleGrid>
+        <CreditNote row={row} />
         {isDuesObligation(obligation) && mode === "record" && <MonthGrid row={row} />}
         {!isLiable(row) && (
           <Text fontSize="sm" color="fg.muted">
-            Their financial start date is after this levy's date, so they don't owe it.
+            {isDuesObligation(obligation)
+              ? "Their financial start date is after this dues year, so they don't owe it."
+              : "Their financial start date is after this levy's date, so they don't owe it."}
           </Text>
         )}
 
@@ -98,7 +138,11 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
             <Separator />
             {mode === "record" ? (
               <>
-                {balanceOf(row) > 0 ? (
+                {unknown ? (
+                  <Text fontSize="sm" color="fg.muted">
+                    New payments are paused for this record until an admin reviews or corrects it.
+                  </Text>
+                ) : balanceOf(row) > 0 ? (
                   <RecordPaymentForm
                     obligation={obligation}
                     row={row}
