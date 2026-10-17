@@ -25,6 +25,16 @@ export const formatRangeLabel = (fromISO: string, toISO: string) => {
   return `${fromLabel} – ${format(to, "MMM d, yyyy")}`;
 };
 
+/** The preset whose range is exactly from–to today, if any. */
+export const presetFor = (fromISO: string, toISO: string, today: Date) =>
+  DATE_PRESETS.find((preset) => {
+    const { from, to } = preset.getRange(today);
+    return (
+      format(from, DATE_INPUT_FORMAT) === fromISO &&
+      format(to, DATE_INPUT_FORMAT) === toISO
+    );
+  })?.label ?? null;
+
 export interface UseDateRangeOptions {
   initialFrom?: string;
   initialTo?: string;
@@ -34,7 +44,10 @@ export interface UseDateRangeOptions {
 export const useDateRange = (options: UseDateRangeOptions = {}) => {
   const [fromDate, setFromDate] = useState<string>(options.initialFrom ?? "");
   const [toDate, setToDate] = useState<string>(options.initialTo ?? "");
-  const [activePreset, setActivePreset] = useState<string | null>(null);
+  // A range arriving from a link (e.g. this month's dates) lights its preset.
+  const [activePreset, setActivePreset] = useState<string | null>(() =>
+    presetFor(options.initialFrom ?? "", options.initialTo ?? "", new Date())
+  );
 
   const applyPreset = (preset: (typeof DATE_PRESETS)[number]) => {
     const { from, to } = preset.getRange(new Date());

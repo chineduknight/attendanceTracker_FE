@@ -53,9 +53,11 @@ interface AnalyticsGridProps {
   dateKeys: string[];
   statuses: AttendanceStatusConfig;
   onOpen: (memberId: string) => void;
+  /** The member last opened from this report: marked so the officer can find their place. */
+  lastOpenedId?: string | null;
 }
 
-const AnalyticsGrid = ({ rows, dateKeys, statuses, onOpen }: AnalyticsGridProps) => {
+const AnalyticsGrid = ({ rows, dateKeys, statuses, onOpen, lastOpenedId }: AnalyticsGridProps) => {
   const terms = useTerms();
   return (
     <Box
@@ -93,10 +95,15 @@ const AnalyticsGrid = ({ rows, dateKeys, statuses, onOpen }: AnalyticsGridProps)
         <Table.Body>
           {rows.map((row, index) => {
             const open = row.memberId ? () => onOpen(row.memberId!) : undefined;
+            const isLastOpened = Boolean(row.memberId) && row.memberId === lastOpenedId;
             return (
               <Table.Row
                 key={row.memberId ?? `${row.name}-${index}`}
                 h="44px"
+                data-member-id={row.memberId}
+                aria-current={isLastOpened || undefined}
+                // The pinned cells keep their own background, so mark every cell.
+                css={isLastOpened ? { "& > td": { bg: "blue.subtle" } } : undefined}
                 onClick={open}
                 cursor={open ? "pointer" : "default"}
                 _hover={open ? { "& > td": { bg: "bg.muted" } } : undefined}
