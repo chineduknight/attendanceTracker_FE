@@ -137,17 +137,38 @@ interface PaymentTarget {
 }
 
 /**
- * Why the backend refused a correction:
+ * Why the backend did not save a correction:
  * - `conflict` (409): the payment or the member's start date changed after
  *   the editor opened; the officer must review the latest figures.
  * - `outdated` (428): the request lacked a precondition the backend needs,
  *   so this app build is older than the backend.
+ * - `unknown` (503): the server could not confirm the outcome. It may have
+ *   saved. Never resend; reload and check what is stored first.
+ * - `declined` (400): nothing was written and repeating the same save cannot
+ *   succeed (e.g. no payment row yet, legacy duplicate rows).
  */
-export type CorrectionRejection = "conflict" | "outdated";
+export type CorrectionRejectionReason = "conflict" | "outdated" | "unknown" | "declined";
 
-const CORRECTION_REJECTIONS: Partial<Record<number, CorrectionRejection>> = {
+export interface CorrectionRejection {
+  reason: CorrectionRejectionReason;
+  /** The backend's explanation for a declined correction, when it sent one. */
+  message?: string;
+}
+
+const CORRECTION_REJECTIONS: Partial<Record<number, CorrectionRejectionReason>> = {
+  400: "declined",
   409: "conflict",
   428: "outdated",
+  503: "unknown",
+};
+
+/** The backend's `{ error }` text, flattened from its array form. */
+const correctionErrorMessage = (error: unknown) => {
+  const message = (error as { response?: { data?: { error?: unknown } } })?.response?.data?.error;
+  if (Array.isArray(message)) {
+    return message.filter((item): item is string => typeof item === "string").join(" ") || undefined;
+  }
+  return typeof message === "string" ? message : undefined;
 };
 
 /**
@@ -159,7 +180,7 @@ const CORRECTION_REJECTIONS: Partial<Record<number, CorrectionRejection>> = {
 export const usePaymentMutations = (
   target: PaymentTarget,
   onSaved: () => void,
-  onCorrectionRejected: (reason: CorrectionRejection) => void,
+  onCorrectionRejected: (rejection: CorrectionRejection) => void,
 ) => {
   const done = () => {
     toast.success("Payment saved");
@@ -173,9 +194,14 @@ export const usePaymentMutations = (
       showMutationError(error);
       return;
     }
-    // The cached row is stale on a conflict: refetch this organisation only.
-    if (reason === "conflict") invalidateFinance(target.organisationId);
-    onCorrectionRejected(reason);
+    // A conflict invalidates because the row moved. An unconfirmed 503 also
+    // invalidates because the correction may have been stored and the row on
+    // screen may no longer match. Both stay scoped to this organisation.
+    if (reason === "conflict" || reason === "unknown") invalidateFinance(target.organisationId);
+    onCorrectionRejected({
+      reason,
+      message: reason === "declined" ? correctionErrorMessage(error) : undefined,
+    });
   };
   const { mutate: record, isLoading: recording } = useMutationWrapper(postRequest, done);
   const { mutate: correct, isLoading: correcting } = useMutationWrapper(putRequest, done, correctionFailed);
