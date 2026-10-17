@@ -28,6 +28,8 @@ import {
   hasArrearsLens,
   isDuesObligation,
   isLiable,
+  isUnknownAmount,
+  REVIEW_TOTALS_NOTE,
   standingLabel,
   visibleRows,
 } from "helpers/financeCompliance";
@@ -64,6 +66,7 @@ const obligationTerms = (obligation: Obligation) =>
  */
 const amountLine = (row: ComplianceRow): { text: string; isOverdue: boolean } | null => {
   if (!row.accountable || !isLiable(row)) return null;
+  if (isUnknownAmount(row)) return { text: "Amount unknown", isOverdue: false };
   if (row.arrears !== undefined) {
     return arrearsOf(row) > 0
       ? { text: `${formatMoney(arrearsOf(row))} behind`, isOverdue: true }
@@ -235,6 +238,11 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
               <Text>{`${formatMoney(compliance.summary.totalOutstanding)} left to pay`}</Text>
               <Text>{`${counts.paid} of ${counts.paid + counts.owing} paid in full`}</Text>
             </Flex>
+            {!!compliance.summary.invalidPaymentRows && (
+              <Text fontSize="sm" color="fg.warning" mt={1}>
+                {REVIEW_TOTALS_NOTE(compliance.summary.invalidPaymentRows)}
+              </Text>
+            )}
             {!!compliance.summary.totalUnappliedCredit && (
               <Text fontSize="sm" color="fg.muted" mt={1}>
                 {`Recorded ${formatMoney(compliance.summary.totalRecorded ?? 0)} · Applied ${formatMoney(
@@ -293,6 +301,9 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
                   },
                   { value: "paid", label: "Paid", count: counts.paid },
                   { value: "not-set", label: "No start date", count: counts["not-set"] },
+                  ...(counts.review
+                    ? [{ value: "review" as const, label: "Needs review", count: counts.review }]
+                    : []),
                 ]}
               />
             </Box>

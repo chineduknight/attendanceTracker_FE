@@ -28,7 +28,14 @@ import {
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { formatMoney } from "helpers/financeConstants";
-import { appliedOf, APPLIED_PROGRESS_LABEL, collectionPct, formatBusinessDate, formatPct } from "helpers/financeCompliance";
+import {
+  appliedOf,
+  APPLIED_PROGRESS_LABEL,
+  collectionPct,
+  formatBusinessDate,
+  formatPct,
+  REVIEW_TOTALS_NOTE,
+} from "helpers/financeCompliance";
 import { invalidateFinance } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import { Obligation, ObligationType } from "components/finance/financeTypes";
@@ -79,6 +86,11 @@ const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
       <Text fontSize="xs" color="fg.muted">
         {`${formatMoney(appliedOf(summary))} applied of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}
       </Text>
+      {!!summary.invalidPaymentRows && (
+        <Text fontSize="xs" color="fg.warning">
+          {REVIEW_TOTALS_NOTE(summary.invalidPaymentRows)}
+        </Text>
+      )}
       {!!summary.totalUnappliedCredit && (
         <Text fontSize="xs" color="fg.muted">
           {`${formatMoney(summary.totalUnappliedCredit)} unapplied credit held`}

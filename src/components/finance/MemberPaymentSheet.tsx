@@ -7,6 +7,7 @@ import {
   expectedOf,
   isDuesObligation,
   isLiable,
+  isUnknownAmount,
   paidOf,
   standingLabel,
   UNAPPLIED_CREDIT_EXPLANATION,
@@ -53,7 +54,7 @@ const CreditNote = ({ row }: { row: ComplianceRow }) => {
       )}
       {row.invalidStoredAmount && (
         <Text fontSize="sm" color="fg.error">
-          This payment record holds an invalid amount and needs an admin review.
+          This payment record holds an invalid amount, so what was paid is unknown. It needs an admin review.
         </Text>
       )}
     </Stack>
@@ -96,11 +97,21 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
       );
     }
 
+    // An invalid stored amount means paid / behind / left to pay are unknown,
+    // not zero: show that instead of a misleading figure.
+    const unknown = isUnknownAmount(row);
+    const money = (value: number) => (unknown ? "Unknown" : formatMoney(value));
+
     return (
       <Stack gap={4}>
         <SimpleGrid columns={3} gap={3}>
-          <Figure label="Paid" value={formatMoney(paidOf(row))} />
-          {row.arrears !== undefined ? (
+          <Figure label="Paid" value={money(paidOf(row))} />
+          {unknown ? (
+            <>
+              <Figure label="Left to pay" value="Unknown" />
+              <Figure label="Due" value={formatMoney(expectedOf(row))} />
+            </>
+          ) : row.arrears !== undefined ? (
             <>
               <Figure label="Behind" value={formatMoney(arrearsOf(row))} />
               <Figure label="Left to pay" value={formatMoney(balanceOf(row))} />
@@ -127,7 +138,11 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
             <Separator />
             {mode === "record" ? (
               <>
-                {balanceOf(row) > 0 ? (
+                {unknown ? (
+                  <Text fontSize="sm" color="fg.muted">
+                    New payments are paused for this record until an admin reviews or corrects it.
+                  </Text>
+                ) : balanceOf(row) > 0 ? (
                   <RecordPaymentForm
                     obligation={obligation}
                     row={row}

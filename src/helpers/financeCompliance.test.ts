@@ -61,7 +61,7 @@ describe("filters, search and sort", () => {
   ];
 
   it("counts each chip, keeping members without a start date out of owing/paid", () => {
-    expect(filterCounts(rows)).toEqual({ all: 4, behind: 0, owing: 2, paid: 1, "not-set": 1 });
+    expect(filterCounts(rows)).toEqual({ all: 4, behind: 0, owing: 2, paid: 1, "not-set": 1, review: 0 });
   });
 
   it("never counts a levy the member is not liable for as owing", () => {
@@ -69,7 +69,25 @@ describe("filters, search and sort", () => {
       memberId: "x", name: "Late joiner", accountable: true, liable: false,
       expected: 0, paid: 0, balance: 0, status: "not-due",
     };
-    expect(filterCounts([notLiable])).toEqual({ all: 1, behind: 0, owing: 0, paid: 0, "not-set": 0 });
+    expect(filterCounts([notLiable])).toEqual({ all: 1, behind: 0, owing: 0, paid: 0, "not-set": 0, review: 0 });
+  });
+
+  it("keeps a needs-review row out of behind / owing / paid and counts it under review", () => {
+    const invalid = duesRow({
+      memberId: "z", name: "Invalid", status: "needs-review", invalidStoredAmount: true,
+      months: twelve([], "unknown"), totalPaid: null, balance: null, arrears: null,
+      compliance: null, paidUpToMonth: null, monthsBehind: null, dueToDate: 6000,
+    });
+    // Owes nothing (not liable) yet flagged: still a review item, never owing.
+    const flaggedNotLiable: ComplianceRow = {
+      memberId: "y", name: "Flagged", accountable: true, liable: false, status: "not-due",
+      expected: 0, paid: 0, balance: 0, invalidStoredAmount: true, recordedTotal: null,
+    };
+
+    expect(filterCounts([invalid, flaggedNotLiable])).toEqual({
+      all: 2, behind: 0, owing: 0, paid: 0, "not-set": 0, review: 2,
+    });
+    expect(standingLabel(invalid, dues)).toBe("Needs review · amount unknown");
   });
 
   it("searches by name case-insensitively", () => {

@@ -1,7 +1,7 @@
 import { Badge, Box, Flex, SimpleGrid, Text } from "@chakra-ui/react";
 import { useColorModeValue } from "../ui/color-mode";
 import { MONTHS, statusMeta } from "helpers/financeConstants";
-import { isBehind, isLiable, overallStatus } from "helpers/financeCompliance";
+import { isBehind, isLiable, isUnknownAmount, overallStatus } from "helpers/financeCompliance";
 import { ComplianceRow, MonthStatus } from "components/finance/financeTypes";
 
 const monthStatus = (row: ComplianceRow, month: number): MonthStatus =>
@@ -22,6 +22,7 @@ const useStatusTint = () => {
 export const StandingBadge = ({ row }: { row: ComplianceRow }) => {
   if (!row.accountable) return <Badge colorPalette="purple">No start date</Badge>;
   if (!isLiable(row)) return <Badge colorPalette="gray">Not liable</Badge>;
+  if (isUnknownAmount(row)) return <Badge colorPalette="yellow">Needs review</Badge>;
   const status = overallStatus(row);
   // With the arrears lens, an unfinished year is only a problem once overdue.
   if (row.arrears !== undefined && status !== "paid") {

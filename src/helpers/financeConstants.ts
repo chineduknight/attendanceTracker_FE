@@ -29,6 +29,7 @@ export const STATUS_META: Record<MonthStatus, { label: string; scheme: string }>
   partial: { label: "Part paid", scheme: "orange" },
   unpaid: { label: "Unpaid", scheme: "red" },
   "not-due": { label: "Not due", scheme: "gray" },
+  unknown: { label: "Unknown", scheme: "yellow" },
 };
 
 export function statusMeta(status: MonthStatus) {

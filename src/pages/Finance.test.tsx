@@ -140,6 +140,39 @@ beforeEach(() => {
 });
 
 describe("Collect", () => {
+  it("shows an invalid payment record as needs review / unknown, never as unpaid or owing", async () => {
+    complianceRows = [
+      ...ARREARS_ROWS,
+      {
+        memberId: "dayo", name: "Dayo", accountable: true, liable: true, status: "needs-review",
+        invalidStoredAmount: true, months: months(Array(12).fill("unknown")),
+        totalExpected: 6000, dueToDate: 2000, totalPaid: null, balance: null, arrears: null,
+        compliance: null, paidUpToMonth: null, monthsBehind: null,
+        recordedTotal: null, appliedTotal: null, unappliedCredit: null,
+      },
+    ];
+    complianceSummary = { ...ARREARS_SUMMARY, invalidPaymentRows: 1, invalidRowsExpected: 6000 };
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    expect(await screen.findByText(/1 payment record needs review: the amount is invalid, so it is left out of these totals/))
+      .toBeInTheDocument();
+    expect(screen.getByText("Amount unknown")).toBeInTheDocument();
+    expect(screen.getByText("Needs review · amount unknown")).toBeInTheDocument();
+    const chips = screen.getByRole("group", { name: "Filter by payment status" });
+    expect(within(chips).getByText(/Needs review/)).toBeInTheDocument();
+    // Not counted as owing / not paid in full.
+    expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Dayo"));
+    const sheet = await screen.findByRole("dialog");
+    // Paid and Left to pay, plus all 12 month cells.
+    expect(within(sheet).getAllByText("Unknown")).toHaveLength(14);
+    expect(within(sheet).getByText(/New payments are paused for this record/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/what was paid is unknown/)).toBeInTheDocument();
+    expect(within(sheet).queryByText(/₦0/)).not.toBeInTheDocument();
+  });
+
   it("distinguishes recorded, applied and unapplied credit when credit is held", async () => {
     complianceSummary = {
       ...SUMMARY, totalCollected: 6000, totalApplied: 6000, totalOutstanding: 6000, totalExpected: 12000,

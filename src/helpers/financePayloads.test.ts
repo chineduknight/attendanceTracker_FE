@@ -62,7 +62,8 @@ describe("statusMeta", () => {
     expect(statusMeta("partial")).toEqual({ label: "Part paid", scheme: "orange" });
     expect(statusMeta("unpaid")).toEqual({ label: "Unpaid", scheme: "red" });
     expect(statusMeta("not-due")).toEqual({ label: "Not due", scheme: "gray" });
-    expect(statusMeta("unknown" as MonthStatus)).toEqual({ label: "Not due", scheme: "gray" });
+    expect(statusMeta("unknown")).toEqual({ label: "Unknown", scheme: "yellow" });
+    expect(statusMeta("mystery" as MonthStatus)).toEqual({ label: "Not due", scheme: "gray" });
   });
 });
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button, Flex, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
 import { AmountInput } from "components/ui/amount-input";
 import { MONTHS, formatMoney } from "helpers/financeConstants";
-import { firstLiableMonth, paidOf, unappliedCreditOf } from "helpers/financeCompliance";
+import { firstLiableMonth, isUnknownAmount, paidOf, unappliedCreditOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
 
@@ -60,7 +60,11 @@ const CorrectPaymentForm = ({
     }
     return seed;
   });
-  const [amountPaid, setAmountPaid] = useState(() => (row && !isDues ? String(paidOf(row)) : ""));
+  // An invalid record has no known amount to pre-fill.
+  const unknown = !!row && isUnknownAmount(row);
+  const [amountPaid, setAmountPaid] = useState(() =>
+    row && !isDues && !unknown ? String(paidOf(row)) : "",
+  );
   const [pending, setPending] = useState<PendingCorrection | null>(null);
   const credit = row ? unappliedCreditOf(row) : 0;
   const hasCredit = credit > 0;
@@ -127,6 +131,11 @@ const CorrectPaymentForm = ({
 
   return (
     <Stack gap={3}>
+      {unknown && (
+        <Text fontSize="sm" color="fg.warning">
+          The current record holds an invalid amount, so nothing is pre-filled. Saving replaces it with the amounts you enter.
+        </Text>
+      )}
       {hasCredit && (
         <Text fontSize="sm" color="fg.muted">
           {`Recorded in total: ${formatMoney(row?.recordedTotal ?? 0)}, including ${formatMoney(credit)} of unapplied credit. A correction replaces the whole recorded amount, credit included.`}
