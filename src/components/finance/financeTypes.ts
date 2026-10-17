@@ -80,6 +80,21 @@ export interface ComplianceRow {
   unappliedCredit?: number | null;
   /** The stored amount is invalid and needs an admin review. */
   invalidStoredAmount?: boolean;
+  /**
+   * Version of the payment row and member finance state this row was built
+   * from. A correction sends back the guard of the row the officer saw so the
+   * backend can refuse it (409) if either changed since. Absent on older
+   * backends, and then corrections are blocked.
+   */
+  correctionGuard?: CorrectionGuard;
+}
+
+export interface CorrectionGuard {
+  paymentRowExists: boolean;
+  /** null: no payment row, or a legacy row saved before revisions. */
+  paymentRevision: number | null;
+  /** 0 is a real revision (legacy members), not "missing". */
+  memberFinanceRevision: number;
 }
 
 export interface ComplianceSummary {

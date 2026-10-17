@@ -133,7 +133,7 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
   const [filter, setFilter] = useState<CollectFilter>("all");
   const [sort, setSort] = useState<CollectSort>("name");
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
-  const { compliance, isLoading, isError, error, refetch, isRefetching } = useCompliance(
+  const { compliance, isLoading, isError, error, refetch, isRefetching, dataUpdatedAt } = useCompliance(
     organisationId,
     obligationId,
   );
@@ -371,6 +371,9 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
           organisationId={organisationId}
           obligation={obligation}
           row={openRow}
+          rowUpdatedAt={dataUpdatedAt}
+          onReload={() => refetch()}
+          isReloading={isRefetching}
           onClose={() => setOpenMemberId(null)}
         />
       )}

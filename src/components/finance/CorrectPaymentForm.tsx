@@ -12,6 +12,8 @@ interface CorrectPaymentFormProps {
   /** The member's current compliance row; seeds and locks the dues grid. */
   row?: ComplianceRow;
   isSaving: boolean;
+  /** Saving is unavailable; the parent explains why. */
+  locked?: boolean;
   /** `replaceUnappliedCredit` is true once the officer confirmed it. */
   onCorrectDues: (monthlyPaid: Record<string, number>, replaceUnappliedCredit: boolean) => void;
   onCorrectLevy: (amountPaid: number, replaceUnappliedCredit: boolean) => void;
@@ -37,6 +39,7 @@ const CorrectPaymentForm = ({
   memberName,
   row,
   isSaving,
+  locked = false,
   onCorrectDues,
   onCorrectLevy,
 }: CorrectPaymentFormProps) => {
@@ -102,6 +105,7 @@ const CorrectPaymentForm = ({
   };
 
   const requestSave = () => {
+    if (locked) return;
     if (isDues) {
       const monthlyPaid: Record<string, number> = {};
       Object.entries(monthly).forEach(([m, v]) => {
@@ -185,7 +189,7 @@ const CorrectPaymentForm = ({
         </Field.Root>
       )}
 
-      <Button colorPalette="purple" onClick={requestSave} loading={isSaving}>
+      <Button colorPalette="purple" onClick={requestSave} loading={isSaving} disabled={locked}>
         Save correction
       </Button>
 
