@@ -9,16 +9,19 @@ import type { LeaveReason } from "hooks/useUnsavedChangesGuard";
 /**
  * The question asked before leaving changes held only in memory: leaving
  * loses them. `subject` names what was changed, e.g. "these settings".
+ * `leaveVerb` names leaving for a form that is closed rather than left,
+ * such as a dialog ("Close").
  */
 export const discardChangesQuestion = (
   subject: string,
   reason: LeaveReason,
+  { leaveVerb = "Leave" }: { leaveVerb?: string } = {},
 ): ConfirmOptions => {
   const loggingOut = reason === "logout";
   return {
     title: "Discard your changes?",
     body: `Your changes to ${subject} haven't been saved. ${
-      loggingOut ? "Log out" : "Leave"
+      loggingOut ? "Log out" : leaveVerb
     } without saving them?`,
     confirmLabel: loggingOut ? "Discard and log out" : "Discard changes",
     cancelLabel: "Keep editing",

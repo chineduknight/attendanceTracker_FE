@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { Link } from "react-router-dom";
 import { confirmLeaveWork } from "hooks/useUnsavedChangesGuard";
 
@@ -62,12 +62,12 @@ const isLocked = (control: HTMLElement) =>
   control.getAttribute("aria-disabled") === "true";
 
 /**
- * Every control on screen is read-only or disabled: nothing can be edited
+ * Every control in `container` (the whole page by default) is read-only or disabled: nothing can be edited
  * while a save is in flight. Returns how many were checked, so a test can
  * prove it looked at the controls it meant to.
  */
-export const expectEveryControlLocked = () => {
-  const controls = CONTROL_ROLES.flatMap((role) => screen.queryAllByRole(role));
+export const expectEveryControlLocked = (container: HTMLElement = document.body) => {
+  const controls = CONTROL_ROLES.flatMap((role) => within(container).queryAllByRole(role));
   expect(controls.filter((control) => !isLocked(control))).toEqual([]);
   return controls.length;
 };
