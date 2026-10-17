@@ -1249,4 +1249,95 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     fireEvent.click(within(notice).getByRole("button", { name: "Record a payment instead" }));
     expect(await within(sheet).findByLabelText("Amount received")).toBeInTheDocument();
   });
+
+  it("shows the notice when a background refetch clears the start date", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    fireEvent.change(await within(sheet).findByLabelText("Apr"), { target: { value: "500" } });
+
+    complianceRows = [{ ...ROWS[0], accountable: false, correctionGuard: NEWER }, ROWS[1], ROWS[2]];
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/has no financial start date/)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("keeps the notice when a 409 is followed by a future dues-year start date", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+
+    const hung = hungCompliance(duesNow);
+    api.get.mockImplementation((url: string) =>
+      url.includes("/compliance")
+        ? hung.promise
+        : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+    );
+    api.put.mockRejectedValueOnce(httpError(409));
+    await saveDuesApr();
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Record changed");
+    await act(async () =>
+      hung.release([
+        {
+          ...ROWS[0],
+          liable: false,
+          status: "not-due",
+          months: months(Array(12).fill("not-due")),
+          totalExpected: 0,
+          totalPaid: 0,
+          balance: 0,
+          paidUpToMonth: 0,
+          correctionGuard: NEWER,
+        },
+        ROWS[1],
+        ROWS[2],
+      ]),
+    );
+
+    await waitFor(() =>
+      expect(within(sheet).getByRole("alert")).toHaveTextContent(/no longer owe this obligation/),
+    );
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/after this dues year/)).toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows the notice when a background refetch moves the start date past the levy", async () => {
+    complianceRows = levyRows(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openLevyCorrection();
+
+    complianceRows = [
+      {
+        memberId: "ada",
+        name: "Ada",
+        accountable: true,
+        liable: false,
+        status: "not-due",
+        expected: 0,
+        paid: 0,
+        balance: 0,
+        correctionGuard: NEWER,
+      } as ComplianceRow,
+    ];
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).getByText(/after this levy's date/)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
 });
