@@ -775,7 +775,9 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     { memberId: "ada", name: "Ada", accountable: true, liable: true, status: "partial",
       expected: 10000, paid: 2000, balance: 8000, correctionGuard, ...extra } as ComplianceRow,
   ];
-  const httpError = (status: number, error = "Rejected") => ({ response: { status, data: { error } } });
+  const httpError = (status: number, error = "Rejected", code?: string) => ({
+    response: { status, data: code ? { error, code } : { error } },
+  });
 
   /**
    * A compliance fetch that stays pending until released. Created up front so
@@ -1051,10 +1053,44 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeEnabled();
   });
 
+  it("a 503 with FINANCE_TRANSACTIONS_UNAVAILABLE keeps the entries and says nothing was written", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+    api.put.mockRejectedValueOnce(
+      httpError(
+        503,
+        "Payment corrections are temporarily unavailable. No change was made.",
+        "FINANCE_TRANSACTIONS_UNAVAILABLE",
+      ),
+    );
+    await saveDuesApr();
+
+    const alert = await within(sheet).findByRole("alert");
+    expect(alert).toHaveTextContent(/temporarily unavailable/);
+    expect(alert).toHaveTextContent(/Nothing was changed/);
+    // Nothing was written, so the figures and the typed correction stay usable.
+    expect(within(sheet).getByLabelText("Apr")).toHaveValue("500");
+    expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeDisabled();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save correction" }));
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
-    ["transactions unavailable", "Payment corrections are temporarily unavailable. No change was made."],
-    ["unknown commit outcome", "We could not confirm whether this correction was saved."],
-  ])("a 503 (%s) is never resent and requires a reload before any fresh correction", async (_case, message) => {
+    [
+      "unknown commit outcome",
+      "We could not confirm whether this correction was saved.",
+      "FINANCE_CORRECTION_OUTCOME_UNKNOWN",
+    ],
+    ["an unrecognised code", "Something went wrong.", "FINANCE_SOMETHING_ELSE"],
+    ["a missing code", "We could not confirm whether this correction was saved.", undefined],
+  ])("a 503 (%s) is treated as unconfirmed: no resend, reload required", async (_case, message, code) => {
     complianceRows = adaWith(GUARD);
     setOrg("org1", MANAGER);
     renderFinance();
@@ -1068,12 +1104,14 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
         ? hung.promise
         : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
     );
-    api.put.mockRejectedValueOnce(httpError(503, message));
+    api.put.mockRejectedValueOnce(httpError(503, message, code));
     await saveDuesApr();
 
     const notice = await within(sheet).findByRole("alert");
     expect(notice).toHaveTextContent("Correction not confirmed");
     expect(notice).toHaveTextContent(/may already be saved/);
+    // The unknown outcome must never claim that nothing was written.
+    expect(notice).not.toHaveTextContent(/Nothing was changed/);
     await waitFor(() => expect(notice).toHaveFocus());
     expect(toast.success).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();

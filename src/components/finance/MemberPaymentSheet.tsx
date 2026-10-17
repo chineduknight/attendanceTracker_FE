@@ -125,7 +125,7 @@ const CorrectionProblemNotice = ({
       {kind === "conflict" && (
         <>
           <Text fontSize="sm">
-            {`Your correction was not saved. Someone changed this payment record or ${memberName}'s financial start date after you opened it.`}
+            {`Your correction was not saved because ${memberName}'s record or this obligation changed after you opened it.`}
           </Text>
           <Text fontSize="sm">Reload and review the latest figures, then enter the correction again.</Text>
         </>
@@ -137,8 +137,8 @@ const CorrectionProblemNotice = ({
             saved, or nothing may have changed. Your entries were cleared.
           </Text>
           <Text fontSize="sm">
-            Reload the latest figures and check the record before correcting again. If the Finance
-            server is temporarily unavailable, try again later.
+            Reload the latest figures and check the record before correcting again. Do not resend
+            this correction until you have checked what is stored.
           </Text>
         </>
       )}
@@ -152,7 +152,7 @@ const CorrectionProblemNotice = ({
       {kind === "changed" && (
         <>
           <Text fontSize="sm">
-            {`This payment record or ${memberName}'s financial start date changed while you were correcting it, so your entries were cleared.`}
+            {`${memberName}'s record or this obligation changed while you were correcting it, so your entries were cleared.`}
           </Text>
           <Text fontSize="sm">Review the latest figures, then enter the correction again.</Text>
         </>
@@ -292,6 +292,7 @@ const MemberPaymentSheet = ({
   };
   const refused = rejection?.reason === "conflict";
   const unconfirmed = rejection?.reason === "unknown";
+  const unavailable = rejection?.reason === "unavailable";
   const declined = rejection?.reason === "declined";
   const outdated = rejection?.reason === "outdated";
   const changedUnderneath = !!correction && !sameCorrectionGuard(correction.guard, correctionGuardOf(row));
@@ -429,13 +430,18 @@ const MemberPaymentSheet = ({
                         {OUTDATED_APP_MESSAGE}
                       </Text>
                     )}
+                    {unavailable && (
+                      <Text role="alert" fontSize="sm" color="fg.error">
+                        Payment corrections are temporarily unavailable. Nothing was changed. Try again later.
+                      </Text>
+                    )}
                     <CorrectionEditor
                       correction={correction}
                       obligation={obligation}
                       isSaving={payments.isSaving}
                       onCorrectDues={payments.correctDues}
                       onCorrectLevy={payments.correctLevy}
-                      locked={!correction.guard || outdated}
+                      locked={!correction.guard || outdated || unavailable}
                     />
                   </>
                 )}

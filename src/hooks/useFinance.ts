@@ -138,16 +138,18 @@ interface PaymentTarget {
 
 /**
  * Why the backend did not save a correction:
- * - `conflict` (409): the payment or the member's start date changed after
- *   the editor opened; the officer must review the latest figures.
+ * - `conflict` (409): the record, start date or obligation changed after the
+ *   editor opened; the officer must review the latest figures.
  * - `outdated` (428): the request lacked a precondition the backend needs,
  *   so this app build is older than the backend.
- * - `unknown` (503): the server could not confirm the outcome. It may have
- *   saved. Never resend; reload and check what is stored first.
+ * - `unknown` (503, missing/unknown code): the server could not confirm the
+ *   outcome. It may have saved. Never resend; reload and check first.
+ * - `unavailable` (503, `FINANCE_TRANSACTIONS_UNAVAILABLE`): the database
+ *   could not run transactions and nothing was written.
  * - `declined` (400): nothing was written and repeating the same save cannot
  *   succeed (e.g. no payment row yet, legacy duplicate rows).
  */
-export type CorrectionRejectionReason = "conflict" | "outdated" | "unknown" | "declined";
+export type CorrectionRejectionReason = "conflict" | "outdated" | "unknown" | "unavailable" | "declined";
 
 export interface CorrectionRejection {
   reason: CorrectionRejectionReason;
@@ -155,12 +157,19 @@ export interface CorrectionRejection {
   message?: string;
 }
 
+/** Stable codes on the two 503s only; every other correction error has none. */
+export type FinanceCorrectionErrorCode =
+  | "FINANCE_TRANSACTIONS_UNAVAILABLE"
+  | "FINANCE_CORRECTION_OUTCOME_UNKNOWN";
+
 const CORRECTION_REJECTIONS: Partial<Record<number, CorrectionRejectionReason>> = {
   400: "declined",
   409: "conflict",
   428: "outdated",
-  503: "unknown",
 };
+
+/** The only 503 that guarantees nothing was written. */
+const TRANSACTIONS_UNAVAILABLE: FinanceCorrectionErrorCode = "FINANCE_TRANSACTIONS_UNAVAILABLE";
 
 /** The backend's `{ error }` text, flattened from its array form. */
 const correctionErrorMessage = (error: unknown) => {
@@ -169,6 +178,12 @@ const correctionErrorMessage = (error: unknown) => {
     return message.filter((item): item is string => typeof item === "string").join(" ") || undefined;
   }
   return typeof message === "string" ? message : undefined;
+};
+
+/** The backend's stable `code`, if it sent one. */
+const correctionErrorCode = (error: unknown) => {
+  const code = (error as { response?: { data?: { code?: unknown } } })?.response?.data?.code;
+  return typeof code === "string" ? code : undefined;
 };
 
 /**
@@ -189,7 +204,16 @@ export const usePaymentMutations = (
   };
   const correctionFailed = (error: unknown) => {
     const status = (error as { response?: { status?: number } })?.response?.status;
-    const reason = status === undefined ? undefined : CORRECTION_REJECTIONS[status];
+    // A 503 is only "nothing was written" with the explicit code; a missing or
+    // unrecognised code is treated as an unknown outcome, never as a safe fail.
+    const reason =
+      status === 503
+        ? correctionErrorCode(error) === TRANSACTIONS_UNAVAILABLE
+          ? "unavailable"
+          : "unknown"
+        : status === undefined
+          ? undefined
+          : CORRECTION_REJECTIONS[status];
     if (!reason) {
       showMutationError(error);
       return;
