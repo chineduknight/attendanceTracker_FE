@@ -49,6 +49,7 @@ import QuickMarkToolbar, {
 import VisibleBulkActions from "components/attendance/VisibleBulkActions";
 import { usePersistedRoster } from "hooks/usePersistedRoster";
 import {
+  NewAttendanceDraft,
   discardNewAttendanceDraft,
   expectedRosterDraftKey,
   manualRosterDraftKey,
@@ -91,6 +92,8 @@ import {
 } from "helpers/manualAttendance";
 import ManualMemberDialog from "components/attendance/ManualMemberDialog";
 import { LeaveReason, useUnsavedChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { attendanceLeaveQuestion } from "helpers/leaveQuestions";
+import { signedInUserId } from "utils/auth";
 import {
   buildAtomicEditPayload,
   canSaveEdit,
@@ -151,7 +154,8 @@ const NoUnfinishedSession = () => {
 /**
  * Decides what this screen marks, then hands it to the roster: an edit always
  * marks the live stored record; a new session is authorized ONLY by the
- * organisation's explicit unfinished-draft metadata.
+ * signed-in officer's own unfinished-draft metadata, never another
+ * officer's or a legacy unowned one.
  */
 const MarkAttendanceSession = () => {
   const [org, currentAttendance, updateCurrentAttendance] = useGlobalStore(
@@ -164,6 +168,7 @@ const MarkAttendanceSession = () => {
   const clearCurrentAttendance = useGlobalStore(
     (state) => state.clearCurrentAttendance,
   );
+  const officerId = useGlobalStore((state) => signedInUserId(state.user));
   const params = useParams();
   const isUpdate = params.attendanceId !== undefined;
   // A NEW session is authorized only by its explicit per-organisation draft
@@ -172,11 +177,13 @@ const MarkAttendanceSession = () => {
   // abandoned edit of an existing record — can never become a new attendance.
   // Read once at mount: the metadata is cleared on submit and that must not
   // resurrect a session from memory, and marking must not swap sessions.
-  const [newSession] = useState<currentAttendanceType | null>(() => {
-    if (isUpdate) return null;
-    const draft = readNewAttendanceDraft(org.id);
-    return draft ? newAttendanceDraftToSession(draft) : null;
-  });
+  const [newDraft] = useState<NewAttendanceDraft | null>(() =>
+    isUpdate ? null : readNewAttendanceDraft(org.id, officerId),
+  );
+  const newSession = useMemo<currentAttendanceType | null>(
+    () => (newDraft ? newAttendanceDraftToSession(newDraft) : null),
+    [newDraft],
+  );
   // The draft becomes the working state too (transient convenience for Submit
   // and the Create Attendance discard flow); a visit with no draft clears any
   // stale transient session instead, so nothing else can act on it. Neither
@@ -188,19 +195,30 @@ const MarkAttendanceSession = () => {
   }, [isUpdate, newSession, updateCurrentAttendance, clearCurrentAttendance]);
 
   if (isUpdate) {
-    return <MarkAttendanceRoster isUpdate session={currentAttendance} />;
+    return (
+      <MarkAttendanceRoster isUpdate session={currentAttendance} draftOwner={null} />
+    );
   }
-  if (!newSession) return <NoUnfinishedSession />;
-  return <MarkAttendanceRoster isUpdate={false} session={newSession} />;
+  if (!newDraft || !newSession) return <NoUnfinishedSession />;
+  return (
+    <MarkAttendanceRoster
+      isUpdate={false}
+      session={newSession}
+      draftOwner={newDraft.ownerId}
+    />
+  );
 };
 
 /** The marking roster: expected members, manual additions, quick marks. */
 const MarkAttendanceRoster = ({
   isUpdate,
   session,
+  draftOwner,
 }: {
   isUpdate: boolean;
   session: currentAttendanceType;
+  /** Whose draft a new session is saved in; null for an edit, which has none. */
+  draftOwner: string | null;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
   const terms = useTerms();
@@ -216,15 +234,18 @@ const MarkAttendanceRoster = ({
     (state) => state.clearCurrentAttendance,
   );
   const params = useParams();
-  // The roster draft identity: an edit uses the attendance id (its own key
-  // namespace); a new session uses its date-name identity, shared with
-  // Create Attendance and the discard cleanup.
-  const draftIdentity = isUpdate
-    ? (params.attendanceId as string)
-    : newAttendanceDraftIdentity(session);
-  const localStorageKey = expectedRosterDraftKey(org.id, draftIdentity);
+  // A new session's roster drafts are keyed by its owner and date-name
+  // identity, shared with Create Attendance and the discard cleanup. An edit
+  // never reads or writes a roster draft (persist: false below), so it has no
+  // storage key.
+  const draftIdentity = newAttendanceDraftIdentity(session);
+  const localStorageKey = draftOwner
+    ? expectedRosterDraftKey(org.id, draftOwner, draftIdentity)
+    : "";
   // Its own key, so drafts saved before manual additions existed stay valid.
-  const manualStorageKey = manualRosterDraftKey(org.id, draftIdentity);
+  const manualStorageKey = draftOwner
+    ? manualRosterDraftKey(org.id, draftOwner, draftIdentity)
+    : "";
   // Every roster change goes through commitMembers so the draft never diverges.
   // `allMembers` is only ever the expected roster. An edit keeps its roster in
   // memory only — it has no resumable draft, unlike a new session.
@@ -502,23 +523,18 @@ const MarkAttendanceRoster = ({
     ],
     [baseline, removalIds],
   );
+  // Leaving an edit loses its unsaved changes; leaving a new session only
+  // interrupts it, since its draft stays saved on this device until submit.
   const releaseLeaveGuard = useUnsavedChangesGuard(
-    isUpdate && hasUnsavedEdits,
+    !isUpdate || hasUnsavedEdits,
     useCallback(
       (reason: LeaveReason) =>
-        confirm({
-          title: "Discard your changes?",
-          body: `Your changes to this ${lowerTerm(
-            terms.attendanceSingular,
-          )} haven't been saved. ${
-            reason === "logout" ? "Log out" : "Leave"
-          } without saving them?`,
-          confirmLabel: reason === "logout" ? "Discard and log out" : "Discard changes",
-          cancelLabel: "Keep editing",
-          destructive: true,
-        }),
-      [confirm, terms.attendanceSingular],
+        confirm(
+          attendanceLeaveQuestion(isUpdate ? "edit" : "draft", reason, terms),
+        ),
+      [confirm, isUpdate, terms],
     ),
+    { savedLocally: !isUpdate },
   );
   // Retrying a failed load only refetches. Unlike Refresh in edit mode, it
   // never discards a draft or reloads the page.
@@ -709,7 +725,9 @@ const MarkAttendanceRoster = ({
       // Only a stored create finishes the draft: its metadata and both roster
       // drafts go together. An update never touches them, so an unfinished
       // new session survives editing an old attendance.
-      discardNewAttendanceDraft(org.id, session);
+      if (draftOwner) {
+        discardNewAttendanceDraft(org.id, { ...session, ownerId: draftOwner });
+      }
     }
     // A finished (or updated) record is no longer the app's working state.
     clearCurrentAttendance();

@@ -1,17 +1,10 @@
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { queryClient } from "services/api/apiHelper";
-import {
-  clearNewAttendanceDraft,
-  discardNewAttendanceDraft,
-  readNewAttendanceDraft,
-} from "helpers/newAttendanceDraft";
+import { organisationDraftKeys } from "helpers/newAttendanceDraft";
 import {
   legacyShownFieldsStorageKey,
   shownFieldsStorageKey,
 } from "helpers/memberListFields";
-
-/** Roster draft keys are `<prefix><organisationId>-<session identity>`. */
-const ROSTER_DRAFT_PREFIXES = ["attendance-draft-", "attendance-manual-draft-"];
 
 /**
  * Forget everything this device holds for an organisation that no longer
@@ -36,14 +29,8 @@ export const forgetOrganisation = (organisationId: string): void => {
   }
   if (wasSelected) store.updateOrganisation(EMPTY_ORG);
 
-  const draft = readNewAttendanceDraft(organisationId);
-  if (draft) discardNewAttendanceDraft(organisationId, draft);
-  else clearNewAttendanceDraft(organisationId);
-  // Roster drafts whose metadata was already gone.
-  const ownPrefixes = ROSTER_DRAFT_PREFIXES.map((prefix) => `${prefix}${organisationId}-`);
-  Object.keys(localStorage)
-    .filter((key) => ownPrefixes.some((prefix) => key.startsWith(prefix)))
-    .forEach((key) => localStorage.removeItem(key));
+  // Every officer's unfinished drafts for it, legacy ones included.
+  organisationDraftKeys(organisationId).forEach((key) => localStorage.removeItem(key));
   localStorage.removeItem(shownFieldsStorageKey(organisationId));
   localStorage.removeItem(legacyShownFieldsStorageKey(organisationId));
 

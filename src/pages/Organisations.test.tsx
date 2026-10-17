@@ -132,18 +132,19 @@ describe("<Organisations> delete and this device's data", () => {
   const A = { ...OWNED, id: "64a000000000000000000001", name: "Choir A" };
   const B = { ...OWNED, id: "64a000000000000000000002", name: "Band B" };
 
+  const OFFICER = "officerA";
   const seed = (id: string) => {
-    writeNewAttendanceDraft(id, SESSION);
-    localStorage.setItem(expectedRosterDraftKey(id, identity), "[]");
-    localStorage.setItem(manualRosterDraftKey(id, identity), "[]");
+    writeNewAttendanceDraft(id, OFFICER, SESSION);
+    localStorage.setItem(expectedRosterDraftKey(id, OFFICER, identity), "[]");
+    localStorage.setItem(manualRosterDraftKey(id, OFFICER, identity), "[]");
     localStorage.setItem(shownFieldsStorageKey(id), '["part"]');
     queryClient.setQueryData(queryKeys.members(id), { data: [] });
   };
   /** Which of an organisation's local data is still on the device. */
   const kept = (id: string) => ({
-    draft: readNewAttendanceDraft(id) !== null,
-    roster: localStorage.getItem(expectedRosterDraftKey(id, identity)) !== null,
-    manual: localStorage.getItem(manualRosterDraftKey(id, identity)) !== null,
+    draft: readNewAttendanceDraft(id, OFFICER) !== null,
+    roster: localStorage.getItem(expectedRosterDraftKey(id, OFFICER, identity)) !== null,
+    manual: localStorage.getItem(manualRosterDraftKey(id, OFFICER, identity)) !== null,
     fields: localStorage.getItem(shownFieldsStorageKey(id)) !== null,
     cache: queryClient.getQueryData(queryKeys.members(id)) !== undefined,
   });

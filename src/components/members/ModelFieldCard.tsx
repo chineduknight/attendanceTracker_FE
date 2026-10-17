@@ -12,9 +12,17 @@ interface ModelFieldCardProps {
   onChange: (patch: Partial<EditorField>) => void;
   /** Only unsaved fields can be removed. */
   onRemove?: () => void;
+  /** Locked while the model is being saved: shown as is, nothing can change. */
+  disabled?: boolean;
 }
 
-const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardProps) => {
+const ModelFieldCard = ({
+  field,
+  errors,
+  onChange,
+  onRemove,
+  disabled = false,
+}: ModelFieldCardProps) => {
   const terms = useTerms();
   const keyHelp = `Internal key is used by stored ${lowerTerm(
     terms.memberSingular,
@@ -41,6 +49,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
             px={2}
             me={-2}
             flexShrink={0}
+            disabled={disabled}
             onClick={onRemove}
           >
             <FaTimesCircle aria-hidden />
@@ -61,6 +70,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
         <Input
           value={field.label}
           placeholder="e.g. Voice Part"
+          readOnly={disabled}
           onChange={(e) => onChange({ label: e.target.value })}
         />
         <Field.ErrorText>{errors?.label}</Field.ErrorText>
@@ -71,7 +81,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
         <Input
           value={field.name}
           placeholder="e.g. voice_part"
-          readOnly={keyLocked}
+          readOnly={keyLocked || disabled}
           bg={keyLocked ? "bg.muted" : undefined}
           onChange={(e) => onChange({ name: e.target.value, keyEdited: true })}
         />
@@ -82,7 +92,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
         )}
       </Field.Root>
 
-      <Field.Root id={`${id}-type`} disabled={keyLocked}>
+      <Field.Root id={`${id}-type`} disabled={keyLocked || disabled}>
         <Field.Label mb="1">Field type</Field.Label>
         <OptionSelect
           options={MEMBER_FIELD_TYPES.map((type) => ({ value: type, label: type }))}
@@ -100,6 +110,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
           <Input
             value={field.optionsText}
             placeholder="Soprano, Alto, Tenor, Bass"
+            readOnly={disabled}
             onChange={(e) =>
               onChange({ optionsText: e.target.value, optionsEdited: true })
             }
@@ -114,7 +125,7 @@ const ModelFieldCard = ({ field, errors, onChange, onRemove }: ModelFieldCardPro
 
       <Box>
         <Checkbox.Root
-          disabled={isPinned}
+          disabled={isPinned || disabled}
           onCheckedChange={({ checked }) => onChange({ required: checked === true })}
           checked={field.required}
         ><Checkbox.HiddenInput /><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Checkbox.Label>Required

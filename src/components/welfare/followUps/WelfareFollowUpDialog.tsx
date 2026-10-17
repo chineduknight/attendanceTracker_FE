@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   CloseButton,
   Button,
@@ -30,7 +30,13 @@ import { lowerTerm } from "helpers/organisationPresentation";
 import { ALL_STATUSES, memberHasStatus } from "helpers/welfareReview";
 import { useTerms } from "hooks/useOrgPresentation";
 import { Officer } from "rbac/types";
-import { ConfirmDialog } from "components/ui/confirm-dialog";
+import { ConfirmDialog, useConfirm } from "components/ui/confirm-dialog";
+import {
+  LeaveReason,
+  useUnsavedChangesGuard,
+} from "hooks/useUnsavedChangesGuard";
+import { discardChangesQuestion } from "helpers/leaveQuestions";
+import { hasFormChanges } from "helpers/formChanges";
 import type { InsightVariant } from "components/welfare/AttendanceInsightCard";
 import {
   WelfareFollowUp,
@@ -40,6 +46,35 @@ import {
 
 export const REASON_MAX_LENGTH = 160;
 export const NOTE_MAX_LENGTH = 1000;
+
+interface FollowUpFormState {
+  isManualCreate: boolean;
+  isEdit: boolean;
+  memberId: string;
+  recordDate: string;
+  reason: string;
+  note: string;
+  keepOpen: boolean;
+  nextFollowUpDate: string;
+  assignedToUserId: string;
+}
+
+/**
+ * What a save would persist, with the payload's own semantics: trimmed text,
+ * the next date only while open, and the assignee only where it is sent (open
+ * on create, always on edit). A field that is hidden and never sent, or the
+ * member picker's search and status filter, is never an unsaved change.
+ */
+const followUpSnapshot = (form: FollowUpFormState) => ({
+  memberId: form.isManualCreate ? form.memberId : null,
+  recordDate: form.recordDate,
+  reason: form.reason.trim(),
+  note: form.note.trim() || null,
+  workflowStatus: form.keepOpen ? "open" : "closed",
+  nextFollowUpDate: form.keepOpen ? form.nextFollowUpDate || null : null,
+  assignedToUserId:
+    form.keepOpen || form.isEdit ? form.assignedToUserId || null : null,
+});
 
 /**
  * What the dialog was opened for. `organisationId` is captured when opening so
@@ -150,6 +185,55 @@ const WelfareFollowUpDialog = ({
   const isEdit = request.mode === "edit";
   const isManualCreate = request.mode === "create" && request.manual;
 
+  // Unsaved changes are measured against the form as it opened, an insight's
+  // prefilled reason included. Kept in memory only: notes may be private.
+  const snapshot = followUpSnapshot({
+    isManualCreate,
+    isEdit,
+    memberId,
+    recordDate,
+    reason,
+    note,
+    keepOpen,
+    nextFollowUpDate,
+    assignedToUserId,
+  });
+  const [baseline] = useState(snapshot);
+  const hasUnsavedChanges = hasFormChanges(baseline, snapshot);
+
+  // One question for every way of closing (Cancel, X, Escape, backdrop,
+  // Back, navigation, Logout): a second request while it is open gets the
+  // same answer instead of a second dialog. Never names the note's contents.
+  const { confirm, confirmDialog } = useConfirm();
+  const openQuestion = useRef<Promise<boolean> | null>(null);
+  const askToDiscard = useCallback(
+    (why: LeaveReason) => {
+      if (!openQuestion.current) {
+        openQuestion.current = confirm(
+          discardChangesQuestion("this welfare follow-up", why, {
+            leaveVerb: "Close",
+          }),
+        ).finally(() => {
+          openQuestion.current = null;
+        });
+      }
+      return openQuestion.current;
+    },
+    [confirm],
+  );
+  // Back, in-app navigation and Logout; the browser covers reload. A save's
+  // success or a stale 409/404 closes through onClose directly, never here.
+  useUnsavedChangesGuard(hasUnsavedChanges, askToDiscard);
+
+  // Everything is locked while a save or archive is in flight: its success
+  // closes the dialog, so nothing typed meanwhile may be silently lost.
+  const locked = isSaving;
+  const requestClose = async () => {
+    if (locked) return;
+    if (hasUnsavedChanges && !(await askToDiscard("navigate"))) return;
+    onClose();
+  };
+
   const { organisationId } = request;
   const members = useMembers(organisationId, { enabled: isManualCreate });
 
@@ -227,6 +311,7 @@ const WelfareFollowUpDialog = ({
       : request.memberId;
 
   const handleSave = () => {
+    if (locked) return;
     setSubmitted(true);
     const trimmedReason = reason.trim();
     if (!resolvedMemberId || !trimmedReason) return;
@@ -303,11 +388,14 @@ const WelfareFollowUpDialog = ({
         placement='center'
         size={{ base: "full", md: "lg" }}
         scrollBehavior="inside"
-        onOpenChange={e => {
-          if (!e.open) {
-            onClose();
-          }
+        onOpenChange={(e) => {
+          // Escape, the backdrop and X ask first when there are changes.
+          if (!e.open) void requestClose();
         }}
+        // Only a tap outside closes it, never focus moving out: when the
+        // discard question closes, focus returns to where the tap left it
+        // (outside this dialog), which would otherwise ask a second time.
+        onFocusOutside={(event) => event.preventDefault()}
       >
         <Portal>
 
@@ -317,7 +405,7 @@ const WelfareFollowUpDialog = ({
               <Dialog.Header><Dialog.Title>
                 {isEdit ? "Edit welfare follow-up" : "Add welfare follow-up"}
               </Dialog.Title></Dialog.Header>
-              <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" /></Dialog.CloseTrigger>
+              <Dialog.CloseTrigger asChild><CloseButton size="sm" minW="44px" minH="44px" disabled={locked} /></Dialog.CloseTrigger>
               <Dialog.Body>
                 <Stack gap={4}>
                   <Field.Root
@@ -348,7 +436,7 @@ const WelfareFollowUpDialog = ({
                             selected: SingleValue<{ value: string; label: string }>,
                           ) => setMemberId(selected?.value ?? "")}
                           isLoading={members.isLoading}
-                          isDisabled={members.isLoading}
+                          isDisabled={members.isLoading || locked}
                           placeholder={`Search ${lowerTerm(
                             terms.memberPlural,
                           )} by name`}
@@ -376,6 +464,7 @@ const WelfareFollowUpDialog = ({
                             ]}
                             value={memberStatus}
                             onChange={setMemberStatus}
+                            isDisabled={locked}
                             styles={{
                               container: (base) => ({ ...base, marginTop: 8 }),
                             }}
@@ -409,7 +498,11 @@ const WelfareFollowUpDialog = ({
 
                   <Field.Root required>
                     <Field.Label>Date</Field.Label>
-                    <DateField value={recordDate} onChange={setRecordDate} />
+                    <DateField
+                      value={recordDate}
+                      onChange={setRecordDate}
+                      disabled={locked}
+                    />
                   </Field.Root>
 
                   <Field.Root invalid={submitted && !reason.trim()} required>
@@ -418,6 +511,7 @@ const WelfareFollowUpDialog = ({
                       id="follow-up-reason"
                       value={reason}
                       maxLength={REASON_MAX_LENGTH}
+                      readOnly={locked}
                       onChange={(event) => setReason(event.target.value)}
                     />
                     <Field.ErrorText>Reason is required.</Field.ErrorText>
@@ -429,6 +523,7 @@ const WelfareFollowUpDialog = ({
                       id="follow-up-note"
                       value={note}
                       maxLength={NOTE_MAX_LENGTH}
+                      readOnly={locked}
                       onChange={(event) => setNote(event.target.value)}
                     />
                     <Field.HelperText>
@@ -444,6 +539,7 @@ const WelfareFollowUpDialog = ({
                     <Switch
                       checked={keepOpen}
                       onCheckedChange={setKeepOpen}
+                      disabled={locked}
                     />
                   </Field.Root>
 
@@ -455,6 +551,7 @@ const WelfareFollowUpDialog = ({
                         onChange={setNextFollowUpDate}
                         min={recordDate || undefined}
                         clearable
+                        disabled={locked}
                       />
                       <Field.HelperText>
                         Optional — an open follow-up can have no date.
@@ -477,6 +574,7 @@ const WelfareFollowUpDialog = ({
                           ]}
                           value={assignedToUserId}
                           onChange={setAssignedToUserId}
+                          isDisabled={locked}
                         />
                       ) : (
                         <Text fontSize="sm">
@@ -526,7 +624,7 @@ const WelfareFollowUpDialog = ({
                       Archive record
                     </Button>
                   )}
-                  <Button variant="outline" onClick={onClose} disabled={isSaving}>
+                  <Button variant="outline" onClick={() => void requestClose()} disabled={isSaving}>
                     Cancel
                   </Button>
                   <Button
@@ -548,14 +646,23 @@ const WelfareFollowUpDialog = ({
         <ConfirmDialog
           open={archiveOpen}
           title="Archive record"
-          body={`Archive the follow-up for ${lockedMemberName}? It will no longer appear in follow-up lists.`}
+          body={`Archive the follow-up for ${lockedMemberName}? It will no longer appear in follow-up lists.${
+            // Archiving never saves the edits made in this form.
+            hasUnsavedChanges
+              ? "\n\nYour unsaved changes to this follow-up will not be saved."
+              : ""
+          }`}
           confirmLabel="Yes, archive"
           confirmPalette="red"
           loading={isSaving}
           onConfirm={handleArchive}
-          onClose={() => setArchiveOpen(false)}
+          // Stays open while the archive runs: its reply closes everything.
+          onClose={() => {
+            if (!locked) setArchiveOpen(false);
+          }}
         />
       )}
+      {confirmDialog}
     </>
   );
 };

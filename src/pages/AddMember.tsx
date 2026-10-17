@@ -29,6 +29,8 @@ import { useTerms } from "hooks/useOrgPresentation";
 import { useMemberModel } from "hooks/useMemberModel";
 import { lowerTerm } from "helpers/organisationPresentation";
 import { LABELS } from "config/presentationLabels";
+import { useDiscardChangesGuard } from "hooks/useUnsavedChangesGuard";
+import { hasFormChanges, snapshotOf } from "helpers/formChanges";
 
 interface FormData {
   [fieldName: string]: string | boolean;
@@ -46,7 +48,7 @@ const dateValue = (value: unknown) =>
 const maxDateFor = (field: MemberModelField) =>
   field.name === "dob" ? todayValue() : undefined;
 
-const AddOrUpdateMember = () => {
+const AddOrUpdateMemberForm = () => {
   const { confirm, confirmDialog } = useConfirm();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
@@ -63,7 +65,7 @@ const AddOrUpdateMember = () => {
   const model = useMemberModel(org.id);
   const membersModel = model.fields as MemberModelField[];
 
-  const { register, control, handleSubmit, reset } = useForm<FormData>();
+  const { register, control, handleSubmit, reset, watch, getValues } = useForm<FormData>();
   // Seed the form once per member, from the first response fetched after
   // this page opened. A cached copy (served first, then refetched) may
   // predate the officer's last save; editing it would write old values back.
@@ -99,6 +101,36 @@ const AddOrUpdateMember = () => {
     setSeed({ memberId: params.memberId, values });
   }, [freshMember, params.memberId, model.hasData, membersModel, reset, seededFor]);
 
+  const memberLabel = lowerTerm(terms.memberSingular);
+  // Until the form is seeded from a fresh response: an error (even with a
+  // cached copy, which may be out of date) or the loader. After that, a
+  // background refetch, failed or not, keeps the form and the officer's edits.
+  const seeded = seededFor === params.memberId;
+
+  // The form as first shown: the loaded member (or a blank new one) after
+  // every field has mounted with its default, so neither loading nor an
+  // option's preselected first value counts as a change. Taken once per
+  // form; refetches of the member or the model never move it.
+  const formShown =
+    model.hasData && membersModel.length > 0 && (!isUpdating || seeded);
+  const formKey = formShown ? params.memberId ?? "new" : null;
+  const [baseline, setBaseline] = useState<{ key: string; values: FormData } | null>(null);
+  useEffect(() => {
+    if (formKey && baseline?.key !== formKey) {
+      setBaseline({ key: formKey, values: snapshotOf(getValues()) });
+    }
+  }, [formKey, baseline, getValues]);
+  const formValues = watch();
+  const hasUnsavedChanges =
+    formKey !== null &&
+    baseline?.key === formKey &&
+    hasFormChanges(baseline.values, formValues);
+  const releaseLeaveGuard = useDiscardChangesGuard(
+    hasUnsavedChanges,
+    isUpdating ? `this ${memberLabel}` : `this new ${memberLabel}`,
+    confirm,
+  );
+
   const onSuccess = () => {
     toast.success(
       isUpdating
@@ -111,7 +143,17 @@ const AddOrUpdateMember = () => {
     if (params.memberId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
     }
-    navigate(PROTECTED_PATHS.VIEW_MEMBER);
+  };
+
+  // Passed per call, so it only runs while this form is still open: an
+  // officer who left mid-request is never pulled back to the list, and the
+  // leave guard of whatever screen they are on now is left alone.
+  const leaveForList = {
+    onSuccess: () => {
+      // Saved or deleted: moving on to the list must not ask.
+      releaseLeaveGuard();
+      navigate(PROTECTED_PATHS.VIEW_MEMBER);
+    },
   };
 
   const { mutate, isLoading } = useMutationWrapper(postRequest, onSuccess);
@@ -128,10 +170,7 @@ const AddOrUpdateMember = () => {
       };
     }
     // Add new member
-    mutate({
-      url,
-      data,
-    });
+    mutate({ url, data }, leaveForList);
   };
 
   const { mutate: deleteMember, isLoading: isDeleting } = useMutationWrapper(
@@ -140,7 +179,6 @@ const AddOrUpdateMember = () => {
       toast.success(`${terms.memberSingular} deleted successfully`);
       queryClient.invalidateQueries({ queryKey: queryKeys.members(org.id) });
       queryClient.removeQueries({ queryKey: queryKeys.member(org.id, params.memberId) });
-      navigate(PROTECTED_PATHS.VIEW_MEMBER);
     },
     (error: any) => {
       const message =
@@ -163,10 +201,18 @@ const AddOrUpdateMember = () => {
       confirmLabel: "Delete",
       destructive: true,
     });
-    if (confirmed) deleteMember({ url });
+    // Deleted after its own confirmation: there is nothing left to discard.
+    // A failed delete keeps the form and its guard.
+    if (confirmed) deleteMember({ url }, leaveForList);
   };
 
+  // Locked while a save or delete is in flight: either one navigates away on
+  // success, so an edit made meanwhile would be lost without a question.
+  const locked = isLoading || isDeleting;
+
   const onSubmit = handleSubmit(async (data) => {
+    // Enter in a field submits the form even while Update shows its spinner.
+    if (locked) return;
     const confirmed = await confirm({
       title: "Confirmation",
       body: `Are you sure you want to ${
@@ -187,6 +233,7 @@ const AddOrUpdateMember = () => {
           <Field.Root key={field._id ?? field.name} id={field.name}>
             <Field.Label>{displayMemberFieldLabel(field)}</Field.Label>
             <FormCheckbox
+              disabled={locked}
               control={control}
               name={field.name}
               label={displayMemberFieldLabel(field)}
@@ -215,6 +262,7 @@ const AddOrUpdateMember = () => {
                   onBlur={input.onBlur}
                   max={maxDateFor(field)}
                   clearable={!field.required}
+                  disabled={locked}
                 />
               )}
             />
@@ -233,6 +281,7 @@ const AddOrUpdateMember = () => {
               control={control}
               name={field.name}
               rules={{ required: field.required }}
+              isDisabled={locked}
               options={(Array.isArray(field.options) ? field.options : []).map(
                 (option) => ({ value: option, label: option }),
               )}
@@ -257,6 +306,7 @@ const AddOrUpdateMember = () => {
             <Input
               type={field.type}
               defaultValue={fieldValue}
+              readOnly={locked}
               {...register(field.name, { required: field.required })}
             />
           </Field.Root>
@@ -265,11 +315,6 @@ const AddOrUpdateMember = () => {
     });
   };
 
-  const memberLabel = lowerTerm(terms.memberSingular);
-  // Until the form is seeded from a fresh response: an error (even with a
-  // cached copy, which may be out of date) or the loader. After that, a
-  // background refetch, failed or not, keeps the form and the officer's edits.
-  const seeded = seededFor === params.memberId;
   const memberFailed = isUpdating && !seeded && memberQuery.isError;
   const memberLoading = isUpdating && !seeded && !memberFailed;
   const modelFailed = model.isError && !model.hasData;
@@ -322,11 +367,12 @@ const AddOrUpdateMember = () => {
               fontWeight="bold"
               type="submit"
               loading={isLoading}
+              disabled={isDeleting}
             >
               {isUpdating ? "Update" : "Submit"}
             </Button>
           </Box>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" disabled={locked} onClick={() => navigate(-1)}>
             Cancel
           </Button>
           {isUpdating && (
@@ -337,6 +383,7 @@ const AddOrUpdateMember = () => {
                 w="full"
                 mt="6"
                 loading={isDeleting}
+                disabled={isLoading}
                 onClick={handleDeleteMember}><FaTrash />{`Delete ${terms.memberSingular}`}</Button>
             </Can>
           )}
@@ -353,6 +400,7 @@ const AddOrUpdateMember = () => {
             <Button
               colorPalette="blue"
               variant="outline"
+              disabled={locked}
               onClick={() => navigate(PROTECTED_PATHS.USER_MODEL)}><FaPlusSquare />{`Update ${LABELS.memberModel(terms)}`}</Button>
           </Flex>
         </Can>
@@ -361,6 +409,19 @@ const AddOrUpdateMember = () => {
       {confirmDialog}
     </PageContainer>
   );
+};
+
+/**
+ * Remounted per organisation and per member, so the loaded member, the
+ * form's values and its unsaved-changes baseline never carry over to another
+ * organisation or member (values are keyed by field name, which they share).
+ * Add and Update are the same component to the router, so without this a
+ * save still in flight from Update would count as the new Add form's own.
+ */
+const AddOrUpdateMember = () => {
+  const organisationId = useGlobalStore((state) => state.organisation.id);
+  const { memberId } = useParams();
+  return <AddOrUpdateMemberForm key={`${organisationId}:${memberId ?? "new"}`} />;
 };
 
 export default AddOrUpdateMember;
