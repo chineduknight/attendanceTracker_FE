@@ -1,3 +1,5 @@
+import { CorrectionGuard } from "components/finance/financeTypes";
+
 interface RecordInput {
   organisationId: string;
   obligationId: string;
@@ -11,6 +13,8 @@ interface DuesCorrectionInput {
   monthlyPaid: Record<string, number>;
   /** Confirms the correction may overwrite the row's unapplied credit. */
   replaceUnappliedCredit?: boolean;
+  /** The guard of the row shown when the correction editor opened. */
+  expectedCorrectionGuard: CorrectionGuard;
 }
 interface LevyCorrectionInput {
   organisationId: string;
@@ -18,7 +22,15 @@ interface LevyCorrectionInput {
   memberId: string;
   amountPaid: number;
   replaceUnappliedCredit?: boolean;
+  expectedCorrectionGuard: CorrectionGuard;
 }
+
+/** Copied field by field so nothing else on the snapshot leaks into the body. */
+const guardBody = ({ paymentRowExists, paymentRevision, memberFinanceRevision }: CorrectionGuard) => ({
+  paymentRowExists,
+  paymentRevision,
+  memberFinanceRevision,
+});
 
 export function buildRecordPaymentPayload(input: RecordInput) {
   const { organisationId, obligationId, memberId, amount } = input;
@@ -26,24 +38,28 @@ export function buildRecordPaymentPayload(input: RecordInput) {
 }
 
 export function buildDuesCorrectionPayload(input: DuesCorrectionInput) {
-  const { organisationId, obligationId, memberId, monthlyPaid, replaceUnappliedCredit } = input;
+  const { organisationId, obligationId, memberId, monthlyPaid, replaceUnappliedCredit, expectedCorrectionGuard } =
+    input;
   return {
     organisationId,
     obligationId,
     memberId,
     monthlyPaid,
-    // Sent only when confirmed, so older backends never see the field.
+    expectedCorrectionGuard: guardBody(expectedCorrectionGuard),
+    // Sent only when confirmed. It never waives the guard above.
     ...(replaceUnappliedCredit ? { replaceUnappliedCredit: true } : {}),
   };
 }
 
 export function buildLevyCorrectionPayload(input: LevyCorrectionInput) {
-  const { organisationId, obligationId, memberId, amountPaid, replaceUnappliedCredit } = input;
+  const { organisationId, obligationId, memberId, amountPaid, replaceUnappliedCredit, expectedCorrectionGuard } =
+    input;
   return {
     organisationId,
     obligationId,
     memberId,
     amountPaid,
+    expectedCorrectionGuard: guardBody(expectedCorrectionGuard),
     ...(replaceUnappliedCredit ? { replaceUnappliedCredit: true } : {}),
   };
 }

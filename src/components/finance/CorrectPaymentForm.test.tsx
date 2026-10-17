@@ -146,3 +146,12 @@ test("shows retained credit and confirms it will be replaced before sending the 
   fireEvent.click(await screen.findByText("Yes, update"));
   expect(onCorrectDues).toHaveBeenCalledWith({ "1": 500, "2": 500, "3": 500, "4": 500 }, true);
 });
+
+test("a locked form cannot save or open the confirmation", () => {
+  const { onCorrectDues } = setup({ row: paidJanToMar, locked: true });
+  const save = screen.getByRole("button", { name: "Save correction" });
+  expect(save).toBeDisabled();
+  fireEvent.click(save);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(onCorrectDues).not.toHaveBeenCalled();
+});

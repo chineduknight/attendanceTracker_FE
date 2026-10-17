@@ -6,6 +6,7 @@ import {
   postRequest,
   putRequest,
   queryClient,
+  showMutationError,
   useMutationWrapper,
   useQueryWrapper,
 } from "services/api/apiHelper";
@@ -22,6 +23,7 @@ import { handleExportError, openExportUrl } from "components/analytics/analytics
 import {
   BulkStartDateResponse,
   ComplianceResponse,
+  CorrectionGuard,
   FinanceMember,
   Obligation,
 } from "components/finance/financeTypes";
@@ -53,7 +55,7 @@ export const useCompliance = (organisationId: string, obligationId: string) => {
         asOf,
       )
     : "";
-  const { data, isLoading, isError, error, refetch, isRefetching } = useQueryWrapper(
+  const { data, isLoading, isError, error, refetch, isRefetching, dataUpdatedAt } = useQueryWrapper(
     queryKeys.finance.compliance(organisationId, obligationId, asOf),
     url,
     { enabled: Boolean(organisationId && obligationId) },
@@ -66,6 +68,8 @@ export const useCompliance = (organisationId: string, obligationId: string) => {
     error,
     refetch,
     isRefetching,
+    /** When the rows on screen were fetched; tells a reload apart from a stale render. */
+    dataUpdatedAt: dataUpdatedAt as number,
   };
 };
 
@@ -132,30 +136,73 @@ interface PaymentTarget {
   memberId: string;
 }
 
-/** Record (POST) and correct (PUT) a member's payment for one obligation. */
-export const usePaymentMutations = (target: PaymentTarget, onSaved: () => void) => {
+/**
+ * Why the backend refused a correction:
+ * - `conflict` (409): the payment or the member's start date changed after
+ *   the editor opened; the officer must review the latest figures.
+ * - `outdated` (428): the request lacked a precondition the backend needs,
+ *   so this app build is older than the backend.
+ */
+export type CorrectionRejection = "conflict" | "outdated";
+
+const CORRECTION_REJECTIONS: Partial<Record<number, CorrectionRejection>> = {
+  409: "conflict",
+  428: "outdated",
+};
+
+/**
+ * Record (POST) and correct (PUT) a member's payment for one obligation.
+ * A correction is an absolute overwrite, so it carries the guard of the row
+ * the officer saw and is never retried: a rejected one is handed to
+ * `onCorrectionRejected` and the officer decides what to do next.
+ */
+export const usePaymentMutations = (
+  target: PaymentTarget,
+  onSaved: () => void,
+  onCorrectionRejected: (reason: CorrectionRejection) => void,
+) => {
   const done = () => {
     toast.success("Payment saved");
     invalidateFinance(target.organisationId);
     onSaved();
   };
+  const correctionFailed = (error: unknown) => {
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    const reason = status === undefined ? undefined : CORRECTION_REJECTIONS[status];
+    if (!reason) {
+      showMutationError(error);
+      return;
+    }
+    // The cached row is stale on a conflict: refetch this organisation only.
+    if (reason === "conflict") invalidateFinance(target.organisationId);
+    onCorrectionRejected(reason);
+  };
   const { mutate: record, isLoading: recording } = useMutationWrapper(postRequest, done);
-  const { mutate: correct, isLoading: correcting } = useMutationWrapper(putRequest, done);
+  const { mutate: correct, isLoading: correcting } = useMutationWrapper(putRequest, done, correctionFailed);
   return {
     record: (amount: number) =>
       record({
         url: financeRequest.PAYMENTS,
         data: buildRecordPaymentPayload({ ...target, amount }),
       }),
-    correctDues: (monthlyPaid: Record<string, number>, replaceUnappliedCredit = false) =>
+    correctDues: (
+      monthlyPaid: Record<string, number>,
+      replaceUnappliedCredit: boolean,
+      expectedCorrectionGuard: CorrectionGuard,
+    ) =>
       correct({
         url: financeRequest.PAYMENTS,
-        data: buildDuesCorrectionPayload({ ...target, monthlyPaid, replaceUnappliedCredit }),
+        data: buildDuesCorrectionPayload({
+          ...target,
+          monthlyPaid,
+          replaceUnappliedCredit,
+          expectedCorrectionGuard,
+        }),
       }),
-    correctLevy: (amountPaid: number, replaceUnappliedCredit = false) =>
+    correctLevy: (amountPaid: number, replaceUnappliedCredit: boolean, expectedCorrectionGuard: CorrectionGuard) =>
       correct({
         url: financeRequest.PAYMENTS,
-        data: buildLevyCorrectionPayload({ ...target, amountPaid, replaceUnappliedCredit }),
+        data: buildLevyCorrectionPayload({ ...target, amountPaid, replaceUnappliedCredit, expectedCorrectionGuard }),
       }),
     isSaving: recording || correcting,
   };

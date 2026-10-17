@@ -756,3 +756,269 @@ describe("<Finance> pinned search", () => {
     },
   );
 });
+
+describe("<Finance> stale-screen correction guard (F0c)", () => {
+  const GUARD = { paymentRowExists: true, paymentRevision: 2, memberFinanceRevision: 5 };
+  const NEWER = { paymentRowExists: true, paymentRevision: 3, memberFinanceRevision: 5 };
+  const adaWith = (correctionGuard?: object, extra: Partial<ComplianceRow> = {}): ComplianceRow[] => [
+    { ...ROWS[0], correctionGuard, ...extra } as ComplianceRow,
+    ROWS[1],
+    ROWS[2],
+  ];
+  /** Ada after another officer recorded April. */
+  const adaPaidToApr = (correctionGuard: object) =>
+    adaWith(correctionGuard, {
+      months: months(["paid", "paid", "paid", "paid", U, U, U, U, U, U, U, U]),
+      totalPaid: 2000, balance: 4000, paidUpToMonth: 4,
+    });
+  const levyRows = (correctionGuard?: object, extra: Partial<ComplianceRow> = {}): ComplianceRow[] => [
+    { memberId: "ada", name: "Ada", accountable: true, liable: true, status: "partial",
+      expected: 10000, paid: 2000, balance: 8000, correctionGuard, ...extra } as ComplianceRow,
+  ];
+  const httpError = (status: number, error = "Rejected") => ({ response: { status, data: { error } } });
+
+  const openCorrection = async (name = "Ada") => {
+    fireEvent.click(await memberRow(name));
+    fireEvent.click(await screen.findByRole("button", { name: /Correct the record/ }));
+    return screen.findByRole("dialog");
+  };
+  const openLevyCorrection = async () => {
+    await chooseOption(await screen.findByLabelText("Obligation"), "Building Levy");
+    return openCorrection();
+  };
+  const saveDuesApr = async () => {
+    fireEvent.change(await screen.findByLabelText("Apr"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+  };
+
+  beforeEach(() => {
+    api.put.mockResolvedValue({ data: { data: {} } });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it("sends the displayed guard on a dues correction, and never on recording", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    fireEvent.click(await memberRow("Ada"));
+    fireEvent.click(await screen.findByRole("button", { name: /1 month/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Record/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty("expectedCorrectionGuard");
+    // Saving closes the sheet; the list is aria-hidden until it has gone.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await openCorrection();
+    await saveDuesApr();
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith("/finance/payments", {
+        organisationId: "org1",
+        obligationId: "dues-now",
+        memberId: "ada",
+        monthlyPaid: { "1": 500, "2": 500, "3": 500, "4": 500 },
+        expectedCorrectionGuard: GUARD,
+      }),
+    );
+  });
+
+  it("sends zero revisions on a levy correction instead of dropping them", async () => {
+    const zero = { paymentRowExists: true, paymentRevision: 0, memberFinanceRevision: 0 };
+    complianceRows = levyRows(zero);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openLevyCorrection();
+
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith("/finance/payments", {
+        organisationId: "org1", obligationId: "levy", memberId: "ada",
+        amountPaid: 2500, expectedCorrectionGuard: zero,
+      }),
+    );
+  });
+
+  it("sends the guard with replaceUnappliedCredit only after the red confirmation", async () => {
+    complianceRows = levyRows(GUARD, { recordedTotal: 3000, appliedTotal: 2000, unappliedCredit: 1000 });
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openLevyCorrection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent(/unapplied credit on this record will be replaced too/);
+    expect(api.put).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Yes, update" }));
+    await waitFor(() =>
+      expect(api.put.mock.calls[0][1]).toMatchObject({
+        amountPaid: 2000, replaceUnappliedCredit: true, expectedCorrectionGuard: GUARD,
+      }),
+    );
+  });
+
+  it("repairs an invalid stored amount with the guard it was opened with", async () => {
+    const legacy = { paymentRowExists: true, paymentRevision: null, memberFinanceRevision: 4 };
+    complianceRows = levyRows(legacy, {
+      status: "needs-review", invalidStoredAmount: true, paid: null, balance: null,
+    });
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openLevyCorrection();
+
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "3000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() =>
+      expect(api.put.mock.calls[0][1]).toMatchObject({ amountPaid: 3000, expectedCorrectionGuard: legacy }),
+    );
+  });
+
+  it("on a 409 keeps the sheet open, refetches this organisation and makes the officer start again", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+
+    // Another officer recorded April after this editor opened.
+    complianceRows = adaPaidToApr(NEWER);
+    api.put.mockRejectedValueOnce(httpError(409, "Payment changed"));
+    await saveDuesApr();
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent("Record changed");
+    expect(notice).toHaveTextContent(/Your correction was not saved/);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // The stale amounts are gone, not left waiting to be resent.
+    expect(within(sheet).queryByLabelText("Apr")).not.toBeInTheDocument();
+    expect(invalidate.mock.calls.every(([filters]) => (filters as unknown as { queryKey: readonly unknown[] }).queryKey[1] === "org1"))
+      .toBe(true);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["finance", "org1", "compliance"] });
+
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Review and correct again" }));
+    // A fresh editor from the reloaded row: April is now part of the record.
+    expect(await within(sheet).findByLabelText("Apr")).toHaveValue("500");
+    expect(api.put).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText("May"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));
+    expect(api.put.mock.calls[1][1]).toMatchObject({
+      monthlyPaid: { "1": 500, "2": 500, "3": 500, "4": 500, "5": 500 },
+      expectedCorrectionGuard: NEWER,
+    });
+  });
+
+  it("on a levy 409 waits for fresh rows before offering a new correction", async () => {
+    complianceRows = levyRows(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openLevyCorrection();
+
+    // The refetch after the conflict hangs until released.
+    let release: () => void = () => undefined;
+    api.get.mockImplementation((url: string) => {
+      if (url.includes("/compliance")) {
+        return new Promise((resolve) => {
+          release = () => resolve({ data: { data: { obligation: levy, summary: SUMMARY, rows: levyRows(NEWER, { paid: 3000 }) } } });
+        });
+      }
+      return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+    });
+    api.put.mockRejectedValueOnce(httpError(409));
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Record changed");
+    expect(within(sheet).getByRole("button", { name: /Reloading…|Reload latest/ })).toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+
+    await act(async () => release());
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Review and correct again" }));
+    expect(await within(sheet).findByLabelText(/total amount paid/i)).toHaveValue("3,000");
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a newer guard when the row refreshes under an open form", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    fireEvent.change(await within(sheet).findByLabelText("Apr"), { target: { value: "500" } });
+
+    // Another tab saves; this tab's cache refreshes in the background.
+    complianceRows = adaPaidToApr(NEWER);
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("blocks corrections without a guard but still records payments", async () => {
+    complianceRows = adaWith(undefined);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+
+    expect(within(sheet).getByText(/refresh the page after the Finance update before correcting/)).toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeDisabled();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Back to record payment" }));
+    fireEvent.click(await screen.findByRole("button", { name: /1 month/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Record/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("on a 428 explains the page needs refreshing, without a toast or success", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    api.put.mockRejectedValueOnce(httpError(428, "Precondition required"));
+    await saveDuesApr();
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent(/older than the latest Finance update/);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("on a 422 shows the backend's message and keeps the form open", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    api.put.mockRejectedValueOnce(httpError(422, "Amount exceeds what is owed"));
+    await saveDuesApr();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Amount exceeds what is owed"));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(within(sheet).getByLabelText("Apr")).toHaveValue("500");
+    expect(within(sheet).queryByText("Record changed")).not.toBeInTheDocument();
+  });
+
+  it("drops an open correction when the organisation changes", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openCorrection();
+
+    act(() => setOrg("org2", MANAGER));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument());
+    await openCorrection();
+    await saveDuesApr();
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(api.put.mock.calls[0][1]).toMatchObject({ organisationId: "org2", expectedCorrectionGuard: GUARD });
+  });
+});

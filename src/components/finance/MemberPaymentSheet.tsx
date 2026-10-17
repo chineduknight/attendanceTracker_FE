@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Button, Flex, SimpleGrid, Stack, Text, Separator } from "@chakra-ui/react";
 import { formatMoney } from "helpers/financeConstants";
 import {
@@ -13,9 +13,10 @@ import {
   UNAPPLIED_CREDIT_EXPLANATION,
   unappliedCreditOf,
 } from "helpers/financeCompliance";
-import { usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
+import { correctionGuardOf, sameCorrectionGuard } from "helpers/correctionGuard";
+import { CorrectionRejection, usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
-import { ComplianceRow, Obligation } from "components/finance/financeTypes";
+import { ComplianceRow, CorrectionGuard, Obligation } from "components/finance/financeTypes";
 import FinanceSheet from "components/finance/FinanceSheet";
 import RecordPaymentForm from "components/finance/RecordPaymentForm";
 import CorrectPaymentForm from "components/finance/CorrectPaymentForm";
@@ -25,9 +26,87 @@ import { MonthGrid, StandingBadge } from "components/finance/ComplianceVisuals";
 interface MemberPaymentSheetProps {
   organisationId: string;
   obligation: Obligation;
+  /** The member's latest row: it follows refetches while the sheet is open. */
   row: ComplianceRow;
+  /** When `row` was fetched. */
+  rowUpdatedAt: number;
+  onReload: () => void;
+  isReloading: boolean;
   onClose: () => void;
 }
+
+/**
+ * What the officer saw when they opened the correction editor. The guard is
+ * captured here, once, and only this copy is ever sent: picking up a newer
+ * guard for values typed against older figures would defeat the check.
+ */
+interface CorrectionSnapshot {
+  row: ComplianceRow;
+  guard: CorrectionGuard | null;
+}
+
+export const MISSING_GUARD_MESSAGE =
+  "Please refresh the page after the Finance update before correcting this payment. Recording new payments still works.";
+export const OUTDATED_APP_MESSAGE =
+  "This correction wasn't saved because this page is older than the latest Finance update. Refresh the page, then make the correction again.";
+
+/**
+ * The correction's figures are out of date: the backend refused it (409), or
+ * a refetch showed the record changed while the editor was open. The entered
+ * values are already gone; the officer reloads, reviews and starts again.
+ */
+const RecordChangedNotice = ({
+  memberName,
+  refused,
+  reloaded,
+  isReloading,
+  onReload,
+  onReview,
+}: {
+  memberName: string;
+  refused: boolean;
+  reloaded: boolean;
+  isReloading: boolean;
+  onReload: () => void;
+  onReview: () => void;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  // Move focus here so keyboard and screen-reader users land on the news.
+  useEffect(() => ref.current?.focus(), []);
+  return (
+    <Stack
+      ref={ref}
+      tabIndex={-1}
+      role="alert"
+      gap={2}
+      p={3}
+      borderWidth="1px"
+      borderColor="border.warning"
+      bg="bg.warning"
+      borderRadius="md"
+      outline="none"
+    >
+      <Text fontWeight="semibold" color="fg.warning">
+        Record changed
+      </Text>
+      <Text fontSize="sm">
+        {refused
+          ? `Your correction was not saved. Someone changed this payment record or ${memberName}'s financial start date after you opened it.`
+          : `This payment record or ${memberName}'s financial start date changed while you were correcting it, so your entries were cleared.`}
+      </Text>
+      <Text fontSize="sm">Reload and review the latest figures, then enter the correction again.</Text>
+      {reloaded ? (
+        <Button size="sm" minH="44px" colorPalette="purple" onClick={onReview}>
+          Review and correct again
+        </Button>
+      ) : (
+        <Button size="sm" minH="44px" colorPalette="purple" loading={isReloading} loadingText="Reloading…" onClick={onReload}>
+          Reload latest
+        </Button>
+      )}
+    </Stack>
+  );
+};
 
 const Figure = ({ label, value }: { label: string; value: string }) => (
   <Box>
@@ -62,17 +141,74 @@ const CreditNote = ({ row }: { row: ComplianceRow }) => {
 };
 
 /**
+ * The form, seeded from the snapshot and bound to its guard. Without a guard
+ * (an older backend) it stays visible but cannot save.
+ */
+const CorrectionEditor = ({
+  correction: { row, guard },
+  obligation,
+  isSaving,
+  onCorrectDues,
+  onCorrectLevy,
+}: {
+  correction: CorrectionSnapshot;
+  obligation: Obligation;
+  isSaving: boolean;
+  onCorrectDues: (monthlyPaid: Record<string, number>, replace: boolean, guard: CorrectionGuard) => void;
+  onCorrectLevy: (amountPaid: number, replace: boolean, guard: CorrectionGuard) => void;
+}) => (
+  <CorrectPaymentForm
+    obligation={obligation}
+    memberName={row.name}
+    row={row}
+    isSaving={isSaving}
+    locked={!guard}
+    onCorrectDues={(monthlyPaid, replace) => guard && onCorrectDues(monthlyPaid, replace, guard)}
+    onCorrectLevy={(amountPaid, replace) => guard && onCorrectLevy(amountPaid, replace, guard)}
+  />
+);
+
+/**
  * Everything about one member for one obligation: where they stand, and —
  * for finance managers — recording money, correcting the record, or setting
  * the start date that makes them accountable at all.
  */
-const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: MemberPaymentSheetProps) => {
+const MemberPaymentSheet = ({
+  organisationId,
+  obligation,
+  row,
+  rowUpdatedAt,
+  onReload,
+  isReloading,
+  onClose,
+}: MemberPaymentSheetProps) => {
   const canManage = usePermissions().has("finance.manage");
-  const [mode, setMode] = useState<"record" | "correct">("record");
+  // null: recording. Lives only in this sheet (keyed by obligation and member,
+  // inside a workspace keyed by organisation), so it is never persisted and
+  // never survives a switch.
+  const [correction, setCorrection] = useState<CorrectionSnapshot | null>(null);
+  const [rejection, setRejection] = useState<{ reason: CorrectionRejection; rowsAt: number } | null>(null);
+  const rowUpdatedAtRef = useRef(rowUpdatedAt);
+  rowUpdatedAtRef.current = rowUpdatedAt;
   const payments = usePaymentMutations(
     { organisationId, obligationId: obligation.id, memberId: row.memberId },
     onClose,
+    (reason) => setRejection({ reason, rowsAt: rowUpdatedAtRef.current }),
   );
+  const openCorrection = () => {
+    setCorrection({ row, guard: correctionGuardOf(row) });
+    setRejection(null);
+  };
+  const closeCorrection = () => {
+    setCorrection(null);
+    setRejection(null);
+  };
+  const refused = rejection?.reason === "conflict";
+  const changedUnderneath = !!correction && !sameCorrectionGuard(correction.guard, correctionGuardOf(row));
+  // After a 409 the rows on screen predate it; only a later fetch may seed a
+  // new correction. The 409 invalidates (cancelling any fetch in flight), so
+  // every fetch that lands afterwards was made after the refusal.
+  const reloaded = !refused || rowUpdatedAt > rejection.rowsAt;
   const startDate = useFinancialStartDate(organisationId);
 
   const body = () => {
@@ -124,7 +260,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
           )}
         </SimpleGrid>
         <CreditNote row={row} />
-        {isDuesObligation(obligation) && mode === "record" && <MonthGrid row={row} />}
+        {isDuesObligation(obligation) && !correction && <MonthGrid row={row} />}
         {!isLiable(row) && (
           <Text fontSize="sm" color="fg.muted">
             {isDuesObligation(obligation)
@@ -136,7 +272,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
         {canManage && isLiable(row) && (
           <>
             <Separator />
-            {mode === "record" ? (
+            {!correction ? (
               <>
                 {unknown ? (
                   <Text fontSize="sm" color="fg.muted">
@@ -154,21 +290,43 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
                     Nothing left to pay on this obligation.
                   </Text>
                 )}
-                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={() => setMode("correct")}>
+                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={openCorrection}>
                   Made a mistake? Correct the record
                 </Button>
               </>
             ) : (
               <>
-                <CorrectPaymentForm
-                  obligation={obligation}
-                  memberName={row.name}
-                  row={row}
-                  isSaving={payments.isSaving}
-                  onCorrectDues={payments.correctDues}
-                  onCorrectLevy={payments.correctLevy}
-                />
-                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={() => setMode("record")}>
+                {refused || changedUnderneath ? (
+                  <RecordChangedNotice
+                    memberName={row.name}
+                    refused={refused}
+                    reloaded={reloaded}
+                    isReloading={isReloading}
+                    onReload={onReload}
+                    onReview={openCorrection}
+                  />
+                ) : (
+                  <>
+                    {!correction.guard && (
+                      <Text role="status" fontSize="sm" color="fg.warning">
+                        {MISSING_GUARD_MESSAGE}
+                      </Text>
+                    )}
+                    {rejection?.reason === "outdated" && (
+                      <Text role="alert" fontSize="sm" color="fg.error">
+                        {OUTDATED_APP_MESSAGE}
+                      </Text>
+                    )}
+                    <CorrectionEditor
+                      correction={correction}
+                      obligation={obligation}
+                      isSaving={payments.isSaving}
+                      onCorrectDues={payments.correctDues}
+                      onCorrectLevy={payments.correctLevy}
+                    />
+                  </>
+                )}
+                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={closeCorrection}>
                   Back to record payment
                 </Button>
               </>
