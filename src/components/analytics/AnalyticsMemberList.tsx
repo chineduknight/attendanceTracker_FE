@@ -24,6 +24,8 @@ interface AnalyticsMemberListProps {
   /** In the backend's ranking order. */
   rows: AnalyticsListRow[];
   onOpen: (memberId: string) => void;
+  /** The member last opened from this report: marked so the officer can find their place. */
+  lastOpenedId?: string | null;
 }
 
 /**
@@ -33,7 +35,7 @@ interface AnalyticsMemberListProps {
  * shows the counts the backend returned. A member with no counts was on no
  * included roster in the range (every cell N/A), which is not absence.
  */
-const AnalyticsMemberList = ({ rows, onOpen }: AnalyticsMemberListProps) => {
+const AnalyticsMemberList = ({ rows, onOpen, lastOpenedId }: AnalyticsMemberListProps) => {
   const terms = useTerms();
   const session = lowerTerm(terms.attendanceSingular);
   return (
@@ -88,11 +90,15 @@ const AnalyticsMemberList = ({ rows, onOpen }: AnalyticsMemberListProps) => {
             )}
           </Flex>
         );
+        const isLastOpened = Boolean(row.memberId) && row.memberId === lastOpenedId;
         return (
           <GroupedListItem key={row.memberId ?? `${row.name}-${row.rank}`} px={0} py={0}>
             {row.memberId ? (
               <Box
                 as="button"
+                data-member-id={row.memberId}
+                aria-current={isLastOpened || undefined}
+                bg={isLastOpened ? "blue.subtle" : undefined}
                 w="100%"
                 textAlign="start"
                 px={4}
