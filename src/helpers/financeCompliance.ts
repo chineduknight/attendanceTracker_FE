@@ -132,15 +132,25 @@ export const visibleRows = (
     sort,
   );
 
-/** Share of what is due that has been collected, for the summary bar. */
+/**
+ * Value applied to the obligation under current start dates. The backend
+ * calls it totalCollected for compatibility, but it is not cash income:
+ * recorded value outside the current window is unapplied credit instead.
+ */
+export const appliedOf = (summary: Pick<ComplianceSummary, "totalCollected" | "totalApplied">) =>
+  summary.totalApplied ?? summary.totalCollected;
+
+/** Share of what is due that has been applied, for the summary bar. */
 export const collectionPct = (
-  summary: Pick<ComplianceSummary, "totalCollected" | "totalOutstanding" | "totalExpected">,
+  summary: Pick<ComplianceSummary, "totalCollected" | "totalApplied" | "totalOutstanding" | "totalExpected">,
 ) => {
-  const expected =
-    summary.totalExpected ?? summary.totalCollected + summary.totalOutstanding;
+  const applied = appliedOf(summary);
+  const expected = summary.totalExpected ?? applied + summary.totalOutstanding;
   if (!expected) return 0;
-  return Math.min(100, (summary.totalCollected / expected) * 100);
+  return Math.min(100, (applied / expected) * 100);
 };
+
+export const APPLIED_PROGRESS_LABEL = "Share applied of expected";
 
 export const monthLabel = (month: number) =>
   MONTHS.find((m) => m.value === month)?.label ?? String(month);
@@ -171,7 +181,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  */
 export const standingLabel = (row: ComplianceRow, obligation: Obligation) => {
   if (!row.accountable) return "No start date";
-  if (!isLiable(row)) return "Not liable for this levy";
+  if (!isLiable(row))
+    return isDuesObligation(obligation) ? "Not liable this year" : "Not liable for this levy";
   const status = overallStatus(row);
   if (status === "paid") return "Paid in full";
   const isDues = isDuesObligation(obligation);

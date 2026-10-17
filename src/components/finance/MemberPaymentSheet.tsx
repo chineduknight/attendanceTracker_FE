@@ -116,7 +116,9 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
         {isDuesObligation(obligation) && mode === "record" && <MonthGrid row={row} />}
         {!isLiable(row) && (
           <Text fontSize="sm" color="fg.muted">
-            Their financial start date is after this levy's date, so they don't owe it.
+            {isDuesObligation(obligation)
+              ? "Their financial start date is after this dues year, so they don't owe it."
+              : "Their financial start date is after this levy's date, so they don't owe it."}
           </Text>
         )}
 

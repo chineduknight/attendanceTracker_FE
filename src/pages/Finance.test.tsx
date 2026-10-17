@@ -140,13 +140,30 @@ beforeEach(() => {
 });
 
 describe("Collect", () => {
+  it("distinguishes recorded, applied and unapplied credit when credit is held", async () => {
+    complianceSummary = {
+      ...SUMMARY, totalCollected: 6000, totalApplied: 6000, totalOutstanding: 6000, totalExpected: 12000,
+      totalRecorded: 8000, totalUnappliedCredit: 2000,
+    };
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    expect(await screen.findByText(/applied · 50%/)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded .*8,000 · Applied .*6,000 · Unapplied credit .*2,000/)).toBeInTheDocument();
+    expect(screen.getByText(/6,000 left to pay/)).toBeInTheDocument();
+  });
+
   it("opens on this year's dues with totals and status counts", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
 
-    expect(await screen.findByText(/collected · 63%/)).toBeInTheDocument();
+    expect(await screen.findByText(/applied · 63%/)).toBeInTheDocument();
     expect(shownValue(screen.getByLabelText("Obligation"))).toBe(`${YEAR} Dues`);
     expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Share applied of expected" })).toBeInTheDocument();
+    expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
+    // No credit in this summary, so no recorded / credit breakdown.
+    expect(screen.queryByText(/Unapplied credit/)).not.toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filter by payment status" });
     expect(within(chips).getByRole("button", { name: "Owing 1" })).toBeInTheDocument();
     expect(within(chips).getByRole("button", { name: "No start date 1" })).toBeInTheDocument();
@@ -241,7 +258,7 @@ describe("Obligations", () => {
     await openTab("Obligations");
 
     expect(await screen.findByText(/of .*12,000.* · 63%/)).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Share collected")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Share applied of expected")).toHaveLength(1);
   });
 
   it("shows amounts, not a member count that would include people not liable", async () => {
@@ -261,10 +278,31 @@ describe("Obligations", () => {
     renderFinance();
     await openTab("Obligations");
 
-    expect(await screen.findByText(/1,400 of .*2,000 · 70%$/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Share collected")).toBeInTheDocument();
+    expect(await screen.findByText(/1,400 applied of .*2,000 · 70%$/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Share applied of expected")).toBeInTheDocument();
     expect(screen.queryByText(/1 of 3/)).not.toBeInTheDocument();
     expect(screen.queryByText(/paid in full/)).not.toBeInTheDocument();
+  });
+
+  it("names the card figure as applied and shows unapplied credit separately", async () => {
+    serve([
+      levy,
+      {
+        ...duesNow,
+        summary: {
+          totalMembers: 3, accountableMembers: 2, paidMembers: 1,
+          totalExpected: 12000, totalCollected: 6000, totalOutstanding: 6000,
+          totalRecorded: 8000, totalUnappliedCredit: 2000,
+        },
+      },
+    ]);
+    setOrg("org1", "owner");
+    renderFinance();
+    await openTab("Obligations");
+
+    expect(await screen.findByText(/6,000 applied of .*12,000 · 50%$/)).toBeInTheDocument();
+    expect(screen.getByText(/2,000 unapplied credit held/)).toBeInTheDocument();
+    expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
   });
 
   it("opens an obligation in Collect when tapped", async () => {

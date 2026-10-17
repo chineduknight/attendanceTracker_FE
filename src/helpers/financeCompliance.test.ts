@@ -1,4 +1,5 @@
 import {
+  appliedOf,
   CLEAR_START_DATE_NOTE,
   START_DATE_CHANGE_NOTE,
   collectionPct,
@@ -101,6 +102,7 @@ describe("standingLabel", () => {
     const row: ComplianceRow = { memberId: "m", name: "M", accountable: true, liable: true, status: "partial" };
     expect(standingLabel(row, levy)).toBe("Part paid");
     expect(standingLabel({ ...row, liable: false }, levy)).toBe("Not liable for this levy");
+    expect(standingLabel({ ...row, liable: false, status: "not-due" }, dues)).toBe("Not liable this year");
   });
 });
 
@@ -153,6 +155,14 @@ describe("defaultObligationId", () => {
     expect(defaultObligationId([old, levy, newerLevy], today)).toBe("lv2");
     expect(defaultObligationId([old], today)).toBe("d25");
     expect(defaultObligationId([], today)).toBe("");
+  });
+});
+
+describe("appliedOf", () => {
+  it("prefers the explicit totalApplied, falling back to totalCollected on older backends", () => {
+    expect(appliedOf({ totalCollected: 300, totalApplied: 300 })).toBe(300);
+    expect(appliedOf({ totalCollected: 300 })).toBe(300);
+    expect(collectionPct({ totalCollected: 999, totalApplied: 300, totalOutstanding: 700 })).toBe(30);
   });
 });
 

@@ -19,6 +19,8 @@ import {
   COLLECT_SORT_LABELS,
   CollectFilter,
   CollectSort,
+  appliedOf,
+  APPLIED_PROGRESS_LABEL,
   collectionPct,
   filterCounts,
   formatBusinessDate,
@@ -213,10 +215,10 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
             </Text>
             <Flex align="baseline" justify="space-between" mt={2} gap={2} wrap="wrap">
               <Text fontSize="2xl" fontWeight="bold" lineHeight="short">
-                {formatMoney(compliance.summary.totalCollected)}
+                {formatMoney(appliedOf(compliance.summary))}
               </Text>
               <Text fontSize="sm" color="fg.muted">
-                {`collected · ${formatPct(collectionPct(compliance.summary))}`}
+                {`applied · ${formatPct(collectionPct(compliance.summary))}`}
               </Text>
             </Flex>
             <Progress.Root
@@ -224,16 +226,22 @@ const CollectTab = ({ organisationId, obligations, obligationId, onObligationCha
               colorPalette="green"
               size="sm"
               borderRadius="full"
-              my={2}
-              aria-label="Share collected">
-              <Progress.Track>
+              my={2}>
+              <Progress.Track aria-label={APPLIED_PROGRESS_LABEL}>
                 <Progress.Range />
               </Progress.Track>
             </Progress.Root>
             <Flex justify="space-between" fontSize="sm" color="fg.muted" gap={2} wrap="wrap">
-              <Text>{`${formatMoney(compliance.summary.totalOutstanding)} left to collect`}</Text>
+              <Text>{`${formatMoney(compliance.summary.totalOutstanding)} left to pay`}</Text>
               <Text>{`${counts.paid} of ${counts.paid + counts.owing} paid in full`}</Text>
             </Flex>
+            {!!compliance.summary.totalUnappliedCredit && (
+              <Text fontSize="sm" color="fg.muted" mt={1}>
+                {`Recorded ${formatMoney(compliance.summary.totalRecorded ?? 0)} · Applied ${formatMoney(
+                  appliedOf(compliance.summary),
+                )} · Unapplied credit ${formatMoney(compliance.summary.totalUnappliedCredit)}`}
+              </Text>
+            )}
             {compliance.summary.totalArrears !== undefined && (
               <Button
                 variant="plain"

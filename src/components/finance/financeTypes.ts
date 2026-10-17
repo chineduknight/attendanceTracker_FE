@@ -13,8 +13,13 @@ export interface ObligationSummary {
   accountableMembers: number;
   paidMembers: number;
   totalExpected: number;
-  /** Value applied to this obligation under current start dates. */
+  /**
+   * Value APPLIED to this obligation under current start dates (named
+   * "collected" for compatibility). Not cash income; see totalRecorded.
+   */
   totalCollected: number;
+  /** Explicit name for totalCollected; absent on older backends. */
+  totalApplied?: number;
   totalOutstanding: number;
   /** All value recorded on payment rows; absent on older backends. */
   totalRecorded?: number;
@@ -45,11 +50,12 @@ export interface ComplianceRow {
   totalPaid?: number;
   balance?: number;
   paidUpToMonth?: number;
+  /** Absent when the member owes nothing this year (`liable: false`). */
   compliance?: number;
-  /** @deprecated No longer sent; use `unappliedCredit`. */
-  creditMonths?: number[];
-  // levy
+  /** False when nothing is owed: a levy dated before the start date, or a
+   * dues year that ends before it. */
   liable?: boolean;
+  // levy
   expected?: number;
   paid?: number;
   // Arrears lens as of the requested date; absent on older backends and on
@@ -72,7 +78,9 @@ export interface ComplianceRow {
 export interface ComplianceSummary {
   totalMembers: number;
   accountableMembers: number;
+  /** Applied value, as on ObligationSummary. */
   totalCollected: number;
+  totalApplied?: number;
   totalOutstanding: number;
   paidMembers?: number;
   totalExpected?: number;
