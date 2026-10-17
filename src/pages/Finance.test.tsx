@@ -9,7 +9,7 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
 import Finance from "pages/Finance";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
-import { CLEAR_WARNING, todayBusinessDate } from "helpers/financeCompliance";
+import { CLEAR_START_DATE_NOTE, todayBusinessDate } from "helpers/financeCompliance";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn(), info: jest.fn(), warn: jest.fn() },
@@ -345,7 +345,7 @@ describe("Start dates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set date" }));
 
     // Both already have a start date, so the confirm says payments move.
-    expect(await screen.findByText(/2 already have a start date\. Their recorded dues payments will be re-applied/))
+    expect(await screen.findByText(/2 already have a start date\. Their recorded payments are kept as they are/))
       .toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Yes, set 2" }));
 
@@ -359,7 +359,7 @@ describe("Start dates", () => {
     expect(screen.getByLabelText("Select Bola")).toBeChecked();
   });
 
-  it("warns that clearing a start date clears the member's payments", async () => {
+  it("tells the officer that clearing a start date keeps the member's payments", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
     await openTab("Start dates");
@@ -367,7 +367,7 @@ describe("Start dates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Clear" }));
 
     const dialog = await screen.findByRole("alertdialog", { name: "Clear financial start date" });
-    expect(dialog).toHaveTextContent(CLEAR_WARNING);
+    expect(dialog).toHaveTextContent(CLEAR_START_DATE_NOTE);
     fireEvent.click(within(dialog).getByRole("button", { name: "Yes, clear" }));
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith("/finance/members/ada/financial-start-date", {

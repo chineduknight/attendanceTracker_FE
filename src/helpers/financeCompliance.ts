@@ -294,12 +294,17 @@ export const matchesStartDateFilter = (member: FinanceMember, filter: StartDateF
   (filter === "missing" ? !member.financialStartDate : !!member.financialStartDate);
 
 /**
- * Consequences of start-date changes, worded from the backend's behaviour:
- * a new date re-applies the member's dues payments to the new liable window
- * (dropping anything that no longer fits the year); clearing the date
- * archives every payment the member has, on every obligation.
+ * Consequences of start-date changes, worded from the backend's behaviour: a
+ * start-date change only moves the period the member owes for. Recorded
+ * payments are never changed; whatever no longer applies is shown as
+ * unapplied credit, and moving the date back re-applies it.
  */
-export const REALLOCATION_WARNING =
-  "Their recorded dues payments will be re-applied from the new date, and any amount that no longer fits the year will be dropped.";
-export const CLEAR_WARNING =
-  "All of their recorded payments, on every obligation, will be cleared. This can't be undone.";
+export const START_DATE_CHANGE_NOTE =
+  "Their recorded payments are kept as they are. Any amount outside the new period will show as unapplied credit, and moving the date back re-applies it.";
+export const CLEAR_START_DATE_NOTE =
+  "Their recorded payments are kept, not deleted. They will show as unapplied credit until a start date is set again.";
+export const UNAPPLIED_CREDIT_EXPLANATION =
+  "Unapplied credit is recorded money beyond what this member owes under their current start date. It stays on record; it isn't refunded or moved to another obligation.";
+
+/** Recorded value that does not apply; 0 on older backends. */
+export const unappliedCreditOf = (row: ComplianceRow) => row.unappliedCredit ?? 0;

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button, Flex, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
 import { AmountInput } from "components/ui/amount-input";
 import { MONTHS, formatMoney } from "helpers/financeConstants";
-import { firstLiableMonth, paidOf } from "helpers/financeCompliance";
+import { firstLiableMonth, paidOf, unappliedCreditOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
 
@@ -12,8 +12,9 @@ interface CorrectPaymentFormProps {
   /** The member's current compliance row; seeds and locks the dues grid. */
   row?: ComplianceRow;
   isSaving: boolean;
-  onCorrectDues: (monthlyPaid: Record<string, number>) => void;
-  onCorrectLevy: (amountPaid: number) => void;
+  /** `replaceUnappliedCredit` is true once the officer confirmed it. */
+  onCorrectDues: (monthlyPaid: Record<string, number>, replaceUnappliedCredit: boolean) => void;
+  onCorrectLevy: (amountPaid: number, replaceUnappliedCredit: boolean) => void;
 }
 
 interface PendingCorrection {
@@ -25,7 +26,9 @@ interface PendingCorrection {
 
 /**
  * Overwrites a member's record for one obligation — an admin fix, so every
- * save is confirmed. Dues are entered month by month in order with no gaps:
+ * save is confirmed. A correction replaces the whole recorded amount, so when
+ * the record holds unapplied credit the officer is shown it and the
+ * confirmation says it will be replaced. Dues are entered month by month in order with no gaps:
  * only the first not-fully-paid month and the last fully-paid one before it
  * are editable, so the most recent payment can still be reduced.
  */
@@ -59,6 +62,11 @@ const CorrectPaymentForm = ({
   });
   const [amountPaid, setAmountPaid] = useState(() => (row && !isDues ? String(paidOf(row)) : ""));
   const [pending, setPending] = useState<PendingCorrection | null>(null);
+  const credit = row ? unappliedCreditOf(row) : 0;
+  const hasCredit = credit > 0;
+  const creditClause = hasCredit
+    ? ` The ${formatMoney(credit)} of unapplied credit on this record will be replaced too.`
+    : "";
 
   const valueOf = (month: number) => monthly[String(month)] ?? "";
   const isComplete = (month: number) =>
@@ -100,25 +108,30 @@ const CorrectPaymentForm = ({
       setPending({
         body:
           count === 0
-            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.`
-            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.`,
+            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.${creditClause}`
+            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.${creditClause}`,
         confirmLabel: count === 0 ? "Yes, clear" : "Yes, update",
-        confirmPalette: count === 0 ? "red" : "purple",
-        run: () => onCorrectDues(monthlyPaid),
+        confirmPalette: count === 0 || hasCredit ? "red" : "purple",
+        run: () => onCorrectDues(monthlyPaid, hasCredit),
       });
       return;
     }
     if (amountPaid === "") return;
     setPending({
-      body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.`,
+      body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.${creditClause}`,
       confirmLabel: "Yes, update",
-      confirmPalette: "purple",
-      run: () => onCorrectLevy(Number(amountPaid)),
+      confirmPalette: hasCredit ? "red" : "purple",
+      run: () => onCorrectLevy(Number(amountPaid), hasCredit),
     });
   };
 
   return (
     <Stack gap={3}>
+      {hasCredit && (
+        <Text fontSize="sm" color="fg.muted">
+          {`Recorded in total: ${formatMoney(row?.recordedTotal ?? 0)}, including ${formatMoney(credit)} of unapplied credit. A correction replaces the whole recorded amount, credit included.`}
+        </Text>
+      )}
       {isDues ? (
         <>
           <Text fontSize="sm" color="fg.muted">

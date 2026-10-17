@@ -80,6 +80,11 @@ const SummaryLine = ({ obligation }: { obligation: Obligation }) => {
       <Text fontSize="xs" color="fg.muted">
         {`${formatMoney(summary.totalCollected)} of ${formatMoney(summary.totalExpected)} · ${formatPct(pct)}`}
       </Text>
+      {!!summary.totalUnappliedCredit && (
+        <Text fontSize="xs" color="fg.muted">
+          {`${formatMoney(summary.totalUnappliedCredit)} unapplied credit held`}
+        </Text>
+      )}
     </Stack>
   );
 };

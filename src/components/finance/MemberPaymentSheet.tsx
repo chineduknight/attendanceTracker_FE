@@ -9,6 +9,8 @@ import {
   isLiable,
   paidOf,
   standingLabel,
+  UNAPPLIED_CREDIT_EXPLANATION,
+  unappliedCreditOf,
 } from "helpers/financeCompliance";
 import { usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
@@ -35,6 +37,29 @@ const Figure = ({ label, value }: { label: string; value: string }) => (
   </Box>
 );
 
+/** Retained history the member's current start date doesn't apply. */
+const CreditNote = ({ row }: { row: ComplianceRow }) => {
+  const credit = unappliedCreditOf(row);
+  if (credit <= 0 && !row.invalidStoredAmount) return null;
+  return (
+    <Stack gap={1}>
+      {credit > 0 && (
+        <>
+          <Text fontSize="sm" fontWeight="medium">{`Unapplied credit: ${formatMoney(credit)}`}</Text>
+          <Text fontSize="xs" color="fg.muted">
+            {UNAPPLIED_CREDIT_EXPLANATION}
+          </Text>
+        </>
+      )}
+      {row.invalidStoredAmount && (
+        <Text fontSize="sm" color="fg.error">
+          This payment record holds an invalid amount and needs an admin review.
+        </Text>
+      )}
+    </Stack>
+  );
+};
+
 /**
  * Everything about one member for one obligation: where they stand, and —
  * for finance managers — recording money, correcting the record, or setting
@@ -54,6 +79,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
       return (
         <Stack gap={4}>
           <Text>{`${row.name} has no financial start date, so nothing is due from them yet.`}</Text>
+          <CreditNote row={row} />
           {canManage && (
             <StartDateForm
               memberName={row.name}
@@ -86,6 +112,7 @@ const MemberPaymentSheet = ({ organisationId, obligation, row, onClose }: Member
             </>
           )}
         </SimpleGrid>
+        <CreditNote row={row} />
         {isDuesObligation(obligation) && mode === "record" && <MonthGrid row={row} />}
         {!isLiable(row) && (
           <Text fontSize="sm" color="fg.muted">

@@ -13,8 +13,13 @@ export interface ObligationSummary {
   accountableMembers: number;
   paidMembers: number;
   totalExpected: number;
+  /** Value applied to this obligation under current start dates. */
   totalCollected: number;
   totalOutstanding: number;
+  /** All value recorded on payment rows; absent on older backends. */
+  totalRecorded?: number;
+  /** Recorded value that does not apply under current start dates. */
+  totalUnappliedCredit?: number;
 }
 
 export interface Obligation {
@@ -41,6 +46,7 @@ export interface ComplianceRow {
   balance?: number;
   paidUpToMonth?: number;
   compliance?: number;
+  /** @deprecated No longer sent; use `unappliedCredit`. */
   creditMonths?: number[];
   // levy
   liable?: boolean;
@@ -52,6 +58,15 @@ export interface ComplianceRow {
   arrears?: number;
   /** Dues only: due months not fully paid. */
   monthsBehind?: number;
+  // Recorded vs applied, also on non-accountable rows; absent on older
+  // backends. Paid / balance figures above are the applied value.
+  /** Everything recorded on the payment row; null when it is invalid. */
+  recordedTotal?: number | null;
+  appliedTotal?: number;
+  /** Recorded value beyond what is owed under the current start date. */
+  unappliedCredit?: number;
+  /** The stored amount is invalid and needs an admin review. */
+  invalidStoredAmount?: boolean;
 }
 
 export interface ComplianceSummary {
@@ -64,6 +79,10 @@ export interface ComplianceSummary {
   totalDueToDate?: number;
   totalArrears?: number;
   behindMembers?: number;
+  totalRecorded?: number;
+  totalUnappliedCredit?: number;
+  creditMembers?: number;
+  invalidPaymentRows?: number;
 }
 
 /** Bulk start-date result: partial success is normal, not an error. */

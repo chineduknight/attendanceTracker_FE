@@ -1,5 +1,6 @@
 import {
-  CLEAR_WARNING,
+  CLEAR_START_DATE_NOTE,
+  START_DATE_CHANGE_NOTE,
   collectionPct,
   defaultObligationId,
   duesPaymentHint,
@@ -244,7 +245,11 @@ describe("business dates and warnings", () => {
     expect(todayBusinessDate(new Date(2026, 9, 8, 23, 30))).toBe("2026-10-08");
   });
 
-  it("warns that clearing a start date clears payments", () => {
-    expect(CLEAR_WARNING).toMatch(/recorded payments, on every obligation, will be cleared/);
+  it("says start-date changes keep recorded payments, with no destructive wording", () => {
+    expect(CLEAR_START_DATE_NOTE).toMatch(/recorded payments are kept, not deleted/);
+    expect(START_DATE_CHANGE_NOTE).toMatch(/kept as they are.*unapplied credit/);
+    for (const note of [CLEAR_START_DATE_NOTE, START_DATE_CHANGE_NOTE]) {
+      expect(note).not.toMatch(/can't be undone|dropped|will be cleared/i);
+    }
   });
 });
