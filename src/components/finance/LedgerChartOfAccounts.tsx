@@ -44,6 +44,7 @@ import {
   validateAccountBatch,
 } from "helpers/ledgerSetup";
 import { ledgerStateKey } from "helpers/ledger";
+import { LedgerWriteAction } from "helpers/ledgerWriteUncertainty";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { useLedgerSetup } from "hooks/useLedgerSetup";
 
@@ -110,6 +111,7 @@ interface AccountRowProps {
   status: LedgerStatus;
   canManage: boolean;
   isUpdating: boolean;
+  writeBlocked: boolean;
   onUpdate: (
     account: LedgerAccount,
     change: { name?: string; active?: boolean },
@@ -117,7 +119,14 @@ interface AccountRowProps {
   ) => void;
 }
 
-const AccountRow = ({ account, status, canManage, isUpdating, onUpdate }: AccountRowProps) => {
+const AccountRow = ({
+  account,
+  status,
+  canManage,
+  isUpdating,
+  writeBlocked,
+  onUpdate,
+}: AccountRowProps) => {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(account.name);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -126,6 +135,7 @@ const AccountRow = ({ account, status, canManage, isUpdating, onUpdate }: Accoun
   const allowance = accountActions(account, {
     ledgerState: ledgerStateKey(status),
     memberReceiptsEnabled: status.memberReceiptsEnabled,
+    writeBlocked,
   });
   const canAct =
     allowance.canRename || allowance.canDeactivate || allowance.canReactivate;
@@ -516,6 +526,10 @@ interface LedgerChartOfAccountsProps {
   onRetryAccounts: () => void;
   isRetryingAccounts: boolean;
   canManage: boolean;
+  /** An earlier ledger write still has an unresolved outcome. */
+  writesBlocked: boolean;
+  /** Persists the unresolved write so a reload cannot re-open it. */
+  onWriteUncertain: (action: LedgerWriteAction) => void;
 }
 
 const LedgerChartOfAccounts = ({
@@ -526,6 +540,8 @@ const LedgerChartOfAccounts = ({
   onRetryAccounts,
   isRetryingAccounts,
   canManage,
+  writesBlocked,
+  onWriteUncertain,
 }: LedgerChartOfAccountsProps) => {
   const headingId = useId();
   const { createAccounts, updateAccount, isCreatingAccounts, isUpdatingAccount } =
@@ -534,22 +550,22 @@ const LedgerChartOfAccounts = ({
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
 
-  const handleFailure = (error: unknown) => {
+  const handleFailure = (error: unknown, action: LedgerWriteAction) => {
     const failure = ledgerApiFailure(error);
-    // A 503 without a recognised "nothing written" code may have been saved.
-    // Never present it as a plain failure and never retry it here.
+    // Timeouts, network errors, uncoded 5xx and an uncoded 503 may all have
+    // been saved. Persist the uncertainty; never present it as a refusal and
+    // never retry it here.
     if (ledgerWriteOutcomeUnknown(failure)) {
-      setOutcomeUnknown(true);
+      onWriteUncertain(action);
       setActionError(null);
       return;
     }
-    setOutcomeUnknown(false);
     setActionError(failure.message ?? "The change wasn't saved. Try again.");
   };
 
-  const createAllowed = canManage && canCreateAccounts(status, canManage);
+  const createAllowed =
+    canManage && canCreateAccounts(status, canManage) && !writesBlocked;
   const frozen = moneyAccountsFrozen(status);
   const memberReceiptsEnabled = status.memberReceiptsEnabled === true;
 
@@ -568,6 +584,7 @@ const LedgerChartOfAccounts = ({
     );
 
   const addSelected = () => {
+    if (writesBlocked) return;
     const drafts = suggestions
       .filter((suggestion) => selected.includes(suggestion.key))
       .map(draftFromStarter);
@@ -581,13 +598,13 @@ const LedgerChartOfAccounts = ({
       onSuccess: () => {
         setSelected([]);
         setActionError(null);
-        setOutcomeUnknown(false);
       },
-      onError: handleFailure,
+      onError: (error) => handleFailure(error, "create-accounts"),
     });
   };
 
   const submitDraft = (draft: AccountDraft) => {
+    if (writesBlocked) return;
     const problem = validateAccountBatch([draft], accounts ?? []);
     if (problem) {
       setFormError(problem);
@@ -598,14 +615,13 @@ const LedgerChartOfAccounts = ({
         setShowForm(false);
         setFormError(null);
         setActionError(null);
-        setOutcomeUnknown(false);
       },
       onError: (error) => {
         const failure = ledgerApiFailure(error);
-        // An uncoded 503 may have been saved: report it as unconfirmed rather
-        // than as a clean validation failure.
+        // An ambiguous outcome is not a validation problem: it may have been
+        // saved, so it goes through the persisted latch instead of the form.
         if (ledgerWriteOutcomeUnknown(failure)) {
-          handleFailure(error);
+          handleFailure(error, "create-accounts");
           return;
         }
         setFormError(
@@ -620,18 +636,18 @@ const LedgerChartOfAccounts = ({
     change: { name?: string; active?: boolean },
     onDone?: () => void,
   ) => {
-    // The row only offers actions when a revision is known.
-    if (account.revision === null) return;
+    // The row only offers actions when a revision is known, and never while
+    // an earlier write is unresolved.
+    if (writesBlocked || account.revision === null) return;
     updateAccount(
       account.id,
       { expectedRevision: account.revision, ...change },
       {
         onSuccess: () => {
           setActionError(null);
-          setOutcomeUnknown(false);
           onDone?.();
         },
-        onError: handleFailure,
+        onError: (error) => handleFailure(error, "update-account"),
       },
     );
   };
@@ -647,12 +663,6 @@ const LedgerChartOfAccounts = ({
     <Box as="section" aria-labelledby={headingId}>
       <SectionHeading id={headingId}>Chart of accounts</SectionHeading>
       <Stack gap={4}>
-        {outcomeUnknown && (
-          <AlertBox tone="warning" title="We couldn't confirm that change">
-            We could not confirm whether this change was saved. Reload the ledger before
-            trying again. Nothing is retried automatically.
-          </AlertBox>
-        )}
         {actionError && <AlertBox title="Accounts weren't changed">{actionError}</AlertBox>}
 
         {accounts === null ? (
@@ -725,6 +735,7 @@ const LedgerChartOfAccounts = ({
                     status={status}
                     canManage={canManage}
                     isUpdating={isUpdatingAccount}
+                    writeBlocked={writesBlocked}
                     onUpdate={requestUpdate}
                   />
                 ))}

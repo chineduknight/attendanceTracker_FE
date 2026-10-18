@@ -4,6 +4,7 @@ import {
   LedgerStatus,
 } from "components/finance/ledgerTypes";
 import { ledgerStateKey } from "helpers/ledger";
+import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
 
 /**
  * Pure rules for F2A-2 ledger setup and chart-of-accounts management
@@ -373,6 +374,12 @@ export const SUGGESTION_FROZEN_NOTE =
 export interface AccountActionContext {
   ledgerState: LedgerKnownState | "unknown";
   memberReceiptsEnabled: boolean | null;
+  /**
+   * True while a previous ledger write in this organisation still has an
+   * unresolved outcome: no further write may be offered until an officer has
+   * checked the ledger.
+   */
+  writeBlocked?: boolean;
 }
 
 export interface AccountActionAllowance {
@@ -401,6 +408,10 @@ export const accountActions = (
 ): AccountActionAllowance => {
   if (context.ledgerState === "unknown")
     return denyAll("The bookkeeping state isn't recognised by this app version.");
+
+  // An unresolved earlier write outranks every other rule: the same request
+  // must not be submitted again until someone has checked the ledger.
+  if (context.writeBlocked) return denyAll(LEDGER_WRITE_UNCERTAIN_NOTE);
 
   const role = toAccountRole(account);
   if (!role) return denyAll("This account type isn't recognised by this app version.");
@@ -588,12 +599,28 @@ export const LEDGER_SETUP_ERROR_CODES = {
   indexesNotInstalled: "LEDGER_INDEXES_NOT_INSTALLED",
 } as const;
 
+/**
+ * The only ledger codes that prove a write did nothing. Any other 5xx code —
+ * or none at all — may have been applied before the error.
+ */
+const NOTHING_WRITTEN_CODES: ReadonlySet<string> = new Set([
+  LEDGER_SETUP_ERROR_CODES.writesDisabled,
+  LEDGER_SETUP_ERROR_CODES.transactionsUnavailable,
+  LEDGER_SETUP_ERROR_CODES.indexesNotInstalled,
+]);
+
 export interface LedgerApiFailure {
   /** The backend's `{ error }` text, when it sent one. */
   message: string | undefined;
   /** The stable `{ code }`, when this route sent one. */
   code: string | undefined;
   status: number | undefined;
+  /**
+   * True when no HTTP response was received at all: a timeout, a network
+   * error or an aborted request. The write may still have reached the
+   * server, so this never proves a refusal.
+   */
+  transportFailure: boolean;
 }
 
 export const ledgerApiFailure = (error: unknown): LedgerApiFailure => {
@@ -606,13 +633,29 @@ export const ledgerApiFailure = (error: unknown): LedgerApiFailure => {
   return {
     message: typeof data?.error === "string" ? data.error : undefined,
     code: typeof data?.code === "string" ? data.code : undefined,
-    status: response?.status,
+    status: typeof response?.status === "number" ? response.status : undefined,
+    transportFailure: !response,
   };
 };
 
-/** A 503 without a code may have written; never show it as a plain failure. */
-export const ledgerWriteOutcomeUnknown = (failure: LedgerApiFailure) =>
-  failure.status === 503 &&
-  failure.code !== LEDGER_SETUP_ERROR_CODES.writesDisabled &&
-  failure.code !== LEDGER_SETUP_ERROR_CODES.transactionsUnavailable &&
-  failure.code !== LEDGER_SETUP_ERROR_CODES.indexesNotInstalled;
+/**
+ * Whether a failed ledger write may still have been applied.
+ *
+ * A client-error response (4xx) is the server telling us it refused the
+ * request before writing, so it is safe to report as "not saved". Everything
+ * else is ambiguous: a 408, any 5xx without one of the three
+ * "nothing was written" codes, and every transport failure (timeout, network
+ * error, aborted request, no response). Callers must never show an ambiguous
+ * outcome as a clean rejection, and must never retry it automatically.
+ */
+export const ledgerWriteOutcomeUnknown = (failure: LedgerApiFailure): boolean => {
+  if (
+    failure.status !== undefined &&
+    failure.status >= 400 &&
+    failure.status < 500 &&
+    failure.status !== 408
+  )
+    return false;
+  if (failure.code && NOTHING_WRITTEN_CODES.has(failure.code)) return false;
+  return true;
+};

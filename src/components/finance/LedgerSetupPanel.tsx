@@ -14,9 +14,15 @@ import {
   ledgerSetupSteps,
   ledgerWriteOutcomeUnknown,
 } from "helpers/ledgerSetup";
+import {
+  LEDGER_WRITE_UNCERTAIN_NOTE,
+  LedgerWriteAction,
+  ledgerWriteUncertaintyGuidance,
+} from "helpers/ledgerWriteUncertainty";
 import { ledgerStateKey } from "helpers/ledger";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { useLedgerSetup } from "hooks/useLedgerSetup";
+import { useLedgerWriteUncertainty } from "hooks/useLedgerWriteUncertainty";
 import { usePermissions } from "rbac/usePermissions";
 
 /**
@@ -81,12 +87,79 @@ const AlertBox = ({
   </Box>
 );
 
+/**
+ * The only escape from an unresolved write is a person checking the ledger.
+ * Controls stay disabled until then, across reloads. "Recheck" refetches the
+ * ledger so the officer can compare before acknowledging.
+ */
+const WriteUncertaintyNotice = ({
+  action,
+  canManage,
+  onRecheck,
+  onAcknowledge,
+  isRechecking,
+}: {
+  action: Parameters<typeof ledgerWriteUncertaintyGuidance>[0];
+  canManage: boolean;
+  onRecheck: () => void;
+  onAcknowledge: () => void;
+  isRechecking: boolean;
+}) => {
+  const { confirm, confirmDialog } = useConfirm();
+
+  const acknowledge = async () => {
+    const confirmed = await confirm({
+      title: "Continue after checking?",
+      body:
+        "Only continue if you have checked the current ledger and are sure the earlier change does not need to be repeated. We cannot confirm whether it was saved.",
+      confirmLabel: "I've checked",
+    });
+    if (confirmed) onAcknowledge();
+  };
+
+  return (
+    <Box
+      role="alert"
+      borderWidth="1px"
+      borderColor="border.warning"
+      borderRadius="md"
+      p={3}
+      bg="bg.panel"
+    >
+      <Stack gap={2}>
+        <Text fontSize="sm" fontWeight="semibold">
+          We couldn't confirm that change
+        </Text>
+        <Text fontSize="sm" color="fg.muted">
+          {LEDGER_WRITE_UNCERTAIN_NOTE}
+        </Text>
+        <Text fontSize="sm" color="fg.muted">
+          {ledgerWriteUncertaintyGuidance(action)}
+        </Text>
+        <Flex gap={2} wrap="wrap">
+          <Button size="sm" variant="outline" loading={isRechecking} onClick={onRecheck}>
+            Recheck the ledger
+          </Button>
+          {canManage && (
+            <Button size="sm" variant="outline" onClick={() => void acknowledge()}>
+              I've checked the ledger
+            </Button>
+          )}
+        </Flex>
+      </Stack>
+      {confirmDialog}
+    </Box>
+  );
+};
+
 interface LedgerSetupPanelProps {
   organisationId: string;
   status: LedgerStatus;
   accounts: LedgerAccount[] | null;
   accountsError: unknown;
   onRetryAccounts: () => void;
+  /** Refetches status and accounts after an unresolved write. */
+  onRecheckLedger?: () => void;
   isRetryingAccounts: boolean;
   /** Tests can force the gate on; production reads config/ledgerSetup. */
   enabled?: boolean;
@@ -98,6 +171,7 @@ const LedgerSetupPanel = ({
   accounts,
   accountsError,
   onRetryAccounts,
+  onRecheckLedger,
   isRetryingAccounts,
   enabled = LEDGER_SETUP_UI_ENABLED,
 }: LedgerSetupPanelProps) => {
@@ -107,11 +181,15 @@ const LedgerSetupPanel = ({
   const { confirm, confirmDialog } = useConfirm();
   const { startSetup, enableMemberReceipts, isStarting, isEnablingReceipts } =
     useLedgerSetup(organisationId);
+  const { uncertainty, mark, clear } = useLedgerWriteUncertainty(organisationId);
 
   const [memberReceiptsChoice, setMemberReceiptsChoice] = useState(false);
   const [localStatus, setLocalStatus] = useState<LedgerStatus | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+
+  // Any unresolved write blocks every setup/account write in this
+  // organisation until an officer reconciles it.
+  const writeBlocked = uncertainty !== null;
 
   // The setup write response is the only place `setup` is visible until
   // GET /status adopts the F2 read shape (F2A-4). It is used only while the
@@ -131,18 +209,19 @@ const LedgerSetupPanel = ({
   const steps = ledgerSetupSteps(status, accounts);
   const memberReceiptsKnown = status.memberReceiptsEnabled !== null;
 
-  const handleFailure = (error: unknown) => {
+  const handleFailure = (error: unknown, action: LedgerWriteAction) => {
     const failure = ledgerApiFailure(error);
     if (ledgerWriteOutcomeUnknown(failure)) {
-      setOutcomeUnknown(true);
+      // Persisted: a reload must not re-open the same write.
+      mark(action);
       setActionError(null);
       return;
     }
-    setOutcomeUnknown(false);
     setActionError(failure.message ?? "The change wasn't saved. Try again.");
   };
 
   const start = async () => {
+    if (writeBlocked) return;
     const confirmed = await confirm({
       title: "Start bookkeeping setup",
       body: `Create an empty ledger for this organisation? Existing dues/levy records are not copied into it, and no money is posted. Member receipts will be ${
@@ -155,29 +234,28 @@ const LedgerSetupPanel = ({
       onSuccess: (next) => {
         setLocalStatus(next);
         setActionError(null);
-        setOutcomeUnknown(false);
       },
       onError: (error) => {
         const failure = ledgerApiFailure(error);
-        // F2A-4 gap: a reloaded F1 status still reads `not_active`, so the
-        // only honest answer is "already started, state not readable yet".
+        // F2A-4 gap: a reloaded F1 status still reads `not_active`. A 409 says
+        // setup exists, not that *this* attempt succeeded — never treat it as
+        // confirmation and never clear an unresolved marker from it.
         if (failure.code === LEDGER_SETUP_ERROR_CODES.alreadyStarted) {
-          setOutcomeUnknown(false);
           setActionError(
-            "Setup has already been started for this organisation. This release can't read the current setup state back yet.",
+            "Setup already exists for this organisation. That doesn't confirm whether your earlier attempt was saved, so recheck the ledger before continuing.",
           );
           return;
         }
-        handleFailure(error);
+        handleFailure(error, "setup");
       },
     });
   };
 
   const turnOnMemberReceipts = async () => {
-    if (status.revision === null) return;
+    if (writeBlocked || status.revision === null) return;
     const confirmed = await confirm({
       title: "Turn on member receipts",
-      body: "Turn on member receipts for this ledger? Money received for a member will be held as a liability until it is allocated. This can't be turned off while member money is held.",
+      body: "Turn on member receipts for this ledger? Money received for a member will be held as a liability until it is allocated. There is no turn-off operation once it is on.",
       confirmLabel: "Turn on",
     });
     if (!confirmed) return;
@@ -185,9 +263,8 @@ const LedgerSetupPanel = ({
       onSuccess: (next) => {
         setLocalStatus(next);
         setActionError(null);
-        setOutcomeUnknown(false);
       },
-      onError: handleFailure,
+      onError: (error) => handleFailure(error, "member-receipts"),
     });
   };
 
@@ -195,11 +272,14 @@ const LedgerSetupPanel = ({
     <Box as="section" aria-labelledby={headingId}>
       <SectionHeading id={headingId}>Bookkeeping setup</SectionHeading>
       <Stack gap={4}>
-        {outcomeUnknown && (
-          <AlertBox tone="warning" title="We couldn't confirm that change">
-            We could not confirm whether this change was saved. Reload the ledger before
-            trying again. Nothing is retried automatically.
-          </AlertBox>
+        {uncertainty && (
+          <WriteUncertaintyNotice
+            action={uncertainty.action}
+            canManage={canManage}
+            onRecheck={() => (onRecheckLedger ?? onRetryAccounts)()}
+            onAcknowledge={clear}
+            isRechecking={isRetryingAccounts}
+          />
         )}
         {actionError && <AlertBox title="That change wasn't saved">{actionError}</AlertBox>}
 
@@ -242,19 +322,21 @@ const LedgerSetupPanel = ({
                 <Switch
                   checked={memberReceiptsChoice}
                   onCheckedChange={setMemberReceiptsChoice}
-                  disabled={!canManage || isStarting}
+                  disabled={writeBlocked || !canManage || isStarting}
                 />
                 <Field.HelperText>
                   Turn this on if the organisation holds money for members before it is
-                  allocated to dues or a levy. It can be turned on later, but not turned
-                  off while member money is held.
+                  allocated to dues or a levy. It can be turned on later, but there is no
+                  turn-off operation once it is on.
                 </Field.HelperText>
               </Field.Root>
               <Button
                 alignSelf="flex-start"
                 colorPalette="teal"
                 loading={isStarting}
-                disabled={!canManage || !canStartLedgerSetup(status, canManage)}
+                disabled={
+                  writeBlocked || !canManage || !canStartLedgerSetup(status, canManage)
+                }
                 onClick={() => void start()}
               >
                 Start bookkeeping setup
@@ -289,7 +371,7 @@ const LedgerSetupPanel = ({
                 {status.memberReceiptsEnabled === true
                   ? "Money received for a member is held as a liability until it is allocated."
                   : status.memberReceiptsEnabled === false
-                    ? "Member money is not tracked as a liability. This can be turned on before the ledger is activated."
+                    ? "Member money is not tracked as a liability. It can be turned on before the ledger is activated; there is no turn-off operation once it is on."
                     : "This server did not report the member-receipts setting."}
               </Text>
 
@@ -298,6 +380,7 @@ const LedgerSetupPanel = ({
                   alignSelf="flex-start"
                   variant="outline"
                   loading={isEnablingReceipts}
+                  disabled={writeBlocked}
                   onClick={() => void turnOnMemberReceipts()}
                 >
                   Turn on member receipts
@@ -340,6 +423,8 @@ const LedgerSetupPanel = ({
             onRetryAccounts={onRetryAccounts}
             isRetryingAccounts={isRetryingAccounts}
             canManage={canManage}
+            writesBlocked={writeBlocked}
+            onWriteUncertain={mark}
           />
         )}
       </Stack>

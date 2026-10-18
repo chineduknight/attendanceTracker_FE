@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "react-toastify";
 import { confirmInDialog, render, toggle } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
@@ -13,8 +14,17 @@ import {
   SUSPENDED_ACCOUNTS_NOTE,
   SUSPENDED_CREATE_NOTE,
 } from "helpers/ledgerSetup";
+import {
+  LEDGER_WRITE_UNCERTAIN_NOTE,
+  markLedgerWriteUncertain,
+  readLedgerWriteUncertainty,
+} from "helpers/ledgerWriteUncertainty";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
+
+jest.mock("react-toastify", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -107,6 +117,7 @@ const renderPanel = (
 
 beforeEach(() => {
   queryClient.clear();
+  window.localStorage.clear();
   jest.clearAllMocks();
   setPermissions(["finance.manage"]);
   api.post.mockResolvedValue({ data: { data: {} } });
@@ -154,6 +165,18 @@ describe("<LedgerSetupPanel> permissions", () => {
     expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
   });
+
+  it("lets a viewer see an unresolved write but not clear it", () => {
+    markLedgerWriteUncertain("org1", "setup");
+    setPermissions(["finance.view"]);
+    renderPanel();
+
+    expect(screen.getByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recheck the ledger" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "I've checked the ledger" }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("<LedgerSetupPanel> starting setup", () => {
@@ -192,7 +215,7 @@ describe("<LedgerSetupPanel> starting setup", () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it("explains an already-started ledger instead of pretending setup succeeded", async () => {
+  it("explains an already-started ledger without claiming this attempt succeeded", async () => {
     api.post.mockRejectedValue({
       response: {
         status: 409,
@@ -208,9 +231,11 @@ describe("<LedgerSetupPanel> starting setup", () => {
     await confirmInDialog("Start setup");
 
     expect(
-      await screen.findByText(/Setup has already been started for this organisation/),
+      await screen.findByText(/doesn't confirm whether your earlier attempt was saved/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Setup has started for this organisation/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Setup has started for this organisation/),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -344,6 +369,8 @@ describe("<LedgerSetupPanel> creating a custom account", () => {
 
     expect(await screen.findByText(/already exists/)).toBeInTheDocument();
     expect(screen.queryByText(/Account added/)).not.toBeInTheDocument();
+    // The inline backend message is the only feedback: no generic toast.
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("blocks a money account while opening balances are pending", () => {
@@ -367,7 +394,10 @@ describe("<LedgerSetupPanel> creating a custom account", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add account" }));
 
     expect(await screen.findByText("We couldn't confirm that change")).toBeInTheDocument();
-    expect(screen.getByText(/Nothing is retried automatically/)).toBeInTheDocument();
+    expect(screen.getByText(LEDGER_WRITE_UNCERTAIN_NOTE)).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+    // Further writes are blocked until someone checks the ledger.
+    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
   });
 });
 
@@ -462,6 +492,88 @@ describe("<LedgerSetupPanel> account row actions", () => {
     expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
     expect(screen.getByText(OPENING_PENDING_CREATE_NOTE)).toBeInTheDocument();
     expect(screen.getByText(OPENING_PENDING_ACCOUNTS_NOTE)).toBeInTheDocument();
+  });
+});
+
+describe("<LedgerSetupPanel> unresolved write latch", () => {
+  it("blocks every write after a network failure and never toasts a generic error", async () => {
+    api.post.mockRejectedValue({ message: "Network Error", code: "ERR_NETWORK", request: {} });
+    renderPanel({
+      status: statusOf("setup", { memberReceiptsEnabled: false }),
+      accounts: [account({ revision: 2 })],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "New account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), {
+      target: { value: "Petty cash" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+
+    expect(await screen.findByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.getAllByText(LEDGER_WRITE_UNCERTAIN_NOTE).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Check whether the account now exists/)).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+    // Exactly one attempt was sent; none may be repeated while unresolved.
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
+  });
+
+  it("remembers the unresolved write across a reload", () => {
+    markLedgerWriteUncertain("org1", "create-accounts");
+    renderPanel({
+      status: statusOf("setup", { memberReceiptsEnabled: false }),
+      accounts: [account({ revision: 2 })],
+    });
+
+    expect(screen.getByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
+  });
+
+  it("keeps writes blocked until an officer confirms the ledger was checked", async () => {
+    markLedgerWriteUncertain("org1", "setup");
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "I've checked the ledger" }));
+    await confirmInDialog("I've checked");
+
+    await waitFor(() =>
+      expect(screen.queryByText("We couldn't confirm that change")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeEnabled();
+    expect(readLedgerWriteUncertainty("org1")).toBeNull();
+  });
+
+  it("never lets a 409 stand in for confirmation of an unresolved attempt", async () => {
+    markLedgerWriteUncertain("org1", "setup");
+    api.post.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { error: "Already", code: "LEDGER_ALREADY_EXISTS" },
+      },
+    });
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(readLedgerWriteUncertainty("org1")).not.toBeNull();
+  });
+});
+
+describe("<LedgerSetupPanel> member receipts wording", () => {
+  it("never implies a turn-off operation exists", () => {
+    const { unmount } = renderPanel();
+    expect(screen.getByText(/no turn-off operation once it is on/)).toBeInTheDocument();
+    unmount();
+
+    queryClient.clear();
+    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
+    expect(screen.getByText(/no turn-off operation once it is on/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /turn off/i })).not.toBeInTheDocument();
   });
 });
 

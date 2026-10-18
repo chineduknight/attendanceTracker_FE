@@ -417,6 +417,12 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           accountsError={accountsQuery.isError ? accountsQuery.error : null}
           onRetryAccounts={accountsQuery.refetch}
           isRetryingAccounts={accountsQuery.isFetching}
+          onRecheckLedger={() => {
+            // Reconciliation after an unresolved write needs both the status
+            // and the account list, not just the list that failed.
+            statusQuery.refetch();
+            accountsQuery.refetch();
+          }}
         />
       )}
 

@@ -24,6 +24,7 @@ import {
   AccountDraft,
 } from "helpers/ledgerSetup";
 import { LedgerAccount, LedgerKnownState, LedgerStatus } from "components/finance/ledgerTypes";
+import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
 
 const account = (overrides: Partial<LedgerAccount> = {}): LedgerAccount => ({
   id: "a1",
@@ -341,6 +342,21 @@ describe("account row actions", () => {
     expect(accountActions(odd, context("setup")).canRename).toBe(false);
     expect(accountActions(account(), context("unknown")).canRename).toBe(false);
   });
+
+  it("offers nothing while an earlier write is unresolved", () => {
+    expect(
+      accountActions(account(), {
+        ledgerState: "setup",
+        memberReceiptsEnabled: true,
+        writeBlocked: true,
+      }),
+    ).toEqual({
+      canRename: false,
+      canDeactivate: false,
+      canReactivate: false,
+      note: LEDGER_WRITE_UNCERTAIN_NOTE,
+    });
+  });
 });
 
 describe("setup capabilities", () => {
@@ -453,48 +469,95 @@ describe("setup progress", () => {
   });
 });
 
-describe("setup error reading", () => {
+describe("ledger write outcome detection", () => {
   it("reads the backend error text, code and status", () => {
     expect(
       ledgerApiFailure({
         response: { status: 409, data: { error: "Already started", code: "LEDGER_ALREADY_EXISTS" } },
       }),
-    ).toEqual({ message: "Already started", code: "LEDGER_ALREADY_EXISTS", status: 409 });
+    ).toEqual({
+      message: "Already started",
+      code: "LEDGER_ALREADY_EXISTS",
+      status: 409,
+      transportFailure: false,
+    });
+
     expect(ledgerApiFailure(new Error("network"))).toEqual({
       message: undefined,
       code: undefined,
       status: undefined,
+      transportFailure: true,
     });
   });
 
-  it("treats only a coded 'nothing written' 503 as a plain failure", () => {
+  it("treats a 4xx response as a provable refusal", () => {
+    for (const status of [400, 401, 403, 404, 409, 422]) {
+      expect(
+        ledgerWriteOutcomeUnknown({
+          status,
+          code: undefined,
+          message: "refused",
+          transportFailure: false,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("treats the three coded 'nothing written' 503s as clean failures", () => {
+    for (const code of [
+      "LEDGER_WRITES_DISABLED",
+      "LEDGER_TRANSACTIONS_UNAVAILABLE",
+      "LEDGER_INDEXES_NOT_INSTALLED",
+    ]) {
+      expect(
+        ledgerWriteOutcomeUnknown({ status: 503, code, message: "off", transportFailure: false }),
+      ).toBe(false);
+    }
+  });
+
+  it("treats uncoded or unfamiliar server failures as ambiguous", () => {
+    for (const status of [500, 502, 503, 504]) {
+      expect(
+        ledgerWriteOutcomeUnknown({
+          status,
+          code: undefined,
+          message: "server error",
+          transportFailure: false,
+        }),
+      ).toBe(true);
+    }
+    // A different 5xx code still says nothing about whether it was written.
     expect(
       ledgerWriteOutcomeUnknown({
         status: 503,
-        code: "LEDGER_WRITES_DISABLED",
-        message: "off",
+        code: "SOMETHING_ELSE",
+        message: "server error",
+        transportFailure: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it("treats a 408 timeout response as ambiguous", () => {
     expect(
       ledgerWriteOutcomeUnknown({
-        status: 503,
-        code: "LEDGER_TRANSACTIONS_UNAVAILABLE",
-        message: "no txn",
+        status: 408,
+        code: undefined,
+        message: undefined,
+        transportFailure: false,
       }),
-    ).toBe(false);
-    expect(
-      ledgerWriteOutcomeUnknown({
-        status: 503,
-        code: "LEDGER_INDEXES_NOT_INSTALLED",
-        message: "no index",
-      }),
-    ).toBe(false);
-    // No code on a 503: the change may have been saved.
-    expect(ledgerWriteOutcomeUnknown({ status: 503, code: undefined, message: undefined })).toBe(
-      true,
-    );
-    expect(ledgerWriteOutcomeUnknown({ status: 500, code: undefined, message: "boom" })).toBe(
-      false,
-    );
+    ).toBe(true);
+  });
+
+  it("treats timeouts, network errors and aborted requests as ambiguous", () => {
+    for (const error of [
+      { code: "ECONNABORTED", message: "timeout of 10000ms exceeded", request: {} },
+      { code: "ETIMEDOUT", message: "timeout" },
+      { code: "ERR_NETWORK", message: "Network Error", request: {} },
+      { message: "aborted" },
+    ]) {
+      const failure = ledgerApiFailure(error);
+      expect(failure.transportFailure).toBe(true);
+      expect(ledgerWriteOutcomeUnknown(failure)).toBe(true);
+    }
   });
 });

@@ -26,6 +26,15 @@ interface MutationCallbacks<T> {
   onError?: (error: unknown) => void;
 }
 
+/**
+ * `useMutationWrapper`'s hook-level `onError` runs on every failure, even when
+ * a per-call handler is supplied (the per-call handler runs separately). Its
+ * default shows a generic toast, which would appear next to the ledger's own
+ * "may or may not have been saved" warning. Passing a no-op at hook level is
+ * the only way to suppress it without changing the shared wrapper app-wide.
+ */
+const suppressGenericError = () => undefined;
+
 export interface UpdateAccountChange {
   /** The account's `revision` from the read shape; required by the backend. */
   expectedRevision: number;
@@ -41,10 +50,18 @@ export const useLedgerSetup = (organisationId: string) => {
       queryKey: queryKeys.finance.ledger.root(organisationId),
     });
 
-  const setupMutation = useMutationWrapper(postRequest);
-  const settingsMutation = useMutationWrapper(patchRequest);
-  const createAccountsMutation = useMutationWrapper(postRequest);
-  const updateAccountMutation = useMutationWrapper(patchRequest);
+  const setupMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
+  const settingsMutation = useMutationWrapper(patchRequest, undefined, suppressGenericError);
+  const createAccountsMutation = useMutationWrapper(
+    postRequest,
+    undefined,
+    suppressGenericError,
+  );
+  const updateAccountMutation = useMutationWrapper(
+    patchRequest,
+    undefined,
+    suppressGenericError,
+  );
 
   const setupUrl = convertParamsToString(financeRequest.LEDGER_SETUP, {
     organisationId,
@@ -73,7 +90,7 @@ export const useLedgerSetup = (organisationId: string) => {
         // `setup` until GET /status adopts the F2 read shape (F2A-4).
         onSuccess: (response: { data?: unknown }) =>
           onSuccess?.(toLedgerStatus(response?.data)),
-        onError,
+        onError: onError ?? suppressGenericError,
       },
     );
 
@@ -90,7 +107,7 @@ export const useLedgerSetup = (organisationId: string) => {
         onSettled: invalidateLedger,
         onSuccess: (response: { data?: unknown }) =>
           onSuccess?.(toLedgerStatus(response?.data)),
-        onError,
+        onError: onError ?? suppressGenericError,
       },
     );
 
@@ -103,7 +120,7 @@ export const useLedgerSetup = (organisationId: string) => {
       {
         onSettled: invalidateLedger,
         onSuccess: () => onSuccess?.(),
-        onError,
+        onError: onError ?? suppressGenericError,
       },
     );
 
@@ -118,7 +135,7 @@ export const useLedgerSetup = (organisationId: string) => {
       {
         onSettled: invalidateLedger,
         onSuccess: () => onSuccess?.(),
-        onError,
+        onError: onError ?? suppressGenericError,
       },
     );
   };
