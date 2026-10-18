@@ -10,6 +10,7 @@ import { PermissionKey } from "rbac/permissions";
 import Finance from "pages/Finance";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
 import { CLEAR_START_DATE_NOTE, todayBusinessDate } from "helpers/financeCompliance";
+import { clearAllCollectionUncertainty } from "helpers/financeUncertainty";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn(), info: jest.fn(), warn: jest.fn() },
@@ -809,7 +810,10 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
   beforeEach(() => {
     api.put.mockResolvedValue({ data: { data: {} } });
   });
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    jest.restoreAllMocks();
+    clearAllCollectionUncertainty();
+  });
 
   it("sends the displayed guard on a dues correction, and never on recording", async () => {
     complianceRows = adaWith(GUARD);
@@ -1084,27 +1088,41 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
 
   it.each([
     [
-      "unknown commit outcome",
-      "We could not confirm whether this correction was saved.",
-      "FINANCE_CORRECTION_OUTCOME_UNKNOWN",
+      "a 503 with an unknown commit outcome",
+      httpError(
+        503,
+        "We could not confirm whether this correction was saved.",
+        "FINANCE_CORRECTION_OUTCOME_UNKNOWN",
+      ),
     ],
-    ["an unrecognised code", "Something went wrong.", "FINANCE_SOMETHING_ELSE"],
-    ["a missing code", "We could not confirm whether this correction was saved.", undefined],
-  ])("a 503 (%s) is treated as unconfirmed: no resend, reload required", async (_case, message, code) => {
+    ["a 503 with an unrecognised code", httpError(503, "Something went wrong.", "FINANCE_SOMETHING_ELSE")],
+    [
+      "a 503 with a missing code",
+      httpError(503, "We could not confirm whether this correction was saved."),
+    ],
+    ["a lost response", {}],
+    ["ERR_NETWORK", { code: "ERR_NETWORK" }],
+    ["a timeout", { code: "ECONNABORTED" }],
+    ["a cancelled request", { code: "ERR_CANCELED" }],
+    ["a proxy 502", { response: { status: 502, data: {} } }],
+    ["a proxy 504", { response: { status: 504, data: {} } }],
+    ["a server 500", { response: { status: 500, data: {} } }],
+    ["a server-reported timeout", { response: { status: 408, data: {} } }],
+  ])("a correction with %s is treated as unconfirmed: no resend, reload required", async (_case, error) => {
     complianceRows = adaWith(GUARD);
     setOrg("org1", MANAGER);
     renderFinance();
     const sheet = await openCorrection();
     const invalidate = jest.spyOn(queryClient, "invalidateQueries");
 
-    // The refetch after the 503 hangs until released.
+    // The refetch after the ambiguity hangs until released.
     const hung = hungCompliance(duesNow);
     api.get.mockImplementation((url: string) =>
       url.includes("/compliance")
         ? hung.promise
         : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
     );
-    api.put.mockRejectedValueOnce(httpError(503, message, code));
+    api.put.mockRejectedValueOnce(error);
     await saveDuesApr();
 
     const notice = await within(sheet).findByRole("alert");
@@ -1117,6 +1135,12 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     expect(toast.error).not.toHaveBeenCalled();
     expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["finance", "org1", "compliance"] });
+    expect(
+      invalidate.mock.calls.every(
+        ([filters]) =>
+          (filters as unknown as { queryKey: readonly unknown[] }).queryKey[1] === "org1",
+      ),
+    ).toBe(true);
     // Nothing is replayed while the stored state is unknown.
     expect(api.put).toHaveBeenCalledTimes(1);
 
@@ -1144,7 +1168,7 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
       if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
       return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
     });
-    api.put.mockRejectedValueOnce(httpError(503));
+    api.put.mockRejectedValueOnce({ code: "ERR_NETWORK" });
     await saveDuesApr();
 
     const notice = await within(sheet).findByRole("alert");
@@ -1377,6 +1401,232 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
     expect(within(sheet).getByText(/after this levy's date/)).toBeInTheDocument();
     expect(api.put).not.toHaveBeenCalled();
+  });
+
+  describe("collection transport ambiguity", () => {
+    const openRecord = async (amount = "500") => {
+      fireEvent.click(await memberRow("Ada"));
+      const sheet = await screen.findByRole("dialog");
+      fireEvent.change(await within(sheet).findByLabelText("Amount received"), {
+        target: { value: amount },
+      });
+      return sheet;
+    };
+    const submitRecord = (sheet: HTMLElement) =>
+      fireEvent.click(within(sheet).getByRole("button", { name: /^Record/ }));
+
+    it.each([
+      ["a lost response", {}],
+      ["ERR_NETWORK", { code: "ERR_NETWORK" }],
+      ["a timeout", { code: "ECONNABORTED" }],
+      ["a cancelled request", { code: "ERR_CANCELED" }],
+      ["a proxy 502", { response: { status: 502, data: {} } }],
+      ["a proxy 503", { response: { status: 503, data: {} } }],
+      ["a proxy 504", { response: { status: 504, data: {} } }],
+      ["a server 500", { response: { status: 500, data: {} } }],
+      ["a server-reported timeout", { response: { status: 408, data: {} } }],
+    ])("a collection with %s is unconfirmed: no resend and no stale amount", async (_case, error) => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+      api.post.mockRejectedValueOnce(error);
+      submitRecord(sheet);
+
+      const notice = await within(sheet).findByRole("alert");
+      expect(notice).toHaveTextContent("Payment not confirmed");
+      expect(notice).toHaveTextContent(/may already be on the record/);
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(api.post).toHaveBeenCalledTimes(1);
+      expect(within(sheet).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["finance", "org1", "compliance"] });
+      expect(
+        invalidate.mock.calls.every(
+          ([filters]) =>
+            (filters as unknown as { queryKey: readonly unknown[] }).queryKey[1] === "org1",
+        ),
+      ).toBe(true);
+
+      fireEvent.click(await within(sheet).findByRole("button", { name: "Review latest figures" }));
+      expect(await within(sheet).findByLabelText("Amount received")).toHaveValue("");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the recorded amount after a lost response and requires a deliberate new record", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      // The backend committed before its response was lost.
+      complianceRows = adaPaidToApr(NEWER);
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(await within(sheet).findByRole("button", { name: "Review latest figures" }));
+
+      expect(within(sheet).getByText("₦2,000")).toBeInTheDocument();
+      expect(await within(sheet).findByLabelText("Amount received")).toHaveValue("");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      [422, "Amount exceeds what is owed"],
+      [400, "Duplicate payment record"],
+    ])("a deterministic %s keeps the form and shows the backend message", async (status, message) => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.post.mockRejectedValueOnce(httpError(status, message));
+      submitRecord(sheet);
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(within(sheet).queryByText("Payment not confirmed")).not.toBeInTheDocument();
+      expect(within(sheet).getByLabelText("Amount received")).toHaveValue("500");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-enable recording when the post-error reload fails", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.get.mockImplementation((url: string) => {
+        if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+        return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+      });
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      const notice = await within(sheet).findByRole("alert");
+      expect(notice).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(notice).getByRole("button", { name: "Reload latest" }));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(within(sheet).queryByRole("button", { name: "Review latest figures" })).not.toBeInTheDocument();
+      expect(within(sheet).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the warning after closing and reopening when the reload failed", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.get.mockImplementation((url: string) => {
+        if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+        return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+      });
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the warning across a reopen until a fresh response and explicit review", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+
+      const hung = hungCompliance(duesNow);
+      api.get.mockImplementation((url: string) =>
+        url.includes("/compliance")
+          ? hung.promise
+          : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+      );
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+
+      await act(async () => hung.release(adaPaidToApr(NEWER)));
+      expect(
+        await within(reopened).findByRole("button", { name: "Review latest figures" }),
+      ).toBeInTheDocument();
+      // Fresh rows are not enough: the form stays hidden until explicit review.
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+
+      fireEvent.click(within(reopened).getByRole("button", { name: "Review latest figures" }));
+      expect(await within(reopened).findByLabelText("Amount received")).toHaveValue("");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not bypass a pending warning after switching tabs", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.get.mockImplementation((url: string) => {
+        if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+        return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+      });
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      await openTab("Obligations");
+      await openTab("Collect");
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps Org A's warning after visiting Org B and never shows it in Org B", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      act(() => setOrg("org2", MANAGER));
+      fireEvent.click(await memberRow("Ada"));
+      const org2Sheet = await screen.findByRole("dialog");
+      expect(within(org2Sheet).queryByText("Payment not confirmed")).not.toBeInTheDocument();
+      expect(within(org2Sheet).getByLabelText("Amount received")).toBeInTheDocument();
+      fireEvent.click(within(org2Sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      act(() => setOrg("org1", MANAGER));
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

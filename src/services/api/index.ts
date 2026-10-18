@@ -7,6 +7,7 @@ import axios, {
 import { toast } from "react-toastify";
 import useGlobalStore, { EMPTY_USER } from "zStore";
 import { authRequest } from "./request";
+import { safeResponseLessError } from "./safeErrorLog";
 
 export const baseURL = process.env.REACT_APP_BASE_URL;
 export * from "./request";
@@ -53,8 +54,10 @@ const onResponseError = (error: AxiosError): Promise<AxiosError> => {
       useGlobalStore.setState({ user: EMPTY_USER });
     }
   } else {
-    // Handle error without response (network error, request cancelled, etc.)
-    console.error(error);
+    // Never log the AxiosError itself: its config carries the Authorization
+    // header and the body (which can include payment amounts). Only a
+    // sanitised transport code is safe.
+    console.error(safeResponseLessError(error));
   }
   return Promise.reject(error);
 };
