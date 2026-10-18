@@ -98,7 +98,7 @@ export const scopeCollectionUncertaintyToAccount = (accountId: string) => {
   }
 };
 
-/** Explicit lifecycle reset (tests and sign-out); never called by the UI. */
+/** Test reset. The UI drops another account's latches via the account scope. */
 export const clearAllCollectionUncertainty = () => {
   activeAccountId = null;
   if (latches.size) {
