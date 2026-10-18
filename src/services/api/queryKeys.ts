@@ -172,6 +172,17 @@ export const queryKeys = {
         format,
         ...(asOf ? [asOf] : []),
       ] as const,
+    ledger: {
+      /** Prefix covering every read-only Books query for one organisation. */
+      root: (organisationId: string) =>
+        ["finance", organisationId, "ledger"] as const,
+      status: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "status"] as const,
+      accounts: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "accounts"] as const,
+      journals: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "journals"] as const,
+    },
   },
 
   rbac: {

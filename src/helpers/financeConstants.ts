@@ -52,3 +52,19 @@ export function formatMoney(value: number): string {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
+/**
+ * Integer kobo as Naira without floating-point arithmetic: the kobo part is
+ * sliced from the decimal string and only shown when nonzero. A value that
+ * is not a safe integer returns a neutral message — never a rounded or
+ * invented amount.
+ */
+export function formatKobo(amountKobo: number): string {
+  if (!Number.isSafeInteger(amountKobo)) return "Amount unavailable";
+  const sign = amountKobo < 0 ? "-" : "";
+  const digits = String(Math.abs(amountKobo)).padStart(3, "0");
+  const naira = Number(digits.slice(0, -2));
+  const kobo = digits.slice(-2);
+  const whole = formatMoney(naira);
+  return kobo === "00" ? `${sign}${whole}` : `${sign}${whole}.${kobo}`;
+}
