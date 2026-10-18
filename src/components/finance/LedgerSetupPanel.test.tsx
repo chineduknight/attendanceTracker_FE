@@ -69,6 +69,7 @@ const account = (overrides: Partial<LedgerAccount> = {}): LedgerAccount => ({
   revision: 0,
   bankName: null,
   accountNumberLast4: null,
+  openingVerified: null,
   ...overrides,
 });
 

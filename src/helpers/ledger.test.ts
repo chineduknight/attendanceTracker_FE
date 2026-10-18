@@ -103,6 +103,7 @@ describe("ledger parsing", () => {
         revision: null,
         bankName: null,
         accountNumberLast4: null,
+        openingVerified: null,
       },
       {
         id: "dues",
@@ -114,6 +115,7 @@ describe("ledger parsing", () => {
         revision: null,
         bankName: null,
         accountNumberLast4: null,
+        openingVerified: null,
       },
     ]);
     expect(toLedgerAccounts({ data: [] })).toBeNull();
