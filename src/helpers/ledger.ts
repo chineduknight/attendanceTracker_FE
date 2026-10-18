@@ -49,6 +49,13 @@ const asBusinessDate = (value: unknown): string | null => {
 };
 
 /**
+ * A bank account's last four digits, exactly four digits, or null. Anything
+ * else is not displayed: a full account number must never be echoed back.
+ */
+const asLastFour = (value: unknown): string | null =>
+  typeof value === "string" && /^[0-9]{4}$/.test(value) ? value : null;
+
+/**
  * A list of non-blank strings, or null when any entry is not one. A malformed
  * entry is not filtered out: a shortened list could look like the full set.
  */
@@ -151,6 +158,11 @@ export const toLedgerAccounts = (value: unknown): LedgerAccount[] | null => {
       subtype: asText(raw.subtype),
       currency: asText(raw.currency),
       active: typeof raw.active === "boolean" ? raw.active : null,
+      // Additive F2 read fields. An F1 list has none of them; they stay null
+      // so nothing is guessed and no action is offered without a revision.
+      revision: asCount(raw.revision),
+      bankName: asText(raw.bankName),
+      accountNumberLast4: asLastFour(raw.accountNumberLast4),
     });
   }
   return accounts;

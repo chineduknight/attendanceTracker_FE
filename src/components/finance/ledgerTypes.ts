@@ -82,6 +82,15 @@ export interface LedgerAccount {
   subtype: string | null;
   currency: string | null;
   active: boolean | null;
+  /**
+   * Additive F2 read field (§8.0). `null` when an F1 backend did not send it
+   * or the value was unusable. Rename/(de)activate PATCHes require it as
+   * `expectedRevision`, so those actions stay unavailable without it.
+   */
+  revision: number | null;
+  /** Additive F2 money-account display metadata (D5); never a full number. */
+  bankName: string | null;
+  accountNumberLast4: string | null;
 }
 
 export type LedgerSide = "debit" | "credit";

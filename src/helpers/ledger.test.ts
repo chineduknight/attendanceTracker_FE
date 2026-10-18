@@ -100,6 +100,9 @@ describe("ledger parsing", () => {
         subtype: "bank",
         currency: "NGN",
         active: true,
+        revision: null,
+        bankName: null,
+        accountNumberLast4: null,
       },
       {
         id: "dues",
@@ -108,9 +111,50 @@ describe("ledger parsing", () => {
         subtype: null,
         currency: null,
         active: null,
+        revision: null,
+        bankName: null,
+        accountNumberLast4: null,
       },
     ]);
     expect(toLedgerAccounts({ data: [] })).toBeNull();
+  });
+
+  it("reads the additive F2 account fields without inventing them", () => {
+    const accounts = toLedgerAccounts([
+      {
+        id: "cash",
+        name: "Cash at bank",
+        class: "asset",
+        subtype: "bank",
+        active: true,
+        revision: 3,
+        bankName: "GTBank",
+        accountNumberLast4: "4321",
+      },
+    ]);
+
+    expect(accounts?.[0]).toMatchObject({
+      revision: 3,
+      bankName: "GTBank",
+      accountNumberLast4: "4321",
+    });
+
+    const malformed = toLedgerAccounts([
+      {
+        id: "cash",
+        revision: -1,
+        bankName: 7,
+        // Only exactly four digits may be shown; a longer value is never
+        // echoed back as if it were the last four.
+        accountNumberLast4: "12345678",
+      },
+    ]);
+
+    expect(malformed?.[0]).toMatchObject({
+      revision: null,
+      bankName: null,
+      accountNumberLast4: null,
+    });
   });
 
   it("distinguishes a genuinely empty account list from a malformed one", () => {
