@@ -14,7 +14,15 @@ import {
   unappliedCreditOf,
 } from "helpers/financeCompliance";
 import { correctionGuardOf, sameCorrectionGuard } from "helpers/correctionGuard";
+import {
+  acknowledgeCollectionUncertainty,
+  collectionUncertaintyKey,
+  markCollectionRefreshed,
+  markCollectionUncertain,
+  useCollectionUncertainty,
+} from "helpers/financeUncertainty";
 import { CorrectionRejection, usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
+import useGlobalStore from "zStore";
 import { usePermissions } from "rbac/usePermissions";
 import { ComplianceRow, CorrectionGuard, Obligation } from "components/finance/financeTypes";
 import FinanceSheet from "components/finance/FinanceSheet";
@@ -337,15 +345,23 @@ const MemberPaymentSheet = ({
   // never survives a switch.
   const [correction, setCorrection] = useState<CorrectionSnapshot | null>(null);
   const [rejection, setRejection] = useState<(CorrectionRejection & { rowsAt: number }) | null>(null);
-  // A collection whose response was lost may already have been recorded.
-  const [recordUnknown, setRecordUnknown] = useState<{ rowsAt: number } | null>(null);
+  const accountId = useGlobalStore((s) => s.user.id);
+  const uncertaintyKey = collectionUncertaintyKey({
+    accountId,
+    organisationId,
+    obligationId: obligation.id,
+    memberId: row.memberId,
+  });
+  const uncertainty = useCollectionUncertainty(uncertaintyKey, accountId);
   const rowUpdatedAtRef = useRef(rowUpdatedAt);
   rowUpdatedAtRef.current = rowUpdatedAt;
+  const uncertaintyKeyRef = useRef(uncertaintyKey);
+  uncertaintyKeyRef.current = uncertaintyKey;
   const payments = usePaymentMutations(
     { organisationId, obligationId: obligation.id, memberId: row.memberId },
     onClose,
     (outcome) => setRejection({ ...outcome, rowsAt: rowUpdatedAtRef.current }),
-    () => setRecordUnknown({ rowsAt: rowUpdatedAtRef.current }),
+    () => markCollectionUncertain(uncertaintyKeyRef.current),
   );
   const openCorrection = () => {
     setCorrection({ row, guard: correctionGuardOf(row) });
@@ -394,17 +410,21 @@ const MemberPaymentSheet = ({
       onDismiss={closeCorrection}
     />
   );
-  // The ambiguous POST invalidates this organisation's finance queries, which
-  // cancels fetches in flight, so only a fetch that lands afterwards counts as
-  // reviewed. A failed reload never advances `dataUpdatedAt` and stays blocked.
-  const recordAwaitingReload = !!recordUnknown && rowUpdatedAt <= recordUnknown.rowsAt;
-  const recordNotice = recordUnknown && (
+  // A post-detection response is recorded even while the sheet is closed, so
+  // reopening after a successful refresh shows the review action, never the
+  // form. `invalidateFinance` cancels in-flight refetches, so a response that
+  // completes after detection belongs to a fetch made after the ambiguity.
+  useEffect(() => {
+    if (uncertainty) markCollectionRefreshed(uncertaintyKey, rowUpdatedAt);
+  }, [uncertainty, uncertaintyKey, rowUpdatedAt]);
+  const recordUnknown = !!uncertainty;
+  const recordNotice = uncertainty && (
     <RecordUnconfirmedNotice
       memberName={row.name}
-      awaitingReload={recordAwaitingReload}
+      awaitingReload={uncertainty.refreshedAt === undefined}
       isReloading={isReloading}
       onReload={onReload}
-      onReview={() => setRecordUnknown(null)}
+      onReview={() => acknowledgeCollectionUncertainty(uncertaintyKey)}
     />
   );
   const startDate = useFinancialStartDate(organisationId);
