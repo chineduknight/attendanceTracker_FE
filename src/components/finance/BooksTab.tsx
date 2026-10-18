@@ -3,6 +3,8 @@ import { Badge, Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
+import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
+import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { formatKobo } from "helpers/financeConstants";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
@@ -404,14 +406,32 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
     <Stack gap={5}>
       <StatusHeader status={status} />
 
-      <AccountsSection
-        headingId={accountsHeadingId}
-        accounts={accountsQuery.accounts}
-        isError={accountsQuery.isError}
-        error={accountsQuery.error}
-        refetch={accountsQuery.refetch}
-        isFetching={accountsQuery.isFetching}
-      />
+      {/* F2A-2 setup and chart-of-accounts controls are fully built but off
+          until the backend routes and the F2 read shape are live. With the
+          gate closed the Books tab is exactly what #131 shipped. */}
+      {LEDGER_SETUP_UI_ENABLED && (
+        <LedgerSetupPanel
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          accountsError={accountsQuery.isError ? accountsQuery.error : null}
+          onRetryAccounts={accountsQuery.refetch}
+          isRetryingAccounts={accountsQuery.isFetching}
+        />
+      )}
+
+      {/* The managed chart of accounts replaces the plain read-only list when
+          the setup panel is on; showing both would duplicate every account. */}
+      {!LEDGER_SETUP_UI_ENABLED && (
+        <AccountsSection
+          headingId={accountsHeadingId}
+          accounts={accountsQuery.accounts}
+          isError={accountsQuery.isError}
+          error={accountsQuery.error}
+          refetch={accountsQuery.refetch}
+          isFetching={accountsQuery.isFetching}
+        />
+      )}
       <JournalsSection
         headingId={journalsHeadingId}
         journals={journalsQuery.journals}

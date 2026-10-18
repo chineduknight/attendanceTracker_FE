@@ -74,6 +74,11 @@ export const financeRequest = {
   LEDGER_STATUS: "/finance/:organisationId/ledger/status",
   LEDGER_ACCOUNTS: "/finance/:organisationId/ledger/accounts",
   LEDGER_JOURNALS: "/finance/:organisationId/ledger/journals",
+  // F2A-2 ledger setup and chart of accounts (RFC v0.3 §8.1). Gated behind
+  // config/ledgerSetup until the backend routes and F2 read shape are live.
+  LEDGER_SETUP: "/finance/:organisationId/ledger/setup",
+  LEDGER_SETTINGS: "/finance/:organisationId/ledger/settings",
+  LEDGER_ACCOUNT: "/finance/:organisationId/ledger/accounts/:accountId",
 };
 
 export const rbacRequest = {
