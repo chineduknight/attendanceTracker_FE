@@ -70,6 +70,10 @@ export const financeRequest = {
     "/finance/:organisationId/obligations/:id/compliance/export/pdf",
   FINANCIAL_START_DATE: "/finance/members/:memberId/financial-start-date",
   BULK_FINANCIAL_START_DATE: "/finance/:organisationId/members/financial-start-date",
+  // Read-only ledger foundation (F1). No write endpoints yet.
+  LEDGER_STATUS: "/finance/:organisationId/ledger/status",
+  LEDGER_ACCOUNTS: "/finance/:organisationId/ledger/accounts",
+  LEDGER_JOURNALS: "/finance/:organisationId/ledger/journals",
 };
 
 export const rbacRequest = {

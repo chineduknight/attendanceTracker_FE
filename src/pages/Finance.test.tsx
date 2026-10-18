@@ -1629,3 +1629,73 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     });
   });
 });
+
+describe("<Finance> Books (F1)", () => {
+  const LEDGER_STATUS = {
+    state: "not_active",
+    currency: "NGN",
+    openingBalancesVerified: false,
+    postingEnabled: false,
+  };
+
+  /** Serve the ledger routes, falling through to the current finance fixture. */
+  const serveLedger = () => {
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation((url: string) => {
+      if (url.endsWith("/ledger/status")) {
+        return Promise.resolve({ data: { data: LEDGER_STATUS } });
+      }
+      if (url.endsWith("/ledger/accounts") || url.endsWith("/ledger/journals")) {
+        return Promise.resolve({ data: { data: [] } });
+      }
+      return base(url);
+    });
+  };
+
+  it("shows the gated, read-only Books tab to a viewer", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    serveLedger();
+    renderFinance();
+
+    const booksTab = await screen.findByRole("tab", { name: "Books" });
+    expect(generatedCss(booksTab)).toMatch(/min-height:\s*44px|height:\s*44px/);
+    await openTab("Books");
+
+    expect(
+      await screen.findByText(/Bookkeeping has not been activated for this organisation/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No finance accounts configured")).toBeInTheDocument();
+    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/status");
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/accounts");
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/journals");
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("reloads Books only for the newly selected organisation", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    serveLedger();
+    renderFinance();
+    await openTab("Books");
+    expect(await screen.findByText(/Bookkeeping has not been activated/)).toBeInTheDocument();
+
+    api.get.mockClear();
+    act(() => setOrg("org2", VIEWER));
+    await openTab("Books");
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith("/finance/org2/ledger/status"),
+    );
+
+    const ledgerCalls = api.get.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.includes("/ledger/"));
+    expect(ledgerCalls.length).toBeGreaterThan(0);
+    expect(ledgerCalls.every((url) => url.includes("/finance/org2/"))).toBe(true);
+  });
+});

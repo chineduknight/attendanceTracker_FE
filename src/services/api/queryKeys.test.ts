@@ -304,4 +304,30 @@ describe("queryKeys tenant scoping", () => {
       ),
     ).toBe(false);
   });
+
+  it("scopes ledger status, accounts and journals to the organisation", () => {
+    const statusA = queryKeys.finance.ledger.status("orgA");
+    expect(statusA).toEqual(["finance", "orgA", "ledger", "status"]);
+    expect(statusA).not.toEqual(queryKeys.finance.ledger.status("orgB"));
+    expect(queryKeys.finance.ledger.accounts("orgA")).not.toEqual(
+      queryKeys.finance.ledger.accounts("orgB"),
+    );
+    expect(queryKeys.finance.ledger.journals("orgA")).not.toEqual(
+      queryKeys.finance.ledger.journals("orgB"),
+    );
+    expect(matches(queryKeys.finance.ledger.root("orgA"), statusA)).toBe(true);
+    expect(matches(queryKeys.finance.ledger.root("orgB"), statusA)).toBe(false);
+  });
+
+  it("keeps a ledger invalidation inside one organisation", () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.finance.ledger.journals("orgA"), { org: "A" });
+    client.setQueryData(queryKeys.finance.ledger.journals("orgB"), { org: "B" });
+
+    const hits = client
+      .getQueryCache()
+      .findAll({ queryKey: queryKeys.finance.ledger.root("orgA") });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].state.data).toEqual({ org: "A" });
+  });
 });
