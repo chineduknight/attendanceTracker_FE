@@ -1,14 +1,20 @@
+import { isValid, parseISO } from "date-fns";
 import {
   LedgerAccount,
   LedgerJournal,
   LedgerJournalLine,
+  LedgerKnownState,
   LedgerStatus,
 } from "components/finance/ledgerTypes";
 
 /**
- * Read-only parsing for the F1 ledger endpoints. Every parser fails closed:
+ * Read-only parsing for the ledger endpoints. Every parser fails closed:
  * an unexpected body becomes `null` ("not available yet") rather than being
  * coerced into empty accounts, a zero balance or a guessed status.
+ *
+ * The same parsers cover F1 payloads and the additive F2 read shape. F2 never
+ * renames or changes an F1 field, and a missing additive field stays `null`
+ * instead of becoming a default or evidence of readiness.
  */
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -20,16 +26,105 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const asText = (value: unknown): string | null =>
   typeof value === "string" && value.trim() ? value.trim() : null;
 
+/** A supplied boolean; anything else (including "true") is null, not false. */
+const asBoolean = (value: unknown): boolean | null =>
+  typeof value === "boolean" ? value : null;
+
+/** A non-negative safe-integer counter; anything else is null, not zero. */
+const asCount = (value: unknown): number | null =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
+
+const BUSINESS_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A business date exactly as supplied (`YYYY-MM-DD`). A malformed or
+ * impossible calendar date is null; it is never shifted or reformatted into
+ * a plausible date.
+ */
+const asBusinessDate = (value: unknown): string | null => {
+  if (typeof value !== "string" || !BUSINESS_DATE.test(value)) return null;
+  return isValid(parseISO(value)) ? value : null;
+};
+
+/**
+ * A list of non-blank strings, or null when any entry is not one. A malformed
+ * entry is not filtered out: a shortened list could look like the full set.
+ */
+const asTextList = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) return null;
+  const list: string[] = [];
+  for (const entry of value) {
+    const text = asText(entry);
+    if (!text) return null;
+    list.push(text);
+  }
+  return list;
+};
+
+const KNOWN_STATES: readonly LedgerKnownState[] = [
+  "not_active",
+  "setup",
+  "pending_verification",
+  "active",
+  "suspended",
+];
+
+export const isKnownLedgerState = (
+  value: string,
+): value is LedgerKnownState =>
+  (KNOWN_STATES as readonly string[]).includes(value);
+
 export const toLedgerStatus = (value: unknown): LedgerStatus | null => {
   const raw = asRecord(value);
-  if (!raw || (raw.state !== "not_active" && raw.state !== "active")) return null;
+  const stateText = asText(raw?.state);
+  // A body without any readable state is malformed, not "not active".
+  if (!raw || !stateText) return null;
   return {
-    state: raw.state,
+    state: isKnownLedgerState(stateText)
+      ? { kind: "known", state: stateText }
+      : { kind: "unknown", raw: stateText },
     currency: asText(raw.currency),
     // Missing flags fail closed: never claim verification or posting support.
     openingBalancesVerified: raw.openingBalancesVerified === true,
     postingEnabled: raw.postingEnabled === true,
+    contractVersion: asText(raw.contractVersion),
+    blockers: asTextList(raw.blockers),
+    openingDate: asBusinessDate(raw.openingDate),
+    lockedThrough: asBusinessDate(raw.lockedThrough),
+    revision: asCount(raw.revision),
+    memberReceiptsEnabled: asBoolean(raw.memberReceiptsEnabled),
+    unconfirmedAttempts: asCount(raw.unconfirmedAttempts),
+    // `undefined` (field absent) is unknown; an explicit `null` is "none";
+    // only an object is an open proposal. Any other type stays unknown.
+    hasPendingProposal:
+      raw.pendingProposal === undefined
+        ? null
+        : raw.pendingProposal === null
+          ? false
+          : asRecord(raw.pendingProposal)
+            ? true
+            : null,
   };
+};
+
+/** The state key used for labels and copy; `unknown` is never a known state. */
+export const ledgerStateKey = (
+  status: LedgerStatus,
+): LedgerKnownState | "unknown" =>
+  status.state.kind === "known" ? status.state.state : "unknown";
+
+export type LedgerReadiness = "active" | "not_ready" | "unknown";
+
+/**
+ * Only a recognised `active` state is ready. Everything else — a known
+ * non-active lifecycle state or an unrecognised future string — is not ready,
+ * whatever `postingEnabled` or `openingBalancesVerified` claim.
+ */
+export const ledgerReadiness = (status: LedgerStatus): LedgerReadiness => {
+  if (status.state.kind === "unknown") return "unknown";
+  return status.state.state === "active" ? "active" : "not_ready";
 };
 
 /**
@@ -129,7 +224,61 @@ export const isLedgerUnavailable = (error: unknown): boolean => {
 };
 
 export const LEDGER_NOT_ACTIVE_NOTE =
-  "Bookkeeping has not been activated for this organisation. Existing dues/levy compliance figures are recorded amounts, not verified cash receipts or opening balances.";
+  "Bookkeeping has not been activated for this organisation. Existing dues/levy compliance figures are recorded amounts, not verified cash receipts, ledger cash, opening balances or income.";
+
+export const LEDGER_SETUP_NOTE =
+  "Bookkeeping setup has started for this organisation, but the books are not active yet. No postings can be made; only recorded journal entries are shown, and balances are not calculated here.";
+
+export const LEDGER_PENDING_VERIFICATION_NOTE =
+  "Opening balances have been proposed and are awaiting independent verification. The books are not active yet, so no postings can be made and balances are not calculated here.";
+
+export const LEDGER_SUSPENDED_NOTE =
+  "Bookkeeping is suspended for this organisation. No postings can be made until an owner resumes it, and balances are not calculated here.";
+
+/**
+ * An unrecognised state string is deliberately reported as unknown rather
+ * than guessed at. It must never be described as active or ready.
+ */
+export const LEDGER_UNKNOWN_STATE_NOTE =
+  "This app version doesn't recognise the bookkeeping state the server reported, so these books are shown as not ready. No balances or transactions have been estimated.";
+
+/** Officer-facing label per state. Colour is added by the component. */
+export const LEDGER_STATE_LABELS: Record<LedgerKnownState | "unknown", string> = {
+  not_active: "Not active",
+  setup: "Setup",
+  pending_verification: "Awaiting verification",
+  active: "Active",
+  suspended: "Suspended",
+  unknown: "Unknown state",
+};
+
+const LEDGER_ACTIVE_VERIFIED_NOTE =
+  "Bookkeeping is active. Only recorded journal entries are shown; balances are not calculated here.";
+const LEDGER_ACTIVE_UNVERIFIED_NOTE =
+  "Bookkeeping is active, but opening balances have not been verified. Only recorded journal entries are shown; balances are not calculated here.";
+
+/**
+ * The explanation shown under the state badge. `active` alone selects the
+ * active wording; `postingEnabled` never upgrades a non-active or unknown
+ * state into one.
+ */
+export const ledgerStatusNote = (status: LedgerStatus): string => {
+  if (status.state.kind === "unknown") return LEDGER_UNKNOWN_STATE_NOTE;
+  switch (status.state.state) {
+    case "active":
+      return status.openingBalancesVerified
+        ? LEDGER_ACTIVE_VERIFIED_NOTE
+        : LEDGER_ACTIVE_UNVERIFIED_NOTE;
+    case "setup":
+      return LEDGER_SETUP_NOTE;
+    case "pending_verification":
+      return LEDGER_PENDING_VERIFICATION_NOTE;
+    case "suspended":
+      return LEDGER_SUSPENDED_NOTE;
+    case "not_active":
+      return LEDGER_NOT_ACTIVE_NOTE;
+  }
+};
 
 export const LEDGER_UNAVAILABLE_TITLE = "Books aren't available yet";
 export const LEDGER_UNAVAILABLE_NOTE =

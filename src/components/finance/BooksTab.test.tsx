@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { generatedCss, render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import BooksTab from "components/finance/BooksTab";
+import { LEDGER_NOT_ACTIVE_NOTE } from "helpers/ledger";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -24,6 +25,19 @@ const ACTIVE = {
   currency: "NGN",
   openingBalancesVerified: true,
   postingEnabled: true,
+};
+
+/** The approved F2 status shape (RFC v0.3 §4.9), all fields additive. */
+const F2_ACTIVE = {
+  ...ACTIVE,
+  blockers: [],
+  openingDate: "2026-11-01",
+  lockedThrough: "2026-10-31",
+  memberReceiptsEnabled: true,
+  revision: 7,
+  pendingProposal: null,
+  unconfirmedAttempts: 0,
+  contractVersion: "f2-0.3",
 };
 const ACCOUNTS = [
   {
@@ -289,5 +303,130 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     expect(screen.queryByText("Org A cash")).not.toBeInTheDocument();
     expect(api.get.mock.calls.length).toBeGreaterThan(0);
     expect(api.get.mock.calls.every(([url]) => String(url).includes("/finance/org2/"))).toBe(true);
+  });
+});
+
+describe("<BooksTab> approved F2 read compatibility", () => {
+  it.each([
+    ["setup", "Setup", /setup has started for this organisation/],
+    [
+      "pending_verification",
+      "Awaiting verification",
+      /awaiting independent verification/,
+    ],
+    ["suspended", "Suspended", /Bookkeeping is suspended for this organisation/],
+  ])(
+    "renders the %s state as not ready, never active",
+    async (state, label, note) => {
+      serveLedger(
+        { ...F2_ACTIVE, state, openingBalancesVerified: false, postingEnabled: false },
+        [],
+        [],
+      );
+      renderBooks();
+
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(screen.getByText(note)).toBeInTheDocument();
+      expect(screen.queryByText("Active")).not.toBeInTheDocument();
+      expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
+      // Reads still happen, but nothing is invented from them.
+      expect(screen.getByText("No finance accounts configured")).toBeInTheDocument();
+      expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+      expect(api.put).not.toHaveBeenCalled();
+      expect(api.patch).not.toHaveBeenCalled();
+      expect(api.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps an unrecognised state unknown and reads no lists", async () => {
+    serveLedger(
+      { ...F2_ACTIVE, state: "frozen_for_review", contractVersion: "f2-9" },
+      ACCOUNTS,
+      JOURNALS,
+    );
+    renderBooks();
+
+    expect(await screen.findByText("Unknown state")).toBeInTheDocument();
+    expect(
+      screen.getByText(/doesn't recognise the bookkeeping state the server reported/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Books aren't available yet")).toBeInTheDocument();
+    expect(screen.queryByText("No finance accounts configured")).not.toBeInTheDocument();
+    expect(screen.queryByText("RCPT-001")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/status");
+  });
+
+  it("shows additive F2 facts exactly as supplied", async () => {
+    serveLedger(
+      {
+        ...F2_ACTIVE,
+        pendingProposal: { id: "p1" },
+        unconfirmedAttempts: 2,
+        blockers: ["LEDGER_WRITES_DISABLED"],
+      },
+      ACCOUNTS,
+      JOURNALS,
+    );
+    renderBooks();
+
+    expect(await screen.findByText("Opening date: 1 Nov 2026")).toBeInTheDocument();
+    expect(screen.getByText("Period locked through: 31 Oct 2026")).toBeInTheDocument();
+    expect(
+      screen.getByText("An opening proposal is open and awaiting verification."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "2 posting requests have unconfirmed outcomes and need resolution.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Member receipts are enabled.")).toBeInTheDocument();
+    expect(screen.getByText("Server-reported blockers:")).toBeInTheDocument();
+    expect(screen.getByText("LEDGER_WRITES_DISABLED")).toBeInTheDocument();
+  });
+
+  it("invents no F2 details for a plain F1 payload", async () => {
+    serveLedger(NOT_ACTIVE, [], []);
+    renderBooks();
+
+    expect(await screen.findByText(LEDGER_NOT_ACTIVE_NOTE)).toBeInTheDocument();
+    expect(screen.getByText("Not active")).toBeInTheDocument();
+    expect(screen.queryByText(/Opening date:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Period locked through:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Member receipts/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unconfirmed outcome/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Server-reported blockers:")).not.toBeInTheDocument();
+    expect(screen.queryByText(/opening proposal is open/)).not.toBeInTheDocument();
+  });
+
+  it("stays read-only when an F2 status claims active and posting enabled", async () => {
+    serveLedger(F2_ACTIVE, ACCOUNTS, JOURNALS);
+    renderBooks();
+
+    // The active wording appears, but the shell still offers no controls.
+    expect(
+      await screen.findByText(
+        "Bookkeeping is active. Only recorded journal entries are shown; balances are not calculated here.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("RCPT-001")).toBeInTheDocument();
+    expect(screen.queryByText("Not active")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+
+    // Status plus the two F1 arrays only: no legacy payment read, no write.
+    const urls = api.get.mock.calls.map(([url]) => String(url)).sort();
+    expect(urls).toEqual([
+      "/finance/org1/ledger/accounts",
+      "/finance/org1/ledger/journals",
+      "/finance/org1/ledger/status",
+    ]);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
   });
 });

@@ -9,18 +9,46 @@ import {
   isLedgerUnavailable,
   LEDGER_FORBIDDEN_NOTE,
   LEDGER_FORBIDDEN_TITLE,
-  LEDGER_NOT_ACTIVE_NOTE,
+  LEDGER_STATE_LABELS,
   LEDGER_UNAVAILABLE_NOTE,
   LEDGER_UNAVAILABLE_TITLE,
   ledgerHttpStatus,
+  ledgerReadiness,
+  ledgerStateKey,
+  ledgerStatusNote,
 } from "helpers/ledger";
 import { useLedgerAccounts, useLedgerJournals, useLedgerStatus } from "hooks/useLedger";
-import { LedgerAccount, LedgerJournal } from "components/finance/ledgerTypes";
+import {
+  LedgerAccount,
+  LedgerJournal,
+  LedgerKnownState,
+  LedgerStatus,
+} from "components/finance/ledgerTypes";
 
 /**
  * The gated ledger shell. It reports only what the backend actually sent:
  * no derived cash balance, opening balance, totals or seeded example rows.
+ *
+ * F1 and the approved F2 read shape share these screens. Only a recognised
+ * `active` state is ever presented as ready; every other known lifecycle state
+ * and any unrecognised future state is not ready. `postingEnabled` is parsed
+ * for information only and never enables a control: this shell stays
+ * read-only even when a server claims active/posting-enabled books.
  */
+
+/** Badge colour per state. `unknown` gets the warning colour, not success. */
+const STATE_SCHEMES: Record<
+  LedgerKnownState | "unknown",
+  "green" | "gray" | "blue" | "orange" | "red" | "yellow"
+> = {
+  active: "green",
+  not_active: "gray",
+  setup: "blue",
+  pending_verification: "orange",
+  suspended: "red",
+  unknown: "yellow",
+};
+
 const Unavailable = ({ forbidden = false }: { forbidden?: boolean }) => (
   <EmptyState
     title={forbidden ? LEDGER_FORBIDDEN_TITLE : LEDGER_UNAVAILABLE_TITLE}
@@ -33,6 +61,94 @@ const SectionHeading = ({ id, children }: { id: string; children: string }) => (
     {children}
   </Text>
 );
+
+/**
+ * Additive F2 status facts, shown only when the server actually sent a usable
+ * value. Missing fields render nothing rather than "none", "off" or "0", and
+ * blocker codes are shown verbatim because this build may not know them yet.
+ */
+const StatusDetails = ({ status }: { status: LedgerStatus }) => {
+  const facts: string[] = [];
+  if (status.openingDate) {
+    facts.push(`Opening date: ${formatBusinessDate(status.openingDate)}`);
+  }
+  if (status.lockedThrough) {
+    facts.push(`Period locked through: ${formatBusinessDate(status.lockedThrough)}`);
+  }
+  if (status.hasPendingProposal === true) {
+    facts.push("An opening proposal is open and awaiting verification.");
+  }
+  if (status.unconfirmedAttempts) {
+    const count = status.unconfirmedAttempts;
+    facts.push(
+      count === 1
+        ? "1 posting request has an unconfirmed outcome and needs resolution."
+        : `${count} posting requests have unconfirmed outcomes and need resolution.`,
+    );
+  }
+  if (status.memberReceiptsEnabled === true) {
+    facts.push("Member receipts are enabled.");
+  } else if (status.memberReceiptsEnabled === false) {
+    facts.push("Member receipts are turned off.");
+  }
+
+  const blockers = status.blockers ?? [];
+  if (!facts.length && !blockers.length) return null;
+
+  return (
+    <Box as="section" aria-label="Bookkeeping details" mt={2}>
+      <Stack gap={1}>
+        {facts.map((fact) => (
+          <Text key={fact} fontSize="sm" color="fg.muted">
+            {fact}
+          </Text>
+        ))}
+        {blockers.length > 0 && (
+          <>
+            <Text fontSize="sm" color="fg.muted">
+              Server-reported blockers:
+            </Text>
+            <Box as="ul" listStyleType="none" m={0} p={0}>
+              {blockers.map((code, index) => (
+                <Text
+                  as="li"
+                  key={`${code}-${index}`}
+                  fontSize="sm"
+                  color="fg.muted"
+                  css={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  {code}
+                </Text>
+              ))}
+            </Box>
+          </>
+        )}
+      </Stack>
+    </Box>
+  );
+};
+
+const StatusHeader = ({ status }: { status: LedgerStatus }) => {
+  const stateKey = ledgerStateKey(status);
+  return (
+    <Box>
+      <Flex align="center" gap={2} wrap="wrap">
+        <Text as="h2" fontSize="lg" fontWeight="semibold">
+          Books
+        </Text>
+        <Badge colorPalette={STATE_SCHEMES[stateKey]} variant="subtle">
+          {LEDGER_STATE_LABELS[stateKey]}
+        </Badge>
+      </Flex>
+      <Text fontSize="sm" color="fg.muted" mt={1}>
+        {ledgerStatusNote(status)}
+      </Text>
+      {/* Unknown states get no configuration detail: this build cannot say
+          what those fields would mean for them. */}
+      {stateKey !== "unknown" && <StatusDetails status={status} />}
+    </Box>
+  );
+};
 
 interface AccountsSectionProps {
   headingId: string;
@@ -228,10 +344,15 @@ const JournalsSection = ({
 
 const BooksTab = ({ organisationId }: { organisationId: string }) => {
   const statusQuery = useLedgerStatus(organisationId);
-  // Lists start only after a valid status, so an old backend gets one neutral
-  // 404 rather than three. A `not_active` status still reads the (empty)
-  // lists, so a real account can never hide behind the gated explanation.
-  const listsEnabled = statusQuery.status !== null;
+  const status = statusQuery.status;
+  const stateKey = status ? ledgerStateKey(status) : null;
+  // Lists start only after a valid, recognised status, so an old backend gets
+  // one neutral 404 rather than three. A `not_active` status still reads the
+  // (empty) lists, so a real account can never hide behind the gated
+  // explanation. An unrecognised state may have different list semantics, so
+  // this build neither reads nor renders lists against it.
+  const listsEnabled =
+    status !== null && ledgerReadiness(status) !== "unknown";
   const accountsQuery = useLedgerAccounts(organisationId, listsEnabled);
   const journalsQuery = useLedgerJournals(organisationId, listsEnabled);
   const accountsHeadingId = useId();
@@ -241,7 +362,6 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
     return <PageLoader h="30vh" label="Loading books..." />;
   }
 
-  const status = statusQuery.status;
   // A failed background refetch keeps the last valid status on screen.
   const statusFailed = statusQuery.isError && !status;
   if (statusFailed) {
@@ -259,7 +379,16 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
 
   // A 200 with a body this build does not understand (e.g. an older mock or
   // proxy) is "not available yet", never an empty active book.
-  if (!status) return <Unavailable />;
+  if (!status || !stateKey) return <Unavailable />;
+
+  if (stateKey === "unknown") {
+    return (
+      <Stack gap={5}>
+        <StatusHeader status={status} />
+        <Unavailable />
+      </Stack>
+    );
+  }
 
   // Wait for both lists to settle (success or failure) before painting the
   // shell, so a transient null can never look like "no accounts configured".
@@ -271,28 +400,9 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
     return <PageLoader h="30vh" label="Loading books..." />;
   }
 
-  const active = status.state === "active";
-  const statusNote = active
-    ? status.openingBalancesVerified
-      ? "Bookkeeping is active. Only recorded journal entries are shown; balances are not calculated here."
-      : "Bookkeeping is active, but opening balances have not been verified. Only recorded journal entries are shown; balances are not calculated here."
-    : LEDGER_NOT_ACTIVE_NOTE;
-
   return (
     <Stack gap={5}>
-      <Box>
-        <Flex align="center" gap={2} wrap="wrap">
-          <Text as="h2" fontSize="lg" fontWeight="semibold">
-            Books
-          </Text>
-          <Badge colorPalette={active ? "green" : "gray"} variant="subtle">
-            {active ? "Active" : "Not active"}
-          </Badge>
-        </Flex>
-        <Text fontSize="sm" color="fg.muted" mt={1}>
-          {statusNote}
-        </Text>
-      </Box>
+      <StatusHeader status={status} />
 
       <AccountsSection
         headingId={accountsHeadingId}

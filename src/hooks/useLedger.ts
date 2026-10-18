@@ -9,8 +9,12 @@ import {
 } from "helpers/ledger";
 
 /**
- * Read-only finance ledger queries (F1). Every key is tenant-scoped and every
+ * Read-only finance ledger queries. Every key is tenant-scoped and every
  * request is a GET; this foundation has no write side.
+ *
+ * The payloads are read through the tolerant F1/F2 parsers: an F1 backend is
+ * a legitimate read, unknown additive fields are ignored, and an unrecognised
+ * lifecycle state never becomes a ready book.
  */
 
 export const useLedgerStatus = (organisationId: string) => {
