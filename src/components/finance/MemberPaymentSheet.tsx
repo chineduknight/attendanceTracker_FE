@@ -14,7 +14,15 @@ import {
   unappliedCreditOf,
 } from "helpers/financeCompliance";
 import { correctionGuardOf, sameCorrectionGuard } from "helpers/correctionGuard";
+import {
+  acknowledgeCollectionUncertainty,
+  collectionUncertaintyKey,
+  markCollectionRefreshed,
+  markCollectionUncertain,
+  useCollectionUncertainty,
+} from "helpers/financeUncertainty";
 import { CorrectionRejection, usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
+import useGlobalStore from "zStore";
 import { usePermissions } from "rbac/usePermissions";
 import { ComplianceRow, CorrectionGuard, Obligation } from "components/finance/financeTypes";
 import FinanceSheet from "components/finance/FinanceSheet";
@@ -192,6 +200,69 @@ const CorrectionProblemNotice = ({
   );
 };
 
+/**
+ * A collection's outcome is unknown: the payment may already be recorded. The
+ * entered amount is gone and recording stays blocked until the officer has
+ * reloaded and deliberately reviewed the latest figures.
+ */
+const RecordUnconfirmedNotice = ({
+  memberName,
+  awaitingReload,
+  isReloading,
+  onReload,
+  onReview,
+}: {
+  memberName: string;
+  awaitingReload: boolean;
+  isReloading: boolean;
+  onReload: () => void;
+  onReview: () => void;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const id = window.setTimeout(() => ref.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, []);
+  return (
+    <Stack
+      ref={ref}
+      tabIndex={-1}
+      role="alert"
+      gap={2}
+      p={3}
+      borderWidth="1px"
+      borderColor="border.warning"
+      bg="bg.warning"
+      borderRadius="md"
+      outline="none"
+    >
+      <Text fontWeight="semibold" color="fg.warning">
+        Payment not confirmed
+      </Text>
+      <Text fontSize="sm">
+        {`The server didn't confirm whether ${memberName}'s payment was recorded. It may already be on the record. Your amount was cleared.`}
+      </Text>
+      <Text fontSize="sm">Reload the latest figures and check the balance before recording again.</Text>
+      {awaitingReload ? (
+        <Button
+          size="sm"
+          minH="44px"
+          colorPalette="purple"
+          loading={isReloading}
+          loadingText="Reloading…"
+          onClick={onReload}
+        >
+          Reload latest
+        </Button>
+      ) : (
+        <Button size="sm" minH="44px" colorPalette="purple" onClick={onReview}>
+          Review latest figures
+        </Button>
+      )}
+    </Stack>
+  );
+};
+
 const Figure = ({ label, value }: { label: string; value: string }) => (
   <Box>
     <Text fontSize="xs" color="fg.muted">
@@ -200,7 +271,6 @@ const Figure = ({ label, value }: { label: string; value: string }) => (
     <Text fontWeight="bold">{value}</Text>
   </Box>
 );
-
 /** Retained history the member's current start date doesn't apply. */
 const CreditNote = ({ row }: { row: ComplianceRow }) => {
   const credit = unappliedCreditOf(row);
@@ -275,12 +345,23 @@ const MemberPaymentSheet = ({
   // never survives a switch.
   const [correction, setCorrection] = useState<CorrectionSnapshot | null>(null);
   const [rejection, setRejection] = useState<(CorrectionRejection & { rowsAt: number }) | null>(null);
+  const accountId = useGlobalStore((s) => s.user.id);
+  const uncertaintyKey = collectionUncertaintyKey({
+    accountId,
+    organisationId,
+    obligationId: obligation.id,
+    memberId: row.memberId,
+  });
+  const uncertainty = useCollectionUncertainty(uncertaintyKey, accountId);
   const rowUpdatedAtRef = useRef(rowUpdatedAt);
   rowUpdatedAtRef.current = rowUpdatedAt;
+  const uncertaintyKeyRef = useRef(uncertaintyKey);
+  uncertaintyKeyRef.current = uncertaintyKey;
   const payments = usePaymentMutations(
     { organisationId, obligationId: obligation.id, memberId: row.memberId },
     onClose,
     (outcome) => setRejection({ ...outcome, rowsAt: rowUpdatedAtRef.current }),
+    () => markCollectionUncertain(uncertaintyKeyRef.current),
   );
   const openCorrection = () => {
     setCorrection({ row, guard: correctionGuardOf(row) });
@@ -329,12 +410,30 @@ const MemberPaymentSheet = ({
       onDismiss={closeCorrection}
     />
   );
+  // A post-detection response is recorded even while the sheet is closed, so
+  // reopening after a successful refresh shows the review action, never the
+  // form. `invalidateFinance` cancels in-flight refetches, so a response that
+  // completes after detection belongs to a fetch made after the ambiguity.
+  useEffect(() => {
+    if (uncertainty) markCollectionRefreshed(uncertaintyKey, rowUpdatedAt);
+  }, [uncertainty, uncertaintyKey, rowUpdatedAt]);
+  const recordUnknown = !!uncertainty;
+  const recordNotice = uncertainty && (
+    <RecordUnconfirmedNotice
+      memberName={row.name}
+      awaitingReload={uncertainty.refreshedAt === undefined}
+      isReloading={isReloading}
+      onReload={onReload}
+      onReview={() => acknowledgeCollectionUncertainty(uncertaintyKey)}
+    />
+  );
   const startDate = useFinancialStartDate(organisationId);
 
   const body = () => {
     if (!row.accountable) {
       return (
         <Stack gap={4}>
+          {recordNotice}
           {notice}
           <Text>{`${row.name} has no financial start date, so nothing is due from them yet.`}</Text>
           <CreditNote row={row} />
@@ -361,6 +460,7 @@ const MemberPaymentSheet = ({
 
     return (
       <Stack gap={4}>
+        {recordNotice}
         {notice}
         <SimpleGrid columns={3} gap={3}>
           <Figure label="Paid" value={money(paidOf(row))} />
@@ -395,27 +495,29 @@ const MemberPaymentSheet = ({
           <>
             <Separator />
             {!correction ? (
-              <>
-                {unknown ? (
-                  <Text fontSize="sm" color="fg.muted">
-                    New payments are paused for this record until an admin reviews or corrects it.
-                  </Text>
-                ) : balanceOf(row) > 0 ? (
-                  <RecordPaymentForm
-                    obligation={obligation}
-                    row={row}
-                    isSaving={payments.isSaving}
-                    onRecord={payments.record}
-                  />
-                ) : (
-                  <Text fontSize="sm" color="fg.muted">
-                    Nothing left to pay on this obligation.
-                  </Text>
-                )}
-                <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={openCorrection}>
-                  Made a mistake? Correct the record
-                </Button>
-              </>
+              recordUnknown ? null : (
+                <>
+                  {unknown ? (
+                    <Text fontSize="sm" color="fg.muted">
+                      New payments are paused for this record until an admin reviews or corrects it.
+                    </Text>
+                  ) : balanceOf(row) > 0 ? (
+                    <RecordPaymentForm
+                      obligation={obligation}
+                      row={row}
+                      isSaving={payments.isSaving}
+                      onRecord={payments.record}
+                    />
+                  ) : (
+                    <Text fontSize="sm" color="fg.muted">
+                      Nothing left to pay on this obligation.
+                    </Text>
+                  )}
+                  <Button variant="plain" size="sm" minH="44px" alignSelf="center" onClick={openCorrection}>
+                    Made a mistake? Correct the record
+                  </Button>
+                </>
+              )
             ) : (
               <>
                 {!problem && (

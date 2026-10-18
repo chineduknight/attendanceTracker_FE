@@ -186,16 +186,56 @@ const correctionErrorCode = (error: unknown) => {
   return typeof code === "string" ? code : undefined;
 };
 
+const hasResponse = (error: unknown) => !!(error as { response?: unknown } | null)?.response;
+
+const responseStatusOf = (error: unknown) => {
+  const status = (error as { response?: { status?: unknown } } | null)?.response?.status;
+  return typeof status === "number" ? status : undefined;
+};
+
+/**
+ * The client cannot prove whether the write landed: no response at all
+ * (network, timeout, cancellation, lost response), a server-reported timeout,
+ * or an unexpected server/proxy failure. The correction-only 503 code is
+ * handled separately because it proves nothing was written.
+ */
+const isAmbiguousOutcome = (error: unknown) => {
+  if (!hasResponse(error)) return true;
+  const status = responseStatusOf(error);
+  return status === undefined || status === 408 || status >= 500;
+};
+
+/**
+ * A correction's rejection, or undefined when the backend refused it with a
+ * deterministic validation error that the default toast can explain.
+ */
+const correctionRejectionOf = (error: unknown): CorrectionRejectionReason | undefined => {
+  // A lost response means the correction may already be stored.
+  if (!hasResponse(error)) return "unknown";
+  const status = responseStatusOf(error);
+  if (status === undefined) return "unknown";
+  if (status === 503) {
+    return correctionErrorCode(error) === TRANSACTIONS_UNAVAILABLE ? "unavailable" : "unknown";
+  }
+  // Any other 5xx, or a server-reported timeout, may have been applied.
+  if (status === 408 || status >= 500) return "unknown";
+  return CORRECTION_REJECTIONS[status];
+};
+
 /**
  * Record (POST) and correct (PUT) a member's payment for one obligation.
  * A correction is an absolute overwrite, so it carries the guard of the row
  * the officer saw and is never retried: a rejected one is handed to
  * `onCorrectionRejected` and the officer decides what to do next.
+ *
+ * A collection is cumulative, so an error that cannot prove the server did
+ * nothing is handed to `onRecordOutcomeUnknown` instead of inviting a retry.
  */
 export const usePaymentMutations = (
   target: PaymentTarget,
   onSaved: () => void,
   onCorrectionRejected: (rejection: CorrectionRejection) => void,
+  onRecordOutcomeUnknown: () => void,
 ) => {
   const done = () => {
     toast.success("Payment saved");
@@ -203,31 +243,32 @@ export const usePaymentMutations = (
     onSaved();
   };
   const correctionFailed = (error: unknown) => {
-    const status = (error as { response?: { status?: number } })?.response?.status;
-    // A 503 is only "nothing was written" with the explicit code; a missing or
-    // unrecognised code is treated as an unknown outcome, never as a safe fail.
-    const reason =
-      status === 503
-        ? correctionErrorCode(error) === TRANSACTIONS_UNAVAILABLE
-          ? "unavailable"
-          : "unknown"
-        : status === undefined
-          ? undefined
-          : CORRECTION_REJECTIONS[status];
+    const reason = correctionRejectionOf(error);
     if (!reason) {
       showMutationError(error);
       return;
     }
-    // A conflict invalidates because the row moved. An unconfirmed 503 also
-    // invalidates because the correction may have been stored and the row on
-    // screen may no longer match. Both stay scoped to this organisation.
+    // A conflict invalidates because the row moved. An unconfirmed outcome
+    // also invalidates because the correction may have been stored and the
+    // row on screen may no longer match. Both stay scoped to this organisation.
     if (reason === "conflict" || reason === "unknown") invalidateFinance(target.organisationId);
     onCorrectionRejected({
       reason,
       message: reason === "declined" ? correctionErrorMessage(error) : undefined,
     });
   };
-  const { mutate: record, isLoading: recording } = useMutationWrapper(postRequest, done);
+  const recordFailed = (error: unknown) => {
+    if (isAmbiguousOutcome(error)) {
+      // A repeated collection is a second business action, not a retry: it
+      // would add the money again. Refresh this organisation's figures and
+      // make the officer check them before recording anything else.
+      invalidateFinance(target.organisationId);
+      onRecordOutcomeUnknown();
+      return;
+    }
+    showMutationError(error);
+  };
+  const { mutate: record, isLoading: recording } = useMutationWrapper(postRequest, done, recordFailed);
   const { mutate: correct, isLoading: correcting } = useMutationWrapper(putRequest, done, correctionFailed);
   return {
     record: (amount: number) =>
