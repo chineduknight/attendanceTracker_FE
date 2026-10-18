@@ -33,27 +33,32 @@ export const toLedgerStatus = (value: unknown): LedgerStatus | null => {
 };
 
 /**
- * Accounts, or null when the body is not an array. Entries without a stable
- * id are dropped because nothing could reference them; supplied fields are
- * preserved and unknown values stay null instead of being filled in.
+ * Accounts, or null when the body is not an array or any entry is not a
+ * usable account. A malformed entry must never be filtered into a shorter
+ * list: a partial list could look like a complete set, and dropping the only
+ * entry would look like "no accounts configured". An empty array is a
+ * genuine empty list and stays `[]`.
+ *
+ * Missing optional fields stay null and are surfaced as unavailable; only
+ * the stable id is structurally required.
  */
 export const toLedgerAccounts = (value: unknown): LedgerAccount[] | null => {
   if (!Array.isArray(value)) return null;
-  return value.flatMap((entry) => {
+  const accounts: LedgerAccount[] = [];
+  for (const entry of value) {
     const raw = asRecord(entry);
     const id = asText(raw?.id);
-    if (!raw || !id) return [];
-    return [
-      {
-        id,
-        name: asText(raw.name) ?? "Unnamed account",
-        class: asText(raw.class),
-        subtype: asText(raw.subtype),
-        currency: asText(raw.currency),
-        active: typeof raw.active === "boolean" ? raw.active : null,
-      },
-    ];
-  });
+    if (!raw || !id) return null;
+    accounts.push({
+      id,
+      name: asText(raw.name) ?? "Unnamed account",
+      class: asText(raw.class),
+      subtype: asText(raw.subtype),
+      currency: asText(raw.currency),
+      active: typeof raw.active === "boolean" ? raw.active : null,
+    });
+  }
+  return accounts;
 };
 
 const toJournalLine = (value: unknown): LedgerJournalLine | null => {
@@ -72,31 +77,41 @@ const toJournalLine = (value: unknown): LedgerJournalLine | null => {
 };
 
 /**
- * Journals, or null when the body is not an array. A malformed line stays
- * on screen with `amountKobo: null` / `side: null` rather than being
- * dropped, so no debit or credit silently disappears.
+ * Journals, or null when the body is not an array or any entry/line is not
+ * structurally usable. A malformed line must never be filtered out: that
+ * would leave a journal that looks complete while missing a debit or credit.
+ * An entry without a valid id or without a `lines` array is likewise
+ * structurally invalid, not an empty journal.
+ *
+ * Invalid individual values inside a line (side, kobo) are not structural:
+ * the line stays on screen with `side: null` / `amountKobo: null` so the UI
+ * can say "Side unavailable" / "Amount unavailable" without rounding.
  */
 export const toLedgerJournals = (value: unknown): LedgerJournal[] | null => {
   if (!Array.isArray(value)) return null;
-  return value.flatMap((entry) => {
+  const journals: LedgerJournal[] = [];
+  for (const entry of value) {
     const raw = asRecord(entry);
     const id = asText(raw?.id);
-    if (!raw || !id) return [];
-    return [
-      {
-        id,
-        businessDate: asText(raw.businessDate) ?? "",
-        reference: asText(raw.reference) ?? "",
-        note: asText(raw.note),
-        sourceType: asText(raw.sourceType),
-        lines: Array.isArray(raw.lines)
-          ? raw.lines
-              .map(toJournalLine)
-              .filter((line): line is LedgerJournalLine => line !== null)
-          : [],
-      },
-    ];
-  });
+    if (!raw || !id || !Array.isArray(raw.lines)) return null;
+
+    const lines: LedgerJournalLine[] = [];
+    for (const line of raw.lines) {
+      const parsed = toJournalLine(line);
+      if (!parsed) return null;
+      lines.push(parsed);
+    }
+
+    journals.push({
+      id,
+      businessDate: asText(raw.businessDate) ?? "",
+      reference: asText(raw.reference) ?? "",
+      note: asText(raw.note),
+      sourceType: asText(raw.sourceType),
+      lines,
+    });
+  }
+  return journals;
 };
 
 /** HTTP status from a failed Axios request, if it reached the backend. */

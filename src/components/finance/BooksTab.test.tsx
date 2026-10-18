@@ -177,6 +177,53 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     expect(api.get).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps genuinely empty lists as empty states", async () => {
+    serveLedger(ACTIVE, [], []);
+    renderBooks();
+
+    expect(await screen.findByText("No finance accounts configured")).toBeInTheDocument();
+    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(screen.queryByText("Books aren't available yet")).not.toBeInTheDocument();
+  });
+
+  it("treats a malformed nonempty accounts list as unavailable, not empty", async () => {
+    serveLedger(
+      ACTIVE,
+      [
+        { id: "cash", name: "Cash at bank", class: "asset", currency: "NGN", active: true },
+        { name: "No stable id" },
+      ],
+      [],
+    );
+    renderBooks();
+
+    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
+    expect(screen.queryByText("No finance accounts configured")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cash at bank")).not.toBeInTheDocument();
+  });
+
+  it("treats a malformed nonempty journal list as unavailable, not empty", async () => {
+    serveLedger(ACTIVE, ACCOUNTS, [
+      { businessDate: "2026-10-12", reference: "RCPT-001", lines: [] },
+    ]);
+    renderBooks();
+
+    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
+    expect(screen.queryByText("No journal entries yet")).not.toBeInTheDocument();
+    expect(screen.queryByText("RCPT-001")).not.toBeInTheDocument();
+  });
+
+  it("treats a malformed journal line as unavailable rather than showing an incomplete journal", async () => {
+    serveLedger(ACTIVE, ACCOUNTS, [
+      { ...JOURNALS[0], lines: [JOURNALS[0].lines[0], "not a line"] },
+    ]);
+    renderBooks();
+
+    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
+    expect(screen.queryByText("RCPT-001")).not.toBeInTheDocument();
+    expect(screen.queryByText(/1,250\.50$/)).not.toBeInTheDocument();
+  });
+
   it("shows the backend's load error and retries into the gated explanation", async () => {
     api.get.mockRejectedValue({
       response: { status: 500, data: { error: "Ledger service down" } },

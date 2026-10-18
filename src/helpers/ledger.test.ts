@@ -90,6 +90,17 @@ describe("ledger parsing", () => {
     expect(toLedgerAccounts({ data: [] })).toBeNull();
   });
 
+  it("distinguishes a genuinely empty account list from a malformed one", () => {
+    expect(toLedgerAccounts([])).toEqual([]);
+    expect(
+      toLedgerAccounts([
+        { id: "cash", name: "Cash at bank" },
+        { name: "No stable id" },
+      ]),
+    ).toBeNull();
+    expect(toLedgerAccounts(["not an account"])).toBeNull();
+  });
+
   it("keeps a malformed journal line visible with unavailable values", () => {
     const journals = toLedgerJournals([
       {
@@ -108,6 +119,49 @@ describe("ledger parsing", () => {
       { accountId: "dues", side: null, amountKobo: null },
     ]);
     expect(toLedgerJournals({})).toBeNull();
+  });
+
+  it("distinguishes a genuinely empty journal list from a malformed one", () => {
+    expect(toLedgerJournals([])).toEqual([]);
+    expect(
+      toLedgerJournals([
+        { id: "j1", businessDate: "2026-10-12", reference: "R1", lines: [] },
+      ]),
+    ).toEqual([
+      {
+        id: "j1",
+        businessDate: "2026-10-12",
+        reference: "R1",
+        note: null,
+        sourceType: null,
+        lines: [],
+      },
+    ]);
+    expect(
+      toLedgerJournals([{ businessDate: "2026-10-12", lines: [] }]),
+    ).toBeNull();
+    expect(toLedgerJournals([{ id: "j1", lines: "not an array" }])).toBeNull();
+  });
+
+  it("fails closed instead of dropping a malformed line from a journal", () => {
+    expect(
+      toLedgerJournals([
+        {
+          id: "j1",
+          lines: [
+            { accountId: "cash", side: "debit", amountKobo: 125050 },
+            "not a line",
+          ],
+        },
+      ]),
+    ).toBeNull();
+  });
+
+  it("keeps a line object when only its fields are unusable", () => {
+    expect(
+      toLedgerJournals([{ id: "j1", lines: [{ side: "debit", amountKobo: 5 }] }])?.[0]
+        .lines,
+    ).toEqual([{ accountId: "", side: "debit", amountKobo: 5 }]);
   });
 
   it("treats gated and missing endpoints as neutral, but not a server failure", () => {
