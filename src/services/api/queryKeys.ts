@@ -182,6 +182,13 @@ export const queryKeys = {
         ["finance", organisationId, "ledger", "accounts"] as const,
       journals: (organisationId: string) =>
         ["finance", organisationId, "ledger", "journals"] as const,
+      /** Prefix covering every opening-balance read for one organisation. */
+      openingBalances: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "opening-balances"] as const,
+      openingBalanceList: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "opening-balances", "list"] as const,
+      effectiveOpenings: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "opening-balances", "effective"] as const,
     },
   },
 

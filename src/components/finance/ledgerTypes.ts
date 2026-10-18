@@ -91,6 +91,13 @@ export interface LedgerAccount {
   /** Additive F2 money-account display metadata (D5); never a full number. */
   bankName: string | null;
   accountNumberLast4: string | null;
+  /**
+   * Additive F2 opening state (RFC §4.4). `false` means the account was added
+   * after activation and still needs a supplementary opening; `true` means a
+   * verified opening covers it; `null` means the backend did not say (F1 or
+   * F2A-4 not delivered). Never read null as "unverified".
+   */
+  openingVerified: boolean | null;
 }
 
 export type LedgerSide = "debit" | "credit";

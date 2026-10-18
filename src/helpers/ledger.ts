@@ -163,6 +163,7 @@ export const toLedgerAccounts = (value: unknown): LedgerAccount[] | null => {
       revision: asCount(raw.revision),
       bankName: asText(raw.bankName),
       accountNumberLast4: asLastFour(raw.accountNumberLast4),
+      openingVerified: asBoolean(raw.openingVerified),
     });
   }
   return accounts;

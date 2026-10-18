@@ -4,7 +4,9 @@ import { GroupedList, GroupedListItem } from "components/GroupedList";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
+import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
+import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { formatKobo } from "helpers/financeConstants";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
@@ -436,6 +438,20 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           error={accountsQuery.error}
           refetch={accountsQuery.refetch}
           isFetching={accountsQuery.isFetching}
+        />
+      )}
+
+      {/* F2A-3A opening balances and verification: its own gate, separate from
+          the setup gate, and off until the corrected backend and F2A-4 ship. */}
+      {LEDGER_OPENING_BALANCES_UI_ENABLED && (
+        <OpeningBalancesPanel
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          onRecheckLedger={() => {
+            statusQuery.refetch();
+            accountsQuery.refetch();
+          }}
         />
       )}
       <JournalsSection

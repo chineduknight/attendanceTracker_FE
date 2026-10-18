@@ -79,6 +79,17 @@ export const financeRequest = {
   LEDGER_SETUP: "/finance/:organisationId/ledger/setup",
   LEDGER_SETTINGS: "/finance/:organisationId/ledger/settings",
   LEDGER_ACCOUNT: "/finance/:organisationId/ledger/accounts/:accountId",
+  // F2A-3 opening balances and independent verification (RFC v0.3 §4.4–§4.5,
+  // §8.1). Provisional until backend PR #40 is corrected and merged.
+  LEDGER_OPENING_BALANCES: "/finance/:organisationId/ledger/opening-balances",
+  LEDGER_OPENING_BALANCES_EFFECTIVE:
+    "/finance/:organisationId/ledger/opening-balances/effective",
+  LEDGER_OPENING_BALANCE_VERIFY:
+    "/finance/:organisationId/ledger/opening-balances/:proposalId/verify",
+  LEDGER_OPENING_BALANCE_REJECT:
+    "/finance/:organisationId/ledger/opening-balances/:proposalId/reject",
+  LEDGER_OPENING_BALANCE_WITHDRAW:
+    "/finance/:organisationId/ledger/opening-balances/:proposalId/withdraw",
 };
 
 export const rbacRequest = {
