@@ -4,7 +4,10 @@ import {
   buildCorrectionOpeningInput,
   buildInitialOpeningInput,
   buildSupplementaryOpeningInput,
+  canSubmitAdjustmentProposal,
   canSubmitOpeningProposal,
+  correctionItemChangesFromDrafts,
+  correctionLinesFromDrafts,
   earliestOpeningDate,
   emptyMemberMoneyDraft,
   formatLagosTimestamp,
@@ -14,11 +17,13 @@ import {
   memberMoneyDraftsToInputs,
   moneyAccountsAwaitingOpening,
   openProposalOf,
+  openingDateGroups,
   openingDateIssue,
   openingDecisionPermissions,
   openingPreview,
   openingStatusKey,
   parseNairaToKobo,
+  supplementaryDateIssue,
   toEffectiveOpenings,
   toOpeningProposal,
   toOpeningProposalPage,
@@ -478,6 +483,189 @@ describe("opening decision permissions", () => {
       canSubmitOpeningProposal({ canManage: true, isOwner: false, hasOpenProposal: true })
         .reason,
     ).toMatch(/already waiting/);
+  });
+
+  it("fails closed when either identity is missing", () => {
+    const missingProposer = openingDecisionPermissions({
+      proposal: proposal({ proposedBy: null }),
+      isOwner: true,
+      userId: "owner",
+      ledgerRevision: 4,
+    });
+    expect(missingProposer.canVerify).toBe(false);
+    expect(missingProposer.verifyBlockedReason).toMatch(/isn't available/);
+
+    const missingUser = openingDecisionPermissions({
+      proposal: proposal(),
+      isOwner: true,
+      userId: null,
+      ledgerRevision: 4,
+    });
+    expect(missingUser.canVerify).toBe(false);
+    expect(missingUser.verifyBlockedReason).toMatch(/isn't available/);
+  });
+
+  it("never lets an unknown proposer verify, even without a user id", () => {
+    const permissions = openingDecisionPermissions({
+      proposal: proposal({ proposedBy: null }),
+      isOwner: false,
+      userId: null,
+      ledgerRevision: 4,
+    });
+    expect(permissions.canVerify).toBe(false);
+    expect(permissions.canReject).toBe(false);
+    // Identity can't be proven, so even the proposer's withdrawal isn't offered.
+    expect(permissions.canWithdraw).toBe(false);
+  });
+});
+
+describe("proposal submission gates", () => {
+  const allowed = {
+    canManage: true,
+    isOwner: false,
+    hasOpenProposal: false,
+    proposalsKnown: true,
+    proposalsComplete: true,
+    anyUnknownStatus: false,
+  };
+
+  it("requires finance.manage for initial and adjustment proposals", () => {
+    expect(canSubmitOpeningProposal({ ...allowed, canManage: false }).allowed).toBe(false);
+    expect(
+      canSubmitAdjustmentProposal({ ...allowed, ledgerState: "active", canManage: false })
+        .allowed,
+    ).toBe(false);
+  });
+
+  it("refuses owner-submitted supplementary and correction proposals", () => {
+    expect(canSubmitAdjustmentProposal({ ...allowed, isOwner: true, ledgerState: "active" })).toEqual(
+      expect.objectContaining({ allowed: false }),
+    );
+    expect(canSubmitOpeningProposal({ ...allowed, isOwner: true }).allowed).toBe(false);
+  });
+
+  it("refuses a second proposal while one is open", () => {
+    expect(canSubmitOpeningProposal({ ...allowed, hasOpenProposal: true }).allowed).toBe(false);
+    expect(
+      canSubmitAdjustmentProposal({ ...allowed, ledgerState: "active", hasOpenProposal: true })
+        .allowed,
+    ).toBe(false);
+  });
+
+  it("fails closed when the history or a status can't be proven", () => {
+    const cases = [
+      { proposalsKnown: false },
+      { proposalsComplete: false },
+      { anyUnknownStatus: true },
+    ];
+    for (const override of cases) {
+      expect(canSubmitOpeningProposal({ ...allowed, ...override }).allowed).toBe(false);
+      expect(
+        canSubmitAdjustmentProposal({ ...allowed, ledgerState: "active", ...override })
+          .allowed,
+      ).toBe(false);
+    }
+  });
+
+  it("requires an active ledger for supplementary and correction proposals", () => {
+    for (const ledgerState of ["setup", "pending_verification", "suspended", "unknown"] as const) {
+      expect(canSubmitAdjustmentProposal({ ...allowed, ledgerState }).allowed).toBe(false);
+    }
+    expect(canSubmitAdjustmentProposal({ ...allowed, ledgerState: "active" }).allowed).toBe(
+      true,
+    );
+  });
+});
+
+describe("supplementary opening date", () => {
+  const base = {
+    openingDate: "2026-01-15",
+    lockedThrough: null,
+    today: "2026-10-18",
+  };
+
+  it("allows an opening older than 31 days when otherwise valid", () => {
+    // D28's 31-day limit governs initial activation, not supplementary openings.
+    expect(supplementaryDateIssue({ ...base, date: "2026-02-01" })).toBeNull();
+    expect(supplementaryDateIssue({ ...base, date: "2026-01-15" })).toBeNull();
+  });
+
+  it("refuses a date before the ledger's opening date", () => {
+    expect(supplementaryDateIssue({ ...base, date: "2026-01-14" })).toMatch(/before/);
+  });
+
+  it("refuses a date inside the locked period", () => {
+    expect(
+      supplementaryDateIssue({ ...base, date: "2026-09-30", lockedThrough: "2026-09-30" }),
+    ).toMatch(/locked/);
+    expect(
+      supplementaryDateIssue({ ...base, date: "2026-09-01", lockedThrough: "2026-09-30" }),
+    ).toMatch(/locked/);
+    expect(
+      supplementaryDateIssue({ ...base, date: "2026-10-01", lockedThrough: "2026-09-30" }),
+    ).toBeNull();
+  });
+
+  it("refuses future and invalid dates", () => {
+    expect(supplementaryDateIssue({ ...base, date: "2026-10-19" })).toMatch(/after today/);
+    expect(supplementaryDateIssue({ ...base, date: "2026-02-30" })).toMatch(/valid/);
+  });
+
+  it("fails closed without a ledger opening date", () => {
+    expect(supplementaryDateIssue({ ...base, openingDate: null, date: "2026-02-01" })).toMatch(
+      /isn't available/,
+    );
+  });
+});
+
+describe("correction drafts", () => {
+  const accounts = [
+    { accountId: "cash", name: "Cash in hand", effectiveKobo: 100000 },
+    { accountId: "bank", name: "Main bank", effectiveKobo: 500000 },
+  ];
+
+  it("omits blank and unchanged amounts", () => {
+    expect(correctionLinesFromDrafts(accounts, { cash: "", bank: "5,000" })).toEqual({
+      lines: [],
+      problem: null,
+    });
+    expect(correctionLinesFromDrafts(accounts, { cash: "1,500" })).toEqual({
+      lines: [{ accountId: "cash", correctedAmountKobo: 150000 }],
+      problem: null,
+    });
+  });
+
+  it("blocks a malformed non-empty amount instead of dropping it", () => {
+    const built = correctionLinesFromDrafts(accounts, { cash: "12x" });
+    expect(built.lines).toBeNull();
+    expect(built.problem).toMatch(/Cash in hand/);
+  });
+
+  it("applies the same rules to member-money corrections", () => {
+    const items = [{ id: "i1", label: "RCPT-1 · Ada", effectiveKobo: 200000 }];
+    expect(correctionItemChangesFromDrafts(items, { i1: "" })).toEqual({
+      itemChanges: [],
+      problem: null,
+    });
+    expect(correctionItemChangesFromDrafts(items, { i1: "2,000" })).toEqual({
+      itemChanges: [],
+      problem: null,
+    });
+    expect(correctionItemChangesFromDrafts(items, { i1: "2,500" })).toEqual({
+      itemChanges: [{ itemId: "i1", correctedAmountKobo: 250000 }],
+      problem: null,
+    });
+    expect(correctionItemChangesFromDrafts(items, { i1: "nope" }).itemChanges).toBeNull();
+  });
+
+  it("groups verified opening dates oldest first, without duplicates", () => {
+    expect(
+      openingDateGroups([
+        { openingDate: "2026-03-01" },
+        { openingDate: "2026-01-15" },
+        { openingDate: "2026-03-01" },
+      ]),
+    ).toEqual(["2026-01-15", "2026-03-01"]);
   });
 });
 

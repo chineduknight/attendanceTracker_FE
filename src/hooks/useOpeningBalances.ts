@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import axiosInstance from "services/api";
 import {
   postRequest,
   queryClient,
@@ -13,7 +15,6 @@ import { LedgerStatus } from "components/finance/ledgerTypes";
 import {
   EffectiveOpeningsView,
   OpeningProposal,
-  OpeningProposalPage,
   SubmitOpeningInput,
   VerifyOpeningInput,
 } from "components/finance/openingBalanceTypes";
@@ -56,20 +57,52 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
     ? (value as Record<string, unknown>)
     : null;
 
+const PROPOSAL_PAGE_SIZE = 100;
+const MAX_PROPOSAL_PAGES = 10;
+
+interface ProposalCollection {
+  /** null when any page was malformed. */
+  items: OpeningProposal[] | null;
+  /** false when the cap was reached with a cursor still outstanding. */
+  complete: boolean;
+}
+
+/** Reads every proposal page (bounded) so "none open" is real evidence. */
+const fetchAllOpeningProposals = async (
+  baseUrl: string,
+): Promise<ProposalCollection> => {
+  const items: OpeningProposal[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_PROPOSAL_PAGES; page += 1) {
+    const query = `?limit=${PROPOSAL_PAGE_SIZE}${
+      cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+    }`;
+    const response = await axiosInstance.get(`${baseUrl}${query}`);
+    const parsed = toOpeningProposalPage(response?.data?.data);
+    if (!parsed) return { items: null, complete: false };
+    items.push(...parsed.items);
+    if (!parsed.nextCursor) return { items, complete: true };
+    cursor = parsed.nextCursor;
+  }
+  return { items, complete: false };
+};
+
 export const useOpeningProposals = (organisationId: string, enabled: boolean) => {
-  const url = `${convertParamsToString(financeRequest.LEDGER_OPENING_BALANCES, {
+  const baseUrl = convertParamsToString(financeRequest.LEDGER_OPENING_BALANCES, {
     organisationId,
-  })}?limit=50`;
-  const { data, isLoading, isError, error, refetch, isFetching } = useQueryWrapper(
+  });
+  // The list is read to completion before it can prove that nothing is open.
+  // A single 50-row page is not evidence: the open proposal could be older.
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery(
     queryKeys.finance.ledger.openingBalanceList(organisationId),
-    url,
+    () => fetchAllOpeningProposals(baseUrl),
     { enabled: Boolean(organisationId) && enabled },
   );
-  const page: OpeningProposalPage | null = toOpeningProposalPage(data?.data);
   return {
-    page,
     /** null means the list is unknown/malformed, never "no proposals". */
-    proposals: page?.items ?? null,
+    proposals: data?.items ?? null,
+    /** true only when every page was read and the last page had no cursor. */
+    complete: data ? data.complete : null,
     hasData: data !== undefined,
     isLoading,
     isError,

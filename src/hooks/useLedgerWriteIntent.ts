@@ -6,6 +6,7 @@ import {
   OpeningWriteAction,
   beginLedgerWriteIntent,
   clearLedgerWriteIntent,
+  clearLedgerWriteIntentMarker,
   markLedgerWriteIntentUnresolved,
   readLedgerWriteIntent,
 } from "helpers/ledgerWriteIntent";
@@ -63,6 +64,10 @@ export const useLedgerWriteIntent = (organisationId: string) => {
     const current = readLedgerWriteIntent(organisationId);
     if (current.kind === "pending")
       clearLedgerWriteIntent(organisationId, current.intent.intentId);
+    else if (current.kind === "unknown")
+      // A corrupt marker has no id to match; the explicit acknowledgement is
+      // the only thing allowed to remove it.
+      clearLedgerWriteIntentMarker(organisationId);
     setRead(readLedgerWriteIntent(organisationId));
   }, [organisationId]);
 

@@ -16,6 +16,7 @@ import { LEDGER_STATE_LABELS, ledgerStateKey } from "helpers/ledger";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { formatKobo } from "helpers/financeConstants";
 import {
+  canSubmitAdjustmentProposal,
   canSubmitOpeningProposal,
   hasMultipleOpenProposals,
   initialOpeningReadiness,
@@ -132,7 +133,7 @@ const OpeningBalancesPanel = ({
   const headingId = useId();
   const { has, isOwner } = usePermissions();
   const canManage = has("finance.manage");
-  const userId = useGlobalStore((s) => s.user.id) ?? null;
+  const userId = useGlobalStore((s) => s.user.id) || null;
   const [view, setView] = useState<View>({ kind: "overview" });
 
   const state = ledgerStateKey(status);
@@ -280,6 +281,12 @@ const OpeningBalancesPanel = ({
   const proposals = proposalsQuery.proposals;
   const multipleOpen = proposals ? hasMultipleOpenProposals(proposals) : false;
   const openProposal = proposals ? openProposalOf(proposals) : null;
+  const proposalsKnown = proposals !== null;
+  const proposalsComplete = proposalsQuery.complete === true;
+  const anyUnknownStatus = (proposals ?? []).some(
+    (proposal) => proposal.status.kind === "unknown",
+  );
+  const hasOpenProposal = openProposal !== null || multipleOpen;
   const readiness = initialOpeningReadiness(
     accounts ?? [],
     status.memberReceiptsEnabled === true,
@@ -287,7 +294,19 @@ const OpeningBalancesPanel = ({
   const proposePermission = canSubmitOpeningProposal({
     canManage,
     isOwner,
-    hasOpenProposal: openProposal !== null || multipleOpen,
+    hasOpenProposal,
+    proposalsKnown,
+    proposalsComplete,
+    anyUnknownStatus,
+  });
+  const adjustmentPermission = canSubmitAdjustmentProposal({
+    ledgerState: state,
+    canManage,
+    isOwner,
+    hasOpenProposal,
+    proposalsKnown,
+    proposalsComplete,
+    anyUnknownStatus,
   });
   const awaiting = moneyAccountsAwaitingOpening(status, accounts ?? []);
   const unknownAccountOpeningState =
@@ -492,6 +511,12 @@ const OpeningBalancesPanel = ({
               ))}
             </Stack>
           )}
+          {proposals !== null && proposalsQuery.complete === false && (
+            <Text fontSize="xs" color="fg.muted" mt={2}>
+              Only part of the proposal history could be read, so new proposals are
+              blocked until it can be read in full.
+            </Text>
+          )}
         </Box>
 
         <Box borderWidth="1px" borderColor="border" borderRadius="md" p={3}>
@@ -556,19 +581,24 @@ const OpeningBalancesPanel = ({
               <Flex gap={2} wrap="wrap">
                 <Button
                   variant="outline"
-                  disabled={intent.blocked}
+                  disabled={intent.blocked || !adjustmentPermission.allowed}
                   onClick={() => setView({ kind: "supplementary" })}
                 >
                   Supplementary opening
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={intent.blocked}
+                  disabled={intent.blocked || !adjustmentPermission.allowed}
                   onClick={() => setView({ kind: "correction" })}
                 >
                   Correct a verified opening
                 </Button>
               </Flex>
+              {!adjustmentPermission.allowed && adjustmentPermission.reason && (
+                <Text fontSize="xs" color="fg.muted">
+                  {adjustmentPermission.reason}
+                </Text>
+              )}
               <Text fontSize="xs" color="fg.muted">
                 Supplementary and correction flows are provisional until the backend
                 contract is final. Opening entries are never reversed or deleted.

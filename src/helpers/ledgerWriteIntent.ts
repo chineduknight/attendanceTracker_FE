@@ -201,6 +201,16 @@ export const clearLedgerWriteIntent = (
   return removeRaw(key);
 };
 
+/**
+ * Remove whatever marker is stored for this organisation, including a corrupt
+ * or unrecognised one. Used only by the explicit reconciliation action; it
+ * remains scoped to this organisation's key.
+ */
+export const clearLedgerWriteIntentMarker = (organisationId: string): boolean => {
+  if (!organisationId) return true;
+  return removeRaw(ledgerWriteIntentKey(organisationId));
+};
+
 /** What an officer should compare before allowing another opening write. */
 export const ledgerWriteIntentGuidance = (
   action: OpeningWriteAction,

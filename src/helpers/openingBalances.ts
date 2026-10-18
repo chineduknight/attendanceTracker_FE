@@ -525,11 +525,11 @@ export const openingDateIssue = (date: string, today: string): string | null => 
 };
 
 /** A stored timestamp shown in Lagos time; never used for business dates. */
-export const formatLagosTimestamp = (value: string | null): string | null => {
+export const formatLagosTimestamp = (value: string | null | undefined): string | null => {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
-  const text = new Intl.DateTimeFormat("en-GB", {
+  const formatted = new Intl.DateTimeFormat("en-GB", {
     timeZone: LAGOS_TIME_ZONE,
     day: "2-digit",
     month: "short",
@@ -538,8 +538,41 @@ export const formatLagosTimestamp = (value: string | null): string | null => {
     minute: "2-digit",
     hour12: false,
   }).format(parsed);
-  return `${text} WAT`;
+  return `${formatted} WAT`;
 };
+
+/**
+ * A supplementary/correction counting date: on or after the ledger's opening
+ * date, outside the locked period, and not in the future. D28's 31-day limit
+ * applies to the initial activation, not to later supplementary openings.
+ */
+export const supplementaryDateIssue = ({
+  date,
+  openingDate,
+  lockedThrough,
+  today,
+}: {
+  date: string;
+  openingDate: string | null;
+  lockedThrough: string | null;
+  today: string;
+}): string | null => {
+  if (!isBusinessDate(date)) return "Choose a valid counting date.";
+  if (!openingDate || !isBusinessDate(openingDate))
+    return "The ledger's opening date isn't available, so this date can't be checked.";
+  if (date < openingDate)
+    return "A supplementary opening can't be dated before the ledger's opening date.";
+  if (lockedThrough && isBusinessDate(lockedThrough) && date <= lockedThrough)
+    return "That date is in a locked period. The owner must move the period lock first.";
+  if (date > today) return "The counting date can't be after today in Lagos.";
+  return null;
+};
+
+/** Distinct verified opening dates, oldest first. */
+export const openingDateGroups = (
+  openings: readonly { openingDate: string }[],
+): string[] =>
+  Array.from(new Set(openings.map((opening) => opening.openingDate))).sort();
 
 /* ------------------------------------------------------------------ */
 /* Chart-of-accounts helpers                                          */
@@ -658,9 +691,15 @@ export const openingDecisionPermissions = ({
   if (proposal.status.status !== "submitted")
     return decision("This proposal has already been decided.");
 
-  const isProposer = Boolean(proposal.proposedBy && proposal.proposedBy === userId);
+  const isProposer = Boolean(
+    proposal.proposedBy && userId && proposal.proposedBy === userId,
+  );
+  // Both identities must be known before the owner/proposer comparison means
+  // anything. A missing id fails closed instead of appearing "not the proposer".
+  const identityKnown = Boolean(proposal.proposedBy && userId);
   const canVerify =
     isOwner &&
+    identityKnown &&
     !isProposer &&
     proposal.fingerprint !== null &&
     ledgerRevision !== null;
@@ -668,14 +707,16 @@ export const openingDecisionPermissions = ({
     ? null
     : !isOwner
       ? "Only the organisation owner can verify opening balances."
-      : isProposer
-        ? "You proposed these opening balances, so another officer must verify them."
-        : "The proposal fingerprint or ledger revision isn't available, so verification can't be requested.";
+      : !identityKnown
+        ? "The proposer or your user ID isn't available, so verification can't be requested."
+        : isProposer
+          ? "You proposed these opening balances, so another officer must verify them."
+          : "The proposal fingerprint or ledger revision isn't available, so verification can't be requested.";
 
   return {
     canVerify,
     canReject: isOwner,
-    canWithdraw: isOwner || isProposer,
+    canWithdraw: isOwner || (identityKnown && isProposer),
     verifyBlockedReason,
   };
 };
@@ -693,10 +734,16 @@ export const canSubmitOpeningProposal = ({
   canManage,
   isOwner,
   hasOpenProposal,
+  proposalsKnown = true,
+  proposalsComplete = true,
+  anyUnknownStatus = false,
 }: {
   canManage: boolean;
   isOwner: boolean;
   hasOpenProposal: boolean;
+  proposalsKnown?: boolean;
+  proposalsComplete?: boolean;
+  anyUnknownStatus?: boolean;
 }): ProposePermission => {
   if (!canManage) return { allowed: false, reason: "You need the finance manage permission." };
   if (isOwner)
@@ -704,6 +751,85 @@ export const canSubmitOpeningProposal = ({
       allowed: false,
       reason:
         "The owner independently verifies opening balances, so another finance officer must submit them.",
+    };
+  if (!proposalsKnown)
+    return {
+      allowed: false,
+      reason:
+        "The proposal history isn't available, so this app can't confirm that no proposal is open.",
+    };
+  if (anyUnknownStatus)
+    return {
+      allowed: false,
+      reason:
+        "A proposal status isn't recognised by this app version, so it can't confirm that no proposal is open.",
+    };
+  if (!proposalsComplete)
+    return {
+      allowed: false,
+      reason:
+        "The proposal history couldn't be read in full, so this app can't confirm that no proposal is open.",
+    };
+  if (hasOpenProposal)
+    return {
+      allowed: false,
+      reason: "A proposal is already waiting for a decision. Verify, reject or withdraw it first.",
+    };
+  return { allowed: true, reason: null };
+};
+
+/**
+ * Supplementary openings and corrections are proposed by a finance officer
+ * who is not the owner, only against an active ledger, and only when the
+ * complete proposal history proves that nothing is open. Unknown history or
+ * status fails closed.
+ */
+export const canSubmitAdjustmentProposal = ({
+  ledgerState,
+  canManage,
+  isOwner,
+  hasOpenProposal,
+  proposalsKnown,
+  proposalsComplete,
+  anyUnknownStatus,
+}: {
+  ledgerState: LedgerKnownState | "unknown";
+  canManage: boolean;
+  isOwner: boolean;
+  hasOpenProposal: boolean;
+  proposalsKnown: boolean;
+  proposalsComplete: boolean;
+  anyUnknownStatus: boolean;
+}): ProposePermission => {
+  if (!canManage) return { allowed: false, reason: "You need the finance manage permission." };
+  if (isOwner)
+    return {
+      allowed: false,
+      reason:
+        "The owner independently verifies opening balances, so another finance officer must submit them.",
+    };
+  if (ledgerState !== "active")
+    return {
+      allowed: false,
+      reason: "Supplementary openings and corrections need an active ledger.",
+    };
+  if (!proposalsKnown)
+    return {
+      allowed: false,
+      reason:
+        "The proposal history isn't available, so this app can't confirm that no proposal is open.",
+    };
+  if (anyUnknownStatus)
+    return {
+      allowed: false,
+      reason:
+        "A proposal status isn't recognised by this app version, so it can't confirm that no proposal is open.",
+    };
+  if (!proposalsComplete)
+    return {
+      allowed: false,
+      reason:
+        "The proposal history couldn't be read in full, so this app can't confirm that no proposal is open.",
     };
   if (hasOpenProposal)
     return {
@@ -918,6 +1044,65 @@ export const amountsToLines = (
     );
   }
   return { lines, problem: null };
+};
+
+export interface CorrectionAccountSource {
+  accountId: string;
+  name: string;
+  effectiveKobo: number;
+}
+
+/**
+ * Correction lines from typed amounts. A blank field means "unchanged" and is
+ * omitted; a non-empty field that cannot be parsed blocks the whole proposal
+ * instead of being silently dropped. An amount equal to the effective opening
+ * is omitted because the backend refuses no-op lines.
+ */
+export const correctionLinesFromDrafts = (
+  accounts: readonly CorrectionAccountSource[],
+  typed: Readonly<Record<string, string>>,
+): { lines: OpeningAccountLineInput[] | null; problem: string | null } => {
+  const lines: OpeningAccountLineInput[] = [];
+  for (const account of accounts) {
+    const value = typed[account.accountId]?.trim() ?? "";
+    if (!value) continue;
+    const correctedAmountKobo = parseNairaToKobo(value);
+    if (correctedAmountKobo === null)
+      return {
+        lines: null,
+        problem: `Enter a valid corrected amount for ${account.name}, or leave it blank to keep it unchanged.`,
+      };
+    if (correctedAmountKobo === account.effectiveKobo) continue;
+    lines.push({ accountId: account.accountId, correctedAmountKobo });
+  }
+  return { lines, problem: null };
+};
+
+export interface CorrectionItemSource {
+  id: string;
+  label: string;
+  effectiveKobo: number;
+}
+
+/** Same rules as account lines for opening member-money item corrections. */
+export const correctionItemChangesFromDrafts = (
+  items: readonly CorrectionItemSource[],
+  typed: Readonly<Record<string, string>>,
+): { itemChanges: OpeningItemChangeInput[] | null; problem: string | null } => {
+  const itemChanges: OpeningItemChangeInput[] = [];
+  for (const item of items) {
+    const value = typed[item.id]?.trim() ?? "";
+    if (!value) continue;
+    const correctedAmountKobo = parseNairaToKobo(value);
+    if (correctedAmountKobo === null)
+      return {
+        itemChanges: null,
+        problem: `Enter a valid corrected amount for ${item.label}, or leave it blank to keep it unchanged.`,
+      };
+    if (correctedAmountKobo === item.effectiveKobo) continue;
+    itemChanges.push({ itemId: item.id, correctedAmountKobo });
+  }
+  return { itemChanges, problem: null };
 };
 
 /** Shared with the tests so every displayed string list is complete. */

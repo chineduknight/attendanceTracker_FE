@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Badge, Box, Button, Field, Flex, Input, Stack, Text, Textarea } from "@chakra-ui/react";
 import { DateField } from "components/ui/date-field";
 import { useConfirm } from "components/ui/confirm-dialog";
+import { OptionSelect } from "components/ui/themed-select";
 import OpeningAccountAmountList from "components/finance/opening/OpeningAccountAmountList";
 import OpeningMemberMoneyEditor from "components/finance/opening/OpeningMemberMoneyEditor";
 import OpeningPreviewCard from "components/finance/opening/OpeningPreview";
@@ -13,21 +14,26 @@ import {
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { formatKobo } from "helpers/financeConstants";
 import {
+  activeMoneyAccounts,
   amountsToLines,
   buildCorrectionOpeningInput,
   buildSupplementaryOpeningInput,
   correctionDelta,
-  earliestOpeningDate,
+  correctionItemChangesFromDrafts,
+  correctionLinesFromDrafts,
   memberMoneyDraftsToInputs,
   moneyAccountsAwaitingOpening,
-  openingDateIssue,
+  openingDateGroups,
   openingPreview,
   parseNairaToKobo,
+  supplementaryDateIssue,
   todayInLagos,
   MemberMoneyDraft,
 } from "helpers/openingBalances";
 import { isMoneyRole, toAccountRole } from "helpers/ledgerSetup";
-import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";import { useOpeningBalanceWrites } from "hooks/useOpeningBalances";
+import { ledgerStateKey } from "helpers/ledger";
+import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";
+import { useOpeningBalanceWrites } from "hooks/useOpeningBalances";
 import { useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
 
 type Writes = ReturnType<typeof useOpeningBalanceWrites>;
@@ -99,7 +105,11 @@ export const SupplementaryOpeningForm = ({
   const candidates = moneyAccountsAwaitingOpening(status, accounts).filter(
     (account) => account.openingVerified === false,
   );
-  const unknownState = moneyAccountsAwaitingOpening(status, accounts).length === 0;
+  // Offer only accounts the server explicitly marks unverified; an unreadable
+  // ledger state or account flag blocks the form instead of guessing.
+  const unknownState =
+    ledgerStateKey(status) === "unknown" ||
+    activeMoneyAccounts(accounts).some((account) => account.openingVerified === null);
   const { confirm, confirmDialog } = useConfirm();
   const { submit, error, setError } = useGuardedSubmit({ writes, intent, onSubmitted });
 
@@ -113,16 +123,24 @@ export const SupplementaryOpeningForm = ({
     amountKobo: parseNairaToKobo(amounts[account.id] ?? ""),
   }));
   const preview = openingPreview(lines, []);
+  const openingDate = status.openingDate;
 
   const problem =
     candidates.length === 0
       ? "No money account is explicitly awaiting a supplementary opening. This server may not report the account opening state yet."
-      : status.revision === null
-        ? "This server doesn't send the ledger revision yet."
-        : openingDateIssue(asOfDate, today) ??
-          (evidence.trim() ? null : "Record the supporting evidence for this count.") ??
-          amountsToLines(candidates, amounts).problem ??
-          (intent.blocked ? "An earlier opening change is unresolved." : null);
+      : !openingDate
+        ? "The ledger's opening date isn't available, so a supplementary date can't be checked."
+        : status.revision === null
+          ? "This server doesn't send the ledger revision yet."
+          : supplementaryDateIssue({
+              date: asOfDate,
+              openingDate,
+              lockedThrough: status.lockedThrough,
+              today,
+            }) ??
+            (evidence.trim() ? null : "Record the supporting evidence for this count.") ??
+            amountsToLines(candidates, amounts).problem ??
+            (intent.blocked ? "An earlier opening change is unresolved." : null);
 
   const handleSubmit = async () => {
     const built = amountsToLines(candidates, amounts);
@@ -174,11 +192,12 @@ export const SupplementaryOpeningForm = ({
             <DateField
               value={asOfDate}
               onChange={setAsOfDate}
-              min={status.openingDate ?? earliestOpeningDate(today)}
+              min={openingDate ?? undefined}
               max={today}
             />
             <Field.HelperText>
-              On or after the ledger's opening date and not later than today in Lagos.
+              On or after the ledger's opening date, outside any locked period, and not
+              later than today in Lagos.
             </Field.HelperText>
           </Field.Root>
           <OpeningAccountAmountList
@@ -259,52 +278,72 @@ export const CorrectionOpeningForm = ({
   );
   const moneyOpenings =
     effective?.accounts.filter((opening) => moneyAccountIds.has(opening.accountId)) ?? [];
-  const openingDate = effective?.openingDate ?? status.openingDate ?? "";
 
   const [corrected, setCorrected] = useState<Record<string, string>>({});
   const [itemCorrected, setItemCorrected] = useState<Record<string, string>>({});
   const [newItems, setNewItems] = useState<MemberMoneyDraft[]>([]);
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
+  const groupDates = openingDateGroups(moneyOpenings);
+  const ledgerOpeningDate = effective?.openingDate ?? status.openingDate ?? null;
+  const [selectedOpeningDate, setSelectedOpeningDate] = useState("");
+  // A single verified date needs no choice; derive it so an async load still selects it.
+  const activeOpeningDate =
+    selectedOpeningDate || (groupDates.length === 1 ? groupDates[0] : "");
+  const groupOpenings = moneyOpenings.filter(
+    (opening) => opening.openingDate === activeOpeningDate,
+  );
+  // Member-money items exist only at the ledger's own opening date.
+  const itemsAtSelectedDate =
+    activeOpeningDate !== "" && activeOpeningDate === ledgerOpeningDate;
+  const editableItems = itemsAtSelectedDate ? (effective?.memberMoneyItems ?? []) : [];
 
   const accountName = (accountId: string) =>
     accounts.find((account) => account.id === accountId)?.name ??
     `Unknown account (${accountId})`;
 
-  const changedLines = moneyOpenings.flatMap((opening) => {
-    const typed = corrected[opening.accountId]?.trim();
-    if (!typed) return [];
-    const kobo = parseNairaToKobo(typed);
-    if (kobo === null || kobo === opening.effectiveKobo) return [];
-    return [{ accountId: opening.accountId, correctedAmountKobo: kobo }];
-  });
-  const changedItems = (effective?.memberMoneyItems ?? []).flatMap((item) => {
-    const typed = itemCorrected[item.id]?.trim();
-    if (!typed) return [];
-    const kobo = parseNairaToKobo(typed);
-    if (kobo === null || kobo === item.effectiveKobo) return [];
-    return [{ itemId: item.id, correctedAmountKobo: kobo }];
-  });
+  const lineDrafts = correctionLinesFromDrafts(
+    groupOpenings.map((opening) => ({
+      accountId: opening.accountId,
+      name: accountName(opening.accountId),
+      effectiveKobo: opening.effectiveKobo,
+    })),
+    corrected,
+  );
+  const itemDrafts = correctionItemChangesFromDrafts(
+    editableItems.map((item) => ({
+      id: item.id,
+      label: `${item.number} · ${item.payerName}`,
+      effectiveKobo: item.effectiveKobo,
+    })),
+    itemCorrected,
+  );
   const itemInputs = memberMoneyDraftsToInputs(newItems);
 
   const problem =
     effective === null
       ? "Verified openings aren't available from this server yet."
-      : !openingDate
-        ? "This ledger has no opening date to correct."
-        : status.revision === null
-          ? "This server doesn't send the ledger revision yet."
-          : !reason.trim()
-            ? "Enter the reason for this correction."
-            : !evidence.trim()
-              ? "Record the supporting evidence for this correction."
-              : itemInputs.problem ??
-                (changedLines.length === 0 && changedItems.length === 0 && newItems.length === 0
-                  ? "Change at least one opening amount or add a member-money item."
-                  : null) ??
-                (intent.blocked ? "An earlier opening change is unresolved." : null);
+      : groupDates.length === 0
+        ? "No verified account openings to correct."
+        : !activeOpeningDate
+          ? "Choose which opening date you are correcting."
+          : status.revision === null
+            ? "This server doesn't send the ledger revision yet."
+            : !reason.trim()
+              ? "Enter the reason for this correction."
+              : !evidence.trim()
+                ? "Record the supporting evidence for this correction."
+                : lineDrafts.problem ??
+                  itemDrafts.problem ??
+                  itemInputs.problem ??
+                  (lineDrafts.lines?.length === 0 &&
+                  itemDrafts.itemChanges?.length === 0 &&
+                  newItems.length === 0
+                    ? "Change at least one opening amount or add a member-money item."
+                    : null) ??
+                  (intent.blocked ? "An earlier opening change is unresolved." : null);
 
-  const deltas = moneyOpenings.flatMap((opening) => {
+  const deltas = groupOpenings.flatMap((opening) => {
     const typed = corrected[opening.accountId]?.trim();
     if (!typed) return [];
     const kobo = parseNairaToKobo(typed);
@@ -330,15 +369,12 @@ export const CorrectionOpeningForm = ({
     if (!confirmed) return;
     submit(
       buildCorrectionOpeningInput({
-        asOfDate: openingDate,
+        asOfDate: activeOpeningDate,
         expectedLedgerRevision: status.revision as number,
         evidence,
         reason,
-        lines: changedLines.map((line) => ({
-          accountId: line.accountId,
-          correctedAmountKobo: line.correctedAmountKobo,
-        })),
-        itemChanges: changedItems,
+        lines: lineDrafts.lines ?? [],
+        itemChanges: itemDrafts.itemChanges ?? [],
         memberMoneyItems: itemInputs.inputs,
       }),
     );
@@ -377,44 +413,73 @@ export const CorrectionOpeningForm = ({
             <Text fontSize="sm" fontWeight="semibold" mb={2}>
               Current effective openings
             </Text>
+            {groupDates.length > 1 && (
+              <Field.Root mb={3}>
+                <Field.Label>Which opening date are you correcting?</Field.Label>
+                <OptionSelect<string>
+                  value={activeOpeningDate}
+                  options={groupDates.map((date) => ({
+                    value: date,
+                    label: formatBusinessDate(date),
+                  }))}
+                  onChange={(value) => {
+                    // Each correction is dated at one opening. Switching the
+                    // group clears drafts from the other date.
+                    setSelectedOpeningDate(value);
+                    setCorrected({});
+                    setItemCorrected({});
+                    setNewItems([]);
+                  }}
+                />
+                <Field.HelperText>
+                  Accounts opened on different dates can't be corrected in one proposal.
+                </Field.HelperText>
+              </Field.Root>
+            )}
             <Stack gap={3}>
-              {moneyOpenings.map((opening) => (
-                <Field.Root key={opening.accountId}>
-                  <Field.Label>
-                    {accountName(opening.accountId)}
-                    <Text as="span" fontSize="xs" color="fg.muted" ml={2}>
-                      effective {formatKobo(opening.effectiveKobo)}
-                    </Text>
-                  </Field.Label>
-                  <Input
-                    aria-label={`Corrected opening for ${accountName(opening.accountId)}`}
-                    value={corrected[opening.accountId] ?? ""}
-                    inputMode="decimal"
-                    placeholder="Leave blank to keep unchanged"
-                    onChange={(event) =>
-                      setCorrected((current) => ({
-                        ...current,
-                        [opening.accountId]: event.target.value,
-                      }))
-                    }
-                  />
-                </Field.Root>
-              ))}
-              {moneyOpenings.length === 0 && (
+              {activeOpeningDate === "" ? (
                 <Text fontSize="sm" color="fg.muted">
-                  No verified account openings to correct.
+                  Choose an opening date to see the accounts you can correct.
                 </Text>
+              ) : groupOpenings.length === 0 ? (
+                <Text fontSize="sm" color="fg.muted">
+                  No verified account openings to correct for this date.
+                </Text>
+              ) : (
+                groupOpenings.map((opening) => (
+                  <Field.Root key={opening.accountId}>
+                    <Field.Label>
+                      {accountName(opening.accountId)}
+                      <Text as="span" fontSize="xs" color="fg.muted" ml={2}>
+                        effective {formatKobo(opening.effectiveKobo)} · opened{" "}
+                        {formatBusinessDate(opening.openingDate)}
+                      </Text>
+                    </Field.Label>
+                    <Input
+                      aria-label={`Corrected opening for ${accountName(opening.accountId)}`}
+                      value={corrected[opening.accountId] ?? ""}
+                      inputMode="decimal"
+                      placeholder="Leave blank to keep unchanged"
+                      onChange={(event) =>
+                        setCorrected((current) => ({
+                          ...current,
+                          [opening.accountId]: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field.Root>
+                ))
               )}
             </Stack>
           </Box>
 
-          {(effective.memberMoneyItems.length > 0 || newItems.length > 0) && (
+          {itemsAtSelectedDate && effective.memberMoneyItems.length > 0 && (
             <Box borderWidth="1px" borderColor="border" borderRadius="md" p={3}>
               <Text fontSize="sm" fontWeight="semibold" mb={2}>
                 Opening member money
               </Text>
               <Stack gap={3}>
-                {effective.memberMoneyItems.map((item) => (
+                {editableItems.map((item) => (
                   <Field.Root key={item.id}>
                     <Field.Label>
                       {item.number} · {item.payerName}
@@ -440,7 +505,17 @@ export const CorrectionOpeningForm = ({
             </Box>
           )}
 
-          <OpeningMemberMoneyEditor drafts={newItems} onChange={setNewItems} />
+          {itemsAtSelectedDate ? (
+            <OpeningMemberMoneyEditor drafts={newItems} onChange={setNewItems} />
+          ) : (
+            activeOpeningDate !== "" &&
+            ledgerOpeningDate !== null && (
+              <Text fontSize="sm" color="fg.muted">
+                Member-money items can only be changed at the ledger's opening date (
+                {formatBusinessDate(ledgerOpeningDate)}).
+              </Text>
+            )
+          )}
 
           <Box borderWidth="1px" borderColor="border" borderRadius="md" p={3}>
             <Text fontSize="sm" fontWeight="semibold" mb={2}>
@@ -487,10 +562,17 @@ export const CorrectionOpeningForm = ({
             />
           </Field.Root>
           <Text fontSize="xs" color="fg.muted">
-            The correction is dated {openingDate ? formatBusinessDate(openingDate) : "—"}.
-            If that period is locked, the owner must move the lock first.
+            The correction is dated{" "}
+            {activeOpeningDate ? formatBusinessDate(activeOpeningDate) : "—"}. If that
+            period is locked, the owner must move the lock first.
           </Text>
         </>
+      )}
+
+      {problem && (
+        <Text fontSize="sm" color="fg.muted" aria-live="polite">
+          {problem}
+        </Text>
       )}
 
       <Flex gap={2} wrap="wrap">

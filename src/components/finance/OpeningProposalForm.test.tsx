@@ -114,7 +114,10 @@ const renderPanel = ({
   );
 
 const openForm = async () => {
-  fireEvent.click(await screen.findByRole("button", { name: "Propose opening balances" }));
+  const button = await screen.findByRole("button", { name: "Propose opening balances" });
+  // The CTA stays disabled until the full proposal history proves nothing is open.
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
 };
 
 const fillEvidence = (value = "Counted by the treasurer") =>
