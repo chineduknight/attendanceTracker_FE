@@ -273,6 +273,61 @@ describe("<OpeningBalancesPanel> gate and state", () => {
   });
 });
 
+describe("<OpeningBalancesPanel> account opening state", () => {
+  const UNREPORTED = /doesn't report each account's opening state/;
+  // The server sends `openingVerified: null` for every non-cash/bank account.
+  const CATEGORIES = [
+    account({ id: "equity", name: "Opening balance equity", class: "equity", subtype: "opening_balance_equity" }),
+    account({ id: "donations", name: "Donations", class: "income", subtype: null }),
+    account({ id: "opex", name: "Operating expenses", class: "expense", subtype: null }),
+  ];
+  const activeStatus = statusOf("active", { hasPendingProposal: false, openingDate: "2026-10-10" });
+
+  it("ignores income, expense and equity accounts, which never carry an opening state", async () => {
+    serveOpenings({ proposals: [] });
+    renderPanel({
+      status: activeStatus,
+      accounts: [
+        account({ openingVerified: true }),
+        account({ id: "bank", name: "Main bank", subtype: "bank", openingVerified: true }),
+        ...CATEGORIES,
+      ],
+    });
+
+    expect(await screen.findByText(/No money account is explicitly awaiting an opening/)).toBeInTheDocument();
+    expect(screen.queryByText(UNREPORTED)).not.toBeInTheDocument();
+  });
+
+  it("still warns when an active cash or bank account has no reported opening state", async () => {
+    serveOpenings({ proposals: [] });
+    renderPanel({
+      status: activeStatus,
+      accounts: [
+        account({ openingVerified: null }),
+        account({ id: "bank", name: "Main bank", subtype: "bank", openingVerified: true }),
+        ...CATEGORIES,
+      ],
+    });
+
+    expect(await screen.findByText(UNREPORTED)).toBeInTheDocument();
+  });
+
+  it("does not warn about an inactive cash account", async () => {
+    serveOpenings({ proposals: [] });
+    renderPanel({
+      status: activeStatus,
+      accounts: [
+        account({ openingVerified: true }),
+        account({ id: "old-cash", name: "Old cash", active: false, openingVerified: null }),
+        ...CATEGORIES,
+      ],
+    });
+
+    expect(await screen.findByText(/No money account is explicitly awaiting an opening/)).toBeInTheDocument();
+    expect(screen.queryByText(UNREPORTED)).not.toBeInTheDocument();
+  });
+});
+
 describe("<OpeningBalancesPanel> proposal review", () => {
   it("verifies with the exact fingerprint, revision and attestation", async () => {
     serveOpenings();

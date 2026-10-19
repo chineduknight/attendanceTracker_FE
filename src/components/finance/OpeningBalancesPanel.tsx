@@ -16,6 +16,7 @@ import { LEDGER_STATE_LABELS, ledgerStateKey } from "helpers/ledger";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { formatKobo } from "helpers/financeConstants";
 import {
+  activeMoneyAccounts,
   canSubmitAdjustmentProposal,
   canSubmitOpeningProposal,
   hasMultipleOpenProposals,
@@ -309,9 +310,12 @@ const OpeningBalancesPanel = ({
     anyUnknownStatus,
   });
   const awaiting = moneyAccountsAwaitingOpening(status, accounts ?? []);
+  // Only cash and bank accounts carry an opening state. The server sends
+  // `openingVerified: null` for every income, expense and equity account by
+  // contract, so those must never make the opening state look unreported.
   const unknownAccountOpeningState =
     state === "active" &&
-    (accounts ?? []).some((account) => account.openingVerified === null);
+    activeMoneyAccounts(accounts ?? []).some((account) => account.openingVerified === null);
   const zeroVerified = verifiedZeroAccounts(effectiveQuery.effective);
 
   return (

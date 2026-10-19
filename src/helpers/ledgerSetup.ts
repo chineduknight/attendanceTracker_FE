@@ -511,13 +511,60 @@ export interface SetupStep {
 }
 
 /**
+ * The activation step. Where this build has no opening-balance screens it is
+ * a later phase; otherwise it follows the reported lifecycle state, which is
+ * the server's evidence that verification happened.
+ */
+const activationStep = (
+  state: LedgerKnownState | "unknown",
+  openingBalancesAvailable: boolean,
+): SetupStep => {
+  const step = { key: "activation", title: "Opening balances and activation" };
+  if (!openingBalancesAvailable) {
+    return {
+      ...step,
+      detail: "Arrives in a later release. Nothing is activated from this screen.",
+      status: "later",
+    };
+  }
+  switch (state) {
+    case "active":
+      return {
+        ...step,
+        detail: "Opening balances were verified and the ledger is active.",
+        status: "done",
+      };
+    case "suspended":
+      return {
+        ...step,
+        detail: "Opening balances were verified. The ledger is suspended until an owner resumes it.",
+        status: "done",
+      };
+    case "pending_verification":
+      return {
+        ...step,
+        detail: "An opening proposal is waiting for the owner to verify it. Verification activates the ledger.",
+        status: "todo",
+      };
+    default:
+      return {
+        ...step,
+        detail: "A finance officer proposes the opening balances in Opening balances; the owner verifies them to activate the ledger.",
+        status: "todo",
+      };
+  }
+};
+
+/**
  * Progress from the data on screen only. A step is "done" only when the
  * backend sent the evidence for it; nothing is inferred from an absent field.
- * Activation is a later phase and is always shown as such.
+ * Activation is shown as a later phase unless this build offers the
+ * opening-balance screens (`openingBalancesAvailable`).
  */
 export const ledgerSetupSteps = (
   status: LedgerStatus,
   accounts: readonly LedgerAccount[] | null,
+  { openingBalancesAvailable = false }: { openingBalancesAvailable?: boolean } = {},
 ): SetupStep[] => {
   const state = ledgerStateKey(status);
   const started = state !== "not_active" && state !== "unknown";
@@ -570,12 +617,7 @@ export const ledgerSetupSteps = (
           : "Waiting for the current account list.",
       status: hasMoneyAccount ? "done" : "todo",
     },
-    {
-      key: "activation",
-      title: "Opening balances and activation",
-      detail: "Arrives in a later release. Nothing is activated from this screen.",
-      status: "later",
-    },
+    activationStep(state, openingBalancesAvailable),
   ];
 
   let currentTaken = false;

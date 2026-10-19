@@ -33,6 +33,9 @@ const themedStyles = <Option, IsMulti extends boolean, Group extends GroupBase<O
         : token("border"),
     boxShadow: state.isFocused ? `0 0 0 1px ${token("blue.focusRing")}` : "none",
     "&:hover": { borderColor: token("border.emphasized") },
+    // Chakra's `disabled` layer style, so a disabled dropdown reads like a
+    // disabled input beside it.
+    ...(state.isDisabled ? { opacity: 0.5 } : {}),
   }),
   valueContainer: (base) => ({
     ...base,

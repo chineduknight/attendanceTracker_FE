@@ -66,7 +66,13 @@ export type PostingSubmitResult =
       replayed: boolean;
       cleared: boolean;
     }
-  | { kind: "refused" | "voided" | "key-reused" | "blocked" | "busy"; message: string }
+  | { kind: "refused" | "voided" | "key-reused" | "busy"; message: string }
+  | {
+      kind: "blocked";
+      message: string;
+      /** Set when the durable claim itself was refused. */
+      reason?: LedgerPostingClaimBlockedReason;
+    }
   | { kind: "unconfirmed"; ambiguous: boolean; message: string };
 
 const invalidateLedger = (organisationId: string) =>
@@ -81,10 +87,28 @@ const invalidateLedger = (organisationId: string) =>
  * Everything else applies RFC §7.5. A posting in flight blocks every other
  * posting from this screen.
  */
-export const useLedgerPostings = (organisationId: string, officerId: string) => {
-  const intent = useLedgerPostingIntent(organisationId);
+export const useLedgerPostings = (
+  organisationId: string,
+  officerId: string,
+  {
+    onExternalIntentChange,
+  }: {
+    /**
+     * Another tab changed this organisation's posting record while this tab
+     * had no request of its own in flight.
+     */
+    onExternalIntentChange?: () => void;
+  } = {},
+) => {
   const [isPosting, setIsPosting] = useState(false);
   const inFlight = useRef(false);
+  const intent = useLedgerPostingIntent(organisationId, {
+    // While this tab's own request is in flight its own outcome decides what
+    // the form shows; another tab's write must not interrupt it.
+    onExternalChange: () => {
+      if (!inFlight.current) onExternalIntentChange?.();
+    },
+  });
 
   const dispatch = useCallback(
     async (record: LedgerPostingIntentRecord): Promise<PostingSubmitResult> => {
@@ -201,7 +225,11 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
         });
         if (claim.kind === "blocked") {
           intent.refresh();
-          return { kind: "blocked", message: claimBlockedMessage(claim.reason) };
+          return {
+            kind: "blocked",
+            message: claimBlockedMessage(claim.reason),
+            reason: claim.reason,
+          };
         }
 
         // Recheck the durable record before dispatch: the body that will be

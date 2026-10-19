@@ -21,6 +21,7 @@ import { usePermissions } from "rbac/usePermissions";
 import useGlobalStore from "zStore";
 import PostingIntentNotice from "components/finance/postings/PostingIntentNotice";
 import PostingReceipt from "components/finance/postings/PostingReceipt";
+import PostingSupersededNotice from "components/finance/postings/PostingSupersededNotice";
 import {
   ExpenseForm,
   ReceiptForm,
@@ -63,11 +64,29 @@ const CashbookPostingsPanel = ({
   const { has } = usePermissions();
   const canManage = has("finance.manage");
   const officerId = useGlobalStore((store) => store.user.id);
-  const postings = useLedgerPostings(organisationId, officerId);
   const [view, setView] = useState<View>("overview");
   const [formError, setFormError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [success, setSuccess] = useState<ConfirmedSuccess | null>(null);
+  // Another tab changed the posting record while a form was open. The form
+  // keeps its entries but is locked until the officer deliberately starts a
+  // new posting: re-enabling it would invite the same money twice.
+  const [superseded, setSuperseded] = useState(false);
+  // Bumped to remount the open form empty for a deliberate new posting.
+  const [formInstance, setFormInstance] = useState(0);
+
+  const supersedeForm = () => {
+    setSuperseded(true);
+    setFormError(null);
+    // Reads only: this tab's journal list predates the other tab's write.
+    onRecheckLedger?.();
+  };
+
+  const postings = useLedgerPostings(organisationId, officerId, {
+    onExternalIntentChange: () => {
+      if (view !== "overview") supersedeForm();
+    },
+  });
 
   if (!enabled) return null;
 
@@ -87,12 +106,20 @@ const CashbookPostingsPanel = ({
     setFormError(null);
     setSuccess(null);
     setPanelError(null);
+    setSuperseded(false);
     setView(next);
   };
 
   const back = () => {
     setFormError(null);
+    setSuperseded(false);
     setView("overview");
+  };
+
+  const startNewPosting = () => {
+    setFormError(null);
+    setSuperseded(false);
+    setFormInstance((instance) => instance + 1);
   };
 
   const handleSubmit = async (
@@ -106,9 +133,17 @@ const CashbookPostingsPanel = ({
         setView("overview");
         setSuccess({ result, summary });
         return;
+      case "blocked":
+        // Another tab's posting holds the record. Whatever happens to it, this
+        // form must not quietly become submittable again when it clears.
+        if (result.reason === "existing") {
+          supersedeForm();
+          return;
+        }
+        setFormError(result.message);
+        return;
       case "refused":
       case "voided":
-      case "blocked":
       case "busy":
         setFormError(result.message);
         return;
@@ -156,6 +191,7 @@ const CashbookPostingsPanel = ({
     },
     isPosting: postings.isPosting,
     error: formError,
+    locked: superseded,
     onCancel: back,
     onSubmit: (draft: Parameters<typeof postings.submit>[0], summary: PostingSummary) => {
       void handleSubmit(draft, summary);
@@ -165,11 +201,11 @@ const CashbookPostingsPanel = ({
   const form = (() => {
     switch (view) {
       case "receipt":
-        return <ReceiptForm {...formProps} />;
+        return <ReceiptForm key={formInstance} {...formProps} />;
       case "expense":
-        return <ExpenseForm {...formProps} />;
+        return <ExpenseForm key={formInstance} {...formProps} />;
       case "transfer":
-        return <TransferForm {...formProps} />;
+        return <TransferForm key={formInstance} {...formProps} />;
       default:
         return null;
     }
@@ -300,6 +336,15 @@ const CashbookPostingsPanel = ({
             state is what the officer is interacting with. After an
             unconfirmed result the view returns to the overview, where only
             the exact stored retry is offered. */}
+        {readiness.ready && view !== "overview" && superseded && (
+          <PostingSupersededNotice
+            hasPendingIntent={hasIntent}
+            isRechecking={isRechecking}
+            onRecheck={recheck}
+            onStartNew={startNewPosting}
+          />
+        )}
+
         {readiness.ready && view !== "overview" && form}
 
         {status.unconfirmedAttempts !== null && status.unconfirmedAttempts > 0 && (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { ReactNode, createContext, useContext, useState } from "react";
 import {
   Button,
   Field,
@@ -42,6 +42,11 @@ export interface PostingFormProps {
   context: PostingDateContext;
   isPosting: boolean;
   error: string | null;
+  /**
+   * Keeps the officer's input on screen but read-only and unsubmittable, e.g.
+   * after another tab changed the organisation's posting record.
+   */
+  locked?: boolean;
   onCancel: () => void;
   onSubmit: (draft: PostingDraft, summary: PostingSummary) => void;
 }
@@ -78,6 +83,12 @@ const earliestPostingDate = (context: PostingDateContext): string | undefined =>
   return valid.length ? valid[valid.length - 1] : undefined;
 };
 
+/**
+ * Set by `LockableFields`. Each field disables its own `Field.Root`, which
+ * disables the input, textarea, dropdown and date picker inside it.
+ */
+const FormLockContext = createContext(false);
+
 const TextField = ({
   label,
   value,
@@ -94,26 +105,29 @@ const TextField = ({
   helper: string;
   required?: boolean;
   multiline?: boolean;
-}) => (
-  <Field.Root>
-    <Field.Label>{required ? `${label} (required)` : label}</Field.Label>
-    {multiline ? (
-      <Textarea
-        value={value}
-        maxLength={maxLength}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    ) : (
-      <Input
-        value={value}
-        maxLength={maxLength}
-        autoComplete="off"
-        onChange={(event) => onChange(event.target.value)}
-      />
-    )}
-    <Field.HelperText>{helper}</Field.HelperText>
-  </Field.Root>
-);
+}) => {
+  const locked = useContext(FormLockContext);
+  return (
+    <Field.Root disabled={locked}>
+      <Field.Label>{required ? `${label} (required)` : label}</Field.Label>
+      {multiline ? (
+        <Textarea
+          value={value}
+          maxLength={maxLength}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <Input
+          value={value}
+          maxLength={maxLength}
+          autoComplete="off"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+      <Field.HelperText>{helper}</Field.HelperText>
+    </Field.Root>
+  );
+};
 
 const SelectField = ({
   label,
@@ -129,18 +143,21 @@ const SelectField = ({
   onChange: (value: string) => void;
   placeholder: string;
   helper?: string;
-}) => (
-  <Field.Root>
-    <Field.Label>{label}</Field.Label>
-    <OptionSelect
-      value={value}
-      options={options}
-      onChange={onChange}
-      placeholder={placeholder}
-    />
-    {helper && <Field.HelperText>{helper}</Field.HelperText>}
-  </Field.Root>
-);
+}) => {
+  const locked = useContext(FormLockContext);
+  return (
+    <Field.Root disabled={locked}>
+      <Field.Label>{label}</Field.Label>
+      <OptionSelect
+        value={value}
+        options={options}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+      {helper && <Field.HelperText>{helper}</Field.HelperText>}
+    </Field.Root>
+  );
+};
 
 const DateAndAmount = ({
   context,
@@ -154,35 +171,39 @@ const DateAndAmount = ({
   onDate: (value: string) => void;
   amountRaw: string;
   onAmount: (value: string) => void;
-}) => (
-  <>
-    <Field.Root>
-      <Field.Label>Business date</Field.Label>
-      <DateField
-        value={date}
-        onChange={onDate}
-        min={earliestPostingDate(context)}
-        max={context.today}
-      />
-      <Field.HelperText>
-        A Lagos calendar date. It can't be before the opening date or inside a locked
-        period.
-      </Field.HelperText>
-    </Field.Root>
-    <Field.Root>
-      <Field.Label>Amount</Field.Label>
-      <InputGroup startAddon="₦" startAddonProps={{ fontSize: "lg" }}>
-        <AmountInput
-          size="lg"
-          placeholder="0"
-          value={amountRaw}
-          onChange={onAmount}
+}) => {
+  const locked = useContext(FormLockContext);
+  return (
+    <>
+      <Field.Root disabled={locked}>
+        <Field.Label>Business date</Field.Label>
+        <DateField
+          value={date}
+          onChange={onDate}
+          min={earliestPostingDate(context)}
+          max={context.today}
+          disabled={locked}
         />
-      </InputGroup>
-      <Field.HelperText>Enter naira; the server stores whole kobo.</Field.HelperText>
-    </Field.Root>
-  </>
-);
+        <Field.HelperText>
+          A Lagos calendar date. It can't be before the opening date or inside a locked
+          period.
+        </Field.HelperText>
+      </Field.Root>
+      <Field.Root disabled={locked}>
+        <Field.Label>Amount</Field.Label>
+        <InputGroup startAddon="₦" startAddonProps={{ fontSize: "lg" }}>
+          <AmountInput
+            size="lg"
+            placeholder="0"
+            value={amountRaw}
+            onChange={onAmount}
+          />
+        </InputGroup>
+        <Field.HelperText>Enter naira; the server stores whole kobo.</Field.HelperText>
+      </Field.Root>
+    </>
+  );
+};
 
 const Feedback = ({
   attempted,
@@ -207,14 +228,22 @@ const Feedback = ({
   </>
 );
 
+const LockableFields = ({ locked, children }: { locked: boolean; children: ReactNode }) => (
+  <FormLockContext.Provider value={locked}>
+    <Stack gap={4}>{children}</Stack>
+  </FormLockContext.Provider>
+);
+
 const Actions = ({
   isPosting,
+  locked,
   onCancel,
   onSubmit,
   label,
   colorPalette,
 }: {
   isPosting: boolean;
+  locked: boolean;
   onCancel: () => void;
   onSubmit: () => void;
   label: string;
@@ -227,7 +256,7 @@ const Actions = ({
     <Button
       colorPalette={colorPalette}
       loading={isPosting}
-      disabled={isPosting}
+      disabled={isPosting || locked}
       onClick={onSubmit}
     >
       {label}
@@ -246,6 +275,7 @@ export const ReceiptForm = ({
   context,
   isPosting,
   error,
+  locked = false,
   onCancel,
   onSubmit,
 }: PostingFormProps) => {
@@ -304,74 +334,77 @@ export const ReceiptForm = ({
         levy as paid; member-money receipts are a separate workflow.
       </Text>
       <Feedback attempted={attempted} issue={issue} error={error} />
-      <DateAndAmount
-        context={context}
-        date={businessDate}
-        onDate={setBusinessDate}
-        amountRaw={amountRaw}
-        onAmount={setAmountRaw}
-      />
-      <SelectField
-        label="Money received into"
-        value={toAccountId}
-        options={accountOptions(accounts)}
-        onChange={setToAccountId}
-        placeholder="Choose a cash or bank account"
-        helper="Only active cash and bank accounts with a verified opening are offered."
-      />
-      <SelectField
-        label="Income category"
-        value={incomeAccountId}
-        options={categoryOptions(accounts, "income")}
-        onChange={setIncomeAccountId}
-        placeholder="Choose an income category"
-        helper="Only active income categories are offered."
-      />
-      <SelectField
-        label="Payment method"
-        value={method}
-        options={methodOptions}
-        onChange={(value) => setMethod(value as PostingMethod)}
-        placeholder="Choose a payment method"
-      />
-      <TextField
-        label="Received from"
-        value={counterpartyName}
-        onChange={setCounterpartyName}
-        maxLength={POSTING_TEXT_LIMITS.counterpartyName}
-        helper="Optional. At most 120 characters."
-      />
-      <TextField
-        label="External reference"
-        value={externalReference}
-        onChange={setExternalReference}
-        maxLength={POSTING_TEXT_LIMITS.externalReference}
-        helper="Optional. The bank or payment provider's transaction reference."
-      />
-      <TextField
-        label="Evidence reference"
-        value={evidenceReference}
-        onChange={setEvidenceReference}
-        maxLength={POSTING_TEXT_LIMITS.evidenceReference}
-        helper="Optional. Where the receipt, invoice or bank evidence is kept."
-      />
-      <TextField
-        label="Reference"
-        value={reference}
-        onChange={setReference}
-        maxLength={POSTING_TEXT_LIMITS.reference}
-        helper="Optional. A short label shown in the journal list."
-      />
-      <TextField
-        label="Note"
-        value={note}
-        onChange={setNote}
-        maxLength={POSTING_TEXT_LIMITS.note}
-        helper="Optional. Anything the next officer should know."
-        multiline
-      />
+      <LockableFields locked={locked}>
+        <DateAndAmount
+          context={context}
+          date={businessDate}
+          onDate={setBusinessDate}
+          amountRaw={amountRaw}
+          onAmount={setAmountRaw}
+        />
+        <SelectField
+          label="Money received into"
+          value={toAccountId}
+          options={accountOptions(accounts)}
+          onChange={setToAccountId}
+          placeholder="Choose a cash or bank account"
+          helper="Only active cash and bank accounts with a verified opening are offered."
+        />
+        <SelectField
+          label="Income category"
+          value={incomeAccountId}
+          options={categoryOptions(accounts, "income")}
+          onChange={setIncomeAccountId}
+          placeholder="Choose an income category"
+          helper="Only active income categories are offered."
+        />
+        <SelectField
+          label="Payment method"
+          value={method}
+          options={methodOptions}
+          onChange={(value) => setMethod(value as PostingMethod)}
+          placeholder="Choose a payment method"
+        />
+        <TextField
+          label="Received from"
+          value={counterpartyName}
+          onChange={setCounterpartyName}
+          maxLength={POSTING_TEXT_LIMITS.counterpartyName}
+          helper="Optional. At most 120 characters."
+        />
+        <TextField
+          label="External reference"
+          value={externalReference}
+          onChange={setExternalReference}
+          maxLength={POSTING_TEXT_LIMITS.externalReference}
+          helper="Optional. The bank or payment provider's transaction reference."
+        />
+        <TextField
+          label="Evidence reference"
+          value={evidenceReference}
+          onChange={setEvidenceReference}
+          maxLength={POSTING_TEXT_LIMITS.evidenceReference}
+          helper="Optional. Where the receipt, invoice or bank evidence is kept."
+        />
+        <TextField
+          label="Reference"
+          value={reference}
+          onChange={setReference}
+          maxLength={POSTING_TEXT_LIMITS.reference}
+          helper="Optional. A short label shown in the journal list."
+        />
+        <TextField
+          label="Note"
+          value={note}
+          onChange={setNote}
+          maxLength={POSTING_TEXT_LIMITS.note}
+          helper="Optional. Anything the next officer should know."
+          multiline
+        />
+      </LockableFields>
       <Actions
         isPosting={isPosting}
+        locked={locked}
         onCancel={onCancel}
         onSubmit={submit}
         label="Post receipt"
@@ -386,6 +419,7 @@ export const ExpenseForm = ({
   context,
   isPosting,
   error,
+  locked = false,
   onCancel,
   onSubmit,
 }: PostingFormProps) => {
@@ -442,75 +476,78 @@ export const ExpenseForm = ({
         Record money spent from a cash or bank account. The payee is required.
       </Text>
       <Feedback attempted={attempted} issue={issue} error={error} />
-      <DateAndAmount
-        context={context}
-        date={businessDate}
-        onDate={setBusinessDate}
-        amountRaw={amountRaw}
-        onAmount={setAmountRaw}
-      />
-      <SelectField
-        label="Paid from"
-        value={fromAccountId}
-        options={accountOptions(accounts)}
-        onChange={setFromAccountId}
-        placeholder="Choose a cash or bank account"
-        helper="Only active cash and bank accounts with a verified opening are offered."
-      />
-      <SelectField
-        label="Expense category"
-        value={expenseAccountId}
-        options={categoryOptions(accounts, "expense")}
-        onChange={setExpenseAccountId}
-        placeholder="Choose an expense category"
-        helper="Only active expense categories are offered."
-      />
-      <SelectField
-        label="Payment method"
-        value={method}
-        options={methodOptions}
-        onChange={(value) => setMethod(value as PostingMethod)}
-        placeholder="Choose a payment method"
-      />
-      <TextField
-        label="Paid to"
-        value={counterpartyName}
-        onChange={setCounterpartyName}
-        maxLength={POSTING_TEXT_LIMITS.counterpartyName}
-        helper="Required. Who received the money. At most 120 characters."
-        required
-      />
-      <TextField
-        label="External reference"
-        value={externalReference}
-        onChange={setExternalReference}
-        maxLength={POSTING_TEXT_LIMITS.externalReference}
-        helper="Optional. The bank or payment provider's transaction reference."
-      />
-      <TextField
-        label="Evidence reference"
-        value={evidenceReference}
-        onChange={setEvidenceReference}
-        maxLength={POSTING_TEXT_LIMITS.evidenceReference}
-        helper="Optional. Where the receipt, invoice or bank evidence is kept."
-      />
-      <TextField
-        label="Reference"
-        value={reference}
-        onChange={setReference}
-        maxLength={POSTING_TEXT_LIMITS.reference}
-        helper="Optional. A short label shown in the journal list."
-      />
-      <TextField
-        label="Note"
-        value={note}
-        onChange={setNote}
-        maxLength={POSTING_TEXT_LIMITS.note}
-        helper="Optional. Anything the next officer should know."
-        multiline
-      />
+      <LockableFields locked={locked}>
+        <DateAndAmount
+          context={context}
+          date={businessDate}
+          onDate={setBusinessDate}
+          amountRaw={amountRaw}
+          onAmount={setAmountRaw}
+        />
+        <SelectField
+          label="Paid from"
+          value={fromAccountId}
+          options={accountOptions(accounts)}
+          onChange={setFromAccountId}
+          placeholder="Choose a cash or bank account"
+          helper="Only active cash and bank accounts with a verified opening are offered."
+        />
+        <SelectField
+          label="Expense category"
+          value={expenseAccountId}
+          options={categoryOptions(accounts, "expense")}
+          onChange={setExpenseAccountId}
+          placeholder="Choose an expense category"
+          helper="Only active expense categories are offered."
+        />
+        <SelectField
+          label="Payment method"
+          value={method}
+          options={methodOptions}
+          onChange={(value) => setMethod(value as PostingMethod)}
+          placeholder="Choose a payment method"
+        />
+        <TextField
+          label="Paid to"
+          value={counterpartyName}
+          onChange={setCounterpartyName}
+          maxLength={POSTING_TEXT_LIMITS.counterpartyName}
+          helper="Required. Who received the money. At most 120 characters."
+          required
+        />
+        <TextField
+          label="External reference"
+          value={externalReference}
+          onChange={setExternalReference}
+          maxLength={POSTING_TEXT_LIMITS.externalReference}
+          helper="Optional. The bank or payment provider's transaction reference."
+        />
+        <TextField
+          label="Evidence reference"
+          value={evidenceReference}
+          onChange={setEvidenceReference}
+          maxLength={POSTING_TEXT_LIMITS.evidenceReference}
+          helper="Optional. Where the receipt, invoice or bank evidence is kept."
+        />
+        <TextField
+          label="Reference"
+          value={reference}
+          onChange={setReference}
+          maxLength={POSTING_TEXT_LIMITS.reference}
+          helper="Optional. A short label shown in the journal list."
+        />
+        <TextField
+          label="Note"
+          value={note}
+          onChange={setNote}
+          maxLength={POSTING_TEXT_LIMITS.note}
+          helper="Optional. Anything the next officer should know."
+          multiline
+        />
+      </LockableFields>
       <Actions
         isPosting={isPosting}
+        locked={locked}
         onCancel={onCancel}
         onSubmit={submit}
         label="Post expense"
@@ -525,6 +562,7 @@ export const TransferForm = ({
   context,
   isPosting,
   error,
+  locked = false,
   onCancel,
   onSubmit,
 }: PostingFormProps) => {
@@ -582,63 +620,66 @@ export const TransferForm = ({
         income nor an expense.
       </Text>
       <Feedback attempted={attempted} issue={issue} error={error} />
-      <DateAndAmount
-        context={context}
-        date={businessDate}
-        onDate={setBusinessDate}
-        amountRaw={amountRaw}
-        onAmount={setAmountRaw}
-      />
-      <SelectField
-        label="Transfer from"
-        value={fromAccountId}
-        options={accountOptions(accounts)}
-        onChange={(value) => {
-          setFromAccountId(value);
-          if (value === toAccountId) setToAccountId("");
-        }}
-        placeholder="Choose a cash or bank account"
-        helper="Only active cash and bank accounts with a verified opening are offered."
-      />
-      <SelectField
-        label="Transfer to"
-        value={toAccountId}
-        options={toOptions}
-        onChange={setToAccountId}
-        placeholder="Choose a different account"
-        helper="The receiving account must be different from the sending account."
-      />
-      <SelectField
-        label="Payment method"
-        value={method}
-        options={methodOptions}
-        onChange={(value) => setMethod(value as PostingMethod)}
-        placeholder="Choose a payment method"
-      />
-      <TextField
-        label="External reference"
-        value={externalReference}
-        onChange={setExternalReference}
-        maxLength={POSTING_TEXT_LIMITS.externalReference}
-        helper="Optional. The bank or payment provider's transaction reference."
-      />
-      <TextField
-        label="Reference"
-        value={reference}
-        onChange={setReference}
-        maxLength={POSTING_TEXT_LIMITS.reference}
-        helper="Optional. A short label shown in the journal list."
-      />
-      <TextField
-        label="Note"
-        value={note}
-        onChange={setNote}
-        maxLength={POSTING_TEXT_LIMITS.note}
-        helper="Optional. Anything the next officer should know."
-        multiline
-      />
+      <LockableFields locked={locked}>
+        <DateAndAmount
+          context={context}
+          date={businessDate}
+          onDate={setBusinessDate}
+          amountRaw={amountRaw}
+          onAmount={setAmountRaw}
+        />
+        <SelectField
+          label="Transfer from"
+          value={fromAccountId}
+          options={accountOptions(accounts)}
+          onChange={(value) => {
+            setFromAccountId(value);
+            if (value === toAccountId) setToAccountId("");
+          }}
+          placeholder="Choose a cash or bank account"
+          helper="Only active cash and bank accounts with a verified opening are offered."
+        />
+        <SelectField
+          label="Transfer to"
+          value={toAccountId}
+          options={toOptions}
+          onChange={setToAccountId}
+          placeholder="Choose a different account"
+          helper="The receiving account must be different from the sending account."
+        />
+        <SelectField
+          label="Payment method"
+          value={method}
+          options={methodOptions}
+          onChange={(value) => setMethod(value as PostingMethod)}
+          placeholder="Choose a payment method"
+        />
+        <TextField
+          label="External reference"
+          value={externalReference}
+          onChange={setExternalReference}
+          maxLength={POSTING_TEXT_LIMITS.externalReference}
+          helper="Optional. The bank or payment provider's transaction reference."
+        />
+        <TextField
+          label="Reference"
+          value={reference}
+          onChange={setReference}
+          maxLength={POSTING_TEXT_LIMITS.reference}
+          helper="Optional. A short label shown in the journal list."
+        />
+        <TextField
+          label="Note"
+          value={note}
+          onChange={setNote}
+          maxLength={POSTING_TEXT_LIMITS.note}
+          helper="Optional. Anything the next officer should know."
+          multiline
+        />
+      </LockableFields>
       <Actions
         isPosting={isPosting}
+        locked={locked}
         onCancel={onCancel}
         onSubmit={submit}
         label="Post transfer"

@@ -459,6 +459,58 @@ describe("setup progress", () => {
     expect(byKey.activation.status).toBe("later");
   });
 
+  describe("activation step", () => {
+    const CHART = [
+      account({ name: "Cash in hand" }),
+      account({ id: "a2", name: "Opening balance equity", class: "equity", subtype: "opening_balance_equity" }),
+    ];
+    const activation = (state: LedgerKnownState, openingBalancesAvailable?: boolean) =>
+      ledgerSetupSteps(
+        statusOf(state, { memberReceiptsEnabled: false }),
+        CHART,
+        openingBalancesAvailable === undefined ? undefined : { openingBalancesAvailable },
+      ).find((step) => step.key === "activation");
+
+    it.each(["not_active", "setup", "pending_verification", "active", "suspended"] as const)(
+      "stays a later phase in %s when the opening-balance screens are off",
+      (state) => {
+        for (const available of [undefined, false]) {
+          expect(activation(state, available)).toMatchObject({
+            status: "later",
+            detail: "Arrives in a later release. Nothing is activated from this screen.",
+          });
+        }
+      },
+    );
+
+    it("is the next step once the chart is ready and setup has started", () => {
+      const step = activation("setup", true);
+      expect(step?.status).toBe("current");
+      expect(step?.detail).toMatch(/proposes the opening balances.*owner verifies them/);
+      expect(step?.detail).not.toMatch(/later release/);
+    });
+
+    it("waits on the owner while a proposal is pending", () => {
+      const step = activation("pending_verification", true);
+      expect(step?.status).toBe("current");
+      expect(step?.detail).toMatch(/waiting for the owner to verify/);
+    });
+
+    it.each(["active", "suspended"] as const)("is done once the ledger is %s", (state) => {
+      const step = activation(state, true);
+      expect(step?.status).toBe("done");
+      expect(step?.detail).toMatch(/Opening balances were verified/);
+    });
+
+    it("is not claimed before setup starts", () => {
+      const steps = ledgerSetupSteps(statusOf("not_active", { memberReceiptsEnabled: null }), [], {
+        openingBalancesAvailable: true,
+      });
+      expect(steps[0].status).toBe("current");
+      expect(steps.find((step) => step.key === "activation")?.status).toBe("todo");
+    });
+  });
+
   it("does not claim an account step without a known account list", () => {
     const steps = ledgerSetupSteps(statusOf("setup"), null);
     const money = steps.find((step) => step.key === "money-account");
