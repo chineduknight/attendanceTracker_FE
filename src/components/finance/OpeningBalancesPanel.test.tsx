@@ -55,6 +55,9 @@ const statusOf = (
   memberReceiptsEnabled: false,
   unconfirmedAttempts: 0,
   hasPendingProposal: true,
+  activatedAt: null,
+  gapWindowAttestedAt: null,
+  gapWindowAttestation: "not_attested",
   ...overrides,
 });
 
@@ -247,7 +250,7 @@ describe("<OpeningBalancesPanel> gate and state", () => {
     renderPanel();
 
     expect(
-      await screen.findByText("We couldn't confirm the last opening change"),
+      await screen.findByText("We couldn't confirm the last ledger change"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Propose opening balances" }),
@@ -408,7 +411,7 @@ describe("<OpeningBalancesPanel> proposal review", () => {
     await confirmInDialog("Verify opening balances");
 
     expect(
-      await screen.findByText("We couldn't confirm the last opening change"),
+      await screen.findByText("We couldn't confirm the last ledger change"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Verify opening" })).toBeDisabled();
     expect(readLedgerWriteIntent("org1")).toMatchObject({
@@ -760,7 +763,7 @@ describe("<OpeningBalancesPanel> identity and intent safety", () => {
     renderPanel();
 
     expect(
-      await screen.findByText(/safety record for an opening change that this app version can't read/),
+      await screen.findByText(/safety record for a ledger change that this app version can't read/),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Propose opening balances" }),

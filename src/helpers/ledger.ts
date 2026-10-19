@@ -1,5 +1,6 @@
 import { isValid, parseISO } from "date-fns";
 import {
+  GapWindowAttestation,
   LedgerAccount,
   LedgerJournal,
   LedgerJournalLine,
@@ -70,6 +71,28 @@ const asTextList = (value: unknown): string[] | null => {
   return list;
 };
 
+/**
+ * A stored timestamp (activation, attestation) as an ISO string. Anything that
+ * does not parse as a real instant is null: never "now" and never a business
+ * date, which would silently widen the gap window.
+ */
+const asTimestamp = (value: unknown): string | null => {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+/**
+ * Attestation is three-state: only an explicit `null` means "not attested".
+ * A missing field is unknown, so a backend that does not send it can never be
+ * read as either proof of an attestation or proof that none exists.
+ */
+const toGapWindowAttestation = (raw: Record<string, unknown>): GapWindowAttestation => {
+  if (!("gapWindowAttestedAt" in raw)) return "unknown";
+  if (raw.gapWindowAttestedAt === null) return "not_attested";
+  return asTimestamp(raw.gapWindowAttestedAt) ? "attested" : "unknown";
+};
+
 const KNOWN_STATES: readonly LedgerKnownState[] = [
   "not_active",
   "setup",
@@ -113,6 +136,9 @@ export const toLedgerStatus = (value: unknown): LedgerStatus | null => {
           : asRecord(raw.pendingProposal)
             ? true
             : null,
+    activatedAt: asTimestamp(raw.activatedAt),
+    gapWindowAttestedAt: asTimestamp(raw.gapWindowAttestedAt),
+    gapWindowAttestation: toGapWindowAttestation(raw),
   };
 };
 

@@ -7,7 +7,7 @@ import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { OpeningProposal } from "components/finance/openingBalanceTypes";
 import OpeningProposalForm from "components/finance/opening/OpeningProposalForm";
 import OpeningProposalReview from "components/finance/opening/OpeningProposalReview";
-import OpeningWriteIntentNotice from "components/finance/opening/OpeningWriteIntentNotice";
+import OpeningWriteIntentNotice from "components/finance/LedgerWriteIntentNotice";
 import {
   CorrectionOpeningForm,
   SupplementaryOpeningForm,

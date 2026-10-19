@@ -49,6 +49,9 @@ describe("ledger parsing", () => {
       memberReceiptsEnabled: null,
       unconfirmedAttempts: null,
       hasPendingProposal: null,
+      activatedAt: null,
+      gapWindowAttestedAt: null,
+      gapWindowAttestation: "unknown",
     });
 
     expect(toLedgerStatus({ state: "active" })).toEqual({
@@ -64,6 +67,9 @@ describe("ledger parsing", () => {
       memberReceiptsEnabled: null,
       unconfirmedAttempts: null,
       hasPendingProposal: null,
+      activatedAt: null,
+      gapWindowAttestedAt: null,
+      gapWindowAttestation: "unknown",
     });
 
     expect(
@@ -333,6 +339,8 @@ describe("ledger F2 read compatibility", () => {
       pendingProposal: null,
       unconfirmedAttempts: 0,
       contractVersion: "f2-0.3",
+      activatedAt: "2026-10-18T10:00:00.000Z",
+      gapWindowAttestedAt: "2026-10-19T09:30:00.000Z",
     });
 
     expect(status).toEqual({
@@ -348,6 +356,9 @@ describe("ledger F2 read compatibility", () => {
       memberReceiptsEnabled: true,
       unconfirmedAttempts: 0,
       hasPendingProposal: false,
+      activatedAt: "2026-10-18T10:00:00.000Z",
+      gapWindowAttestedAt: "2026-10-19T09:30:00.000Z",
+      gapWindowAttestation: "attested",
     });
   });
 
@@ -371,6 +382,9 @@ describe("ledger F2 read compatibility", () => {
       revision: null,
       memberReceiptsEnabled: null,
       unconfirmedAttempts: null,
+      activatedAt: null,
+      gapWindowAttestedAt: null,
+      gapWindowAttestation: "unknown",
     });
   });
 
@@ -394,6 +408,30 @@ describe("ledger F2 read compatibility", () => {
     expect(
       toLedgerStatus({ ...F1_STATUS, pendingProposal: "p1" })?.hasPendingProposal,
     ).toBeNull();
+  });
+
+  it("keeps a missing gap-window attestation unknown, never 'not attested'", () => {
+    expect(toLedgerStatus(F1_STATUS)?.gapWindowAttestation).toBe("unknown");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, gapWindowAttestedAt: null })?.gapWindowAttestation,
+    ).toBe("not_attested");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, gapWindowAttestedAt: "not a date" })
+        ?.gapWindowAttestation,
+    ).toBe("unknown");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, gapWindowAttestedAt: "2026-10-19T09:30:00.000Z" })
+        ?.gapWindowAttestation,
+    ).toBe("attested");
+  });
+
+  it("reads the activation instant without inventing one", () => {
+    expect(toLedgerStatus(F1_STATUS)?.activatedAt).toBeNull();
+    expect(
+      toLedgerStatus({ ...F1_STATUS, activatedAt: "2026-10-18T10:00:00.000Z" })
+        ?.activatedAt,
+    ).toBe("2026-10-18T10:00:00.000Z");
+    expect(toLedgerStatus({ ...F1_STATUS, activatedAt: "yesterday" })?.activatedAt).toBeNull();
   });
 
   it("does not decode an unrequested paged body as an empty list", () => {

@@ -62,6 +62,9 @@ const statusOf = (
   memberReceiptsEnabled: false,
   unconfirmedAttempts: 0,
   hasPendingProposal: false,
+  activatedAt: null,
+  gapWindowAttestedAt: null,
+  gapWindowAttestation: "not_attested",
   ...overrides,
 });
 

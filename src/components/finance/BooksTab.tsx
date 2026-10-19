@@ -5,8 +5,10 @@ import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
+import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
+import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
 import { formatKobo } from "helpers/financeConstants";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
@@ -438,6 +440,21 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           error={accountsQuery.error}
           refetch={accountsQuery.refetch}
           isFetching={accountsQuery.isFetching}
+        />
+      )}
+
+      {/* F2A-3B lifecycle (suspend/resume, period lock, gap-window
+          attestation): its own gate, off until the lifecycle routes, the F2A-4
+          reads and the server write flag are live. */}
+      {LEDGER_LIFECYCLE_UI_ENABLED && (
+        <LedgerLifecyclePanel
+          organisationId={organisationId}
+          status={status}
+          onRecheckLedger={() => {
+            statusQuery.refetch();
+            accountsQuery.refetch();
+            journalsQuery.refetch();
+          }}
         />
       )}
 

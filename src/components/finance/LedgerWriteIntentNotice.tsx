@@ -7,13 +7,16 @@ import {
 import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
 
 /**
- * The block shown while an opening-balance write intent is outstanding.
+ * The block shown while a ledger write intent is outstanding.
  *
- * It appears on mount from persisted state, so a reload cannot re-enable a
- * write whose request may already have been sent. Only an explicit
- * reconciliation clears it; a later 409 is never treated as proof either way.
+ * It covers both opening-balance actions and lifecycle actions (suspend,
+ * resume, period lock, gap-window attestation) because they share one
+ * organisation-scoped intent slot. It appears on mount from persisted state,
+ * so a reload cannot re-enable a write whose request may already have been
+ * sent. Only an explicit reconciliation clears it; a later 409 is never
+ * treated as proof either way.
  */
-const OpeningWriteIntentNotice = ({
+const LedgerWriteIntentNotice = ({
   read,
   canManage,
   isRechecking,
@@ -35,7 +38,7 @@ const OpeningWriteIntentNotice = ({
     const confirmed = await confirm({
       title: "Continue after checking?",
       body:
-        "Only continue if you have checked the proposal and ledger and are sure the earlier change does not need to be repeated. We cannot confirm whether it was saved.",
+        "Only continue if you have checked the ledger and its recent audit records and are sure the earlier change does not need to be repeated. We cannot confirm whether it was saved.",
       confirmLabel: "I've checked",
     });
     if (confirmed) onAcknowledge();
@@ -43,10 +46,10 @@ const OpeningWriteIntentNotice = ({
 
   const storageUnavailable = read.kind === "storage-unavailable";
   const body = storageUnavailable
-    ? "This browser can't store the safety record required before an opening change, so opening changes are blocked. Allow site storage and try again."
+    ? "This browser can't store the safety record required before a ledger change, so ledger changes are blocked. Allow site storage and try again."
     : read.kind === "pending"
       ? LEDGER_WRITE_UNCERTAIN_NOTE
-      : "This browser has a safety record for an opening change that this app version can't read. Check the proposal and ledger before making another change.";
+      : "This browser has a safety record for a ledger change that this app version can't read. Check the ledger and its audit records before making another change.";
 
   return (
     <Box
@@ -60,8 +63,8 @@ const OpeningWriteIntentNotice = ({
       <Stack gap={2}>
         <Text fontSize="sm" fontWeight="semibold">
           {storageUnavailable
-            ? "Opening changes are blocked"
-            : "We couldn't confirm the last opening change"}
+            ? "Ledger changes are blocked"
+            : "We couldn't confirm the last ledger change"}
         </Text>
         <Text fontSize="sm" color="fg.muted">
           {body}
@@ -100,4 +103,4 @@ const OpeningWriteIntentNotice = ({
   );
 };
 
-export default OpeningWriteIntentNotice;
+export default LedgerWriteIntentNotice;
