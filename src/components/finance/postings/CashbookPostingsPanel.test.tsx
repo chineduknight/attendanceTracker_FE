@@ -12,6 +12,7 @@ import {
   beginLedgerPostingIntent,
   clearLedgerPostingIntent,
   ledgerPostingIntentKey,
+  markLedgerPostingIntentUnresolved,
   readLedgerPostingIntents,
 } from "helpers/ledgerPostingIntent";
 import { POSTING_STORAGE_CLEAR_FAILED_MESSAGE } from "hooks/useLedgerPostings";
@@ -233,6 +234,71 @@ const seedIntent = async (organisationId = "org1", key = "key-12345678") => {
     throw new Error(`Expected a seeded claim, got ${result.reason}`);
   }
   return result.record;
+};
+
+/**
+ * What the browser delivers to every other open tab when one tab writes the
+ * organisation's posting record. jsdom has one window, so the test delivers
+ * it; the writing tab has either left its form or has its own request in
+ * flight, and the hook ignores the event in both cases.
+ */
+const deliverStorageEvent = (organisationId = "org1") => {
+  const event = new Event("storage") as StorageEvent;
+  Object.defineProperty(event, "key", { value: ledgerPostingIntentKey(organisationId) });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+};
+
+/** Two open tabs of the same organisation's Books screen. */
+const renderTwoTabs = () => {
+  const recheck = [jest.fn(), jest.fn()] as const;
+  render(
+    <>
+      {recheck.map((onRecheckLedger, index) => (
+        <CashbookPostingsPanel
+          key={index}
+          organisationId="org1"
+          status={statusOf()}
+          accounts={ACCOUNTS}
+          enabled
+          onRecheckLedger={onRecheckLedger}
+        />
+      ))}
+    </>,
+  );
+  const [firstPanel, secondPanel] = screen.getAllByRole("region");
+  expect(screen.getAllByRole("region")).toHaveLength(2);
+  return {
+    firstPanel,
+    secondPanel,
+    first: within(firstPanel),
+    second: within(secondPanel),
+    recheck,
+  };
+};
+
+const fillReceiptIn = async (panel: HTMLElement, amount = "25000", { open = true } = {}) => {
+  const tab = within(panel);
+  if (open) fireEvent.click(tab.getByRole("button", { name: /Money in/ }));
+  fireEvent.change(tab.getByLabelText("Amount"), { target: { value: amount } });
+  await chooseOption(tab.getByLabelText("Money received into"), "Cash in hand");
+  await chooseOption(tab.getByLabelText("Income category"), "Donations");
+};
+
+const SUPERSEDED = "Check the journal entries before posting this";
+
+/** The form keeps its entries but can't be edited or submitted. */
+const expectLocked = (panel: HTMLElement, amountShown = "25,000") => {
+  const tab = within(panel);
+  expect(tab.getByText(SUPERSEDED)).toBeInTheDocument();
+  expect(tab.getByLabelText("Amount")).toHaveValue(amountShown);
+  expect(tab.getByLabelText("Amount")).toBeDisabled();
+  expect(tab.getByLabelText("Money received into")).toBeDisabled();
+  expect(tab.getByRole("button", { name: "Post receipt" })).toBeDisabled();
+  // Nothing claims the other tab's outcome.
+  expect(tab.queryByText("Posted")).not.toBeInTheDocument();
+  expect(tab.queryByText("Already posted")).not.toBeInTheDocument();
 };
 
 beforeEach(() => {
@@ -554,6 +620,7 @@ describe("cross-tab coordination", () => {
     expect(panels).toHaveLength(2);
     const first = within(panels[0]);
     const second = within(panels[1]);
+    const secondPanel = panels[1];
 
     fireEvent.click(first.getByRole("button", { name: /Money in/ }));
     fireEvent.change(first.getByLabelText("Amount"), {
@@ -574,30 +641,29 @@ describe("cross-tab coordination", () => {
     fireEvent.click(submitButtons[1]);
 
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-    expect(
-      await second.findByText(/An earlier financial posting is still unconfirmed/),
-    ).toBeInTheDocument();
+    // The second tab's claim was refused: its form is locked, not re-armed.
+    expect(await second.findByText(SUPERSEDED)).toBeInTheDocument();
+    expect(second.queryByText(/still unconfirmed. Retry that exact request first/)).not.toBeInTheDocument();
+    expectLocked(secondPanel);
     expect(api.post).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       resolvePost(successBody());
     });
     expect(await screen.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    deliverStorageEvent();
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(stored().kind).toBe("none");
+    // The first tab's record cleared, yet the second form stays locked.
+    expectLocked(secondPanel);
+    fireEvent.click(second.getByRole("button", { name: "Post receipt" }));
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes when another tab writes the organisation's intent", async () => {
     renderPanel();
     await seedIntent("org1");
-
-    const event = new Event("storage") as StorageEvent;
-    Object.defineProperty(event, "key", {
-      value: ledgerPostingIntentKey("org1"),
-    });
-    act(() => {
-      window.dispatchEvent(event);
-    });
+    deliverStorageEvent();
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
@@ -1007,4 +1073,156 @@ describe("a retry resolving after another tab moved on", () => {
       expect(api.post).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe("another tab changes the posting record while a form is open (F1)", () => {
+  it("locks the second tab's copy of a receipt the first tab has just posted", async () => {
+    const { first, firstPanel, second, secondPanel, recheck } = renderTwoTabs();
+    await fillReceiptIn(firstPanel);
+    await fillReceiptIn(secondPanel);
+
+    fireEvent.click(first.getByRole("button", { name: "Post receipt" }));
+    expect(await first.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    // The first tab claimed and then cleared the record.
+    deliverStorageEvent();
+
+    expectLocked(secondPanel);
+    expect(recheck[1]).toHaveBeenCalled();
+    expect(second.getByRole("button", { name: "Start a new posting" })).toBeEnabled();
+
+    // The officer tries to submit the same real-world receipt again.
+    fireEvent.click(second.getByRole("button", { name: "Post receipt" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(stored().kind).toBe("none");
+  });
+
+  it("only allows a deliberate, empty new posting after the interruption", async () => {
+    const { first, firstPanel, second, secondPanel } = renderTwoTabs();
+    await fillReceiptIn(firstPanel);
+    await fillReceiptIn(secondPanel, "1000");
+    fireEvent.click(first.getByRole("button", { name: "Post receipt" }));
+    expect(await first.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    deliverStorageEvent();
+    expectLocked(secondPanel, "1,000");
+
+    fireEvent.click(second.getByRole("button", { name: "Start a new posting" }));
+    expect(second.queryByText(SUPERSEDED)).not.toBeInTheDocument();
+    expect(second.getByLabelText("Amount")).toHaveValue("");
+    expect(second.getByLabelText("Amount")).toBeEnabled();
+
+    await fillReceiptIn(secondPanel, "1000", { open: false });
+    // The server's proof must match this posting's own amount (₦1,000).
+    api.post.mockResolvedValueOnce(successBody("R-000002", { totalKobo: 100000 }));
+    fireEvent.click(second.getByRole("button", { name: "Post receipt" }));
+    expect(await second.findByText(/Journal number: R-000002/)).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(2);
+    const [firstKey, secondKey] = api.post.mock.calls.map(([, body]) => body.idempotencyKey);
+    expect(secondKey).not.toBe(firstKey);
+  });
+
+  it.each([
+    ["posted", async (record: Awaited<ReturnType<typeof seedIntent>>) => {
+      await clearLedgerPostingIntent("org1", record.key);
+    }],
+    ["refused", async (record: Awaited<ReturnType<typeof seedIntent>>) => {
+      await clearLedgerPostingIntent("org1", record.key);
+    }],
+    ["voided after an unknown outcome", async (record: Awaited<ReturnType<typeof seedIntent>>) => {
+      await markLedgerPostingIntentUnresolved(record, { ambiguous: true, message: "Unknown." });
+      deliverStorageEvent();
+      await clearLedgerPostingIntent("org1", record.key);
+    }],
+  ])(
+    "makes no claim about the outcome when the other tab's posting was %s",
+    async (_outcome, resolveElsewhere) => {
+      renderPanel({});
+      await openReceipt();
+      await fillReceipt();
+
+      // Another tab claims the record: this form locks at once.
+      const record = await seedIntent();
+      deliverStorageEvent();
+      expect(screen.getByText(SUPERSEDED)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Start a new posting" })).toBeDisabled();
+      expect(screen.getByText(/a new posting can't start until it is\s+proved/)).toBeInTheDocument();
+
+      // The other tab resolves it; this tab only sees the record disappear.
+      await resolveElsewhere(record);
+      deliverStorageEvent();
+
+      expect(stored().kind).toBe("none");
+      expect(screen.getByText(SUPERSEDED)).toBeInTheDocument();
+      expect(screen.getByText(/can't tell whether that posting was saved, refused or voided/)).toBeInTheDocument();
+      expect(screen.getByLabelText("Amount")).toHaveValue("25,000");
+      expect(screen.getByRole("button", { name: "Post receipt" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Start a new posting" })).toBeEnabled();
+      expect(screen.queryByText("Posted")).not.toBeInTheDocument();
+      expect(screen.queryByText("Already posted")).not.toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores another organisation's posting record", async () => {
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+
+    await seedIntent("org2");
+    deliverStorageEvent("org2");
+
+    expect(screen.queryByText(SUPERSEDED)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Post receipt" })).toBeEnabled();
+  });
+
+  it("leaves the overview usable when no form was open", async () => {
+    renderPanel();
+    const record = await seedIntent();
+    deliverStorageEvent();
+    await clearLedgerPostingIntent("org1", record.key);
+    deliverStorageEvent();
+
+    expect(screen.queryByText(SUPERSEDED)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Money in/ })).toBeEnabled();
+  });
+
+  it("does not interrupt this tab's own request in flight", async () => {
+    let resolvePost: (value: unknown) => void = () => undefined;
+    api.post.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePost = resolve;
+      }),
+    );
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    // Another tab retries this tab's own record (same key) meanwhile.
+    deliverStorageEvent();
+    await act(async () => {
+      resolvePost(successBody());
+    });
+
+    expect(await screen.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    expect(screen.queryByText(SUPERSEDED)).not.toBeInTheDocument();
+  });
+
+  it("clears the lock when the officer goes back", async () => {
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    const record = await seedIntent();
+    deliverStorageEvent();
+    await clearLedgerPostingIntent("org1", record.key);
+    deliverStorageEvent();
+    expect(screen.getByText(SUPERSEDED)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await openReceipt();
+    expect(screen.queryByText(SUPERSEDED)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Amount")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Post receipt" })).toBeEnabled();
+  });
 });

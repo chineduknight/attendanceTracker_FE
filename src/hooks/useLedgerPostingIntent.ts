@@ -18,11 +18,27 @@ import {
  * is unconfirmed. Clearing is only done by a proved outcome (201, a replay,
  * a void, or a first clean 4xx refusal).
  */
-export const useLedgerPostingIntent = (organisationId: string) => {
+export const useLedgerPostingIntent = (
+  organisationId: string,
+  {
+    onExternalChange,
+  }: {
+    /**
+     * Another tab claimed, resolved or cleared this organisation's posting
+     * record. Says nothing about why: success, a refusal and a void all look
+     * the same from here.
+     */
+    onExternalChange?: () => void;
+  } = {},
+) => {
   const [read, setRead] = useState<LedgerPostingIntentRead>(() =>
     readLedgerPostingIntents(organisationId),
   );
   const currentOrganisationId = useRef(organisationId);
+  const onExternalChangeRef = useRef(onExternalChange);
+  useEffect(() => {
+    onExternalChangeRef.current = onExternalChange;
+  });
 
   const refresh = useCallback(() => {
     const next = readLedgerPostingIntents(organisationId);
@@ -51,6 +67,7 @@ export const useLedgerPostingIntent = (organisationId: string) => {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== null && event.key !== storageKey) return;
       setRead(readLedgerPostingIntents(organisationId));
+      onExternalChangeRef.current?.();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);

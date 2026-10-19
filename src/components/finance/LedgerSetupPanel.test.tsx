@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
@@ -148,6 +148,52 @@ describe("<LedgerSetupPanel> feature gate", () => {
       },
     });
     expect(screen.queryByText("Bookkeeping setup")).not.toBeInTheDocument();
+  });
+});
+
+describe("<LedgerSetupPanel> activation progress", () => {
+  const ACTIVE_CHART = [
+    account({ openingVerified: true }),
+    account({
+      id: "a2",
+      name: "Opening balance equity",
+      class: "equity",
+      subtype: "opening_balance_equity",
+      openingVerified: null,
+    }),
+  ];
+  const activationRow = () => {
+    const rows = within(
+      screen.getByRole("list", { name: "Bookkeeping setup progress" }),
+    ).getAllByRole("listitem");
+    const row = rows.find((item) => within(item).queryByText("Opening balances and activation"));
+    if (!row) throw new Error("activation row missing");
+    return row;
+  };
+
+  it("reports an active ledger as activated when opening balances are offered", () => {
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false }),
+      accounts: ACTIVE_CHART,
+      openingBalancesEnabled: true,
+    });
+
+    const row = activationRow();
+    expect(within(row).getByText("Opening balances were verified and the ledger is active.")).toBeInTheDocument();
+    expect(within(row).getByText("Done")).toBeInTheDocument();
+    expect(screen.queryByText(/Arrives in a later release/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the later-release row where opening balances are not offered", () => {
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false }),
+      accounts: ACTIVE_CHART,
+      openingBalancesEnabled: false,
+    });
+
+    const row = activationRow();
+    expect(within(row).getByText(/Arrives in a later release/)).toBeInTheDocument();
+    expect(within(row).getByText("Later")).toBeInTheDocument();
   });
 });
 

@@ -4,6 +4,7 @@ import { GroupedList, GroupedListItem } from "components/GroupedList";
 import LedgerChartOfAccounts from "components/finance/LedgerChartOfAccounts";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { Switch } from "components/ui/switch";
+import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import {
   LEDGER_SETUP_ERROR_CODES,
@@ -163,6 +164,8 @@ interface LedgerSetupPanelProps {
   isRetryingAccounts: boolean;
   /** Tests can force the gate on; production reads config/ledgerSetup. */
   enabled?: boolean;
+  /** Whether the opening-balance screens are offered; production reads config/ledgerOpeningBalances. */
+  openingBalancesEnabled?: boolean;
 }
 
 const LedgerSetupPanel = ({
@@ -174,6 +177,7 @@ const LedgerSetupPanel = ({
   onRecheckLedger,
   isRetryingAccounts,
   enabled = LEDGER_SETUP_UI_ENABLED,
+  openingBalancesEnabled = LEDGER_OPENING_BALANCES_UI_ENABLED,
 }: LedgerSetupPanelProps) => {
   const headingId = useId();
   const { has } = usePermissions();
@@ -206,7 +210,9 @@ const LedgerSetupPanel = ({
   if (state === "unknown") return null;
 
   const notStarted = state === "not_active";
-  const steps = ledgerSetupSteps(status, accounts);
+  const steps = ledgerSetupSteps(status, accounts, {
+    openingBalancesAvailable: openingBalancesEnabled,
+  });
   const memberReceiptsKnown = status.memberReceiptsEnabled !== null;
 
   const handleFailure = (error: unknown, action: LedgerWriteAction) => {
