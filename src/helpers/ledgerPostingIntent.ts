@@ -318,6 +318,92 @@ export const readLedgerPostingIntents = (
 export const hasPendingLedgerPosting = (read: LedgerPostingIntentRead) =>
   read.kind !== "none";
 
+/** This organisation's stored record for one key, or null. */
+export const readLedgerPostingIntentByKey = (
+  organisationId: string,
+  key: string,
+): LedgerPostingIntentRecord | null => {
+  const read = readLedgerPostingIntents(organisationId);
+  return read.kind === "pending"
+    ? read.intents.find((entry) => entry.key === key) ?? null
+    : null;
+};
+
+/** Exact-body comparison for the pre-dispatch recheck. */
+export const sameLedgerPostingBody = (left: unknown, right: unknown): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+export type LedgerPostingClaimBlockedReason =
+  | "existing"
+  | "unknown"
+  | "storage-unavailable"
+  | "coordination-unavailable"
+  | "write-failed"
+  | "invalid";
+
+export type LedgerPostingClaimResult =
+  | { kind: "claimed"; record: LedgerPostingIntentRecord }
+  | { kind: "blocked"; reason: LedgerPostingClaimBlockedReason };
+
+export const LEDGER_POSTING_CLAIM_LOCK_PREFIX =
+  "presence-pro:ledger-posting-claim:";
+
+/** One cross-tab lock per organisation: only one claim can be admitted. */
+export const ledgerPostingClaimLockName = (organisationId: string) =>
+  `${LEDGER_POSTING_CLAIM_LOCK_PREFIX}${organisationId}`;
+
+const POSTING_CLAIM_TIMEOUT_MS = 5000;
+
+interface LockManagerLike {
+  request: (
+    name: string,
+    optionsOrCallback: unknown,
+    maybeCallback?: unknown,
+  ) => Promise<unknown>;
+}
+
+const getLockManager = (): LockManagerLike | null => {
+  if (typeof navigator === "undefined") return null;
+  const locks = (navigator as unknown as { locks?: LockManagerLike }).locks;
+  return locks && typeof locks.request === "function" ? locks : null;
+};
+
+type LockOutcome<T> = { ok: true; value: T } | { ok: false };
+
+/**
+ * Run the claim under the Web Locks API's per-organisation exclusive lock.
+ * The lock is held only for the storage read/write/read-back, never for the
+ * network request. If the API is unavailable (or the lock cannot be taken
+ * within the safety window), the claim fails closed and nothing is sent.
+ */
+const withClaimLock = async <T>(
+  organisationId: string,
+  run: () => T,
+): Promise<LockOutcome<T>> => {
+  const locks = getLockManager();
+  if (!locks) return { ok: false };
+  const name = ledgerPostingClaimLockName(organisationId);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    if (typeof AbortController !== "undefined") {
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), POSTING_CLAIM_TIMEOUT_MS);
+      const value = await locks.request(
+        name,
+        { signal: controller.signal },
+        run,
+      );
+      return { ok: true, value: value as T };
+    }
+    const value = await locks.request(name, run);
+    return { ok: true, value: value as T };
+  } catch {
+    return { ok: false };
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+};
+
 export interface NewLedgerPostingIntent {
   organisationId: string;
   officerId: string;
@@ -328,41 +414,81 @@ export interface NewLedgerPostingIntent {
 }
 
 /**
- * Persist the exact intent before dispatch. Returns null when storage is
- * unavailable, the record is invalid, or anything is already outstanding.
+ * Persist the exact intent before dispatch.
+ *
+ * The empty-slot check, write and read-back all happen inside one
+ * per-organisation cross-tab lock, so two tabs cannot both pass the check and
+ * dispatch different keys. The read-back proves the durable record is the
+ * body this caller intends to send. Any unsupported/unsafe condition blocks
+ * the claim rather than falling back to an uncoordinated read/write.
  */
-export const beginLedgerPostingIntent = (
+export const beginLedgerPostingIntent = async (
   input: NewLedgerPostingIntent,
   now: Date = new Date(),
-): LedgerPostingIntentRecord | null => {
+): Promise<LedgerPostingClaimResult> => {
   const { organisationId, officerId, key, operation, body, summary } = input;
-  if (!organisationId || !officerId) return null;
-  if (readLedgerPostingIntents(organisationId).kind !== "none") return null;
-  if (!isPostingKey(key)) return null;
-  if (!isUsableBody(body, operation, key)) return null;
-  if (summary.operation !== operation) return null;
+  if (!organisationId || !officerId) return { kind: "blocked", reason: "invalid" };
+  if (!isPostingKey(key)) return { kind: "blocked", reason: "invalid" };
+  if (!isUsableBody(body, operation, key)) return { kind: "blocked", reason: "invalid" };
+  if (summary.operation !== operation) return { kind: "blocked", reason: "invalid" };
 
-  const record: LedgerPostingIntentRecord = {
+  const outcome = await withClaimLock(
     organisationId,
-    officerId,
-    key,
-    operation,
-    body,
-    summary,
-    startedAt: now.toISOString(),
-    state: "dispatching",
-    hadAmbiguousAttempt: false,
-    retryMode: "retry",
-    lastAttemptAt: null,
-    lastFailure: null,
-  };
-  const container: StoredContainer = { organisationId, intents: [record] };
-  return writeRaw(
-    ledgerPostingIntentKey(organisationId),
-    JSON.stringify(container),
-  )
-    ? record
-    : null;
+    (): LedgerPostingClaimResult => {
+      const current = readLedgerPostingIntents(organisationId);
+      if (current.kind === "storage-unavailable") {
+        return { kind: "blocked", reason: "storage-unavailable" };
+      }
+      if (current.kind === "unknown") {
+        return { kind: "blocked", reason: "unknown" };
+      }
+      if (current.kind === "pending") {
+        return { kind: "blocked", reason: "existing" };
+      }
+
+      const record: LedgerPostingIntentRecord = {
+        organisationId,
+        officerId,
+        key,
+        operation,
+        body,
+        summary,
+        startedAt: now.toISOString(),
+        state: "dispatching",
+        hadAmbiguousAttempt: false,
+        retryMode: "retry",
+        lastAttemptAt: null,
+        lastFailure: null,
+      };
+      const container: StoredContainer = { organisationId, intents: [record] };
+      if (
+        !writeRaw(
+          ledgerPostingIntentKey(organisationId),
+          JSON.stringify(container),
+        )
+      ) {
+        return { kind: "blocked", reason: "storage-unavailable" };
+      }
+
+      // Re-read under the same lock: the record that will be retried must be
+      // exactly the body this caller is about to send.
+      const verified = readLedgerPostingIntents(organisationId);
+      if (
+        verified.kind !== "pending" ||
+        verified.intents.length !== 1 ||
+        verified.intents[0].key !== key ||
+        !sameLedgerPostingBody(verified.intents[0].body, body)
+      ) {
+        return { kind: "blocked", reason: "write-failed" };
+      }
+      return { kind: "claimed", record };
+    },
+  );
+
+  if (!outcome.ok) {
+    return { kind: "blocked", reason: "coordination-unavailable" };
+  }
+  return outcome.value;
 };
 
 /**

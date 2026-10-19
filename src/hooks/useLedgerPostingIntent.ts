@@ -5,6 +5,7 @@ import {
   NewLedgerPostingIntent,
   beginLedgerPostingIntent,
   clearLedgerPostingIntent,
+  ledgerPostingIntentKey,
   markLedgerPostingIntentUnresolved,
   readLedgerPostingIntents,
 } from "helpers/ledgerPostingIntent";
@@ -32,11 +33,24 @@ export const useLedgerPostingIntent = (organisationId: string) => {
     setRead(readLedgerPostingIntents(organisationId));
   }, [organisationId]);
 
-  const begin = useCallback(
-    (input: NewLedgerPostingIntent) => {
-      const record = beginLedgerPostingIntent(input);
+  // Another tab claiming, clearing or resolving a posting must immediately
+  // block/refresh this one too. The storage event fires in other tabs only;
+  // this tab updates its state directly in begin/clear/mark.
+  useEffect(() => {
+    const storageKey = ledgerPostingIntentKey(organisationId);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== storageKey) return;
       setRead(readLedgerPostingIntents(organisationId));
-      return record;
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [organisationId]);
+
+  const begin = useCallback(
+    async (input: NewLedgerPostingIntent) => {
+      const result = await beginLedgerPostingIntent(input);
+      setRead(readLedgerPostingIntents(organisationId));
+      return result;
     },
     [organisationId],
   );

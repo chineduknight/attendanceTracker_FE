@@ -1,6 +1,10 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { format, parseISO, subDays } from "date-fns";
 import { chooseOption, optionLabels, render } from "test-utils/render";
+import {
+  installPostingLockManager,
+  removePostingLockManager,
+} from "test-utils/postingLocks";
 import CashbookPostingsPanel from "components/finance/postings/CashbookPostingsPanel";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
@@ -93,6 +97,7 @@ const successBody = (
   overrides: Record<string, unknown> = {},
   replayed = false,
 ) => ({
+  status: replayed ? 200 : 201,
   data: {
     data: {
       replayed,
@@ -197,14 +202,47 @@ const pendingIntents = () => {
   return read.intents;
 };
 
+/** Simulates another tab's confirmed write for this organisation. */
+const seedIntent = async (organisationId = "org1") => {
+  const result = await beginLedgerPostingIntent({
+    organisationId,
+    officerId: "officer-1",
+    key: "key-12345678",
+    operation: "receipt",
+    body: {
+      idempotencyKey: "key-12345678",
+      businessDate: TODAY,
+      amountKobo: 2500000,
+      toAccountId: "cash",
+      incomeAccountId: "income",
+      method: "cash",
+    },
+    summary: {
+      operation: "receipt",
+      amountKobo: 2500000,
+      businessDate: TODAY,
+      method: "cash",
+      fromAccountName: null,
+      toAccountName: "Cash in hand",
+      categoryName: "Donations",
+    },
+  });
+  if (result.kind !== "claimed") {
+    throw new Error(`Expected a seeded claim, got ${result.reason}`);
+  }
+  return result.record;
+};
+
 beforeEach(() => {
   window.localStorage.clear();
   jest.clearAllMocks();
+  installPostingLockManager();
   setSession();
   api.post.mockResolvedValue(successBody());
 });
 
 afterEach(() => {
+  removePostingLockManager();
   useGlobalStore.setState({ user: EMPTY_USER, organisation: EMPTY_ORG });
 });
 
@@ -242,6 +280,27 @@ describe("feature gate and readiness", () => {
       }),
     });
     expect(screen.getByText(/switched off on the server/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
+  });
+
+  it("refuses contradictory readiness: posting enabled with blockers", () => {
+    renderPanel({
+      status: statusOf({
+        postingEnabled: true,
+        blockers: ["LEDGER_WRITES_DISABLED"],
+      }),
+    });
+    expect(screen.getByText(/switched off on the server/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
+  });
+
+  it("refuses readiness when the blocker list is unavailable", () => {
+    renderPanel({
+      status: statusOf({ postingEnabled: true, blockers: null }),
+    });
+    expect(
+      screen.getByText(/didn't report whether posting is available/),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
   });
 
@@ -284,6 +343,9 @@ describe("successful postings", () => {
   });
 
   it("posts an expense with the required payee", async () => {
+    api.post.mockResolvedValueOnce(
+      successBody("E-000001", { sourceType: "cash_expense", totalKobo: 750000 }),
+    );
     renderPanel();
     openExpense();
     await fillExpense();
@@ -298,10 +360,13 @@ describe("successful postings", () => {
       counterpartyName: "Venue Ltd",
       method: "cash",
     });
-    expect(await screen.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    expect(await screen.findByText(/Journal number: E-000001/)).toBeInTheDocument();
   });
 
   it("posts a transfer without transfer-invalid fields", async () => {
+    api.post.mockResolvedValueOnce(
+      successBody("T-000001", { sourceType: "cash_transfer", totalKobo: 2000000 }),
+    );
     renderPanel();
     openTransfer();
     await fillTransfer();
@@ -317,7 +382,7 @@ describe("successful postings", () => {
     });
     expect("counterpartyName" in body).toBe(false);
     expect("evidenceReference" in body).toBe(false);
-    expect(await screen.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    expect(await screen.findByText(/Journal number: T-000001/)).toBeInTheDocument();
   });
 
   it("shows a 200 replay as already posted, not as a new posting", async () => {
@@ -331,6 +396,209 @@ describe("successful postings", () => {
     expect(screen.getByText("Journal number: R-000009")).toBeInTheDocument();
     expect(screen.getByText("Confirmed replay")).toBeInTheDocument();
     expect(stored().kind).toBe("none");
+  });
+});
+
+describe("malformed success responses", () => {
+  it("does not clear the intent when a 201 has no usable journal identity", async () => {
+    api.post.mockResolvedValueOnce({
+      status: 201,
+      data: { data: { replayed: false, journal: null } },
+    });
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(screen.queryByText("Posted")).not.toBeInTheDocument();
+    expect(pendingIntents()[0]).toMatchObject({
+      hadAmbiguousAttempt: true,
+      state: "unresolved",
+    });
+    expect(pendingIntents()[0].body).toEqual(api.post.mock.calls[0][1]);
+  });
+
+  it("does not clear the intent when replay information is missing", async () => {
+    const body = successBody();
+    delete (body.data.data as { replayed?: boolean }).replayed;
+    api.post.mockResolvedValueOnce(body);
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(screen.queryByText("Posted")).not.toBeInTheDocument();
+    expect(stored().kind).toBe("pending");
+  });
+
+  it("rejects a contradictory 201 that claims to be a replay", async () => {
+    api.post.mockResolvedValueOnce({
+      ...successBody("R-000001", {}, true),
+      status: 201,
+    });
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(screen.queryByText("Posted")).not.toBeInTheDocument();
+    expect(stored().kind).toBe("pending");
+  });
+
+  it("rejects a 204 or another unexpected 2xx", async () => {
+    api.post.mockResolvedValueOnce({ status: 204, data: undefined });
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(stored().kind).toBe("pending");
+  });
+
+  it("rejects a success journal without the server-issued number", async () => {
+    api.post.mockResolvedValueOnce(successBody(""));
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(screen.queryByText(/Journal number:/)).not.toBeInTheDocument();
+    expect(stored().kind).toBe("pending");
+  });
+
+  it("rejects a success journal for the wrong operation", async () => {
+    api.post.mockResolvedValueOnce(
+      successBody("R-000001", { sourceType: "cash_expense" }),
+    );
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(stored().kind).toBe("pending");
+  });
+
+  it("keeps an unreadable success pending across reload and retries the exact request", async () => {
+    api.post.mockResolvedValueOnce({
+      status: 201,
+      data: { data: { replayed: false, journal: null } },
+    });
+    const view = renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    await submit("Post receipt");
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+
+    view.unmount();
+    renderPanel();
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    api.post.mockResolvedValueOnce(successBody("R-000001", {}, true));
+    fireEvent.click(screen.getByRole("button", { name: "Retry this posting" }));
+    expect(await screen.findByText("Already posted")).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(2);
+    expect(api.post.mock.calls[1]).toEqual(api.post.mock.calls[0]);
+    expect(stored().kind).toBe("none");
+  });
+});
+
+describe("cross-tab coordination", () => {
+  it("blocks new postings when the browser cannot coordinate tabs", async () => {
+    removePostingLockManager();
+    renderPanel();
+    await openReceipt();
+    await fillReceipt();
+    fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+
+    expect(
+      await screen.findByText(/couldn't be coordinated safely across open tabs/),
+    ).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(stored().kind).toBe("none");
+  });
+
+  it("dispatches only one request when two open panels compete", async () => {
+    let resolvePost: (value: unknown) => void = () => undefined;
+    api.post.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePost = resolve;
+      }),
+    );
+    render(
+      <>
+        <CashbookPostingsPanel
+          organisationId="org1"
+          status={statusOf()}
+          accounts={ACCOUNTS}
+          enabled
+        />
+        <CashbookPostingsPanel
+          organisationId="org1"
+          status={statusOf()}
+          accounts={ACCOUNTS}
+          enabled
+        />
+      </>,
+    );
+    const panels = screen.getAllByRole("region");
+    expect(panels).toHaveLength(2);
+    const first = within(panels[0]);
+    const second = within(panels[1]);
+
+    fireEvent.click(first.getByRole("button", { name: /Money in/ }));
+    fireEvent.change(first.getByLabelText("Amount"), {
+      target: { value: "25000" },
+    });
+    await chooseOption(first.getByLabelText("Money received into"), "Cash in hand");
+    await chooseOption(first.getByLabelText("Income category"), "Donations");
+
+    fireEvent.click(second.getByRole("button", { name: /Money in/ }));
+    fireEvent.change(second.getByLabelText("Amount"), {
+      target: { value: "25000" },
+    });
+    await chooseOption(second.getByLabelText("Money received into"), "Cash in hand");
+    await chooseOption(second.getByLabelText("Income category"), "Donations");
+
+    const submitButtons = screen.getAllByRole("button", { name: "Post receipt" });
+    fireEvent.click(submitButtons[0]);
+    fireEvent.click(submitButtons[1]);
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(
+      await second.findByText(/An earlier financial posting is still unconfirmed/),
+    ).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolvePost(successBody());
+    });
+    expect(await screen.findByText(/Journal number: R-000001/)).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(stored().kind).toBe("none");
+  });
+
+  it("refreshes when another tab writes the organisation's intent", async () => {
+    renderPanel();
+    await seedIntent("org1");
+
+    const event = new Event("storage") as StorageEvent;
+    Object.defineProperty(event, "key", {
+      value: ledgerPostingIntentKey("org1"),
+    });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
   });
 });
 
@@ -394,7 +662,7 @@ describe("validation and eligibility", () => {
     fireEvent.click(button);
     fireEvent.click(button);
 
-    expect(api.post).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
     await act(async () => {
       resolvePost(successBody());
     });
@@ -445,30 +713,7 @@ describe("unknown outcomes and durable retry", () => {
   });
 
   it("keeps a pending posting across a fresh render", async () => {
-    const record = beginLedgerPostingIntent({
-      organisationId: "org1",
-      officerId: "officer-1",
-      key: "key-12345678",
-      operation: "receipt",
-      body: {
-        idempotencyKey: "key-12345678",
-        businessDate: TODAY,
-        amountKobo: 2500000,
-        toAccountId: "cash",
-        incomeAccountId: "income",
-        method: "cash",
-      },
-      summary: {
-        operation: "receipt",
-        amountKobo: 2500000,
-        businessDate: TODAY,
-        method: "cash",
-        fromAccountName: null,
-        toAccountName: "Cash in hand",
-        categoryName: "Donations",
-      },
-    });
-    expect(record).not.toBeNull();
+    await seedIntent();
 
     renderPanel();
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
@@ -477,29 +722,7 @@ describe("unknown outcomes and durable retry", () => {
   });
 
   it("keeps organisations isolated when switching", async () => {
-    beginLedgerPostingIntent({
-      organisationId: "org1",
-      officerId: "officer-1",
-      key: "key-12345678",
-      operation: "receipt",
-      body: {
-        idempotencyKey: "key-12345678",
-        businessDate: TODAY,
-        amountKobo: 2500000,
-        toAccountId: "cash",
-        incomeAccountId: "income",
-        method: "cash",
-      },
-      summary: {
-        operation: "receipt",
-        amountKobo: 2500000,
-        businessDate: TODAY,
-        method: "cash",
-        fromAccountName: null,
-        toAccountName: "Cash in hand",
-        categoryName: "Donations",
-      },
-    });
+    await seedIntent();
 
     const view = renderPanel({ organisationId: "org2" });
     expect(screen.queryByText("A financial posting is unconfirmed")).not.toBeInTheDocument();

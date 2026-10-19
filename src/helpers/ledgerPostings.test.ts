@@ -6,6 +6,7 @@ import {
   TransferDraft,
 } from "components/finance/ledgerPostingTypes";
 import {
+  assessPostingConfirmation,
   buildExpenseBody,
   buildReceiptBody,
   buildTransferBody,
@@ -317,6 +318,97 @@ describe("exact bodies", () => {
   });
 });
 
+describe("assessPostingConfirmation", () => {
+  const journal = (overrides: Record<string, unknown> = {}) => ({
+    id: "journal-1",
+    businessDate: "2026-10-18",
+    sourceType: "cash_receipt",
+    totalKobo: 2500000,
+    entry: { number: "R-000001", method: "cash" },
+    lines: [],
+    ...overrides,
+  });
+  const assess = (
+    httpStatus: number | undefined,
+    body: unknown,
+    operation: "receipt" | "expense" | "transfer" = "receipt",
+  ) =>
+    assessPostingConfirmation({
+      httpStatus,
+      body,
+      operation,
+      businessDate: "2026-10-18",
+      amountKobo: 2500000,
+    });
+
+  it("confirms a 201 new posting with a usable journal identity", () => {
+    expect(
+      assess(201, { data: { replayed: false, journal: journal() } }),
+    ).toMatchObject({ confirmed: true, replayed: false });
+  });
+
+  it("confirms a 200 replay with explicit replay information", () => {
+    expect(
+      assess(200, { data: { replayed: true, journal: journal() } }),
+    ).toMatchObject({ confirmed: true, replayed: true });
+  });
+
+  it("rejects a missing journal identity", () => {
+    expect(assess(201, { data: { replayed: false, journal: null } })).toMatchObject({
+      confirmed: false,
+    });
+    expect(
+      assess(201, {
+        data: { replayed: false, journal: journal({ id: undefined }) },
+      }),
+    ).toMatchObject({ confirmed: false });
+  });
+
+  it("rejects missing or contradictory replay information", () => {
+    expect(assess(201, { data: { journal: journal() } })).toMatchObject({
+      confirmed: false,
+    });
+    expect(
+      assess(201, { data: { replayed: true, journal: journal() } }),
+    ).toMatchObject({ confirmed: false });
+    expect(
+      assess(200, { data: { replayed: false, journal: journal() } }),
+    ).toMatchObject({ confirmed: false });
+  });
+
+  it("rejects a journal that does not match the operation, date, amount or number", () => {
+    expect(
+      assess(201, {
+        data: { replayed: false, journal: journal({ sourceType: "cash_expense" }) },
+      }),
+    ).toMatchObject({ confirmed: false });
+    expect(
+      assess(201, {
+        data: { replayed: false, journal: journal({ businessDate: "2026-10-17" }) },
+      }),
+    ).toMatchObject({ confirmed: false });
+    expect(
+      assess(201, {
+        data: { replayed: false, journal: journal({ totalKobo: 1 }) },
+      }),
+    ).toMatchObject({ confirmed: false });
+    expect(
+      assess(201, {
+        data: { replayed: false, journal: journal({ entry: {} }) },
+      }),
+    ).toMatchObject({ confirmed: false });
+  });
+
+  it("rejects unexpected 2xx statuses", () => {
+    expect(assess(204, { data: { replayed: false, journal: journal() } })).toMatchObject({
+      confirmed: false,
+    });
+    expect(assess(undefined, { data: { replayed: false, journal: journal() } })).toMatchObject({
+      confirmed: false,
+    });
+  });
+});
+
 describe("toPostingResponse", () => {
   it("reads the confirmed journal, entry and replay flag", () => {
     const parsed = toPostingResponse({
@@ -444,6 +536,15 @@ describe("postingReadiness", () => {
 
   it("is ready only for an active, verified, unblocked ledger", () => {
     expect(ready()).toEqual({ ready: true, reason: null });
+  });
+
+  it("never trusts postingEnabled over blockers or an unreported blocker list", () => {
+    expect(
+      ready({ postingEnabled: true, blockers: ["LEDGER_WRITES_DISABLED"] }),
+    ).toMatchObject({ ready: false });
+    expect(ready({ postingEnabled: true, blockers: null })).toMatchObject({
+      ready: false,
+    });
   });
 
   it("explains permission, inactive, suspended and unverified states", () => {

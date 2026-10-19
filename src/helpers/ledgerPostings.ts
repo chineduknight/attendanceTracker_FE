@@ -525,25 +525,31 @@ export const postingReadiness = ({
       reason: "Opening balances aren't verified, so cash and bank accounts can't be posted to yet.",
     };
   }
-  if (status.postingEnabled !== true) {
-    const blockers = status.blockers;
-    if (blockers === null) {
-      return {
-        ready: false,
-        reason:
-          "The server didn't report whether posting is available, so no financial entry can be offered.",
-      };
-    }
-    const known = blockers
-      .map((code) => POSTING_BLOCKER_MESSAGES[code])
-      .filter((message): message is string => Boolean(message));
-    if (known.length) return { ready: false, reason: known.join(" ") };
+  // Readiness must be affirmative and internally consistent. A true
+  // `postingEnabled` never overrides blockers (or an unreported blocker
+  // list): either would mean the server has not actually cleared posting.
+  if (status.blockers === null) {
     return {
       ready: false,
       reason:
-        blockers.length > 0
-          ? `The server reports that posting is unavailable (${blockers.join(", ")}).`
-          : "The server doesn't report posting as available for this ledger.",
+        "The server didn't report whether posting is available, so no financial entry can be offered.",
+    };
+  }
+  if (status.blockers.length > 0) {
+    const known = status.blockers
+      .map((code) => POSTING_BLOCKER_MESSAGES[code])
+      .filter((message): message is string => Boolean(message));
+    return {
+      ready: false,
+      reason: known.length
+        ? known.join(" ")
+        : `The server reports that posting is unavailable (${status.blockers.join(", ")}).`,
+    };
+  }
+  if (status.postingEnabled !== true) {
+    return {
+      ready: false,
+      reason: "The server doesn't report posting as available for this ledger.",
     };
   }
   if (!status.openingDate) {
@@ -665,6 +671,99 @@ export const toPostingResponse = (value: unknown): PostingResponse => {
   return {
     journal: toPostingJournal(data.journal),
     replayed: typeof data.replayed === "boolean" ? data.replayed : null,
+  };
+};
+
+/** The one journal `sourceType` each posting endpoint can create. */
+export const POSTING_SOURCE_TYPES: Record<PostingOperation, string> = {
+  receipt: "cash_receipt",
+  expense: "cash_expense",
+  transfer: "cash_transfer",
+};
+
+export type PostingConfirmationAssessment =
+  | { confirmed: true; journal: PostingJournal; replayed: boolean }
+  | { confirmed: false; message: string };
+
+const unconfirmedPostingResponse = (detail: string): PostingConfirmationAssessment => ({
+  confirmed: false,
+  message: `The server returned a success status, but ${detail}. The request has been kept pending; retry the exact same request. If it was posted, the server will return the original journal instead of posting again.`,
+});
+
+/**
+ * A 2xx is only proof when its body is contract-consistent.
+ *
+ * The client keeps the intent until it can identify the journal that was
+ * posted, knows whether this was a replay, and can see that the journal is
+ * the same type, date and amount it asked for. Anything else is unconfirmed,
+ * never "Posted": the stored body and key stay pending and a fresh posting is
+ * blocked.
+ */
+export const assessPostingConfirmation = ({
+  httpStatus,
+  body,
+  operation,
+  businessDate,
+  amountKobo,
+}: {
+  httpStatus: number | undefined;
+  body: unknown;
+  operation: PostingOperation;
+  businessDate: string;
+  amountKobo: number;
+}): PostingConfirmationAssessment => {
+  if (httpStatus !== 200 && httpStatus !== 201) {
+    return unconfirmedPostingResponse(
+      `the status (${httpStatus ?? "none"}) was not 201 or 200`,
+    );
+  }
+
+  const parsed = toPostingResponse(body);
+  if (!parsed.journal) {
+    return unconfirmedPostingResponse(
+      "the response did not contain a usable journal identity",
+    );
+  }
+  if (parsed.replayed === null) {
+    return unconfirmedPostingResponse(
+      "the response did not say whether this was a replay",
+    );
+  }
+  if (httpStatus === 201 && parsed.replayed !== false) {
+    return unconfirmedPostingResponse(
+      "a 201 response claimed to be a replay",
+    );
+  }
+  if (httpStatus === 200 && parsed.replayed !== true) {
+    return unconfirmedPostingResponse(
+      "a 200 response did not confirm a replay",
+    );
+  }
+  if (parsed.journal.sourceType !== POSTING_SOURCE_TYPES[operation]) {
+    return unconfirmedPostingResponse(
+      "the journal type did not match the posting",
+    );
+  }
+  if (parsed.journal.businessDate !== businessDate) {
+    return unconfirmedPostingResponse(
+      "the journal business date did not match the posting",
+    );
+  }
+  if (parsed.journal.totalKobo !== amountKobo) {
+    return unconfirmedPostingResponse(
+      "the journal total did not match the posting amount",
+    );
+  }
+  if (!parsed.journal.number) {
+    return unconfirmedPostingResponse(
+      "the response did not contain the server-issued journal number",
+    );
+  }
+
+  return {
+    confirmed: true,
+    journal: parsed.journal,
+    replayed: parsed.replayed,
   };
 };
 

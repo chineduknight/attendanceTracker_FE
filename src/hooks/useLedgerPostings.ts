@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { postRequest, queryClient } from "services/api/apiHelper";
+import axiosInstance from "services/api";
+import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import {
@@ -8,16 +9,18 @@ import {
   PostingSummary,
 } from "components/finance/ledgerPostingTypes";
 import {
+  LedgerPostingClaimBlockedReason,
   LedgerPostingIntentRecord,
-  hasPendingLedgerPosting,
   newPostingKey,
+  readLedgerPostingIntentByKey,
   readLedgerPostingIntents,
+  sameLedgerPostingBody,
 } from "helpers/ledgerPostingIntent";
 import {
+  assessPostingConfirmation,
   buildPostingBody,
   classifyPostingFailure,
   postingEndpoint,
-  toPostingResponse,
 } from "helpers/ledgerPostings";
 import { useLedgerPostingIntent } from "hooks/useLedgerPostingIntent";
 
@@ -33,11 +36,34 @@ export const POSTING_UNRESOLVED_BLOCKS_MESSAGE =
 export const POSTING_UNKNOWN_RECORD_MESSAGE =
   "This browser has a posting safety record that this app version can't read. New postings are blocked. Contact support before entering money again.";
 
+export const POSTING_COORDINATION_UNAVAILABLE_MESSAGE =
+  "Posting couldn't be coordinated safely across open tabs, so nothing was sent. Close other tabs or use a current browser, then try again.";
+
+export const POSTING_CLAIM_MISMATCH_MESSAGE =
+  "The browser's posting safety record couldn't be verified before sending, so nothing was sent. Recheck the books, then try again.";
+
+const claimBlockedMessage = (reason: LedgerPostingClaimBlockedReason): string => {
+  switch (reason) {
+    case "existing":
+      return POSTING_UNRESOLVED_BLOCKS_MESSAGE;
+    case "unknown":
+      return POSTING_UNKNOWN_RECORD_MESSAGE;
+    case "storage-unavailable":
+      return POSTING_STORAGE_UNAVAILABLE_MESSAGE;
+    case "coordination-unavailable":
+      return POSTING_COORDINATION_UNAVAILABLE_MESSAGE;
+    case "write-failed":
+      return POSTING_CLAIM_MISMATCH_MESSAGE;
+    case "invalid":
+      return "This posting couldn't be recorded safely, so nothing was sent.";
+  }
+};
+
 export type PostingSubmitResult =
   | {
       kind: "confirmed";
-      journal: PostingJournal | null;
-      replayed: boolean | null;
+      journal: PostingJournal;
+      replayed: boolean;
       cleared: boolean;
     }
   | { kind: "refused" | "voided" | "key-reused" | "blocked" | "busy"; message: string }
@@ -50,9 +76,10 @@ const invalidateLedger = (organisationId: string) =>
 
 /**
  * F2B-1 posting writes. Each dispatch persists `{ key, exact body, org,
- * officer }` before sending, sends that same object on every retry, accepts
- * 201 and 200-replayed as proof, and otherwise applies RFC §7.5. A posting in
- * flight blocks every other posting from this screen.
+ * officer }` before sending, sends that same object on every retry, and
+ * accepts only a contract-consistent 201 or 200-replayed response as proof.
+ * Everything else applies RFC §7.5. A posting in flight blocks every other
+ * posting from this screen.
  */
 export const useLedgerPostings = (organisationId: string, officerId: string) => {
   const intent = useLedgerPostingIntent(organisationId);
@@ -65,14 +92,37 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
         organisationId: record.organisationId,
       });
       try {
-        const response = await postRequest({ url, data: record.body });
-        const parsed = toPostingResponse(response);
+        // Use the Axios instance directly: only this path needs the HTTP
+        // status, so the shared `postRequest` helper (and every consumer of
+        // it) stays unchanged.
+        const response = await axiosInstance.post(url, record.body);
+        const assessment = assessPostingConfirmation({
+          httpStatus: response.status,
+          body: response.data,
+          operation: record.operation,
+          businessDate: record.body.businessDate,
+          amountKobo: record.body.amountKobo,
+        });
+        if (!assessment.confirmed) {
+          // A 2xx alone is not proof. Keep the exact body/key pending and
+          // never show "Posted" without a readable journal and replay fact.
+          intent.markUnresolved(record, {
+            ambiguous: true,
+            retryMode: "retry",
+            message: assessment.message,
+          });
+          return {
+            kind: "unconfirmed",
+            ambiguous: true,
+            message: assessment.message,
+          };
+        }
         const cleared = intent.clear(record);
         invalidateLedger(record.organisationId);
         return {
           kind: "confirmed",
-          journal: parsed.journal,
-          replayed: parsed.replayed,
+          journal: assessment.journal,
+          replayed: assessment.replayed,
           cleared,
         };
       } catch (error) {
@@ -136,25 +186,12 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
               "This session can't identify the organisation or officer for a financial posting. Sign in again.",
           };
         }
-        // Read storage again rather than trusting rendered state: another tab
-        // may have persisted an intent since this screen mounted.
-        const current = readLedgerPostingIntents(organisationId);
-        if (hasPendingLedgerPosting(current)) {
-          intent.refresh();
-          return {
-            kind: "blocked",
-            message:
-              current.kind === "storage-unavailable"
-                ? POSTING_STORAGE_UNAVAILABLE_MESSAGE
-                : current.kind === "unknown"
-                  ? POSTING_UNKNOWN_RECORD_MESSAGE
-                  : POSTING_UNRESOLVED_BLOCKS_MESSAGE,
-          };
-        }
-
         const key = newPostingKey();
         const body = buildPostingBody(draft, key);
-        const record = intent.begin({
+        // The claim's read, write and read-back happen under one cross-tab
+        // lock. A second tab therefore sees this record instead of admitting
+        // a different key.
+        const claim = await intent.begin({
           organisationId,
           officerId,
           key,
@@ -162,13 +199,29 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
           body,
           summary,
         });
-        if (!record) {
-          return {
-            kind: "blocked",
-            message: POSTING_STORAGE_UNAVAILABLE_MESSAGE,
-          };
+        if (claim.kind === "blocked") {
+          intent.refresh();
+          return { kind: "blocked", message: claimBlockedMessage(claim.reason) };
         }
-        return await dispatch(record);
+
+        // Recheck the durable record before dispatch: the body that will be
+        // sent on any retry must be exactly the one just verified.
+        const stored = readLedgerPostingIntentByKey(
+          organisationId,
+          claim.record.key,
+        );
+        if (
+          !stored ||
+          !sameLedgerPostingBody(stored.body, claim.record.body)
+        ) {
+          intent.refresh();
+          return { kind: "blocked", message: POSTING_CLAIM_MISMATCH_MESSAGE };
+        }
+        // Dispatch the freshly claimed record, not the just-read copy: the
+        // read treats any stored `dispatching` record as ambiguous (for
+        // crash recovery), but this request has not been sent yet. The
+        // read-back above proved the persisted body is identical.
+        return await dispatch(claim.record);
       } finally {
         endPosting();
       }
