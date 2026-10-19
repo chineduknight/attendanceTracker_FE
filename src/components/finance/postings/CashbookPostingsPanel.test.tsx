@@ -10,9 +10,11 @@ import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import {
   beginLedgerPostingIntent,
+  clearLedgerPostingIntent,
   ledgerPostingIntentKey,
   readLedgerPostingIntents,
 } from "helpers/ledgerPostingIntent";
+import { POSTING_STORAGE_CLEAR_FAILED_MESSAGE } from "hooks/useLedgerPostings";
 import { todayInLagos } from "helpers/openingBalances";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
@@ -203,14 +205,14 @@ const pendingIntents = () => {
 };
 
 /** Simulates another tab's confirmed write for this organisation. */
-const seedIntent = async (organisationId = "org1") => {
+const seedIntent = async (organisationId = "org1", key = "key-12345678") => {
   const result = await beginLedgerPostingIntent({
     organisationId,
     officerId: "officer-1",
-    key: "key-12345678",
+    key,
     operation: "receipt",
     body: {
-      idempotencyKey: "key-12345678",
+      idempotencyKey: key,
       businessDate: TODAY,
       amountKobo: 2500000,
       toAccountId: "cash",
@@ -906,4 +908,103 @@ describe("repairing unreadable storage", () => {
     expect(screen.getByText(/record that this app version can't read/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
   });
+});
+
+describe("confirmed posting whose safety record can't be cleared", () => {
+  it.each([
+    [
+      "storage rejects the removal",
+      () => {
+        const spy = jest.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+          throw new Error("blocked");
+        });
+        return () => spy.mockRestore();
+      },
+    ],
+    [
+      "the cross-tab lock is lost after sending",
+      () => {
+        api.post.mockImplementationOnce(async () => {
+          removePostingLockManager();
+          return successBody();
+        });
+        return () => undefined;
+      },
+    ],
+  ])("still shows the confirmation but blocks new postings when %s", async (_label, arrange) => {
+    const restore = arrange();
+    try {
+      renderPanel();
+      await openReceipt();
+      await fillReceipt();
+      await submit("Post receipt");
+
+      expect(await screen.findByText("Journal number: R-000001")).toBeInTheDocument();
+      expect(screen.getByText("Posted")).toBeInTheDocument();
+      expect(screen.getByText(POSTING_STORAGE_CLEAR_FAILED_MESSAGE)).toBeInTheDocument();
+      expect(pendingIntents()).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "Record another posting" }));
+      expect(screen.queryByText("Journal number: R-000001")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/New postings are blocked/)).toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe("a retry resolving after another tab moved on", () => {
+  const OTHER_TAB_KEY = "key-87654321";
+
+  it.each([
+    ["a replayed success", () => successBody("R-000001", {}, true), "resolve"],
+    [
+      "a writes-disabled 503",
+      () => ({
+        response: {
+          status: 503,
+          data: { error: "Ledger writes are disabled", code: "LEDGER_WRITES_DISABLED" },
+        },
+      }),
+      "reject",
+    ],
+  ] as const)(
+    "leaves the other tab's newer claim untouched on %s",
+    async (_label, outcome, settleAs) => {
+      const original = await seedIntent();
+      let settle: (value: unknown) => void = () => undefined;
+      api.post.mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          settle = settleAs === "resolve" ? resolve : reject;
+        }),
+      );
+      renderPanel();
+      fireEvent.click(await screen.findByRole("button", { name: "Retry this posting" }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+      expect(api.post.mock.calls[0][1]).toEqual(original.body);
+
+      // The other tab's retry of the same key was proved first: it cleared
+      // that key and claimed a new posting while this response was pending.
+      expect(await clearLedgerPostingIntent("org1", original.key)).toBe(true);
+      await seedIntent("org1", OTHER_TAB_KEY);
+
+      await act(async () => {
+        settle(outcome());
+      });
+
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Money in/ })).toBeNull());
+      const intents = pendingIntents();
+      expect(intents).toHaveLength(1);
+      expect(intents[0]).toMatchObject({
+        key: OTHER_TAB_KEY,
+        state: "dispatching",
+        lastFailure: null,
+        body: { idempotencyKey: OTHER_TAB_KEY },
+      });
+      expect(screen.getByText(/New postings are blocked/)).toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    },
+  );
 });

@@ -106,7 +106,7 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
         if (!assessment.confirmed) {
           // A 2xx alone is not proof. Keep the exact body/key pending and
           // never show "Posted" without a readable journal and replay fact.
-          intent.markUnresolved(record, {
+          await intent.markUnresolved(record, {
             ambiguous: true,
             retryMode: "retry",
             message: assessment.message,
@@ -117,7 +117,7 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
             message: assessment.message,
           };
         }
-        const cleared = intent.clear(record);
+        const cleared = await intent.clear(record);
         invalidateLedger(record.organisationId);
         return {
           kind: "confirmed",
@@ -132,20 +132,20 @@ export const useLedgerPostings = (organisationId: string, officerId: string) => 
         );
         switch (disposition.kind) {
           case "voided":
-            intent.clear(record);
+            await intent.clear(record);
             return { kind: "voided", message: disposition.message };
           case "clean-refusal":
-            intent.clear(record);
+            await intent.clear(record);
             return { kind: "refused", message: disposition.message };
           case "key-reused":
-            intent.markUnresolved(record, {
+            await intent.markUnresolved(record, {
               ambiguous: false,
               retryMode: "owner",
               message: disposition.message,
             });
             return { kind: "key-reused", message: disposition.message };
           case "keep-pending":
-            intent.markUnresolved(record, {
+            await intent.markUnresolved(record, {
               ambiguous: disposition.ambiguous,
               retryMode: disposition.ownerResolution ? "owner" : "retry",
               message: disposition.message,

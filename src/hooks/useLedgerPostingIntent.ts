@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LedgerPostingIntentRead,
   LedgerPostingIntentRecord,
@@ -22,6 +22,7 @@ export const useLedgerPostingIntent = (organisationId: string) => {
   const [read, setRead] = useState<LedgerPostingIntentRead>(() =>
     readLedgerPostingIntents(organisationId),
   );
+  const currentOrganisationId = useRef(organisationId);
 
   const refresh = useCallback(() => {
     const next = readLedgerPostingIntents(organisationId);
@@ -30,8 +31,17 @@ export const useLedgerPostingIntent = (organisationId: string) => {
   }, [organisationId]);
 
   useEffect(() => {
+    currentOrganisationId.current = organisationId;
     setRead(readLedgerPostingIntents(organisationId));
   }, [organisationId]);
+
+  // Every mutation waits for the cross-tab lock, so it can resolve after the
+  // officer has switched organisation. Organisation A's result must never
+  // repaint Organisation B's notice.
+  const refreshAfterMutation = useCallback((mutatedOrganisationId: string) => {
+    if (mutatedOrganisationId !== currentOrganisationId.current) return;
+    setRead(readLedgerPostingIntents(mutatedOrganisationId));
+  }, []);
 
   // Another tab claiming, clearing or resolving a posting must immediately
   // block/refresh this one too. The storage event fires in other tabs only;
@@ -49,14 +59,14 @@ export const useLedgerPostingIntent = (organisationId: string) => {
   const begin = useCallback(
     async (input: NewLedgerPostingIntent) => {
       const result = await beginLedgerPostingIntent(input);
-      setRead(readLedgerPostingIntents(organisationId));
+      refreshAfterMutation(input.organisationId);
       return result;
     },
-    [organisationId],
+    [refreshAfterMutation],
   );
 
   const markUnresolved = useCallback(
-    (
+    async (
       record: LedgerPostingIntentRecord,
       options: {
         ambiguous: boolean;
@@ -64,20 +74,23 @@ export const useLedgerPostingIntent = (organisationId: string) => {
         retryMode?: "retry" | "owner";
       },
     ) => {
-      const saved = markLedgerPostingIntentUnresolved(record, options);
-      setRead(readLedgerPostingIntents(organisationId));
+      const saved = await markLedgerPostingIntentUnresolved(record, options);
+      refreshAfterMutation(record.organisationId);
       return saved;
     },
-    [organisationId],
+    [refreshAfterMutation],
   );
 
   const clear = useCallback(
-    (record: LedgerPostingIntentRecord) => {
-      const cleared = clearLedgerPostingIntent(organisationId, record.key);
-      setRead(readLedgerPostingIntents(organisationId));
+    async (record: LedgerPostingIntentRecord) => {
+      const cleared = await clearLedgerPostingIntent(
+        record.organisationId,
+        record.key,
+      );
+      refreshAfterMutation(record.organisationId);
       return cleared;
     },
-    [organisationId],
+    [refreshAfterMutation],
   );
 
   return { read, begin, markUnresolved, clear, refresh };

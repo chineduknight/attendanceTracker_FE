@@ -12,6 +12,11 @@
  *
  * A later 4xx never clears a record that has had an ambiguous attempt, and a
  * corrupt record fails closed. Nothing here silently discards an intent.
+ *
+ * Every write to the record (claim, unresolved update, clear) is a
+ * read-modify-write under one per-organisation cross-tab lock, so a stale
+ * response in one tab can never delete or overwrite a newer key claimed by
+ * another.
  */
 
 import {
@@ -345,14 +350,18 @@ export type LedgerPostingClaimResult =
   | { kind: "claimed"; record: LedgerPostingIntentRecord }
   | { kind: "blocked"; reason: LedgerPostingClaimBlockedReason };
 
-export const LEDGER_POSTING_CLAIM_LOCK_PREFIX =
-  "presence-pro:ledger-posting-claim:";
+export const LEDGER_POSTING_INTENT_LOCK_PREFIX =
+  "presence-pro:ledger-posting-intent-lock:";
 
-/** One cross-tab lock per organisation: only one claim can be admitted. */
-export const ledgerPostingClaimLockName = (organisationId: string) =>
-  `${LEDGER_POSTING_CLAIM_LOCK_PREFIX}${organisationId}`;
+/**
+ * One cross-tab lock per organisation, held by every mutation of that
+ * organisation's intent record: only one claim can be admitted, and a clear
+ * or unresolved update can never interleave with another tab's claim.
+ */
+export const ledgerPostingIntentLockName = (organisationId: string) =>
+  `${LEDGER_POSTING_INTENT_LOCK_PREFIX}${organisationId}`;
 
-const POSTING_CLAIM_TIMEOUT_MS = 5000;
+const POSTING_LOCK_TIMEOUT_MS = 5000;
 
 interface LockManagerLike {
   request: (
@@ -371,23 +380,24 @@ const getLockManager = (): LockManagerLike | null => {
 type LockOutcome<T> = { ok: true; value: T } | { ok: false };
 
 /**
- * Run the claim under the Web Locks API's per-organisation exclusive lock.
- * The lock is held only for the storage read/write/read-back, never for the
- * network request. If the API is unavailable (or the lock cannot be taken
- * within the safety window), the claim fails closed and nothing is sent.
+ * Run one intent mutation under the Web Locks API's per-organisation
+ * exclusive lock. The lock is held only for the storage read/write/read-back,
+ * never for the network request. If the API is unavailable (or the lock
+ * cannot be taken within the safety window), the mutation does not happen:
+ * a claim sends nothing, and a clear or update leaves the record blocking.
  */
-const withClaimLock = async <T>(
+const withIntentLock = async <T>(
   organisationId: string,
   run: () => T,
 ): Promise<LockOutcome<T>> => {
   const locks = getLockManager();
   if (!locks) return { ok: false };
-  const name = ledgerPostingClaimLockName(organisationId);
+  const name = ledgerPostingIntentLockName(organisationId);
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     if (typeof AbortController !== "undefined") {
       const controller = new AbortController();
-      timer = setTimeout(() => controller.abort(), POSTING_CLAIM_TIMEOUT_MS);
+      timer = setTimeout(() => controller.abort(), POSTING_LOCK_TIMEOUT_MS);
       const value = await locks.request(
         name,
         { signal: controller.signal },
@@ -432,7 +442,7 @@ export const beginLedgerPostingIntent = async (
   if (!isUsableBody(body, operation, key)) return { kind: "blocked", reason: "invalid" };
   if (summary.operation !== operation) return { kind: "blocked", reason: "invalid" };
 
-  const outcome = await withClaimLock(
+  const outcome = await withIntentLock(
     organisationId,
     (): LedgerPostingClaimResult => {
       const current = readLedgerPostingIntents(organisationId);
@@ -495,8 +505,13 @@ export const beginLedgerPostingIntent = async (
  * Mark this exact key's outcome as unresolved. Never touches another record.
  * `ambiguous` is sticky: once an attempt may have committed, later business
  * refusals must never clear the record.
+ *
+ * The record is re-read under the lock: if another tab has already cleared
+ * this key (and perhaps claimed a new one), nothing is written, so a stale
+ * response can neither resurrect the old intent nor overwrite the new one.
+ * Returns false when nothing was saved; the stored record then still blocks.
  */
-export const markLedgerPostingIntentUnresolved = (
+export const markLedgerPostingIntentUnresolved = async (
   record: LedgerPostingIntentRecord,
   {
     ambiguous,
@@ -510,53 +525,67 @@ export const markLedgerPostingIntentUnresolved = (
     retryMode?: "retry" | "owner";
     now?: Date;
   },
-): boolean => {
-  const key = ledgerPostingIntentKey(record.organisationId);
-  const stored = readRawResult(key);
-  if (!stored.ok || stored.value === null) return false;
-  const container = parseContainer(record.organisationId, stored.value);
-  if (!container) return false;
-  const index = container.intents.findIndex((entry) => entry.key === record.key);
-  if (index === -1) return false;
-  const current = container.intents[index];
-  // `parseRecord` treats a reloaded `dispatching` record as ambiguous. The
-  // current request, however, knows its own disposition: a clean 401/503 must
-  // not become ambiguous just because the record was written before sending.
-  // Once a record is already `unresolved`, its stored flag is authoritative
-  // and is preserved (another tab may have proved an ambiguous attempt).
-  const previouslyAmbiguous =
-    (current.state === "unresolved" && current.hadAmbiguousAttempt) ||
-    record.hadAmbiguousAttempt;
-  container.intents[index] = {
-    ...current,
-    state: "unresolved",
-    hadAmbiguousAttempt: previouslyAmbiguous || ambiguous,
-    retryMode: retryMode === "owner" ? "owner" : current.retryMode,
-    lastAttemptAt: now.toISOString(),
-    lastFailure: message,
-  };
-  return writeRaw(key, JSON.stringify(container));
+): Promise<boolean> => {
+  const outcome = await withIntentLock(record.organisationId, () => {
+    const key = ledgerPostingIntentKey(record.organisationId);
+    const stored = readRawResult(key);
+    if (!stored.ok || stored.value === null) return false;
+    const container = parseContainer(record.organisationId, stored.value);
+    if (!container) return false;
+    const index = container.intents.findIndex((entry) => entry.key === record.key);
+    if (index === -1) return false;
+    const current = container.intents[index];
+    // `parseRecord` treats a reloaded `dispatching` record as ambiguous. The
+    // current request, however, knows its own disposition: a clean 401/503
+    // must not become ambiguous just because the record was written before
+    // sending. Once a record is already `unresolved`, its stored flag is
+    // authoritative and is preserved (another tab may have proved an
+    // ambiguous attempt).
+    const previouslyAmbiguous =
+      (current.state === "unresolved" && current.hadAmbiguousAttempt) ||
+      record.hadAmbiguousAttempt;
+    container.intents[index] = {
+      ...current,
+      state: "unresolved",
+      hadAmbiguousAttempt: previouslyAmbiguous || ambiguous,
+      retryMode: retryMode === "owner" ? "owner" : current.retryMode,
+      lastAttemptAt: now.toISOString(),
+      lastFailure: message,
+    };
+    return writeRaw(key, JSON.stringify(container));
+  });
+  return outcome.ok && outcome.value;
 };
 
-/** Clear only this exact key. A missing record is already clear. */
-export const clearLedgerPostingIntent = (
+/**
+ * Clear only this exact key. A missing record is already clear.
+ *
+ * Re-read under the lock, so a stale clear that queued behind another tab's
+ * clear-and-claim removes nothing but its own key. Returns false when the
+ * record could not be proved cleared (no coordination, unreadable storage or
+ * a corrupt record); it then still blocks new postings.
+ */
+export const clearLedgerPostingIntent = async (
   organisationId: string,
   key: string,
-): boolean => {
+): Promise<boolean> => {
   if (!organisationId) return true;
-  const storageKey = ledgerPostingIntentKey(organisationId);
-  const stored = readRawResult(storageKey);
-  if (!stored.ok) return false;
-  if (stored.value === null) return true;
-  const container = parseContainer(organisationId, stored.value);
-  // A corrupt marker is never silently removed: only an explicit resolution
-  // (F2B-3) may clear it.
-  if (!container) return false;
-  const remaining = container.intents.filter((entry) => entry.key !== key);
-  if (remaining.length === container.intents.length) return true;
-  if (remaining.length === 0) return removeRaw(storageKey);
-  return writeRaw(
-    storageKey,
-    JSON.stringify({ organisationId, intents: remaining }),
-  );
+  const outcome = await withIntentLock(organisationId, () => {
+    const storageKey = ledgerPostingIntentKey(organisationId);
+    const stored = readRawResult(storageKey);
+    if (!stored.ok) return false;
+    if (stored.value === null) return true;
+    const container = parseContainer(organisationId, stored.value);
+    // A corrupt marker is never silently removed: only an explicit
+    // resolution (F2B-3) may clear it.
+    if (!container) return false;
+    const remaining = container.intents.filter((entry) => entry.key !== key);
+    if (remaining.length === container.intents.length) return true;
+    if (remaining.length === 0) return removeRaw(storageKey);
+    return writeRaw(
+      storageKey,
+      JSON.stringify({ organisationId, intents: remaining }),
+    );
+  });
+  return outcome.ok && outcome.value;
 };
