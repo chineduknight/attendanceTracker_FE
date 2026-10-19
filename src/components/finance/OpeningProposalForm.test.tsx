@@ -37,6 +37,7 @@ const statusOf = (
   blockers: [],
   openingDate: null,
   lockedThrough: null,
+  lockedThroughState: "none",
   revision: 4,
   memberReceiptsEnabled: false,
   unconfirmedAttempts: 0,

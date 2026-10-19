@@ -348,12 +348,16 @@ export const PeriodLockForm = ({
     action: "set-period-lock",
     onDone,
   });
-  const current = status.lockedThrough;
+  const liveStateKnown = status.lockedThroughState !== "unknown";
+  const current = status.lockedThroughState === "set" ? status.lockedThrough : null;
   const [date, setDate] = useState(current ?? "");
   const [reason, setReason] = useState("");
 
-  const revisionProblem =
-    status.revision === null ? "This server doesn't send the ledger revision yet." : null;
+  const revisionProblem = !liveStateKnown
+    ? "The server didn't report the current period lock, so it can't be changed safely."
+    : status.revision === null
+      ? "This server doesn't send the ledger revision yet."
+      : null;
   const change = date ? periodLockChange(current, date) : "unchanged";
   const moveProblem =
     revisionProblem ??
@@ -376,10 +380,10 @@ export const PeriodLockForm = ({
       title: lockedThrough === null ? "Remove the period lock" : "Move the period lock",
       body:
         lockedThrough === null
-          ? "Removing the lock is an audited unlock. The reason is recorded in the ledger audit trail."
+          ? "Removing the lock is an audited unlock: postings and corrections dated on or before the old lock become allowed. The reason is recorded in the ledger audit trail."
           : periodLockNeedsReason(change)
             ? "Moving the lock back is an audited unlock. The reason is recorded in the ledger audit trail."
-            : "The new lock stops postings dated after it. The change is recorded in the ledger audit trail.",
+            : "The new lock refuses postings and corrections dated on or before it. The change is recorded in the ledger audit trail.",
       confirmLabel:
         lockedThrough === null ? "Remove the period lock" : "Move the period lock",
     });
@@ -407,8 +411,8 @@ export const PeriodLockForm = ({
         </Badge>
       </Flex>
       <Text fontSize="sm" color="fg.muted">
-        Postings and corrections dated after the lock are refused. Moving the lock back or
-        removing it is an audited unlock.
+        Postings and corrections dated on or before the lock are refused. Moving the lock
+        back or removing it is an audited unlock.
       </Text>
       <Text fontSize="sm">
         Current lock:{" "}

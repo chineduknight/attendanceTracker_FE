@@ -52,6 +52,7 @@ describe("ledger parsing", () => {
       activatedAt: null,
       gapWindowAttestedAt: null,
       gapWindowAttestation: "unknown",
+      lockedThroughState: "unknown",
     });
 
     expect(toLedgerStatus({ state: "active" })).toEqual({
@@ -70,6 +71,7 @@ describe("ledger parsing", () => {
       activatedAt: null,
       gapWindowAttestedAt: null,
       gapWindowAttestation: "unknown",
+      lockedThroughState: "unknown",
     });
 
     expect(
@@ -359,6 +361,7 @@ describe("ledger F2 read compatibility", () => {
       activatedAt: "2026-10-18T10:00:00.000Z",
       gapWindowAttestedAt: "2026-10-19T09:30:00.000Z",
       gapWindowAttestation: "attested",
+      lockedThroughState: "set",
     });
   });
 
@@ -385,6 +388,7 @@ describe("ledger F2 read compatibility", () => {
       activatedAt: null,
       gapWindowAttestedAt: null,
       gapWindowAttestation: "unknown",
+      lockedThroughState: "unknown",
     });
   });
 
@@ -432,6 +436,25 @@ describe("ledger F2 read compatibility", () => {
         ?.activatedAt,
     ).toBe("2026-10-18T10:00:00.000Z");
     expect(toLedgerStatus({ ...F1_STATUS, activatedAt: "yesterday" })?.activatedAt).toBeNull();
+  });
+
+  it("keeps an explicit no-lock distinct from an unreadable lock", () => {
+    expect(toLedgerStatus(F1_STATUS)?.lockedThroughState).toBe("unknown");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, lockedThrough: null })?.lockedThroughState,
+    ).toBe("none");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, lockedThrough: "2026-10-10" })?.lockedThroughState,
+    ).toBe("set");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, lockedThrough: "31/10/2026" })?.lockedThroughState,
+    ).toBe("unknown");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, lockedThrough: "2026-02-31" })?.lockedThroughState,
+    ).toBe("unknown");
+    expect(
+      toLedgerStatus({ ...F1_STATUS, lockedThrough: undefined })?.lockedThroughState,
+    ).toBe("unknown");
   });
 
   it("does not decode an unrequested paged body as an empty list", () => {

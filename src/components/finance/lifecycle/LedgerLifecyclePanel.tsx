@@ -246,10 +246,12 @@ const LedgerLifecyclePanel = ({
             )}
             {status.revision !== null && <Fact>{`Ledger revision: ${status.revision}`}</Fact>}
             {status.revision !== null &&
-              (status.lockedThrough ? (
+              (status.lockedThroughState === "set" && status.lockedThrough ? (
                 <Fact>{`Period locked through: ${formatBusinessDate(status.lockedThrough)}`}</Fact>
-              ) : (
+              ) : status.lockedThroughState === "none" ? (
                 <Fact>The period is not locked.</Fact>
+              ) : (
+                <Fact>The server didn't report the current period lock.</Fact>
               ))}
             {status.gapWindowAttestation === "attested" && (
               <Fact>
@@ -369,7 +371,11 @@ const LedgerLifecyclePanel = ({
                   disabled={!lock.allowed || intent.blocked}
                   onClick={() => setView({ kind: "period-lock" })}
                 >
-                  {status.lockedThrough ? "Move period lock" : "Set period lock"}
+                  {status.lockedThroughState === "set"
+                    ? "Move period lock"
+                    : status.lockedThroughState === "none"
+                      ? "Set period lock"
+                      : "Period lock"}
                 </Button>
                 {status.gapWindowAttestation === "not_attested" && (
                   <Button

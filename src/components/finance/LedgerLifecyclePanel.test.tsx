@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { format, parseISO, subDays } from "date-fns";
 import { confirmInDialog, render } from "test-utils/render";
@@ -39,24 +39,34 @@ const LATER_LOCK = format(subDays(TODAY_DATE, 2), "yyyy-MM-dd");
 const ACTIVATED_AT = `${format(subDays(TODAY_DATE, 20), "yyyy-MM-dd")}T09:00:00.000Z`;
 const ATTESTED_AT = `${format(subDays(TODAY_DATE, 1), "yyyy-MM-dd")}T09:30:00.000Z`;
 
-const statusOf = (overrides: Partial<LedgerStatus> = {}): LedgerStatus => ({
-  state: { kind: "known", state: "active" },
-  currency: "NGN",
-  openingBalancesVerified: true,
-  postingEnabled: false,
-  contractVersion: "f2-0.3",
-  blockers: [],
-  openingDate: OPENING,
-  lockedThrough: null,
-  revision: 7,
-  memberReceiptsEnabled: false,
-  unconfirmedAttempts: 0,
-  hasPendingProposal: false,
-  activatedAt: ACTIVATED_AT,
-  gapWindowAttestedAt: null,
-  gapWindowAttestation: "not_attested",
-  ...overrides,
-});
+const statusOf = (overrides: Partial<LedgerStatus> = {}): LedgerStatus => {
+  const base: LedgerStatus = {
+    state: { kind: "known", state: "active" },
+    currency: "NGN",
+    openingBalancesVerified: true,
+    postingEnabled: false,
+    contractVersion: "f2-0.3",
+    blockers: [],
+    openingDate: OPENING,
+    lockedThrough: null,
+    lockedThroughState: "none",
+    revision: 7,
+    memberReceiptsEnabled: false,
+    unconfirmedAttempts: 0,
+    hasPendingProposal: false,
+    activatedAt: ACTIVATED_AT,
+    gapWindowAttestedAt: null,
+    gapWindowAttestation: "not_attested",
+    ...overrides,
+  };
+  // Status fixtures describe a readable server response unless a test says
+  // otherwise, so a date in the override is a confirmed lock.
+  if (overrides.lockedThroughState !== undefined) return base;
+  return {
+    ...base,
+    lockedThroughState: base.lockedThrough ? "set" : "none",
+  };
+};
 
 /** A raw wire status for write responses (parsed by the hook). */
 const wireStatus = (overrides: Record<string, unknown> = {}) => ({
@@ -76,6 +86,13 @@ const wireStatus = (overrides: Record<string, unknown> = {}) => ({
   gapWindowAttestedAt: null,
   ...overrides,
 });
+
+/** A wire status with the `lockedThrough` key genuinely absent. */
+const wireStatusWithoutLock = (overrides: Record<string, unknown> = {}) => {
+  const body = { ...wireStatus(overrides) } as Record<string, unknown>;
+  delete body.lockedThrough;
+  return body;
+};
 
 const auditRow = (overrides: Record<string, unknown> = {}) => ({
   id: "a1",
@@ -606,6 +623,9 @@ describe("<LedgerLifecyclePanel> period lock", () => {
     fireEvent.change(screen.getByLabelText("New lock date"), {
       target: { value: format(parseISO(LATER_LOCK), "MMM d, yyyy") },
     });
+    expect(
+      screen.getByText(/dated on or before the lock are refused/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Set period lock" }));
     await confirmInDialog("Move the period lock");
 
@@ -692,7 +712,15 @@ describe("<LedgerLifecyclePanel> period lock", () => {
       { target: { value: "Year-end review" } },
     );
     fireEvent.click(remove);
-    await confirmInDialog("Remove the period lock");
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByText(
+        /postings and corrections dated on or before the old lock become allowed/,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Remove the period lock" }),
+    );
 
     await waitFor(() =>
       expect(api.put).toHaveBeenCalledWith("/finance/org1/ledger/period-lock", {
@@ -702,6 +730,132 @@ describe("<LedgerLifecyclePanel> period lock", () => {
       }),
     );
     expect(await screen.findByText("The period lock is removed.")).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" });
+  });
+
+  it("never confirms a removal from an absent lock field", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.put.mockResolvedValue({ data: { data: wireStatusWithoutLock() } });
+    renderPanel({ status: statusOf({ lockedThrough: LATER_LOCK }) });
+
+    await openLock();
+    fireEvent.change(
+      screen.getByLabelText("Reason (required when moving back or removing)"),
+      { target: { value: "Year-end review" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove period lock" }));
+    await confirmInDialog("Remove the period lock");
+
+    expect(
+      await screen.findByText(/couldn't read the resulting ledger state/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("The period lock is removed.")).not.toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "set-period-lock", state: "unresolved" },
+    });
+  });
+
+  it("never confirms a removal from a missing lock field", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.put.mockResolvedValue({
+      data: { data: { ...wireStatus(), lockedThrough: undefined } },
+    });
+    const view = renderPanel({ status: statusOf({ lockedThrough: LATER_LOCK }) });
+
+    await openLock();
+    fireEvent.change(
+      screen.getByLabelText("Reason (required when moving back or removing)"),
+      { target: { value: "Year-end review" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove period lock" }));
+    await confirmInDialog("Remove the period lock");
+
+    expect(
+      await screen.findByText(/couldn't read the resulting ledger state/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("The period lock is removed.")).not.toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "set-period-lock", state: "unresolved" },
+    });
+
+    // Reloading must not silently drop the safety latch.
+    view.unmount();
+    queryClient.clear();
+    serveAudit();
+    renderPanel({ status: statusOf({ lockedThrough: LATER_LOCK }) });
+    expect(
+      await screen.findByText("We couldn't confirm the last ledger change"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Move period lock" })).toBeDisabled();
+  });
+
+  it("never confirms a removal from a malformed lock field", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.put.mockResolvedValue({
+      data: { data: wireStatus({ lockedThrough: "not-a-date" }) },
+    });
+    renderPanel({ status: statusOf({ lockedThrough: LATER_LOCK }) });
+
+    await openLock();
+    fireEvent.change(
+      screen.getByLabelText("Reason (required when moving back or removing)"),
+      { target: { value: "Year-end review" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove period lock" }));
+    await confirmInDialog("Remove the period lock");
+
+    expect(
+      await screen.findByText(/couldn't read the resulting ledger state/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("The period lock is removed.")).not.toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "set-period-lock", state: "unresolved" },
+    });
+  });
+
+  it("never confirms a new lock from an unreadable lock field", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.put.mockResolvedValue({
+      data: { data: { ...wireStatus(), lockedThrough: undefined } },
+    });
+    renderPanel();
+
+    await openLock();
+    fireEvent.change(screen.getByLabelText("New lock date"), {
+      target: { value: format(parseISO(LATER_LOCK), "MMM d, yyyy") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Set period lock" }));
+    await confirmInDialog("Move the period lock");
+
+    expect(
+      await screen.findByText(/couldn't read the resulting ledger state/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/now locked through/)).not.toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "set-period-lock", state: "unresolved" },
+    });
+  });
+
+  it("refuses lock changes when the current lock is unreported", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    renderPanel({ status: statusOf({ lockedThroughState: "unknown" }) });
+
+    expect(
+      await screen.findByText("The server didn't report the current period lock."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Period lock" })).toBeDisabled();
+    expect(
+      screen.getByText(/didn't report the current period lock, so it can't be changed safely/),
+    ).toBeInTheDocument();
   });
 
   it("refuses an unchanged lock date instead of posting a no-op", async () => {

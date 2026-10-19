@@ -216,6 +216,10 @@ export const lifecyclePermission = ({
       "This server doesn't send the ledger revision yet, so this change can't be submitted safely.",
     );
 
+  if (action === "period-lock" && status.lockedThroughState === "unknown")
+    return deny(
+      "The server didn't report the current period lock, so it can't be changed safely.",
+    );
   if (action === "suspend" && state !== "active")
     return deny("Only an active ledger can be suspended.");
   if (action === "resume" && state !== "suspended")
@@ -397,11 +401,18 @@ export const lifecycleConfirmation = ({
       return state === "suspended" ? "confirmed" : "contradicted";
     case "resume":
       return state === "active" ? "confirmed" : "contradicted";
-    case "period-lock":
-      // The returned lock must be exactly the one that was requested.
-      return status.lockedThrough === (lockedThrough ?? null)
+    case "period-lock": {
+      if (lockedThrough === null || lockedThrough === undefined) {
+        // Only an explicit null proves removal; a missing/malformed field does not.
+        if (status.lockedThroughState === "none") return "confirmed";
+        return status.lockedThroughState === "unknown" ? "unreadable" : "contradicted";
+      }
+      if (status.lockedThroughState === "unknown") return "unreadable";
+      // Only the exact requested valid date confirms the new lock.
+      return status.lockedThroughState === "set" && status.lockedThrough === lockedThrough
         ? "confirmed"
         : "contradicted";
+    }
     case "attest-gap-window":
       if (status.gapWindowAttestation === "attested") return "confirmed";
       // A parseable status that omits the attestation field is unreadable
@@ -456,18 +467,23 @@ export const lifecycleOutcomeMessage = ({
   }
   if (action === "period-lock") {
     const target = lockedThrough ?? null;
-    const reported = status.lockedThrough;
     if (target === null) {
-      return reported === null
-        ? "The period lock is removed."
-        : unconfirmed(
-            `The server accepted the request but still reports a period lock through ${formatBusinessDate(reported)}. Reload before trying again.`,
-          );
+      if (status.lockedThroughState === "none") return "The period lock is removed.";
+      if (status.lockedThroughState === "unknown")
+        return `${UNREADABLE_RESULT}${RETAINED_RECORD}`;
+      const reported = status.lockedThrough as string;
+      return unconfirmed(
+        `The server accepted the request but still reports a period lock through ${formatBusinessDate(reported)}. Reload before trying again.`,
+      );
     }
-    return reported === target
+    if (status.lockedThroughState === "unknown")
+      return `${UNREADABLE_RESULT}${RETAINED_RECORD}`;
+    return status.lockedThroughState === "set" && status.lockedThrough === target
       ? `The period is now locked through ${formatBusinessDate(target)}.`
       : unconfirmed(
-          `The server accepted the request but reports a different period lock (${reported ? formatBusinessDate(reported) : "none"}). Reload before trying again.`,
+          `The server accepted the request but reports a different period lock (${
+            status.lockedThrough ? formatBusinessDate(status.lockedThrough) : "none"
+          }). Reload before trying again.`,
         );
   }
   if (status.gapWindowAttestation === "attested") {

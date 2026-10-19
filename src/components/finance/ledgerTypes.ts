@@ -61,6 +61,12 @@ export interface LedgerStatus {
   openingDate: string | null;
   /** `YYYY-MM-DD` exactly as supplied, or null when absent/malformed. */
   lockedThrough: string | null;
+  /**
+   * Three-state period-lock read: `set` only for a valid date, `none` only
+   * for an explicit `null`, and `unknown` when the field is missing or
+   * malformed. A successful unlock must never be inferred from `unknown`.
+   */
+  lockedThroughState: PeriodLockState;
   /** Client-visible CAS revision; null when absent/not a counter. */
   revision: number | null;
   memberReceiptsEnabled: boolean | null;
@@ -91,6 +97,8 @@ export interface LedgerStatus {
 }
 
 export type GapWindowAttestation = "attested" | "not_attested" | "unknown";
+
+export type PeriodLockState = "set" | "none" | "unknown";
 
 export interface LedgerAccount {
   id: string;

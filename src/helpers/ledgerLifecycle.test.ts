@@ -28,6 +28,7 @@ const statusOf = (overrides: Partial<LedgerStatus> = {}): LedgerStatus => ({
   blockers: [],
   openingDate: "2026-10-01",
   lockedThrough: null,
+  lockedThroughState: "none",
   revision: 7,
   memberReceiptsEnabled: false,
   unconfirmedAttempts: 0,
@@ -253,6 +254,16 @@ describe("lifecycle permissions", () => {
     ).toMatch(/ledger revision/);
   });
 
+  it("refuses a lock change when the current lock can't be read", () => {
+    const permission = lifecyclePermission({
+      action: "period-lock",
+      status: statusOf({ lockedThroughState: "unknown" }),
+      ...OWNER,
+    });
+    expect(permission.allowed).toBe(false);
+    expect(permission.reason).toMatch(/didn't report the current period lock/);
+  });
+
   it("never offers or claims an attestation the server didn't mark unattested", () => {
     for (const attestation of ["attested", "unknown"] as const) {
       const permission = lifecyclePermission({
@@ -409,38 +420,66 @@ describe("lifecycle confirmation", () => {
     expect(
       lifecycleConfirmation({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: "2026-10-10" }) },
+        result: {
+          status: statusOf({ lockedThrough: "2026-10-10", lockedThroughState: "set" }),
+        },
         lockedThrough: "2026-10-10",
       }),
     ).toBe("confirmed");
     expect(
       lifecycleConfirmation({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: "2026-10-11" }) },
+        result: {
+          status: statusOf({ lockedThrough: "2026-10-11", lockedThroughState: "set" }),
+        },
         lockedThrough: "2026-10-10",
       }),
     ).toBe("contradicted");
     expect(
       lifecycleConfirmation({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: null }) },
+        result: { status: statusOf({ lockedThrough: null, lockedThroughState: "none" }) },
         lockedThrough: null,
       }),
     ).toBe("confirmed");
     expect(
       lifecycleConfirmation({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: "2026-10-10" }) },
+        result: {
+          status: statusOf({ lockedThrough: "2026-10-10", lockedThroughState: "set" }),
+        },
         lockedThrough: null,
       }),
     ).toBe("contradicted");
     expect(
       lifecycleConfirmation({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: null }) },
+        result: { status: statusOf({ lockedThrough: null, lockedThroughState: "none" }) },
         lockedThrough: "2026-10-10",
       }),
     ).toBe("contradicted");
+  });
+
+  it("never confirms an unlock from a missing or malformed lock field", () => {
+    for (const status of [
+      statusOf({ lockedThroughState: "unknown" }),
+      statusOf({ lockedThrough: "not-a-date", lockedThroughState: "unknown" }),
+    ]) {
+      expect(
+        lifecycleConfirmation({
+          action: "period-lock",
+          result: { status },
+          lockedThrough: null,
+        }),
+      ).toBe("unreadable");
+      expect(
+        lifecycleConfirmation({
+          action: "period-lock",
+          result: { status },
+          lockedThrough: "2026-10-10",
+        }),
+      ).toBe("unreadable");
+    }
   });
 
   it("distinguishes an unreadable attestation from a contradicting one", () => {
@@ -506,17 +545,42 @@ describe("outcome wording", () => {
     expect(
       lifecycleOutcomeMessage({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: "2026-10-10" }) },
+        result: {
+          status: statusOf({ lockedThrough: "2026-10-10", lockedThroughState: "set" }),
+        },
         lockedThrough: "2026-10-10",
       }),
     ).toMatch(/locked through/);
     expect(
       lifecycleOutcomeMessage({
         action: "period-lock",
-        result: { status: statusOf({ lockedThrough: "2026-10-10" }) },
+        result: {
+          status: statusOf({ lockedThrough: "2026-10-10", lockedThroughState: "set" }),
+        },
         lockedThrough: null,
       }),
     ).toMatch(/still reports a period lock/);
+  });
+
+  it("does not claim a removal when the lock field is unreadable", () => {
+    const message = lifecycleOutcomeMessage({
+      action: "period-lock",
+      result: { status: statusOf({ lockedThroughState: "unknown" }) },
+      lockedThrough: null,
+    });
+    expect(message).not.toMatch(/The period lock is removed/);
+    expect(message).toMatch(/couldn't read the resulting ledger state/);
+    expect(message).toMatch(/safety record from this attempt is kept/);
+
+    const malformed = lifecycleOutcomeMessage({
+      action: "period-lock",
+      result: {
+        status: statusOf({ lockedThrough: "not-a-date", lockedThroughState: "unknown" }),
+      },
+      lockedThrough: "2026-10-10",
+    });
+    expect(malformed).not.toMatch(/now locked through/);
+    expect(malformed).toMatch(/couldn't read the resulting ledger state/);
   });
 
   it("does not claim an attestation the status does not show", () => {
