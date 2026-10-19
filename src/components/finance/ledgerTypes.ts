@@ -61,6 +61,12 @@ export interface LedgerStatus {
   openingDate: string | null;
   /** `YYYY-MM-DD` exactly as supplied, or null when absent/malformed. */
   lockedThrough: string | null;
+  /**
+   * Three-state period-lock read: `set` only for a valid date, `none` only
+   * for an explicit `null`, and `unknown` when the field is missing or
+   * malformed. A successful unlock must never be inferred from `unknown`.
+   */
+  lockedThroughState: PeriodLockState;
   /** Client-visible CAS revision; null when absent/not a counter. */
   revision: number | null;
   memberReceiptsEnabled: boolean | null;
@@ -73,7 +79,26 @@ export interface LedgerStatus {
    * define the inner proposal fields, so none are read.
    */
   hasPendingProposal: boolean | null;
+  /**
+   * ISO timestamp of activation (F2A-4 additive read). Display only; null when
+   * the backend did not send a usable timestamp. A missing activation time is
+   * never treated as "activated now" or as an empty gap window.
+   */
+  activatedAt: string | null;
+  /** ISO timestamp of the gap-window attestation; null when absent/unusable. */
+  gapWindowAttestedAt: string | null;
+  /**
+   * Three-state attestation read. `attested` only when the server sent a
+   * usable attestation timestamp; `not_attested` only for an explicit `null`;
+   * a missing or malformed field stays `unknown` and must never be read as
+   * either an attestation or its absence.
+   */
+  gapWindowAttestation: GapWindowAttestation;
 }
+
+export type GapWindowAttestation = "attested" | "not_attested" | "unknown";
+
+export type PeriodLockState = "set" | "none" | "unknown";
 
 export interface LedgerAccount {
   id: string;

@@ -90,6 +90,15 @@ export const financeRequest = {
     "/finance/:organisationId/ledger/opening-balances/:proposalId/reject",
   LEDGER_OPENING_BALANCE_WITHDRAW:
     "/finance/:organisationId/ledger/opening-balances/:proposalId/withdraw",
+  // F2A-3 lifecycle (RFC v0.3 §4.2, §4.6, §4.7; D9, D12, D28). Suspend,
+  // resume and period-lock are owner-only; the gap-window attestation needs
+  // finance.manage. The audit read is the lifecycle trail (F2A-4 §8.1).
+  LEDGER_SUSPEND: "/finance/:organisationId/ledger/suspend",
+  LEDGER_RESUME: "/finance/:organisationId/ledger/resume",
+  LEDGER_PERIOD_LOCK: "/finance/:organisationId/ledger/period-lock",
+  LEDGER_GAP_WINDOW_ATTEST:
+    "/finance/:organisationId/ledger/gap-window/attest",
+  LEDGER_AUDIT: "/finance/:organisationId/ledger/audit",
 };
 
 export const rbacRequest = {

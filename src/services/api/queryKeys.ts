@@ -189,6 +189,9 @@ export const queryKeys = {
         ["finance", organisationId, "ledger", "opening-balances", "list"] as const,
       effectiveOpenings: (organisationId: string) =>
         ["finance", organisationId, "ledger", "opening-balances", "effective"] as const,
+      /** Lifecycle audit trail for one organisation (F2A-4 read). */
+      audit: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "audit"] as const,
     },
   },
 

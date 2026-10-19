@@ -52,10 +52,14 @@ const statusOf = (
   blockers: [],
   openingDate: null,
   lockedThrough: null,
+  lockedThroughState: "none",
   revision: 2,
   memberReceiptsEnabled: true,
   unconfirmedAttempts: 0,
   hasPendingProposal: false,
+  activatedAt: null,
+  gapWindowAttestedAt: null,
+  gapWindowAttestation: "not_attested",
   ...overrides,
 });
 

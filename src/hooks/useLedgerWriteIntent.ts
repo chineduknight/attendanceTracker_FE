@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   LedgerIntentRead,
+  LedgerWriteAction,
   LedgerWriteIntent,
   LedgerWriteIntentRefs,
-  OpeningWriteAction,
   beginLedgerWriteIntent,
   clearLedgerWriteIntent,
   clearLedgerWriteIntentMarker,
@@ -35,7 +35,7 @@ export const useLedgerWriteIntent = (organisationId: string) => {
   }, [organisationId]);
 
   const begin = useCallback(
-    (action: OpeningWriteAction, refs: LedgerWriteIntentRefs = {}) => {
+    (action: LedgerWriteAction, refs: LedgerWriteIntentRefs = {}) => {
       const intent = beginLedgerWriteIntent(organisationId, action, refs);
       setRead(readLedgerWriteIntent(organisationId));
       return intent;

@@ -23,11 +23,24 @@ export type OpeningWriteAction =
   | "reject-opening"
   | "withdraw-opening";
 
-const ACTIONS: readonly OpeningWriteAction[] = [
+/** High-impact ledger lifecycle writes that share the same intent-before-dispatch rule. */
+export type LifecycleWriteAction =
+  | "suspend-ledger"
+  | "resume-ledger"
+  | "set-period-lock"
+  | "attest-gap-window";
+
+export type LedgerWriteAction = OpeningWriteAction | LifecycleWriteAction;
+
+const ACTIONS: readonly LedgerWriteAction[] = [
   "submit-opening",
   "verify-opening",
   "reject-opening",
   "withdraw-opening",
+  "suspend-ledger",
+  "resume-ledger",
+  "set-period-lock",
+  "attest-gap-window",
 ];
 
 export interface LedgerWriteIntentRefs {
@@ -40,7 +53,7 @@ export interface LedgerWriteIntentRefs {
 export interface LedgerWriteIntent {
   organisationId: string;
   intentId: string;
-  action: OpeningWriteAction;
+  action: LedgerWriteAction;
   proposalId: string | null;
   fingerprint: string | null;
   kind: string | null;
@@ -59,7 +72,7 @@ export const LEDGER_WRITE_INTENT_PREFIX = "presence-pro:ledger-write-intent:";
 export const ledgerWriteIntentKey = (organisationId: string) =>
   `${LEDGER_WRITE_INTENT_PREFIX}${organisationId}`;
 
-const isAction = (value: unknown): value is OpeningWriteAction =>
+const isAction = (value: unknown): value is LedgerWriteAction =>
   typeof value === "string" && (ACTIONS as readonly string[]).includes(value);
 
 const newIntentId = () => {
@@ -154,7 +167,7 @@ export const readLedgerWriteIntent = (
  */
 export const beginLedgerWriteIntent = (
   organisationId: string,
-  action: OpeningWriteAction,
+  action: LedgerWriteAction,
   refs: LedgerWriteIntentRefs = {},
   now: Date = new Date(),
 ): LedgerWriteIntent | null => {
@@ -211,9 +224,9 @@ export const clearLedgerWriteIntentMarker = (organisationId: string): boolean =>
   return removeRaw(ledgerWriteIntentKey(organisationId));
 };
 
-/** What an officer should compare before allowing another opening write. */
+/** What an officer should compare before allowing another ledger write. */
 export const ledgerWriteIntentGuidance = (
-  action: OpeningWriteAction,
+  action: LedgerWriteAction,
   kind: string | null,
 ): string => {
   switch (action) {
@@ -229,5 +242,13 @@ export const ledgerWriteIntentGuidance = (
       return "Check whether the proposal is now rejected before trying again.";
     case "withdraw-opening":
       return "Check whether the proposal is now withdrawn before trying again.";
+    case "suspend-ledger":
+      return "Check the current ledger state and recent audit records to see whether the suspension was recorded before trying again.";
+    case "resume-ledger":
+      return "Check the current ledger state and recent audit records to see whether the ledger was resumed before trying again.";
+    case "set-period-lock":
+      return "Check the current period lock and recent audit records before moving it again.";
+    case "attest-gap-window":
+      return "Check whether the gap window is now recorded as attested before attesting again.";
   }
 };

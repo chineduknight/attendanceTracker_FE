@@ -1,10 +1,12 @@
 import { isValid, parseISO } from "date-fns";
 import {
+  GapWindowAttestation,
   LedgerAccount,
   LedgerJournal,
   LedgerJournalLine,
   LedgerKnownState,
   LedgerStatus,
+  PeriodLockState,
 } from "components/finance/ledgerTypes";
 
 /**
@@ -70,6 +72,39 @@ const asTextList = (value: unknown): string[] | null => {
   return list;
 };
 
+/**
+ * A stored timestamp (activation, attestation) as an ISO string. Anything that
+ * does not parse as a real instant is null: never "now" and never a business
+ * date, which would silently widen the gap window.
+ */
+const asTimestamp = (value: unknown): string | null => {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+/**
+ * Attestation is three-state: only an explicit `null` means "not attested".
+ * A missing field is unknown, so a backend that does not send it can never be
+ * read as either proof of an attestation or proof that none exists.
+ */
+const toGapWindowAttestation = (raw: Record<string, unknown>): GapWindowAttestation => {
+  if (!("gapWindowAttestedAt" in raw)) return "unknown";
+  if (raw.gapWindowAttestedAt === null) return "not_attested";
+  return asTimestamp(raw.gapWindowAttestedAt) ? "attested" : "unknown";
+};
+
+/**
+ * Period lock is three-state too: an explicit `null` means "no lock", and a
+ * valid date means "locked through". A missing or malformed value is unknown,
+ * so an unlock can never be confirmed by an absent field.
+ */
+const toPeriodLockState = (raw: Record<string, unknown>): PeriodLockState => {
+  if (!("lockedThrough" in raw)) return "unknown";
+  if (raw.lockedThrough === null) return "none";
+  return asBusinessDate(raw.lockedThrough) ? "set" : "unknown";
+};
+
 const KNOWN_STATES: readonly LedgerKnownState[] = [
   "not_active",
   "setup",
@@ -100,6 +135,7 @@ export const toLedgerStatus = (value: unknown): LedgerStatus | null => {
     blockers: asTextList(raw.blockers),
     openingDate: asBusinessDate(raw.openingDate),
     lockedThrough: asBusinessDate(raw.lockedThrough),
+    lockedThroughState: toPeriodLockState(raw),
     revision: asCount(raw.revision),
     memberReceiptsEnabled: asBoolean(raw.memberReceiptsEnabled),
     unconfirmedAttempts: asCount(raw.unconfirmedAttempts),
@@ -113,6 +149,9 @@ export const toLedgerStatus = (value: unknown): LedgerStatus | null => {
           : asRecord(raw.pendingProposal)
             ? true
             : null,
+    activatedAt: asTimestamp(raw.activatedAt),
+    gapWindowAttestedAt: asTimestamp(raw.gapWindowAttestedAt),
+    gapWindowAttestation: toGapWindowAttestation(raw),
   };
 };
 

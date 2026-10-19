@@ -37,10 +37,14 @@ const statusOf = (
   blockers: [],
   openingDate: null,
   lockedThrough: null,
+  lockedThroughState: "none",
   revision: 4,
   memberReceiptsEnabled: false,
   unconfirmedAttempts: 0,
   hasPendingProposal: false,
+  activatedAt: null,
+  gapWindowAttestedAt: null,
+  gapWindowAttestation: "not_attested",
   ...overrides,
 });
 
@@ -294,7 +298,7 @@ describe("<OpeningProposalForm> guided initial proposal", () => {
     await submitAndConfirm();
 
     expect(
-      await screen.findByText("We couldn't confirm the last opening change"),
+      await screen.findByText("We couldn't confirm the last ledger change"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Submit proposal" })).toBeDisabled();
     expect(toast.error).not.toHaveBeenCalled();
