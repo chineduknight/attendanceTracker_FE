@@ -1,14 +1,10 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import { Box, Button, SimpleGrid, Stack, Text } from "@chakra-ui/react";
+import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
+import { CASHBOOK_OPERATIONS } from "components/finance/ledgerPostingTypes";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
-import {
-  PostingSummary,
-} from "components/finance/ledgerPostingTypes";
-import {
-  LedgerPostingIntentRecord,
-  hasPendingLedgerPosting,
-} from "helpers/ledgerPostingIntent";
+import { hasPendingLedgerPosting } from "helpers/ledgerPostingIntent";
 import {
   expenseOperationReadiness,
   postingReadiness,
@@ -16,9 +12,8 @@ import {
   transferOperationReadiness,
 } from "helpers/ledgerPostings";
 import { todayInLagos } from "helpers/openingBalances";
-import { PostingSubmitResult, useLedgerPostings } from "hooks/useLedgerPostings";
+import { usePostingWorkflow } from "hooks/usePostingWorkflow";
 import { usePermissions } from "rbac/usePermissions";
-import useGlobalStore from "zStore";
 import PostingIntentNotice from "components/finance/postings/PostingIntentNotice";
 import PostingReceipt from "components/finance/postings/PostingReceipt";
 import PostingSupersededNotice from "components/finance/postings/PostingSupersededNotice";
@@ -29,11 +24,6 @@ import {
 } from "components/finance/postings/PostingForms";
 
 type View = "overview" | "receipt" | "expense" | "transfer";
-
-interface ConfirmedSuccess {
-  result: Extract<PostingSubmitResult, { kind: "confirmed" }>;
-  summary: PostingSummary;
-}
 
 /**
  * F2B-1 cashbook posting UI (RFC v0.3 §5.1–§5.5, §8.2).
@@ -51,6 +41,7 @@ const CashbookPostingsPanel = ({
   onRecheckLedger,
   isRechecking = false,
   enabled = LEDGER_POSTINGS_UI_ENABLED,
+  memberMoneyEnabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -59,34 +50,18 @@ const CashbookPostingsPanel = ({
   onRecheckLedger?: () => void;
   isRechecking?: boolean;
   enabled?: boolean;
+  /** Whether the Member money section is shown; it owns retries of member-money postings. */
+  memberMoneyEnabled?: boolean;
 }) => {
   const headingId = useId();
   const { has } = usePermissions();
   const canManage = has("finance.manage");
-  const officerId = useGlobalStore((store) => store.user.id);
-  const [view, setView] = useState<View>("overview");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [panelError, setPanelError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<ConfirmedSuccess | null>(null);
-  // Another tab changed the posting record while a form was open. The form
-  // keeps its entries but is locked until the officer deliberately starts a
-  // new posting: re-enabling it would invite the same money twice.
-  const [superseded, setSuperseded] = useState(false);
-  // Bumped to remount the open form empty for a deliberate new posting.
-  const [formInstance, setFormInstance] = useState(0);
-
-  const supersedeForm = () => {
-    setSuperseded(true);
-    setFormError(null);
-    // Reads only: this tab's journal list predates the other tab's write.
-    onRecheckLedger?.();
-  };
-
-  const postings = useLedgerPostings(organisationId, officerId, {
-    onExternalIntentChange: () => {
-      if (view !== "overview") supersedeForm();
-    },
+  const workflow = usePostingWorkflow<Exclude<View, "overview">>({
+    organisationId,
+    onRecheckLedger,
   });
+  const { postings, view, formError, panelError, success, superseded, formInstance, recheck } =
+    workflow;
 
   if (!enabled) return null;
 
@@ -96,90 +71,6 @@ const CashbookPostingsPanel = ({
   const receiptReadiness = receiptOperationReadiness(accounts);
   const expenseReadiness = expenseOperationReadiness(accounts);
   const transferReadiness = transferOperationReadiness(accounts);
-
-  const recheck = () => {
-    postings.intent.refresh();
-    onRecheckLedger?.();
-  };
-
-  const open = (next: View) => {
-    setFormError(null);
-    setSuccess(null);
-    setPanelError(null);
-    setSuperseded(false);
-    setView(next);
-  };
-
-  const back = () => {
-    setFormError(null);
-    setSuperseded(false);
-    setView("overview");
-  };
-
-  const startNewPosting = () => {
-    setFormError(null);
-    setSuperseded(false);
-    setFormInstance((instance) => instance + 1);
-  };
-
-  const handleSubmit = async (
-    draft: Parameters<typeof postings.submit>[0],
-    summary: PostingSummary,
-  ) => {
-    setFormError(null);
-    const result = await postings.submit(draft, summary);
-    switch (result.kind) {
-      case "confirmed":
-        setView("overview");
-        setSuccess({ result, summary });
-        return;
-      case "blocked":
-        // Another tab's posting holds the record. Whatever happens to it, this
-        // form must not quietly become submittable again when it clears.
-        if (result.reason === "existing") {
-          supersedeForm();
-          return;
-        }
-        setFormError(result.message);
-        return;
-      case "refused":
-      case "voided":
-      case "busy":
-        setFormError(result.message);
-        return;
-      case "unconfirmed":
-      case "key-reused":
-        // The durable notice now owns the explanation. The form must not be
-        // used for a new key; only the recorded retry is offered.
-        setView("overview");
-        setSuccess(null);
-        return;
-    }
-  };
-
-  const handleRetry = async (record: LedgerPostingIntentRecord) => {
-    setPanelError(null);
-    const result = await postings.retry(record);
-    switch (result.kind) {
-      case "confirmed":
-        setSuccess({ result, summary: record.summary });
-        setView("overview");
-        return;
-      case "refused":
-      case "voided":
-        setPanelError(result.message);
-        return;
-      case "blocked":
-      case "busy":
-        setPanelError(result.message);
-        return;
-      case "unconfirmed":
-      case "key-reused":
-        // The notice already states the outcome and offers the only safe
-        // next action: retry this exact request again.
-        return;
-    }
-  };
 
   const formProps = {
     accounts: accounts ?? [],
@@ -192,10 +83,8 @@ const CashbookPostingsPanel = ({
     isPosting: postings.isPosting,
     error: formError,
     locked: superseded,
-    onCancel: back,
-    onSubmit: (draft: Parameters<typeof postings.submit>[0], summary: PostingSummary) => {
-      void handleSubmit(draft, summary);
-    },
+    onCancel: workflow.back,
+    onSubmit: workflow.submit,
   };
 
   const form = (() => {
@@ -228,8 +117,12 @@ const CashbookPostingsPanel = ({
             canManage={canManage}
             isPosting={postings.isPosting}
             isRechecking={isRechecking}
-            onRetry={(record) => void handleRetry(record)}
+            onRetry={workflow.retry}
             onRecheck={recheck}
+            // Member-money postings are retried in their own section when it
+            // is shown; otherwise nothing pending may be stranded out of view.
+            operations={memberMoneyEnabled ? CASHBOOK_OPERATIONS : undefined}
+            elsewhereLabel="Member money"
           />
         )}
 
@@ -243,10 +136,7 @@ const CashbookPostingsPanel = ({
           <PostingReceipt
             result={success.result}
             summary={success.summary}
-            onAnother={() => {
-              setSuccess(null);
-              setPanelError(null);
-            }}
+            onAnother={workflow.dismissSuccess}
           />
         )}
 
@@ -275,7 +165,7 @@ const CashbookPostingsPanel = ({
                 variant="outline"
                 minH="64px"
                 disabled={!receiptReadiness.ready}
-                onClick={() => open("receipt")}
+                onClick={() => workflow.open("receipt")}
               >
                 <Stack gap={0}>
                   <Text fontWeight="semibold">Money in</Text>
@@ -289,7 +179,7 @@ const CashbookPostingsPanel = ({
                 variant="outline"
                 minH="64px"
                 disabled={!expenseReadiness.ready}
-                onClick={() => open("expense")}
+                onClick={() => workflow.open("expense")}
               >
                 <Stack gap={0}>
                   <Text fontWeight="semibold">Money out</Text>
@@ -303,7 +193,7 @@ const CashbookPostingsPanel = ({
                 variant="outline"
                 minH="64px"
                 disabled={!transferReadiness.ready}
-                onClick={() => open("transfer")}
+                onClick={() => workflow.open("transfer")}
               >
                 <Stack gap={0}>
                   <Text fontWeight="semibold">Transfer</Text>
@@ -341,7 +231,7 @@ const CashbookPostingsPanel = ({
             hasPendingIntent={hasIntent}
             isRechecking={isRechecking}
             onRecheck={recheck}
-            onStartNew={startNewPosting}
+            onStartNew={workflow.startNewPosting}
           />
         )}
 
@@ -357,7 +247,7 @@ const CashbookPostingsPanel = ({
 
         {hasIntent && (
           <Text fontSize="sm" color="fg.muted">
-            New postings are blocked until the recorded request above is proved by the
+            New postings are blocked until the unconfirmed posting is proved by the
             server. Do not enter the same transaction again from a new form.
           </Text>
         )}

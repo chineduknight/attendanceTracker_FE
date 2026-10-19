@@ -30,12 +30,15 @@ import {
 
 const NO_OBLIGATIONS: Obligation[] = [];
 
-export const useObligations = (organisationId: string) => {
+export const useObligations = (
+  organisationId: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) => {
   const url = convertParamsToString(financeRequest.LIST_OBLIGATIONS, { organisationId });
   const { data, isLoading, isError, error, refetch } = useQueryWrapper(
     queryKeys.finance.obligations(organisationId),
     url,
-    { enabled: Boolean(organisationId) },
+    { enabled: enabled && Boolean(organisationId) },
   );
   const obligations: Obligation[] = data?.data ?? NO_OBLIGATIONS;
   return { obligations, hasData: data !== undefined, isLoading, isError, error, refetch };

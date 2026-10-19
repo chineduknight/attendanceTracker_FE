@@ -11,6 +11,19 @@ import {
 } from "helpers/ledgerPostingIntent";
 
 /**
+ * Same-tab announcements of this tab's own intent writes. The browser's
+ * `storage` event reaches other tabs only, but "Record money" and "Member
+ * money" are separate sections sharing one pending slot on the same page.
+ */
+const sameTabIntentWrites = new EventTarget();
+const SAME_TAB_INTENT_WRITE = "ledger-posting-intent-write";
+
+interface SameTabIntentWrite {
+  organisationId: string;
+  writer: object;
+}
+
+/**
  * The organisation's durable posting intents, mirrored to localStorage.
  *
  * Re-read on mount and on organisation change, so a reload or an organisation
@@ -24,9 +37,9 @@ export const useLedgerPostingIntent = (
     onExternalChange,
   }: {
     /**
-     * Another tab claimed, resolved or cleared this organisation's posting
-     * record. Says nothing about why: success, a refusal and a void all look
-     * the same from here.
+     * Another tab, or another posting section on this page, claimed,
+     * resolved or cleared this organisation's posting record. Says nothing
+     * about why: success, a refusal and a void all look the same from here.
      */
     onExternalChange?: () => void;
   } = {},
@@ -39,6 +52,8 @@ export const useLedgerPostingIntent = (
   useEffect(() => {
     onExternalChangeRef.current = onExternalChange;
   });
+  // This instance's identity, so it can ignore its own announcements.
+  const writer = useRef({}).current;
 
   const refresh = useCallback(() => {
     const next = readLedgerPostingIntents(organisationId);
@@ -54,10 +69,18 @@ export const useLedgerPostingIntent = (
   // Every mutation waits for the cross-tab lock, so it can resolve after the
   // officer has switched organisation. Organisation A's result must never
   // repaint Organisation B's notice.
-  const refreshAfterMutation = useCallback((mutatedOrganisationId: string) => {
-    if (mutatedOrganisationId !== currentOrganisationId.current) return;
-    setRead(readLedgerPostingIntents(mutatedOrganisationId));
-  }, []);
+  const refreshAfterMutation = useCallback(
+    (mutatedOrganisationId: string) => {
+      sameTabIntentWrites.dispatchEvent(
+        new CustomEvent<SameTabIntentWrite>(SAME_TAB_INTENT_WRITE, {
+          detail: { organisationId: mutatedOrganisationId, writer },
+        }),
+      );
+      if (mutatedOrganisationId !== currentOrganisationId.current) return;
+      setRead(readLedgerPostingIntents(mutatedOrganisationId));
+    },
+    [writer],
+  );
 
   // Another tab claiming, clearing or resolving a posting must immediately
   // block/refresh this one too. The storage event fires in other tabs only;
@@ -69,9 +92,20 @@ export const useLedgerPostingIntent = (
       setRead(readLedgerPostingIntents(organisationId));
       onExternalChangeRef.current?.();
     };
+    // Another section on this page wrote the record: the same as another tab.
+    const onSameTabWrite = (event: Event) => {
+      const detail = (event as CustomEvent<SameTabIntentWrite>).detail;
+      if (detail.writer === writer || detail.organisationId !== organisationId) return;
+      setRead(readLedgerPostingIntents(organisationId));
+      onExternalChangeRef.current?.();
+    };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [organisationId]);
+    sameTabIntentWrites.addEventListener(SAME_TAB_INTENT_WRITE, onSameTabWrite);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      sameTabIntentWrites.removeEventListener(SAME_TAB_INTENT_WRITE, onSameTabWrite);
+    };
+  }, [organisationId, writer]);
 
   const begin = useCallback(
     async (input: NewLedgerPostingIntent) => {

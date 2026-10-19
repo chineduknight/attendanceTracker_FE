@@ -20,6 +20,8 @@
  */
 
 import {
+  MEMBER_MONEY_PURPOSES,
+  MemberMoneyPurpose,
   POSTING_METHODS,
   PostingBody,
   PostingMethod,
@@ -28,7 +30,13 @@ import {
 } from "components/finance/ledgerPostingTypes";
 import { isBusinessDate } from "helpers/openingBalances";
 
-const OPERATIONS: readonly PostingOperation[] = ["receipt", "expense", "transfer"];
+const OPERATIONS: readonly PostingOperation[] = [
+  "receipt",
+  "expense",
+  "transfer",
+  "member_receipt",
+  "refund",
+];
 
 export const LEDGER_POSTING_INTENT_PREFIX = "presence-pro:ledger-posting-intent:";
 
@@ -61,6 +69,12 @@ export interface LedgerPostingIntentRecord {
   operation: PostingOperation;
   /** The exact object sent for this intent. Reused verbatim on every retry. */
   body: PostingBody;
+  /**
+   * Refunds only: the member-money source in the route
+   * (`/member-money/:sourceId/refunds`). Part of the exact request, so a
+   * retry goes to the same source. `null` for every other operation.
+   */
+  sourceId: string | null;
   summary: PostingSummary;
   startedAt: string;
   state: "dispatching" | "unresolved";
@@ -105,6 +119,15 @@ const isOperation = (value: unknown): value is PostingOperation =>
 
 const isMethod = (value: unknown): value is PostingMethod =>
   typeof value === "string" && (POSTING_METHODS as readonly string[]).includes(value);
+
+const isPurpose = (value: unknown): value is MemberMoneyPurpose =>
+  typeof value === "string" && (MEMBER_MONEY_PURPOSES as readonly string[]).includes(value);
+
+const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
+
+/** The ids the server accepts in a route or hint (24 hex characters). */
+export const isObjectId = (value: unknown): value is string =>
+  typeof value === "string" && OBJECT_ID_PATTERN.test(value);
 
 const readRawResult = (
   key: string,
@@ -156,10 +179,22 @@ const parseSummary = (value: unknown): PostingSummary | null => {
   const fromAccountName = optionalText(raw.fromAccountName);
   const toAccountName = optionalText(raw.toAccountName);
   const categoryName = optionalText(raw.categoryName);
+  // F2B-2 additions: absent on records written by the F2B-1 build.
+  const counterpartyName = optionalText(raw.counterpartyName);
+  const sourceNumber = optionalText(raw.sourceNumber);
+  const purpose =
+    raw.purpose === null || raw.purpose === undefined
+      ? null
+      : isPurpose(raw.purpose)
+        ? raw.purpose
+        : undefined;
   if (
     fromAccountName === undefined ||
     toAccountName === undefined ||
-    categoryName === undefined
+    categoryName === undefined ||
+    counterpartyName === undefined ||
+    sourceNumber === undefined ||
+    purpose === undefined
   )
     return null;
   return {
@@ -170,6 +205,9 @@ const parseSummary = (value: unknown): PostingSummary | null => {
     fromAccountName,
     toAccountName,
     categoryName,
+    counterpartyName,
+    purpose,
+    sourceNumber,
   };
 };
 
@@ -195,6 +233,9 @@ const isUsableBody = (value: unknown, operation: PostingOperation, key: string) 
   const requiredId = (entry: unknown) => typeof entry === "string" && entry.trim().length > 0;
   const optionalText = (entry: unknown) =>
     entry === undefined || (typeof entry === "string" && entry.length <= 500);
+  const requiredText = (entry: unknown, max: number) =>
+    typeof entry === "string" && entry.trim().length > 0 && entry.length <= max;
+  const optionalHint = (entry: unknown) => entry === undefined || isObjectId(entry);
 
   switch (operation) {
     case "receipt":
@@ -225,8 +266,37 @@ const isUsableBody = (value: unknown, operation: PostingOperation, key: string) 
         optionalText(body.reference) &&
         optionalText(body.note)
       );
+    case "member_receipt":
+      return (
+        requiredId(body.toAccountId) &&
+        requiredText(body.counterpartyName, 120) &&
+        isPurpose(body.purpose) &&
+        body.receivedAfterOpeningCount === true &&
+        optionalHint(body.memberId) &&
+        optionalHint(body.obligationId) &&
+        optionalText(body.externalReference) &&
+        optionalText(body.evidenceReference) &&
+        optionalText(body.reference) &&
+        optionalText(body.note)
+      );
+    case "refund":
+      return (
+        requiredId(body.fromAccountId) &&
+        requiredText(body.counterpartyName, 120) &&
+        requiredText(body.reason, 500) &&
+        optionalText(body.externalReference) &&
+        optionalText(body.evidenceReference) &&
+        optionalText(body.reference) &&
+        optionalText(body.note)
+      );
   }
 };
+
+/** A refund must carry its route source; nothing else may. */
+const isUsableSourceId = (value: unknown, operation: PostingOperation) =>
+  operation === "refund"
+    ? isObjectId(value)
+    : value === undefined || value === null;
 
 const parseRecord = (
   organisationId: string,
@@ -240,6 +310,7 @@ const parseRecord = (
   if (!isPostingKey(raw.key)) return null;
   if (!isOperation(raw.operation)) return null;
   if (!isUsableBody(raw.body, raw.operation, raw.key)) return null;
+  if (!isUsableSourceId(raw.sourceId, raw.operation)) return null;
   const summary = parseSummary(raw.summary);
   if (!summary) return null;
   if (summary.operation !== raw.operation) return null;
@@ -267,6 +338,7 @@ const parseRecord = (
     key: raw.key,
     operation: raw.operation,
     body: raw.body as PostingBody,
+    sourceId: raw.operation === "refund" ? (raw.sourceId as string) : null,
     summary,
     startedAt: raw.startedAt,
     state: raw.state,
@@ -420,6 +492,8 @@ export interface NewLedgerPostingIntent {
   key: string;
   operation: PostingOperation;
   body: PostingBody;
+  /** Refunds only: the route's `:sourceId`. */
+  sourceId?: string | null;
   summary: PostingSummary;
 }
 
@@ -437,9 +511,11 @@ export const beginLedgerPostingIntent = async (
   now: Date = new Date(),
 ): Promise<LedgerPostingClaimResult> => {
   const { organisationId, officerId, key, operation, body, summary } = input;
+  const sourceId = input.sourceId ?? null;
   if (!organisationId || !officerId) return { kind: "blocked", reason: "invalid" };
   if (!isPostingKey(key)) return { kind: "blocked", reason: "invalid" };
   if (!isUsableBody(body, operation, key)) return { kind: "blocked", reason: "invalid" };
+  if (!isUsableSourceId(sourceId, operation)) return { kind: "blocked", reason: "invalid" };
   if (summary.operation !== operation) return { kind: "blocked", reason: "invalid" };
 
   const outcome = await withIntentLock(
@@ -462,6 +538,7 @@ export const beginLedgerPostingIntent = async (
         key,
         operation,
         body,
+        sourceId,
         summary,
         startedAt: now.toISOString(),
         state: "dispatching",
@@ -487,6 +564,7 @@ export const beginLedgerPostingIntent = async (
         verified.kind !== "pending" ||
         verified.intents.length !== 1 ||
         verified.intents[0].key !== key ||
+        verified.intents[0].sourceId !== sourceId ||
         !sameLedgerPostingBody(verified.intents[0].body, body)
       ) {
         return { kind: "blocked", reason: "write-failed" };
