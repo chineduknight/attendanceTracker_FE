@@ -6,9 +6,11 @@ import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
 import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePanel";
+import CashbookPostingsPanel from "components/finance/postings/CashbookPostingsPanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
+import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { formatKobo } from "helpers/financeConstants";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
@@ -471,6 +473,29 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           }}
         />
       )}
+
+      {/* F2B-1 receipts, expenses and transfers: a separate gate, default off.
+          The panel itself also refuses every form unless the server reports
+          posting as ready, so a preview build can never post against a
+          half-configured ledger. */}
+      {LEDGER_POSTINGS_UI_ENABLED && (
+        <CashbookPostingsPanel
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          isRechecking={
+            statusQuery.isFetching ||
+            accountsQuery.isFetching ||
+            journalsQuery.isFetching
+          }
+          onRecheckLedger={() => {
+            statusQuery.refetch();
+            accountsQuery.refetch();
+            journalsQuery.refetch();
+          }}
+        />
+      )}
+
       <JournalsSection
         headingId={journalsHeadingId}
         journals={journalsQuery.journals}

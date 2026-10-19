@@ -99,6 +99,12 @@ export const financeRequest = {
   LEDGER_GAP_WINDOW_ATTEST:
     "/finance/:organisationId/ledger/gap-window/attest",
   LEDGER_AUDIT: "/finance/:organisationId/ledger/audit",
+  // F2B-1 cashbook postings (RFC v0.3 §5.1–§5.5, §8.2). The client sends a
+  // typed intent plus one idempotency key; the server builds the lines and
+  // the gapless entry number. Gated behind config/ledgerPostings.
+  LEDGER_RECEIPTS: "/finance/:organisationId/ledger/receipts",
+  LEDGER_EXPENSES: "/finance/:organisationId/ledger/expenses",
+  LEDGER_TRANSFERS: "/finance/:organisationId/ledger/transfers",
 };
 
 export const rbacRequest = {
