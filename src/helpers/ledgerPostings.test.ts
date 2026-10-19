@@ -213,6 +213,33 @@ describe("eligible accounts and categories", () => {
   });
 });
 
+describe("F3 member income accounts", () => {
+  const withF3 = [
+    ...ACCOUNTS,
+    account({ id: "dues-income", name: "Dues income", class: "income", subtype: "member_dues_income", openingVerified: null }),
+    account({ id: "levy-income", name: "Levy income", class: "income", subtype: "member_levy_income", openingVerified: null }),
+    account({ id: "grants", name: "Grants", class: "income", subtype: null, openingVerified: null }),
+  ];
+
+  it("keeps them out of the ordinary receipt categories", () => {
+    expect(postingIncomeCategories(withF3).map((entry) => entry.id)).toEqual([
+      "income",
+      "grants",
+    ]);
+  });
+
+  it("refuses a receipt naming one", () => {
+    const context = { ...CONTEXT, accounts: withF3 };
+    expect(receiptDraftIssue(receipt({ incomeAccountId: "dues-income" }), context)).toBe(
+      "Choose an active income category.",
+    );
+    expect(receiptDraftIssue(receipt({ incomeAccountId: "levy-income" }), context)).toBe(
+      "Choose an active income category.",
+    );
+    expect(receiptDraftIssue(receipt({ incomeAccountId: "grants" }), context)).toBeNull();
+  });
+});
+
 describe("draft validation", () => {
   it("accepts a complete receipt, expense and transfer", () => {
     expect(receiptDraftIssue(receipt(), CONTEXT)).toBeNull();

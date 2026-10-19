@@ -706,6 +706,21 @@ describe("validation and eligibility", () => {
     expect(categories).toEqual(["Donations"]);
   });
 
+  it("never offers F3 member dues or levy income as a receipt category", async () => {
+    renderPanel({
+      accounts: [
+        ...ACCOUNTS,
+        account({ id: "dues-income", name: "Dues income", class: "income", subtype: "member_dues_income", openingVerified: null }),
+        account({ id: "levy-income", name: "Levy income", class: "income", subtype: "member_levy_income", openingVerified: null }),
+        account({ id: "grants", name: "Grants", class: "income", subtype: null, openingVerified: null }),
+      ],
+    });
+    await openReceipt();
+
+    const categories = await optionLabels(screen.getByLabelText("Income category"));
+    expect(categories).toEqual(["Donations", "Grants"]);
+  });
+
   it("does not offer the sending account as the transfer destination", async () => {
     renderPanel();
     openTransfer();

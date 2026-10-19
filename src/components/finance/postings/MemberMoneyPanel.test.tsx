@@ -9,7 +9,11 @@ import CashbookPostingsPanel from "components/finance/postings/CashbookPostingsP
 import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
-import { beginLedgerPostingIntent, readLedgerPostingIntents } from "helpers/ledgerPostingIntent";
+import {
+  beginLedgerPostingIntent,
+  ledgerPostingIntentKey,
+  readLedgerPostingIntents,
+} from "helpers/ledgerPostingIntent";
 import { MEMBER_MONEY_NOT_DUES_NOTE } from "helpers/memberMoney";
 import { todayInLagos } from "helpers/openingBalances";
 import { PermissionKey } from "rbac/permissions";
@@ -122,7 +126,7 @@ let sourcesError: unknown;
 
 const serveReads = () => {
   api.get.mockImplementation((url: string) => {
-    if (url.startsWith("/finance/org1/ledger/member-money")) {
+    if (/^\/finance\/org\d\/ledger\/member-money/.test(url)) {
       return sourcesError
         ? Promise.reject(sourcesError)
         : Promise.resolve({ data: { data: sourcesBody } });
@@ -409,7 +413,7 @@ describe("refunds", () => {
     expect(within(held[0]).getByText("OM-000001")).toBeInTheDocument();
     expect(within(held[0]).getByText("Opening member money")).toBeInTheDocument();
     expect(within(held[1]).getByText("₦5,000 held")).toBeInTheDocument();
-    expect(within(held[1]).getByText("₦1,000 refunded of ₦6,000")).toBeInTheDocument();
+    expect(within(held[1]).getByText("₦6,000 received · ₦1,000 refunded")).toBeInTheDocument();
     expect(api.get.mock.calls.find(([url]) => String(url).includes("member-money"))?.[0]).toBe(
       "/finance/org1/ledger/member-money?open=true&limit=100",
     );
@@ -500,6 +504,147 @@ describe("refunds", () => {
     expect(api.post).toHaveBeenCalledTimes(2);
     expect(api.post.mock.calls[1]).toEqual(api.post.mock.calls[0]);
     expect(stored().kind).toBe("none");
+  });
+});
+
+describe("what each source holds stays the server's current figure", () => {
+  /** The server's list after ₦2,000 more was refunded from M-000012 elsewhere. */
+  const refundedElsewhere = () => {
+    sourcesBody = {
+      items: [
+        SOURCES[0],
+        { ...SOURCES[1], refundedKobo: 300000, remainingKobo: 300000 },
+      ],
+      nextCursor: null,
+    };
+  };
+
+  /** What the browser delivers to this tab when another tab writes the posting record. */
+  const anotherTabWrote = () => {
+    const event = new Event("storage") as StorageEvent;
+    Object.defineProperty(event, "key", { value: ledgerPostingIntentKey("org1") });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+  };
+
+  it("re-reads the held list when another tab posts, with no form open", async () => {
+    renderPanel();
+    expect(await screen.findByText("₦5,000 held")).toBeInTheDocument();
+    refundedElsewhere();
+    anotherTabWrote();
+
+    expect(await screen.findByText("₦3,000 held")).toBeInTheDocument();
+    expect(screen.queryByText("₦5,000 held")).not.toBeInTheDocument();
+    await openRefund();
+    expect(screen.getByText("Still held: ₦3,000")).toBeInTheDocument();
+    await fillRefund("4000");
+    fireEvent.click(screen.getByRole("button", { name: "Record refund" }));
+    expect(
+      await screen.findByText("A refund can't be more than the ₦3,000 still held from M-000012."),
+    ).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("updates an open refund form, locked, when another tab posts", async () => {
+    renderPanel();
+    await openRefund();
+    expect(screen.getByText("Still held: ₦5,000")).toBeInTheDocument();
+    await fillRefund("4000");
+    refundedElsewhere();
+    anotherTabWrote();
+
+    expect(await screen.findByText("Still held: ₦3,000")).toBeInTheDocument();
+    expect(screen.getByText("Check the journal entries before posting this")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record refund" })).toBeDisabled();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the held list on a deliberate recheck", async () => {
+    api.post.mockRejectedValueOnce({ response: { status: 503, data: { error: "Unavailable" } } });
+    renderPanel();
+    await openRefund();
+    await fillRefund();
+    fireEvent.click(screen.getByRole("button", { name: "Record refund" }));
+    expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
+    expect(await screen.findByText("₦5,000 held")).toBeInTheDocument();
+    const readsBefore = memberMoneyReads();
+    refundedElsewhere();
+
+    fireEvent.click(screen.getByRole("button", { name: "Recheck the books" }));
+    expect(await screen.findByText("₦3,000 held")).toBeInTheDocument();
+    expect(memberMoneyReads()).toBeGreaterThan(readsBefore);
+    expect(recheck).toHaveBeenCalled();
+  });
+
+  it("shows the current amount held after the server refuses a refund as too large", async () => {
+    api.post.mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: {
+          error: "This refund is more than the money still held from this source.",
+          code: "LEDGER_REFUND_EXCEEDS_REMAINING",
+        },
+      },
+    });
+    renderPanel();
+    await openRefund();
+    await fillRefund("4000");
+    refundedElsewhere();
+    fireEvent.click(screen.getByRole("button", { name: "Record refund" }));
+
+    expect(
+      await screen.findByText("This refund is more than the money still held from this source."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Still held: ₦3,000")).toBeInTheDocument();
+  });
+
+  it("withdraws the refund form when the source no longer holds anything", async () => {
+    renderPanel();
+    await openRefund();
+    sourcesBody = { items: [SOURCES[0]], nextCursor: null };
+    anotherTabWrote();
+
+    expect(await screen.findByText("Nothing is held to refund any more")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record refund" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("button", { name: "Refund from M-000012" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refund from OM-000001" })).toBeInTheDocument();
+  });
+
+  it("pauses the refund when the refreshed list can't be trusted", async () => {
+    renderPanel();
+    await openRefund();
+    sourcesBody = {
+      items: [SOURCES[0], { ...SOURCES[1], remainingKobo: 600000 }],
+      nextCursor: null,
+    };
+    anotherTabWrote();
+
+    expect(await screen.findByText("What is held couldn't be confirmed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record refund" })).not.toBeInTheDocument();
+
+    sourcesBody = { items: SOURCES, nextCursor: null };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("Still held: ₦5,000")).toBeInTheDocument();
+  });
+
+  it("treats a source repeated across pages as an unreadable list", async () => {
+    api.get.mockImplementation((url: string) => {
+      if (url.startsWith("/finance/org1/ledger/member-money")) {
+        return Promise.resolve({
+          data: {
+            data: url.includes("cursor=")
+              ? { items: [SOURCES[1]], nextCursor: null }
+              : { items: SOURCES, nextCursor: "next-page" },
+          },
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${url}`));
+    });
+    renderPanel();
+    expect(await screen.findByText(/couldn't be read, so no refund is offered/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Refund from/ })).not.toBeInTheDocument();
   });
 });
 

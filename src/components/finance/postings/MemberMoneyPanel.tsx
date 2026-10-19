@@ -58,9 +58,15 @@ const SourceRow = ({
         <Text fontSize="sm" color="fg.muted">
           {`${source.purpose ? MEMBER_MONEY_PURPOSE_LABELS[source.purpose] : "Purpose unknown"} · received ${formatBusinessDate(source.businessDate)}`}
         </Text>
-        {source.refundedKobo > 0 && (
+        {(source.refundedKobo > 0 || source.allocatedKobo > 0) && (
           <Text fontSize="sm" color="fg.muted">
-            {`${formatKobo(source.refundedKobo)} refunded of ${formatKobo(source.effectiveKobo)}`}
+            {[
+              `${formatKobo(source.effectiveKobo)} received`,
+              source.refundedKobo > 0 ? `${formatKobo(source.refundedKobo)} refunded` : null,
+              source.allocatedKobo > 0 ? `${formatKobo(source.allocatedKobo)} allocated` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </Text>
         )}
       </Stack>
@@ -74,6 +80,63 @@ const SourceRow = ({
           </Button>
         )}
       </Stack>
+    </Flex>
+  </Box>
+);
+
+type RefundSourceState =
+  | { kind: "current"; source: MemberMoneySource }
+  /** The server's full list no longer has it: nothing is left to refund. */
+  | { kind: "gone" }
+  /** The latest list couldn't be read, so its current figures are unknown. */
+  | { kind: "unknown" };
+
+const refundSourceState = ({
+  id,
+  sources,
+  complete,
+}: {
+  id: string;
+  sources: MemberMoneySource[] | null;
+  complete: boolean | null;
+}): RefundSourceState => {
+  if (!sources) return { kind: "unknown" };
+  const source = sources.find((entry) => entry.id === id);
+  if (source) return { kind: "current", source };
+  // Missing from a capped list proves nothing.
+  return complete ? { kind: "gone" } : { kind: "unknown" };
+};
+
+/** Shown instead of a refund form whose source can't be confirmed now. */
+const RefundSourceUnavailable = ({
+  gone,
+  isRechecking,
+  onRecheck,
+  onBack,
+}: {
+  gone: boolean;
+  isRechecking: boolean;
+  onRecheck: () => void;
+  onBack: () => void;
+}) => (
+  <Box role="alert" borderWidth="1px" borderColor="border.warning" borderRadius="md" p={3} bg="bg.panel">
+    <Text fontSize="sm" fontWeight="semibold" mb={1}>
+      {gone ? "Nothing is held to refund any more" : "What is held couldn't be confirmed"}
+    </Text>
+    <Text fontSize="sm" color="fg.muted" mb={3}>
+      {gone
+        ? "The server reports that this member money no longer holds anything, so no refund is offered. Check the journal entries before recording anything else."
+        : "The latest amount still held couldn't be read from the server, so this refund is paused. Check again before refunding."}
+    </Text>
+    <Flex gap={2} wrap="wrap">
+      {!gone && (
+        <Button size="sm" variant="outline" onClick={onRecheck} loading={isRechecking}>
+          Check again
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" onClick={onBack}>
+        Back
+      </Button>
     </Flex>
   </Box>
 );
@@ -111,13 +174,22 @@ const MemberMoneyPanel = ({
   const { has } = usePermissions();
   const canManage = has("finance.manage");
   const canReadMembers = has("members.view");
-  const workflow = usePostingWorkflow<MemberMoneyView>({ organisationId, onRecheckLedger });
-  const { postings, view, formError, panelError, success, superseded, formInstance, recheck } =
-    workflow;
-  const [refundSource, setRefundSource] = useState<MemberMoneySource | null>(null);
-
   const memberReceiptsOn = status.memberReceiptsEnabled === true;
   const sourcesQuery = useOpenMemberMoney(organisationId, enabled && memberReceiptsOn);
+  const workflow = usePostingWorkflow<MemberMoneyView>({
+    organisationId,
+    onRecheckLedger,
+    // What each source still holds is the server's figure; any posting made
+    // elsewhere, a recheck or a refusal re-reads it rather than trusting it.
+    onPanelReadsStale: () => {
+      if (memberReceiptsOn) void sourcesQuery.refetch();
+    },
+  });
+  const { postings, view, formError, panelError, success, superseded, formInstance, recheck } =
+    workflow;
+  // The source the officer chose to refund. The form shows the latest server
+  // copy of it, never this snapshot's figures.
+  const [refundSourceId, setRefundSourceId] = useState<string | null>(null);
   // Hints are read only while the form that offers them is open. The member
   // list needs members.view; without it the payer name alone is recorded.
   const hintsNeeded = enabled && view === "member_receipt";
@@ -132,6 +204,15 @@ const MemberMoneyPanel = ({
   const memberMoney = memberMoneyReadiness({ status, accounts });
   const readiness = posting.ready ? memberMoney : posting;
   const canStart = readiness.ready && !hasIntent && !success && view === "overview";
+  const rechecking = isRechecking || (sourcesQuery.isFetching && !sourcesQuery.isLoading);
+
+  const refund = refundSourceId
+    ? refundSourceState({
+        id: refundSourceId,
+        sources: sourcesQuery.isError ? null : sourcesQuery.sources,
+        complete: sourcesQuery.complete,
+      })
+    : null;
 
   const memberOptions: SelectOption[] | null =
     canReadMembers && membersQuery.isSuccess
@@ -167,8 +248,15 @@ const MemberMoneyPanel = ({
         memberOptions={memberOptions}
         obligationOptions={obligationOptions}
       />
-    ) : view === "refund" && refundSource ? (
-      <RefundForm key={`${refundSource.id}-${formInstance}`} {...formProps} source={refundSource} />
+    ) : view === "refund" && refund?.kind === "current" ? (
+      <RefundForm key={`${refund.source.id}-${formInstance}`} {...formProps} source={refund.source} />
+    ) : view === "refund" ? (
+      <RefundSourceUnavailable
+        gone={refund?.kind === "gone"}
+        isRechecking={rechecking}
+        onRecheck={recheck}
+        onBack={workflow.back}
+      />
     ) : null;
 
   const sources = (() => {
@@ -208,7 +296,7 @@ const MemberMoneyPanel = ({
               source={source}
               canRefund={canStart}
               onRefund={() => {
-                setRefundSource(source);
+                setRefundSourceId(source.id);
                 workflow.open("refund");
               }}
             />
@@ -242,7 +330,7 @@ const MemberMoneyPanel = ({
             read={intentRead}
             canManage={canManage}
             isPosting={postings.isPosting}
-            isRechecking={isRechecking}
+            isRechecking={rechecking}
             onRetry={workflow.retry}
             onRecheck={recheck}
             // Ordinary postings are retried in "Record money" when it is
@@ -297,7 +385,7 @@ const MemberMoneyPanel = ({
         {readiness.ready && view !== "overview" && superseded && (
           <PostingSupersededNotice
             hasPendingIntent={hasIntent}
-            isRechecking={isRechecking}
+            isRechecking={rechecking}
             onRecheck={recheck}
             onStartNew={workflow.startNewPosting}
           />

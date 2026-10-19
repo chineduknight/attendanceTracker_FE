@@ -18,14 +18,19 @@ interface OpenMemberMoney {
 /** Reads every open source (bounded) so "nothing held" is real evidence. */
 const fetchOpenMemberMoney = async (baseUrl: string): Promise<OpenMemberMoney> => {
   const items: MemberMoneySource[] = [];
+  const seen = new Set<string>();
   let cursor: string | null = null;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const query = `?open=true&limit=${PAGE_SIZE}${
       cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
     }`;
     const response = await axiosInstance.get(`${baseUrl}${query}`);
-    const parsed = toMemberMoneyPage(response?.data?.data);
+    const parsed = toMemberMoneyPage(response?.data?.data, { open: true });
     if (!parsed) return { items: null, complete: false };
+    // A source repeated across pages means the pages disagree; which copy
+    // holds the right amount can't be known here.
+    if (parsed.items.some((source) => seen.has(source.id))) return { items: null, complete: false };
+    parsed.items.forEach((source) => seen.add(source.id));
     items.push(...parsed.items);
     if (!parsed.nextCursor) return { items, complete: true };
     cursor = parsed.nextCursor;

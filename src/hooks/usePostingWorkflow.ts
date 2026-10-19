@@ -23,10 +23,17 @@ export interface ConfirmedPosting {
 export const usePostingWorkflow = <View extends string>({
   organisationId,
   onRecheckLedger,
+  onPanelReadsStale,
 }: {
   organisationId: string;
   /** Refetches status, accounts and journals (reads only). */
   onRecheckLedger?: () => void;
+  /**
+   * Refetches the panel's own reads (e.g. member money held). Called whenever
+   * they may be stale: a posting record changed elsewhere (form open or not),
+   * a deliberate recheck, or the server refusing a posting.
+   */
+  onPanelReadsStale?: () => void;
 }) => {
   const officerId = useGlobalStore((store) => store.user.id);
   const [view, setView] = useState<View | "overview">("overview");
@@ -50,12 +57,16 @@ export const usePostingWorkflow = <View extends string>({
   const postings = useLedgerPostings(organisationId, officerId, {
     onExternalIntentChange: () => {
       if (view !== "overview") supersedeForm();
+      // Even with no form open, what another tab or section just posted can
+      // change what this panel shows (e.g. what a source still holds).
+      onPanelReadsStale?.();
     },
   });
 
   const recheck = () => {
     postings.intent.refresh();
     onRecheckLedger?.();
+    onPanelReadsStale?.();
   };
 
   const open = (next: View) => {
@@ -102,6 +113,11 @@ export const usePostingWorkflow = <View extends string>({
         return;
       case "refused":
       case "voided":
+        // A refusal can mean this screen's figures were stale (e.g.
+        // LEDGER_REFUND_EXCEEDS_REMAINING); show the server's current ones.
+        setFormError(result.message);
+        onPanelReadsStale?.();
+        return;
       case "busy":
         setFormError(result.message);
         return;
@@ -125,6 +141,9 @@ export const usePostingWorkflow = <View extends string>({
         return;
       case "refused":
       case "voided":
+        setPanelError(result.message);
+        onPanelReadsStale?.();
+        return;
       case "blocked":
       case "busy":
         setPanelError(result.message);

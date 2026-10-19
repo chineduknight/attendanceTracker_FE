@@ -126,7 +126,7 @@ const isPurpose = (value: unknown): value is MemberMoneyPurpose =>
 const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
 
 /** The ids the server accepts in a route or hint (24 hex characters). */
-const isObjectId = (value: unknown): value is string =>
+export const isObjectId = (value: unknown): value is string =>
   typeof value === "string" && OBJECT_ID_PATTERN.test(value);
 
 const readRawResult = (

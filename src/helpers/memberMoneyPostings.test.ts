@@ -434,10 +434,64 @@ describe("member money sources", () => {
     }
   });
 
+  it("requires the source id the refund route accepts (an ObjectId)", () => {
+    for (const id of ["M-000012", "src-1", "a".repeat(23), "g".repeat(24), 12, null, undefined]) {
+      expect(toMemberMoneySource(item({ id }))).toBeNull();
+    }
+    expect(toMemberMoneySource(item({ id: "A1".repeat(12) }))?.id).toBe("A1".repeat(12));
+  });
+
+  it("reads allocatedKobo when the server sends it", () => {
+    expect(
+      toMemberMoneySource(
+        item({ effectiveKobo: 600000, refundedKobo: 100000, allocatedKobo: 200000, remainingKobo: 300000 }),
+      ),
+    ).toMatchObject({ refundedKobo: 100000, allocatedKobo: 200000, remainingKobo: 300000 });
+    expect(toMemberMoneySource(item({ allocatedKobo: 0 }))?.allocatedKobo).toBe(0);
+  });
+
+  it("reads an older server without allocatedKobo as no allocations, still checked exactly", () => {
+    // F2B-2 servers predate F3-1: remaining must equal effective − refunded.
+    expect(toMemberMoneySource(item())).toMatchObject({ allocatedKobo: 0, remainingKobo: 500000 });
+    expect(toMemberMoneySource(item({ remainingKobo: 300000 }))).toBeNull();
+  });
+
+  it("refuses an invalid allocatedKobo rather than treating it as zero", () => {
+    for (const allocatedKobo of [null, -1, 1.5, "0", Number.MAX_SAFE_INTEGER + 1]) {
+      expect(toMemberMoneySource(item({ allocatedKobo }))).toBeNull();
+    }
+  });
+
+  it("refuses figures that contradict each other", () => {
+    for (const bad of [
+      // remaining larger than what is left after refunds
+      item({ remainingKobo: 600000 }),
+      // remaining smaller than what is left
+      item({ remainingKobo: 400000 }),
+      // refunded more than was received
+      item({ effectiveKobo: 100000, refundedKobo: 200000, remainingKobo: 0 }),
+      // allocations not accounted for
+      item({ allocatedKobo: 100000 }),
+      // a reversed receipt still claiming to hold money
+      item({ effectiveKobo: 0, refundedKobo: 0, remainingKobo: 500000 }),
+    ]) {
+      expect(toMemberMoneySource(bad)).toBeNull();
+    }
+  });
+
   it("fails the whole page closed on any malformed item", () => {
     expect(toMemberMoneyPage({ items: [item()], nextCursor: null })?.items).toHaveLength(1);
     expect(toMemberMoneyPage({ items: [item(), item({ kind: "x" })], nextCursor: null })).toBeNull();
+    expect(
+      toMemberMoneyPage({ items: [item(), item({ remainingKobo: 1 })], nextCursor: null }),
+    ).toBeNull();
     expect(toMemberMoneyPage({ items: [], nextCursor: "" })).toBeNull();
     expect(toMemberMoneyPage({ nextCursor: null })).toBeNull();
+  });
+
+  it("refuses a source holding nothing in an open=true page", () => {
+    const spent = item({ refundedKobo: 600000, remainingKobo: 0 });
+    expect(toMemberMoneyPage({ items: [spent], nextCursor: null })?.items).toHaveLength(1);
+    expect(toMemberMoneyPage({ items: [spent], nextCursor: null }, { open: true })).toBeNull();
   });
 });

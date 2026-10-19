@@ -66,11 +66,17 @@ export const postingMoneyAccounts = (
 const activeCategory = (account: LedgerAccount, accountClass: "income" | "expense") =>
   account.active === true && account.class === accountClass;
 
+/**
+ * Ordinary receipt categories: active income with no subtype. F3's member
+ * dues/levy income accounts (`member_dues_income`, `member_levy_income`) are
+ * also class `income`, but only allocations may credit them; a receipt naming
+ * one is `422 LEDGER_ACCOUNT_ROLE_MISMATCH`. Never filter on class alone.
+ */
 export const postingIncomeCategories = (
   accounts: readonly LedgerAccount[] | null,
 ): LedgerAccount[] =>
   (accounts ?? [])
-    .filter((account) => activeCategory(account, "income"))
+    .filter((account) => activeCategory(account, "income") && account.subtype === null)
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name));
 
