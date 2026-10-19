@@ -7,9 +7,11 @@ import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
 import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePanel";
 import CashbookPostingsPanel from "components/finance/postings/CashbookPostingsPanel";
+import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
+import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { formatKobo } from "helpers/financeConstants";
 import { formatBusinessDate } from "helpers/financeCompliance";
@@ -408,6 +410,15 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
     return <PageLoader h="30vh" label="Loading books..." />;
   }
 
+  // Both posting sections recheck the same reads: status, accounts, journals.
+  const isRecheckingPostings =
+    statusQuery.isFetching || accountsQuery.isFetching || journalsQuery.isFetching;
+  const recheckPostings = () => {
+    statusQuery.refetch();
+    accountsQuery.refetch();
+    journalsQuery.refetch();
+  };
+
   return (
     <Stack gap={5}>
       <StatusHeader status={status} />
@@ -483,16 +494,20 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           organisationId={organisationId}
           status={status}
           accounts={accountsQuery.accounts}
-          isRechecking={
-            statusQuery.isFetching ||
-            accountsQuery.isFetching ||
-            journalsQuery.isFetching
-          }
-          onRecheckLedger={() => {
-            statusQuery.refetch();
-            accountsQuery.refetch();
-            journalsQuery.refetch();
-          }}
+          isRechecking={isRecheckingPostings}
+          onRecheckLedger={recheckPostings}
+        />
+      )}
+
+      {/* F2B-2 member receipts and refunds: its own gate, default off. It
+          shares the pending posting with "Record money" above. */}
+      {LEDGER_MEMBER_MONEY_UI_ENABLED && (
+        <MemberMoneyPanel
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          isRechecking={isRecheckingPostings}
+          onRecheckLedger={recheckPostings}
         />
       )}
 

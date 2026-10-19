@@ -192,6 +192,9 @@ export const queryKeys = {
       /** Lifecycle audit trail for one organisation (F2A-4 read). */
       audit: (organisationId: string) =>
         ["finance", organisationId, "ledger", "audit"] as const,
+      /** Member-money sources still holding money (F2B-2 read). */
+      openMemberMoney: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "member-money", "open"] as const,
     },
   },
 

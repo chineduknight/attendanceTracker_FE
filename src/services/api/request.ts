@@ -105,6 +105,12 @@ export const financeRequest = {
   LEDGER_RECEIPTS: "/finance/:organisationId/ledger/receipts",
   LEDGER_EXPENSES: "/finance/:organisationId/ledger/expenses",
   LEDGER_TRANSFERS: "/finance/:organisationId/ledger/transfers",
+  // F2B-2 member money (gated): receipts credit the holding liability, never
+  // income; refunds name one source in the route.
+  LEDGER_MEMBER_RECEIPTS: "/finance/:organisationId/ledger/member-receipts",
+  LEDGER_MEMBER_MONEY: "/finance/:organisationId/ledger/member-money",
+  LEDGER_MEMBER_MONEY_REFUNDS:
+    "/finance/:organisationId/ledger/member-money/:sourceId/refunds",
 };
 
 export const rbacRequest = {

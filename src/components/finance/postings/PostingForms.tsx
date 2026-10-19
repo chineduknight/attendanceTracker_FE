@@ -51,11 +51,11 @@ export interface PostingFormProps {
   onSubmit: (draft: PostingDraft, summary: PostingSummary) => void;
 }
 
-const methodOptions: SelectOption<PostingMethod>[] = POSTING_METHODS.map(
+export const methodOptions: SelectOption<PostingMethod>[] = POSTING_METHODS.map(
   (method) => ({ value: method, label: POSTING_METHOD_LABELS[method] }),
 );
 
-const accountOptions = (accounts: readonly LedgerAccount[]): SelectOption[] =>
+export const accountOptions = (accounts: readonly LedgerAccount[]): SelectOption[] =>
   postingMoneyAccounts(accounts).map((account) => ({
     value: account.id,
     label: account.name,
@@ -70,7 +70,7 @@ const categoryOptions = (
     : postingExpenseCategories(accounts)
   ).map((account) => ({ value: account.id, label: account.name }));
 
-const nameOf = (accounts: readonly LedgerAccount[], id: string): string | null =>
+export const nameOf = (accounts: readonly LedgerAccount[], id: string): string | null =>
   accounts.find((account) => account.id === id)?.name ?? null;
 
 /** The datepicker disables days before the opening or on/before the lock. */
@@ -87,9 +87,9 @@ const earliestPostingDate = (context: PostingDateContext): string | undefined =>
  * Set by `LockableFields`. Each field disables its own `Field.Root`, which
  * disables the input, textarea, dropdown and date picker inside it.
  */
-const FormLockContext = createContext(false);
+export const FormLockContext = createContext(false);
 
-const TextField = ({
+export const TextField = ({
   label,
   value,
   onChange,
@@ -129,13 +129,15 @@ const TextField = ({
   );
 };
 
-const SelectField = ({
+export const SelectField = ({
   label,
   value,
   options,
   onChange,
   placeholder,
   helper,
+  searchable = false,
+  onClear,
 }: {
   label: string;
   value: string;
@@ -143,6 +145,10 @@ const SelectField = ({
   onChange: (value: string) => void;
   placeholder: string;
   helper?: string;
+  /** Typing to filter, for long lists such as members. */
+  searchable?: boolean;
+  /** For an optional value: offers a clear button. */
+  onClear?: () => void;
 }) => {
   const locked = useContext(FormLockContext);
   return (
@@ -153,13 +159,15 @@ const SelectField = ({
         options={options}
         onChange={onChange}
         placeholder={placeholder}
+        isSearchable={searchable}
+        onClear={onClear}
       />
       {helper && <Field.HelperText>{helper}</Field.HelperText>}
     </Field.Root>
   );
 };
 
-const DateAndAmount = ({
+export const DateAndAmount = ({
   context,
   date,
   onDate,
@@ -205,7 +213,7 @@ const DateAndAmount = ({
   );
 };
 
-const Feedback = ({
+export const Feedback = ({
   attempted,
   issue,
   error,
@@ -228,13 +236,13 @@ const Feedback = ({
   </>
 );
 
-const LockableFields = ({ locked, children }: { locked: boolean; children: ReactNode }) => (
+export const LockableFields = ({ locked, children }: { locked: boolean; children: ReactNode }) => (
   <FormLockContext.Provider value={locked}>
     <Stack gap={4}>{children}</Stack>
   </FormLockContext.Provider>
 );
 
-const Actions = ({
+export const Actions = ({
   isPosting,
   locked,
   onCancel,
@@ -264,7 +272,7 @@ const Actions = ({
   </Flex>
 );
 
-const FormHeading = ({ children }: { children: string }) => (
+export const FormHeading = ({ children }: { children: string }) => (
   <Text as="h3" fontSize="md" fontWeight="semibold">
     {children}
   </Text>

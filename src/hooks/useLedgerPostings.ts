@@ -21,6 +21,7 @@ import {
   buildPostingBody,
   classifyPostingFailure,
   postingEndpoint,
+  postingSourceId,
 } from "helpers/ledgerPostings";
 import { useLedgerPostingIntent } from "hooks/useLedgerPostingIntent";
 
@@ -112,8 +113,11 @@ export const useLedgerPostings = (
 
   const dispatch = useCallback(
     async (record: LedgerPostingIntentRecord): Promise<PostingSubmitResult> => {
+      // A refund's source is part of the route, so the stored `sourceId`
+      // sends every retry to the same member money.
       const url = convertParamsToString(postingEndpoint(record.operation), {
         organisationId: record.organisationId,
+        ...(record.sourceId ? { sourceId: record.sourceId } : {}),
       });
       try {
         // Use the Axios instance directly: only this path needs the HTTP
@@ -126,6 +130,7 @@ export const useLedgerPostings = (
           operation: record.operation,
           businessDate: record.body.businessDate,
           amountKobo: record.body.amountKobo,
+          sourceId: record.sourceId,
         });
         if (!assessment.confirmed) {
           // A 2xx alone is not proof. Keep the exact body/key pending and
@@ -221,6 +226,7 @@ export const useLedgerPostings = (
           key,
           operation: draft.operation,
           body,
+          sourceId: postingSourceId(draft),
           summary,
         });
         if (claim.kind === "blocked") {

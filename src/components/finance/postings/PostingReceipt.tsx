@@ -1,5 +1,8 @@
 import { Badge, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import {
+  MEMBER_MONEY_PURPOSES,
+  MEMBER_MONEY_PURPOSE_LABELS,
+  MemberMoneyPurpose,
   POSTING_METHOD_LABELS,
   PostingSummary,
 } from "components/finance/ledgerPostingTypes";
@@ -28,7 +31,27 @@ const summaryText = (summary: PostingSummary) => {
       return `Transfer from ${
         summary.fromAccountName ?? "the selected account"
       } to ${summary.toAccountName ?? "the selected account"}`;
+    case "member_receipt":
+      return `Member money in to ${
+        summary.toAccountName ?? "the selected account"
+      }, held for members (not income)`;
+    case "refund":
+      return `Member money refund from ${summary.fromAccountName ?? "the selected account"}`;
   }
+};
+
+const COUNTERPARTY_LABELS: Partial<Record<PostingSummary["operation"], string>> = {
+  member_receipt: "Paid by",
+  refund: "Paid to",
+};
+
+/** The server's purpose when readable and known, else what was sent. */
+const purposeLabel = (fromServer: string | null, sent: PostingSummary["purpose"]) => {
+  const purpose =
+    fromServer && (MEMBER_MONEY_PURPOSES as readonly string[]).includes(fromServer)
+      ? (fromServer as MemberMoneyPurpose)
+      : sent ?? null;
+  return purpose ? MEMBER_MONEY_PURPOSE_LABELS[purpose] : null;
 };
 
 /**
@@ -50,6 +73,14 @@ const PostingReceipt = ({
   const method =
     postingMethodLabel(journal?.method ?? null) ??
     POSTING_METHOD_LABELS[summary.method];
+  const purpose =
+    summary.operation === "member_receipt"
+      ? purposeLabel(journal?.purpose ?? null, summary.purpose)
+      : null;
+  const sourceNumber =
+    summary.operation === "refund"
+      ? journal?.memberMoneySourceNumber ?? summary.sourceNumber ?? null
+      : null;
 
   return (
     <Box
@@ -90,9 +121,14 @@ const PostingReceipt = ({
           </Text>
           <Text fontSize="sm">{`Payment method: ${method}`}</Text>
           <Text fontSize="sm">{summaryText(summary)}</Text>
+          {purpose && <Text fontSize="sm">{`Purpose: ${purpose}`}</Text>}
+          {sourceNumber && <Text fontSize="sm">{`Refunded from: ${sourceNumber}`}</Text>}
           {journal?.counterpartyName && (
-            <Text fontSize="sm">{`Counterparty: ${journal.counterpartyName}`}</Text>
+            <Text fontSize="sm">{`${
+              COUNTERPARTY_LABELS[summary.operation] ?? "Counterparty"
+            }: ${journal.counterpartyName}`}</Text>
           )}
+          {journal?.reason && <Text fontSize="sm">{`Reason: ${journal.reason}`}</Text>}
           {journal?.reference && (
             <Text fontSize="sm">{`Reference: ${journal.reference}`}</Text>
           )}

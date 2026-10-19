@@ -10,6 +10,7 @@ import {
 import { formatLagosTimestamp } from "helpers/openingBalances";
 import { postingSummaryText } from "helpers/ledgerPostings";
 import { formatBusinessDate } from "helpers/financeCompliance";
+import { PostingOperation } from "components/finance/ledgerPostingTypes";
 
 /**
  * The block shown while a financial posting is unconfirmed.
@@ -26,6 +27,8 @@ const PostingIntentNotice = ({
   isRechecking,
   onRetry,
   onRecheck,
+  operations,
+  elsewhereLabel,
 }: {
   read: LedgerPostingIntentRead;
   canManage: boolean;
@@ -33,6 +36,14 @@ const PostingIntentNotice = ({
   isRechecking: boolean;
   onRetry: (record: LedgerPostingIntentRecord) => void;
   onRecheck: () => void;
+  /**
+   * The postings this section owns and retries. One pending posting blocks
+   * every new posting, but only its own section offers the retry, so the
+   * same request is never offered twice on one page. Omit to show all.
+   */
+  operations?: readonly PostingOperation[];
+  /** Where the other postings are shown, e.g. "Member money". */
+  elsewhereLabel?: string;
 }) => {
   if (read.kind === "none") return null;
 
@@ -76,9 +87,31 @@ const PostingIntentNotice = ({
     );
   }
 
+  const shown = operations
+    ? read.intents.filter((record) => operations.includes(record.operation))
+    : read.intents;
+  const shownElsewhere = read.intents.length - shown.length;
+
   return (
     <Stack gap={3}>
-      {read.intents.map((record) => {
+      {shownElsewhere > 0 && (
+        <Box
+          role="alert"
+          borderWidth="1px"
+          borderColor="border.warning"
+          borderRadius="md"
+          p={3}
+          bg="bg.panel"
+        >
+          <Text fontSize="sm" fontWeight="semibold" mb={1}>
+            A financial posting is unconfirmed
+          </Text>
+          <Text fontSize="sm" color="fg.muted">
+            {`It is shown in ${elsewhereLabel ?? "another section"}. Nothing new can be recorded until it is proved there.`}
+          </Text>
+        </Box>
+      )}
+      {shown.map((record) => {
         const started = formatLagosTimestamp(record.startedAt);
         return (
           <Box

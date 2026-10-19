@@ -414,3 +414,143 @@ describe("two tabs resolving the same key", () => {
     expect(pendingIntents()[0]).toMatchObject({ key: OLD_KEY, state: "dispatching" });
   });
 });
+
+describe("member-money intents (F2B-2)", () => {
+  const SOURCE_ID = "a".repeat(24);
+  const REFUND_BODY = {
+    idempotencyKey: "key-refund01",
+    businessDate: "2026-10-18",
+    amountKobo: 100000,
+    fromAccountId: "cash",
+    method: "cash" as const,
+    counterpartyName: "Ada Obi",
+    reason: "Paid twice",
+  };
+  const REFUND_SUMMARY: PostingSummary = {
+    operation: "refund",
+    amountKobo: 100000,
+    businessDate: "2026-10-18",
+    method: "cash",
+    fromAccountName: "Cash in hand",
+    toAccountName: null,
+    categoryName: null,
+    counterpartyName: "Ada Obi",
+    purpose: null,
+    sourceNumber: "M-000012",
+  };
+  const beginRefund = (sourceId: string | null) =>
+    beginLedgerPostingIntent(
+      {
+        organisationId: "org1",
+        officerId: "officer-1",
+        key: REFUND_BODY.idempotencyKey,
+        operation: "refund",
+        body: REFUND_BODY,
+        sourceId,
+        summary: REFUND_SUMMARY,
+      },
+      NOW,
+    );
+
+  it("keeps a refund's source with its exact body across a reload", async () => {
+    expect(await beginRefund(SOURCE_ID)).toMatchObject({ kind: "claimed" });
+    const [stored] = pendingIntents();
+    expect(stored).toMatchObject({
+      operation: "refund",
+      sourceId: SOURCE_ID,
+      body: REFUND_BODY,
+      summary: { sourceNumber: "M-000012", counterpartyName: "Ada Obi" },
+    });
+
+    expect(
+      await markLedgerPostingIntentUnresolved(stored, { ambiguous: true, message: "Unknown.", now: NOW }),
+    ).toBe(true);
+    expect(pendingIntents()[0].sourceId).toBe(SOURCE_ID);
+  });
+
+  it("refuses a refund without its source, and a source on any other posting", async () => {
+    expect(await beginRefund(null)).toMatchObject({ kind: "blocked", reason: "invalid" });
+    expect(await beginRefund("not-an-id")).toMatchObject({ kind: "blocked", reason: "invalid" });
+    expect(
+      await beginLedgerPostingIntent(
+        {
+          organisationId: "org1",
+          officerId: "officer-1",
+          key: "key-12345678",
+          operation: "receipt",
+          body: BODY,
+          sourceId: SOURCE_ID,
+          summary: SUMMARY,
+        },
+        NOW,
+      ),
+    ).toMatchObject({ kind: "blocked", reason: "invalid" });
+    expect(readLedgerPostingIntents("org1").kind).toBe("none");
+  });
+
+  it("still reads a record written by the F2B-1 build", () => {
+    window.localStorage.setItem(
+      ledgerPostingIntentKey("org1"),
+      JSON.stringify({
+        organisationId: "org1",
+        intents: [
+          {
+            organisationId: "org1",
+            officerId: "officer-1",
+            key: "key-12345678",
+            operation: "receipt",
+            body: BODY,
+            summary: SUMMARY,
+            startedAt: NOW.toISOString(),
+            state: "unresolved",
+            hadAmbiguousAttempt: true,
+            retryMode: "retry",
+            lastAttemptAt: null,
+            lastFailure: null,
+          },
+        ],
+      }),
+    );
+    expect(pendingIntents()[0]).toMatchObject({
+      key: "key-12345678",
+      sourceId: null,
+      summary: { counterpartyName: null, purpose: null, sourceNumber: null },
+    });
+  });
+
+  it("fails closed on a stored member receipt without the opening-count attestation", () => {
+    const body = {
+      idempotencyKey: "key-member01",
+      businessDate: "2026-10-18",
+      amountKobo: 600000,
+      toAccountId: "cash",
+      method: "cash",
+      counterpartyName: "Ada Obi",
+      purpose: "dues",
+    };
+    window.localStorage.setItem(
+      ledgerPostingIntentKey("org1"),
+      JSON.stringify({
+        organisationId: "org1",
+        intents: [
+          {
+            organisationId: "org1",
+            officerId: "officer-1",
+            key: "key-member01",
+            operation: "member_receipt",
+            body,
+            sourceId: null,
+            summary: { ...SUMMARY, operation: "member_receipt", purpose: "dues" },
+            startedAt: NOW.toISOString(),
+            state: "unresolved",
+            hadAmbiguousAttempt: true,
+            retryMode: "retry",
+            lastAttemptAt: null,
+            lastFailure: null,
+          },
+        ],
+      }),
+    );
+    expect(readLedgerPostingIntents("org1").kind).toBe("unknown");
+  });
+});

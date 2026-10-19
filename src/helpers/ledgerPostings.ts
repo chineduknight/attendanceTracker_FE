@@ -1,5 +1,6 @@
 /**
- * F2B-1 cashbook posting rules (F2 Cashbook RFC v0.3 §5, §7, §8.2).
+ * F2B-1 cashbook and F2B-2 member-money posting rules (F2 Cashbook RFC v0.3
+ * §5, §7, §8.2).
  *
  * Pure helpers only: eligible-account filtering, strict field validation,
  * exact integer-kobo conversion, body building, tolerant response parsing and
@@ -13,6 +14,11 @@ import { LedgerAccount, LedgerStatus, PeriodLockState } from "components/finance
 import {
   ExpenseBody,
   ExpenseDraft,
+  MEMBER_MONEY_PURPOSES,
+  MEMBER_MONEY_PURPOSE_LABELS,
+  MemberMoneyPurpose,
+  MemberReceiptBody,
+  MemberReceiptDraft,
   POSTING_METHODS,
   POSTING_METHOD_LABELS,
   POSTING_OPERATION_LABELS,
@@ -24,12 +30,14 @@ import {
   PostingSummary,
   ReceiptBody,
   ReceiptDraft,
+  RefundBody,
+  RefundDraft,
   TransferBody,
   TransferDraft,
 } from "components/finance/ledgerPostingTypes";
 import { ledgerApiFailure } from "helpers/ledgerSetup";
 import { ledgerStateKey } from "helpers/ledger";
-import { isBusinessDate } from "helpers/openingBalances";
+import { activeMemberMoneyAccount, isBusinessDate } from "helpers/openingBalances";
 import { financeRequest } from "services/api/request";
 
 /* ------------------------------------------------------------------ */
@@ -155,6 +163,8 @@ export const POSTING_TEXT_LIMITS = {
   evidenceReference: 500,
   reference: 64,
   note: 500,
+  /** Refund reason (RFC §8.2). */
+  reason: 500,
 } as const;
 
 export const isPostingMethod = (value: string): value is PostingMethod =>
@@ -331,6 +341,90 @@ export const transferDraftIssue = (
   );
 };
 
+/** The optional reference fields every member-money entry accepts. */
+const entryReferencesIssue = (draft: {
+  externalReference: string;
+  evidenceReference: string;
+  reference: string;
+  note: string;
+}): string | null =>
+  postingTextIssue({
+    value: draft.externalReference,
+    label: "External reference",
+    max: POSTING_TEXT_LIMITS.externalReference,
+  }) ??
+  postingTextIssue({
+    value: draft.evidenceReference,
+    label: "Evidence reference",
+    max: POSTING_TEXT_LIMITS.evidenceReference,
+  }) ??
+  postingTextIssue({
+    value: draft.reference,
+    label: "Reference",
+    max: POSTING_TEXT_LIMITS.reference,
+  }) ??
+  postingTextIssue({
+    value: draft.note,
+    label: "Note",
+    max: POSTING_TEXT_LIMITS.note,
+  });
+
+export const isMemberMoneyPurpose = (value: string): value is MemberMoneyPurpose =>
+  (MEMBER_MONEY_PURPOSES as readonly string[]).includes(value);
+
+export const RECEIVED_AFTER_OPENING_COUNT_ISSUE =
+  "Confirm the money was received after the opening count. Money already in the opening count can't be recorded as a member receipt.";
+
+export const memberReceiptDraftIssue = (
+  draft: MemberReceiptDraft,
+  context: PostingValidationContext,
+): string | null =>
+  commonDraftIssue(draft, context) ??
+  (moneyAccountIds(context.accounts).has(draft.toAccountId)
+    ? null
+    : "Choose the cash or bank account the money was received into.") ??
+  postingTextIssue({
+    value: draft.counterpartyName,
+    label: "Paid by",
+    max: POSTING_TEXT_LIMITS.counterpartyName,
+    required: true,
+  }) ??
+  (isMemberMoneyPurpose(draft.purpose) ? null : "Choose what the money is for.") ??
+  (draft.receivedAfterOpeningCount === true ? null : RECEIVED_AFTER_OPENING_COUNT_ISSUE) ??
+  entryReferencesIssue(draft);
+
+export const refundDraftIssue = (
+  draft: RefundDraft,
+  context: PostingValidationContext,
+): string | null =>
+  commonDraftIssue(draft, context) ??
+  (draft.businessDate < draft.source.businessDate
+    ? `A refund can't be dated before the money it returns was received (${formatBusinessDate(
+        draft.source.businessDate,
+      )}).`
+    : null) ??
+  (draft.amountKobo > draft.source.remainingKobo
+    ? `A refund can't be more than the ${formatKobo(
+        draft.source.remainingKobo,
+      )} still held from ${draft.source.number}.`
+    : null) ??
+  (moneyAccountIds(context.accounts).has(draft.fromAccountId)
+    ? null
+    : "Choose the cash or bank account the money is paid back from.") ??
+  postingTextIssue({
+    value: draft.counterpartyName,
+    label: "Paid to",
+    max: POSTING_TEXT_LIMITS.counterpartyName,
+    required: true,
+  }) ??
+  postingTextIssue({
+    value: draft.reason,
+    label: "Reason",
+    max: POSTING_TEXT_LIMITS.reason,
+    required: true,
+  }) ??
+  entryReferencesIssue(draft);
+
 export const postingDraftIssue = (
   draft: PostingDraft,
   context: PostingValidationContext,
@@ -342,6 +436,10 @@ export const postingDraftIssue = (
       return expenseDraftIssue(draft.expense, context);
     case "transfer":
       return transferDraftIssue(draft.transfer, context);
+    case "member_receipt":
+      return memberReceiptDraftIssue(draft.memberReceipt, context);
+    case "refund":
+      return refundDraftIssue(draft.refund, context);
   }
 };
 
@@ -427,6 +525,64 @@ export const buildTransferBody = (
   return body;
 };
 
+/** Optional reference fields, omitted when blank. */
+const withReferences = <T extends object>(
+  body: T,
+  draft: { externalReference: string; evidenceReference: string; reference: string; note: string },
+): T => {
+  const references = {
+    externalReference: optionalText(draft.externalReference),
+    evidenceReference: optionalText(draft.evidenceReference),
+    reference: optionalText(draft.reference),
+    note: optionalText(draft.note),
+  };
+  const present = Object.fromEntries(
+    Object.entries(references).filter(([, value]) => value !== undefined),
+  );
+  return { ...body, ...present };
+};
+
+/**
+ * The exact member-receipt body. The server picks the holding account, so
+ * none is ever sent. Blank hints are omitted rather than sent empty.
+ */
+export const buildMemberReceiptBody = (
+  draft: MemberReceiptDraft,
+  idempotencyKey: string,
+): MemberReceiptBody => {
+  if (!isMemberMoneyPurpose(draft.purpose)) {
+    throw new Error("A member receipt needs an explicit purpose.");
+  }
+  const body: MemberReceiptBody = {
+    idempotencyKey,
+    businessDate: draft.businessDate,
+    amountKobo: draft.amountKobo,
+    toAccountId: draft.toAccountId,
+    method: draft.method,
+    counterpartyName: draft.counterpartyName.trim(),
+    purpose: draft.purpose,
+    receivedAfterOpeningCount: true,
+  };
+  if (draft.memberId) body.memberId = draft.memberId;
+  if (draft.obligationId) body.obligationId = draft.obligationId;
+  return withReferences(body, draft);
+};
+
+/** The exact refund body. The source is the route's `:sourceId`, never a body field. */
+export const buildRefundBody = (draft: RefundDraft, idempotencyKey: string): RefundBody =>
+  withReferences(
+    {
+      idempotencyKey,
+      businessDate: draft.businessDate,
+      amountKobo: draft.amountKobo,
+      fromAccountId: draft.fromAccountId,
+      method: draft.method,
+      counterpartyName: draft.counterpartyName.trim(),
+      reason: draft.reason.trim(),
+    },
+    draft,
+  );
+
 export const buildPostingBody = (
   draft: PostingDraft,
   idempotencyKey: string,
@@ -438,8 +594,16 @@ export const buildPostingBody = (
       return buildExpenseBody(draft.expense, idempotencyKey);
     case "transfer":
       return buildTransferBody(draft.transfer, idempotencyKey);
+    case "member_receipt":
+      return buildMemberReceiptBody(draft.memberReceipt, idempotencyKey);
+    case "refund":
+      return buildRefundBody(draft.refund, idempotencyKey);
   }
 };
+
+/** The refund's source id, which is part of the exact request (its route). */
+export const postingSourceId = (draft: PostingDraft): string | null =>
+  draft.operation === "refund" ? draft.refund.source.id : null;
 
 export const postingEndpoint = (operation: PostingOperation): string => {
   switch (operation) {
@@ -449,6 +613,10 @@ export const postingEndpoint = (operation: PostingOperation): string => {
       return financeRequest.LEDGER_EXPENSES;
     case "transfer":
       return financeRequest.LEDGER_TRANSFERS;
+    case "member_receipt":
+      return financeRequest.LEDGER_MEMBER_RECEIPTS;
+    case "refund":
+      return financeRequest.LEDGER_MEMBER_MONEY_REFUNDS;
   }
 };
 
@@ -614,6 +782,37 @@ export const transferOperationReadiness = (
           "At least two active cash or bank accounts with verified openings are needed for a transfer.",
       };
 
+/**
+ * Member money needs, on top of ordinary posting readiness, member receipts
+ * turned on for this ledger and an active holding account. The server picks
+ * that account; the client only checks it exists so it can explain a gap.
+ */
+export const memberMoneyReadiness = ({
+  status,
+  accounts,
+}: {
+  status: LedgerStatus;
+  accounts: readonly LedgerAccount[] | null;
+}): PostingReadiness => {
+  if (status.memberReceiptsEnabled !== true) {
+    return {
+      ready: false,
+      reason:
+        status.memberReceiptsEnabled === false
+          ? "Member receipts are turned off for this ledger. An officer can turn them on in Bookkeeping setup before activation."
+          : "The server didn't report whether member receipts are on, so member money can't be recorded.",
+    };
+  }
+  if (accounts === null || !activeMemberMoneyAccount(accounts)) {
+    return {
+      ready: false,
+      reason:
+        "No active member money holding account is set up. Add one in the chart of accounts before recording member money.",
+    };
+  }
+  return { ready: true, reason: null };
+};
+
 /* ------------------------------------------------------------------ */
 /* Confirmed response                                                 */
 /* ------------------------------------------------------------------ */
@@ -638,6 +837,7 @@ export const toPostingJournal = (value: unknown): PostingJournal | null => {
   const id = asText(raw?.id);
   if (!raw || !id) return null;
   const entry = asRecord(raw.entry);
+  const source = asRecord(entry?.memberMoneySource);
   const postedBy = asRecord(raw.postedBy);
   return {
     id,
@@ -654,6 +854,16 @@ export const toPostingJournal = (value: unknown): PostingJournal | null => {
     counterpartyName: asText(entry?.counterpartyName),
     externalReference: asText(entry?.externalReference),
     evidenceReference: asText(entry?.evidenceReference),
+    purpose: asText(entry?.purpose),
+    memberId: asText(entry?.memberId),
+    obligationId: asText(entry?.obligationId),
+    receivedAfterOpeningCount:
+      typeof entry?.receivedAfterOpeningCount === "boolean"
+        ? entry.receivedAfterOpeningCount
+        : null,
+    memberMoneySourceId: asText(source?.id),
+    memberMoneySourceNumber: asText(source?.number),
+    reason: asText(entry?.reason),
   };
 };
 
@@ -679,6 +889,8 @@ export const POSTING_SOURCE_TYPES: Record<PostingOperation, string> = {
   receipt: "cash_receipt",
   expense: "cash_expense",
   transfer: "cash_transfer",
+  member_receipt: "member_receipt",
+  refund: "member_receipt_refund",
 };
 
 export type PostingConfirmationAssessment =
@@ -705,12 +917,15 @@ export const assessPostingConfirmation = ({
   operation,
   businessDate,
   amountKobo,
+  sourceId = null,
 }: {
   httpStatus: number | undefined;
   body: unknown;
   operation: PostingOperation;
   businessDate: string;
   amountKobo: number;
+  /** Refunds: the `:sourceId` the request was sent to. */
+  sourceId?: string | null;
 }): PostingConfirmationAssessment => {
   if (httpStatus !== 200 && httpStatus !== 201) {
     return unconfirmedPostingResponse(
@@ -759,6 +974,13 @@ export const assessPostingConfirmation = ({
       "the response did not contain the server-issued journal number",
     );
   }
+  // A refund is only the one asked for when it returned money from the
+  // source the request named.
+  if (operation === "refund" && parsed.journal.memberMoneySourceId !== sourceId) {
+    return unconfirmedPostingResponse(
+      "the refund did not name the member money it was sent against",
+    );
+  }
 
   return {
     confirmed: true,
@@ -786,6 +1008,9 @@ export const POSTING_ERROR_CODES = {
   accountInactive: "LEDGER_ACCOUNT_INACTIVE",
   openingUnverified: "LEDGER_OPENING_UNVERIFIED",
   sameAccountTransfer: "LEDGER_SAME_ACCOUNT_TRANSFER",
+  memberReceiptsDisabled: "LEDGER_MEMBER_RECEIPTS_DISABLED",
+  requiredAccountMissing: "LEDGER_REQUIRED_ACCOUNT_MISSING",
+  refundExceedsRemaining: "LEDGER_REFUND_EXCEEDS_REMAINING",
 } as const;
 
 const NOTHING_WRITTEN_CODES: ReadonlySet<string> = new Set([
@@ -935,6 +1160,18 @@ export const postingSummaryText = (summary: PostingSummary): string => {
       return `${operation}: ${amount} from ${
         summary.fromAccountName ?? "the selected account"
       } to ${summary.toAccountName ?? "the selected account"}`;
+    case "member_receipt":
+      return `${operation}: ${amount} into ${
+        summary.toAccountName ?? "the selected account"
+      } from ${summary.counterpartyName ?? "the payer"}${
+        summary.purpose ? ` (${MEMBER_MONEY_PURPOSE_LABELS[summary.purpose].toLowerCase()})` : ""
+      }`;
+    case "refund":
+      return `${operation}: ${amount} from ${
+        summary.fromAccountName ?? "the selected account"
+      } to ${summary.counterpartyName ?? "the recipient"}, against ${
+        summary.sourceNumber ?? "the selected member money"
+      }`;
   }
 };
 
