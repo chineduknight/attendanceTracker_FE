@@ -106,6 +106,16 @@ const serveAudit = ({
   });
 };
 
+/** A 200 whose body is served verbatim (for malformed audit payloads). */
+const serveRawAudit = (body: unknown) => {
+  api.get.mockImplementation((url: string) => {
+    if (!String(url).includes("/ledger/audit")) {
+      return Promise.resolve({ data: { data: {} } });
+    }
+    return Promise.resolve({ data: { data: body } });
+  });
+};
+
 const setSession = ({
   permissions = ["finance.manage"] as PermissionKey[],
   isOwner = false,
@@ -359,7 +369,7 @@ describe("<LedgerLifecyclePanel> suspend and resume", () => {
     serveAudit();
     setSession({ isOwner: true });
     api.post.mockResolvedValue({ data: { data: {} } });
-    renderPanel();
+    const view = renderPanel();
 
     await submitSuspend("Treasurer handover");
 
@@ -367,6 +377,41 @@ describe("<LedgerLifecyclePanel> suspend and resume", () => {
       await screen.findByText(/couldn't read the resulting ledger state/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/The ledger is suspended/)).not.toBeInTheDocument();
+    // A 2xx that proves nothing keeps the persisted marker.
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "suspend-ledger", state: "unresolved" },
+    });
+
+    // The marker survives a reload: the next mount is still blocked.
+    view.unmount();
+    queryClient.clear();
+    serveAudit();
+    renderPanel();
+
+    expect(
+      await screen.findByText("We couldn't confirm the last ledger change"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suspend ledger" })).toBeDisabled();
+  });
+
+  it("keeps the marker when a 2xx status contradicts the suspension", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.post.mockResolvedValue({ data: { data: wireStatus({ state: "active" }) } });
+    renderPanel();
+
+    await submitSuspend("Treasurer handover");
+
+    expect(
+      await screen.findByText(/still reports the ledger as Active/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/The ledger is suspended/)).not.toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "suspend-ledger", state: "unresolved" },
+    });
+    expect(screen.getByRole("button", { name: "Suspend ledger" })).toBeDisabled();
   });
 
   it("lets an owner resume a suspended ledger with a reason", async () => {
@@ -391,6 +436,32 @@ describe("<LedgerLifecyclePanel> suspend and resume", () => {
       }),
     );
     expect(await screen.findByText("The ledger is active again.")).toBeInTheDocument();
+  });
+
+  it("retains the marker when a resume response still reports suspended", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.post.mockResolvedValue({
+      data: { data: wireStatus({ state: "suspended" }) },
+    });
+    renderPanel({
+      status: statusOf({ state: { kind: "known", state: "suspended" } }),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Resume ledger" }));
+    fireEvent.change(screen.getByLabelText("Reason for resuming"), {
+      target: { value: "Handover complete" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resume ledger" }));
+    await confirmInDialog("Resume bookkeeping");
+
+    expect(
+      await screen.findByText(/still reports the ledger as Suspended/),
+    ).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "resume-ledger", state: "unresolved" },
+    });
   });
 
   it("shows the suspension reason from the audit trail without inventing one", async () => {
@@ -463,6 +534,37 @@ describe("<LedgerLifecyclePanel> gap-window attestation", () => {
       }),
     );
     expect(await screen.findByText(/The gap window is recorded as attested/)).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" });
+  });
+
+  it("retains the marker when the attestation response is unreadable", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    // No `gapWindowAttestedAt` at all: the parser reports an unknown
+    // attestation, which is not proof either way.
+    api.post.mockResolvedValue({
+      data: {
+        data: {
+          ...wireStatus(),
+          gapWindowAttestedAt: undefined,
+        },
+      },
+    });
+    renderPanel();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Record gap-window attestation" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Record attestation" }));
+    await confirmInDialog("Attest gap window");
+
+    expect(
+      await screen.findByText(/doesn't report the gap window as attested/),
+    ).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "attest-gap-window", state: "unresolved" },
+    });
   });
 
   it("does not report an attestation the response does not show", async () => {
@@ -480,6 +582,10 @@ describe("<LedgerLifecyclePanel> gap-window attestation", () => {
     expect(
       await screen.findByText(/doesn't report the gap window as attested/),
     ).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "attest-gap-window", state: "unresolved" },
+    });
   });
 });
 
@@ -510,6 +616,31 @@ describe("<LedgerLifecyclePanel> period lock", () => {
       }),
     );
     expect(await screen.findByText(/The period is now locked through/)).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" });
+  });
+
+  it("retains the marker when the returned lock differs from the request", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.put.mockResolvedValue({
+      data: { data: wireStatus({ lockedThrough: EARLIER_LOCK }) },
+    });
+    renderPanel();
+
+    await openLock();
+    fireEvent.change(screen.getByLabelText("New lock date"), {
+      target: { value: format(parseISO(LATER_LOCK), "MMM d, yyyy") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Set period lock" }));
+    await confirmInDialog("Move the period lock");
+
+    expect(
+      await screen.findByText(/reports a different period lock/),
+    ).toBeInTheDocument();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "set-period-lock", state: "unresolved" },
+    });
   });
 
   it("requires a reason to move the lock back", async () => {
@@ -608,6 +739,78 @@ describe("<LedgerLifecyclePanel> period lock", () => {
       intent: { action: "set-period-lock", state: "unresolved" },
     });
     expect(screen.getByRole("button", { name: "Set period lock" })).toBeDisabled();
+  });
+});
+
+describe("<LedgerLifecyclePanel> audit read", () => {
+  const unreadableText =
+    /The audit trail response couldn't be read, so this app can't show or verify any audit records/;
+
+  it("treats a missing nextCursor as unreadable, not the end of history", async () => {
+    serveRawAudit({ items: [auditRow()] });
+    renderPanel();
+
+    expect(await screen.findByText(unreadableText)).toBeInTheDocument();
+    expect(screen.queryByText("Ledger suspended")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("The server reported no older audit records."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("The audit trail is loading.")).not.toBeInTheDocument();
+  });
+
+  it("treats a malformed nextCursor as unreadable", async () => {
+    serveRawAudit({ items: [auditRow()], nextCursor: 42 });
+    renderPanel();
+
+    expect(await screen.findByText(unreadableText)).toBeInTheDocument();
+    expect(
+      screen.queryByText("The server reported no older audit records."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats a malformed row as an unreadable response", async () => {
+    serveRawAudit({ items: [{ id: "a1" }], nextCursor: null });
+    renderPanel();
+
+    expect(await screen.findByText(unreadableText)).toBeInTheDocument();
+    expect(screen.queryByText("Ledger suspended")).not.toBeInTheDocument();
+  });
+
+  it("claims an end of history only for an explicit null cursor", async () => {
+    serveAudit({ items: [auditRow()], nextCursor: null });
+    renderPanel();
+
+    expect(await screen.findByText("Ledger suspended")).toBeInTheDocument();
+    expect(
+      screen.getByText("The server reported no older audit records."),
+    ).toBeInTheDocument();
+  });
+
+  it("discloses a partial history when a cursor remains", async () => {
+    serveAudit({ items: [auditRow()], nextCursor: "older" });
+    renderPanel();
+
+    expect(await screen.findByText("Ledger suspended")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Showing the most recent audit records; older records aren't shown here/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("The server reported no older audit records."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show a suspension reason from an unreadable audit response", async () => {
+    serveRawAudit({ items: [auditRow()] });
+    renderPanel({
+      status: statusOf({ state: { kind: "known", state: "suspended" } }),
+    });
+
+    expect(
+      await screen.findByText(
+        /The audit trail response couldn't be read, so the suspension reason can't be shown here/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Reason: Treasurer handover")).not.toBeInTheDocument();
   });
 });
 

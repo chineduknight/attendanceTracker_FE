@@ -7,9 +7,11 @@ import { LifecycleWriteResult } from "components/finance/lifecycleTypes";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";
 import {
+  LifecycleAction,
   MAX_LIFECYCLE_REASON,
   gapWindow,
   gapWindowProblem,
+  lifecycleConfirmation,
   lifecycleReasonIssue,
   periodLockChange,
   periodLockIssue,
@@ -29,6 +31,19 @@ type Done = (result: LifecycleWriteResult | null, lockedThrough?: string | null)
 const STORAGE_MESSAGE =
   "This browser can't store the safety record required before a ledger change. Allow site storage and try again.";
 
+type LifecycleIntentAction =
+  | "suspend-ledger"
+  | "resume-ledger"
+  | "set-period-lock"
+  | "attest-gap-window";
+
+const CONFIRMATION_ACTION: Record<LifecycleIntentAction, LifecycleAction> = {
+  "suspend-ledger": "suspend",
+  "resume-ledger": "resume",
+  "set-period-lock": "period-lock",
+  "attest-gap-window": "attest-gap-window",
+};
+
 /**
  * Persist the intent before dispatching, clear it only on a provable refusal
  * or after a response, and mark it unresolved when the outcome is ambiguous.
@@ -40,7 +55,7 @@ const useGuardedLifecycleSubmit = ({
   onDone,
 }: {
   intent: Intent;
-  action: "suspend-ledger" | "resume-ledger" | "set-period-lock" | "attest-gap-window";
+  action: LifecycleIntentAction;
   onDone: Done;
 }) => {
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +74,19 @@ const useGuardedLifecycleSubmit = ({
     }
     send({
       onSuccess: (result) => {
-        intent.clear(record);
+        const confirmation = lifecycleConfirmation({
+          action: CONFIRMATION_ACTION[action],
+          result,
+          lockedThrough,
+        });
+        if (confirmation === "confirmed") {
+          intent.clear(record);
+        } else {
+          // A 2xx is not proof: an unreadable status, or one that contradicts
+          // the requested change, keeps the persisted marker so a reload
+          // cannot permit a blind retry.
+          intent.markUnresolved(record);
+        }
         setError(null);
         onDone(result, lockedThrough);
       },

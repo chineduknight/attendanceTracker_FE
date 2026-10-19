@@ -289,6 +289,11 @@ const LedgerLifecyclePanel = ({
                     <Fact>{`Recorded at: ${formatLagosTimestamp(suspendEntry.at) ?? "time unavailable"}`}</Fact>
                   )}
                 </>
+              ) : audit.unreadable ? (
+                <Fact>
+                  The audit trail response couldn't be read, so the suspension reason can't be
+                  shown here.
+                </Fact>
               ) : entries === null ? (
                 <Fact>
                   The audit trail isn't available from this server yet, so the suspension reason
@@ -406,6 +411,11 @@ const LedgerLifecyclePanel = ({
           <SectionHeading id={auditHeadingId}>Recent ledger audit</SectionHeading>
           {audit.isError && entries === null ? (
             <Fact>The audit trail isn't available from this server yet.</Fact>
+          ) : audit.unreadable ? (
+            <Fact>
+              The audit trail response couldn't be read, so this app can't show or verify any
+              audit records. Nothing here is assumed about older or newer records.
+            </Fact>
           ) : entries === null ? (
             <Fact>The audit trail is loading.</Fact>
           ) : entries.length === 0 ? (
@@ -454,7 +464,7 @@ const LedgerLifecyclePanel = ({
               <Fact>
                 {audit.nextCursor
                   ? "Showing the most recent audit records; older records aren't shown here."
-                  : "Showing every ledger audit record the server sent."}
+                  : "The server reported no older audit records."}
               </Fact>
             </Stack>
           )}

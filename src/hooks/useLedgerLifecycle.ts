@@ -67,6 +67,11 @@ export const useLedgerAudit = (organisationId: string, enabled: boolean) => {
     /** null when the audit read failed or its body was not usable. */
     page,
     entries: page?.items ?? null,
+    /**
+     * True when a response arrived but its body was not a usable audit page
+     * (bad items or unreadable pagination). Distinct from "still loading".
+     */
+    unreadable: data !== undefined && page === null,
     /** Non-null means older rows exist; null when the page is unavailable. */
     nextCursor: page ? page.nextCursor : null,
     hasData: data !== undefined,

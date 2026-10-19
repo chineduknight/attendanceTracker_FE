@@ -87,20 +87,25 @@ export const toLedgerAuditEntry = (value: unknown): LedgerAuditEntry | null => {
 /**
  * One audit page. A malformed item makes the page unusable instead of
  * yielding a shorter list that could look like the complete history.
+ *
+ * `nextCursor` must be explicit. An explicit `null` ends the history; a
+ * non-blank string continues it. A missing or malformed value is unreadable
+ * and never becomes a confirmed "no more records".
  */
 export const toLedgerAuditPage = (value: unknown): LedgerAuditPage | null => {
   const raw = asRecord(value);
   if (!raw || !Array.isArray(raw.items)) return null;
+  if (!("nextCursor" in raw)) return null;
+  const rawCursor = raw.nextCursor;
+  if (rawCursor !== null && !asText(rawCursor)) return null;
+  const nextCursor = rawCursor === null ? null : (asText(rawCursor) as string);
   const items: LedgerAuditEntry[] = [];
   for (const item of raw.items) {
     const parsed = toLedgerAuditEntry(item);
     if (!parsed) return null;
     items.push(parsed);
   }
-  return {
-    items,
-    nextCursor: asText(raw.nextCursor),
-  };
+  return { items, nextCursor };
 };
 
 export const ledgerAuditActionLabels: Record<
@@ -364,8 +369,53 @@ export const periodLockReasonIssue = (
 /* Outcome wording                                                    */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Whether a 2xx response actually proves the requested lifecycle change.
+ *
+ * `unreadable` means the status body could not be parsed (or does not carry
+ * the field the action changes); `contradicted` means it parsed but reports a
+ * different state. Only `confirmed` may clear the persisted safety marker.
+ */
+export type LifecycleConfirmation = "confirmed" | "unreadable" | "contradicted";
+
+export const lifecycleConfirmation = ({
+  action,
+  result,
+  lockedThrough,
+}: {
+  action: LifecycleAction;
+  result: LifecycleWriteResult;
+  /** The lock date the officer asked for, for `period-lock` only. */
+  lockedThrough?: string | null;
+}): LifecycleConfirmation => {
+  const status = result.status;
+  if (!status) return "unreadable";
+  const state = ledgerStateKey(status);
+
+  switch (action) {
+    case "suspend":
+      return state === "suspended" ? "confirmed" : "contradicted";
+    case "resume":
+      return state === "active" ? "confirmed" : "contradicted";
+    case "period-lock":
+      // The returned lock must be exactly the one that was requested.
+      return status.lockedThrough === (lockedThrough ?? null)
+        ? "confirmed"
+        : "contradicted";
+    case "attest-gap-window":
+      if (status.gapWindowAttestation === "attested") return "confirmed";
+      // A parseable status that omits the attestation field is unreadable
+      // evidence, not a contradiction.
+      return status.gapWindowAttestation === "unknown" ? "unreadable" : "contradicted";
+  }
+};
+
 const UNREADABLE_RESULT =
   "The server accepted the request, but this app couldn't read the resulting ledger state. Reload and check the audit trail before making another change.";
+
+/** Said whenever the outcome is not confirmed, so the latch is never silent. */
+const RETAINED_RECORD =
+  " The safety record from this attempt is kept until you reconcile it.";
 
 const stateLabel = (status: LedgerStatus) =>
   LEDGER_STATE_LABELS[ledgerStateKey(status)];
@@ -386,18 +436,23 @@ export const lifecycleOutcomeMessage = ({
   lockedThrough?: string | null;
 }): string => {
   const status = result.status;
-  if (!status) return UNREADABLE_RESULT;
+  if (!status) return `${UNREADABLE_RESULT}${RETAINED_RECORD}`;
   const state = ledgerStateKey(status);
+  const unconfirmed = (message: string) => `${message}${RETAINED_RECORD}`;
 
   if (action === "suspend") {
     return state === "suspended"
       ? "The ledger is suspended. No postings or opening proposals can be made until an owner resumes it."
-      : `The server accepted the suspension but still reports the ledger as ${stateLabel(status)}. Reload before trying again.`;
+      : unconfirmed(
+          `The server accepted the suspension but still reports the ledger as ${stateLabel(status)}. Reload before trying again.`,
+        );
   }
   if (action === "resume") {
     return state === "active"
       ? "The ledger is active again."
-      : `The server accepted the resume but still reports the ledger as ${stateLabel(status)}. Reload before trying again.`;
+      : unconfirmed(
+          `The server accepted the resume but still reports the ledger as ${stateLabel(status)}. Reload before trying again.`,
+        );
   }
   if (action === "period-lock") {
     const target = lockedThrough ?? null;
@@ -405,11 +460,15 @@ export const lifecycleOutcomeMessage = ({
     if (target === null) {
       return reported === null
         ? "The period lock is removed."
-        : `The server accepted the request but still reports a period lock through ${formatBusinessDate(reported)}. Reload before trying again.`;
+        : unconfirmed(
+            `The server accepted the request but still reports a period lock through ${formatBusinessDate(reported)}. Reload before trying again.`,
+          );
     }
     return reported === target
       ? `The period is now locked through ${formatBusinessDate(target)}.`
-      : `The server accepted the request but reports a different period lock (${reported ? formatBusinessDate(reported) : "none"}). Reload before trying again.`;
+      : unconfirmed(
+          `The server accepted the request but reports a different period lock (${reported ? formatBusinessDate(reported) : "none"}). Reload before trying again.`,
+        );
   }
   if (status.gapWindowAttestation === "attested") {
     const at = status.gapWindowAttestedAt
@@ -419,5 +478,7 @@ export const lifecycleOutcomeMessage = ({
       ? `The gap window is recorded as attested (${at}).`
       : "The gap window is recorded as attested.";
   }
-  return "The server accepted the attestation but doesn't report the gap window as attested. Reload and check the audit trail before trying again.";
+  return unconfirmed(
+    "The server accepted the attestation but doesn't report the gap window as attested. Reload and check the audit trail before trying again.",
+  );
 };

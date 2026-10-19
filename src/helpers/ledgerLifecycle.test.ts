@@ -6,6 +6,7 @@ import {
   gapWindowProblem,
   latestAuditEntry,
   ledgerAuditActionLabels,
+  lifecycleConfirmation,
   lifecycleOutcomeMessage,
   lifecyclePermission,
   lifecycleReasonIssue,
@@ -111,6 +112,21 @@ describe("audit parsing", () => {
     expect(toLedgerAuditPage({ items: [], nextCursor: null })).toEqual({
       items: [],
       nextCursor: null,
+    });
+  });
+
+  it("only ends the history when nextCursor is explicitly null", () => {
+    // Missing or malformed pagination metadata must never read as "no more
+    // records": the page is unreadable instead.
+    expect(toLedgerAuditPage({ items: [] })).toBeNull();
+    expect(toLedgerAuditPage({ items: [], nextCursor: undefined })).toBeNull();
+    expect(toLedgerAuditPage({ items: [], nextCursor: "" })).toBeNull();
+    expect(toLedgerAuditPage({ items: [], nextCursor: "   " })).toBeNull();
+    expect(toLedgerAuditPage({ items: [], nextCursor: 42 })).toBeNull();
+    expect(toLedgerAuditPage({ items: [], nextCursor: {} })).toBeNull();
+    expect(toLedgerAuditPage({ items: [], nextCursor: "older" })).toEqual({
+      items: [],
+      nextCursor: "older",
     });
   });
 
@@ -359,6 +375,96 @@ describe("lifecycle reasons", () => {
   });
 });
 
+describe("lifecycle confirmation", () => {
+  const suspended = statusOf({ state: { kind: "known", state: "suspended" } });
+
+  it("confirms a suspend only when the status reports suspended", () => {
+    expect(
+      lifecycleConfirmation({ action: "suspend", result: { status: suspended } }),
+    ).toBe("confirmed");
+    expect(
+      lifecycleConfirmation({ action: "suspend", result: { status: statusOf() } }),
+    ).toBe("contradicted");
+    expect(
+      lifecycleConfirmation({
+        action: "suspend",
+        result: { status: statusOf({ state: { kind: "unknown", raw: "frozen" } }) },
+      }),
+    ).toBe("contradicted");
+    expect(lifecycleConfirmation({ action: "suspend", result: { status: null } })).toBe(
+      "unreadable",
+    );
+  });
+
+  it("confirms a resume only when the status reports active", () => {
+    expect(lifecycleConfirmation({ action: "resume", result: { status: statusOf() } })).toBe(
+      "confirmed",
+    );
+    expect(
+      lifecycleConfirmation({ action: "resume", result: { status: suspended } }),
+    ).toBe("contradicted");
+  });
+
+  it("confirms exactly the period lock that was requested", () => {
+    expect(
+      lifecycleConfirmation({
+        action: "period-lock",
+        result: { status: statusOf({ lockedThrough: "2026-10-10" }) },
+        lockedThrough: "2026-10-10",
+      }),
+    ).toBe("confirmed");
+    expect(
+      lifecycleConfirmation({
+        action: "period-lock",
+        result: { status: statusOf({ lockedThrough: "2026-10-11" }) },
+        lockedThrough: "2026-10-10",
+      }),
+    ).toBe("contradicted");
+    expect(
+      lifecycleConfirmation({
+        action: "period-lock",
+        result: { status: statusOf({ lockedThrough: null }) },
+        lockedThrough: null,
+      }),
+    ).toBe("confirmed");
+    expect(
+      lifecycleConfirmation({
+        action: "period-lock",
+        result: { status: statusOf({ lockedThrough: "2026-10-10" }) },
+        lockedThrough: null,
+      }),
+    ).toBe("contradicted");
+    expect(
+      lifecycleConfirmation({
+        action: "period-lock",
+        result: { status: statusOf({ lockedThrough: null }) },
+        lockedThrough: "2026-10-10",
+      }),
+    ).toBe("contradicted");
+  });
+
+  it("distinguishes an unreadable attestation from a contradicting one", () => {
+    expect(
+      lifecycleConfirmation({
+        action: "attest-gap-window",
+        result: { status: statusOf({ gapWindowAttestation: "attested" }) },
+      }),
+    ).toBe("confirmed");
+    expect(
+      lifecycleConfirmation({
+        action: "attest-gap-window",
+        result: { status: statusOf({ gapWindowAttestation: "not_attested" }) },
+      }),
+    ).toBe("contradicted");
+    expect(
+      lifecycleConfirmation({
+        action: "attest-gap-window",
+        result: { status: statusOf({ gapWindowAttestation: "unknown" }) },
+      }),
+    ).toBe("unreadable");
+  });
+});
+
 describe("outcome wording", () => {
   it("never reports an unreadable or contradictory state as success", () => {
     const unreadable = lifecycleOutcomeMessage({
@@ -366,6 +472,7 @@ describe("outcome wording", () => {
       result: { status: null },
     });
     expect(unreadable).toMatch(/couldn't read the resulting ledger state/);
+    expect(unreadable).toMatch(/safety record from this attempt is kept/);
 
     const stillActive = lifecycleOutcomeMessage({
       action: "suspend",
@@ -373,6 +480,7 @@ describe("outcome wording", () => {
     });
     expect(stillActive).toMatch(/still reports the ledger as Active/);
     expect(stillActive).not.toMatch(/is suspended/);
+    expect(stillActive).toMatch(/safety record from this attempt is kept/);
   });
 
   it("confirms each transition only from the returned status", () => {
@@ -384,6 +492,14 @@ describe("outcome wording", () => {
         },
       }),
     ).toMatch(/The ledger is suspended/);
+    expect(
+      lifecycleOutcomeMessage({
+        action: "suspend",
+        result: {
+          status: statusOf({ state: { kind: "known", state: "suspended" } }),
+        },
+      }),
+    ).not.toMatch(/safety record from this attempt is kept/);
     expect(
       lifecycleOutcomeMessage({ action: "resume", result: { status: statusOf() } }),
     ).toMatch(/active again/);
