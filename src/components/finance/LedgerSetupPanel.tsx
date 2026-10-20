@@ -202,8 +202,13 @@ interface LedgerSetupPanelProps {
    * Refetches status and accounts after an unresolved write; resolves `true`
    * when both reloaded into usable shapes. `requireAllocations` is false for
    * F2A-2 writes, so an older F2 backend need not report the F3 setting.
+   * `allowInitialSetup` is true only for an unresolved initial setup, whose
+   * no-ledger shape has no revision.
    */
-  onRecheckLedger?: (options: { requireAllocations: boolean }) => Promise<boolean> | void;
+  onRecheckLedger?: (options: {
+    requireAllocations: boolean;
+    allowInitialSetup: boolean;
+  }) => Promise<boolean> | void;
   isRetryingAccounts: boolean;
   /** Status or accounts are refetching (F3A waits for the fresh revision). */
   isRefreshingLedger?: boolean;
@@ -348,6 +353,9 @@ const LedgerSetupPanel = ({
                   // The allocations-setting action is F3-specific even if the
                   // F3A gate is later turned off; F2A-2 actions are not.
                   requireAllocations: uncertainty.action === "member-allocations",
+                  // Only an unknown initial setup may legitimately reconcile
+                  // against a not_active status with no revision.
+                  allowInitialSetup: uncertainty.action === "setup",
                 });
               // No status+accounts recheck is available: refetch what we can,
               // but never unlock acknowledgement from a partial read.

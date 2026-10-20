@@ -14,6 +14,7 @@ import {
   SUGGESTION_FROZEN_NOTE,
   SUSPENDED_ACCOUNTS_NOTE,
   SUSPENDED_CREATE_NOTE,
+  ledgerRecheckUsable,
 } from "helpers/ledgerSetup";
 import {
   LEDGER_WRITE_UNCERTAIN_NOTE,
@@ -603,7 +604,7 @@ describe("<LedgerSetupPanel> unresolved write latch", () => {
     // A failed or unusable reload never unlocks acknowledgement.
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
     await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
-    expect(recheck).toHaveBeenCalledWith({ requireAllocations: false });
+    expect(recheck).toHaveBeenCalledWith({ requireAllocations: false, allowInitialSetup: true });
     expect(acknowledge).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
@@ -716,6 +717,22 @@ describe("<LedgerSetupPanel> durable F2A-2 write lifecycle", () => {
   const storedPhase = (organisationId: string) =>
     JSON.parse(window.localStorage.getItem(ledgerWriteUncertaintyKey(organisationId)) ?? "null")
       ?.phase;
+
+  const wireAccount = {
+    id: "a1",
+    name: "Cash in hand",
+    class: "asset",
+    subtype: "cash",
+    currency: "NGN",
+    active: true,
+  };
+  const noLedgerStatus = () =>
+    wireStatusOf("not_active", { revision: null, memberReceiptsEnabled: null });
+  /** The real validator, not a mock that claims a recheck succeeded. */
+  const realRecheck = (statusData: unknown, accountsData: unknown) =>
+    jest.fn(async (options: { requireAllocations: boolean; allowInitialSetup: boolean }) =>
+      ledgerRecheckUsable(statusData, accountsData, options),
+    );
 
   const startSetup = async () => {
     fireEvent.click(screen.getByRole("button", { name: "Start bookkeeping setup" }));
@@ -832,6 +849,74 @@ describe("<LedgerSetupPanel> durable F2A-2 write lifecycle", () => {
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org2") });
   });
 
+  it("acknowledges an uncertain initial setup after a fresh no-ledger recheck", async () => {
+    markLedgerWriteUncertain("org1", "setup");
+    markLedgerWriteUncertain("org2", "setup");
+    const recheck = realRecheck(noLedgerStatus(), []);
+    renderPanel({ onRecheckLedger: recheck });
+
+    const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
+    expect(acknowledge).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+    await waitFor(() => expect(acknowledge).toBeEnabled());
+    expect(recheck).toHaveBeenCalledWith({ requireAllocations: false, allowInitialSetup: true });
+    // A recheck never resends the setup.
+    expect(api.post).not.toHaveBeenCalled();
+
+    fireEvent.click(acknowledge);
+    await confirmInDialog("I've checked");
+    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
+    // Only the organisation being reconciled is cleared.
+    expect(readLedgerWriteUncertainty("org2")?.action).toBe("setup");
+  });
+
+  it.each(["create-accounts", "update-account", "member-receipts"] as const)(
+    "does not accept the no-ledger shape for an unresolved %s write",
+    async (action) => {
+      markLedgerWriteUncertain("org1", action);
+      const recheck = realRecheck(noLedgerStatus(), []);
+      renderPanel({ onRecheckLedger: recheck });
+      const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+      await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+      expect(recheck).toHaveBeenCalledWith({ requireAllocations: false, allowInitialSetup: false });
+      expect(acknowledge).toBeDisabled();
+    },
+  );
+
+  it.each([
+    ["a failed refetch", undefined, undefined],
+    ["a malformed status", { state: "not_active", revision: "bad" }, []],
+    ["missing accounts", noLedgerStatus(), undefined],
+    ["nonempty accounts", noLedgerStatus(), [wireAccount]],
+    ["an existing ledger with no revision", { ...noLedgerStatus(), state: "setup" }, []],
+  ])(
+    "does not accept %s as an initial setup recheck",
+    async (_label, statusData, accountsData) => {
+      markLedgerWriteUncertain("org1", "setup");
+      const recheck = realRecheck(statusData, accountsData);
+      renderPanel({ onRecheckLedger: recheck });
+      const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+      await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+      expect(acknowledge).toBeDisabled();
+    },
+  );
+
+  it("still requires the F3 allocations setting for a member-allocations recheck", async () => {
+    markLedgerWriteUncertain("org1", "member-allocations");
+    const recheck = realRecheck(wireStatusOf("active", { revision: 4 }), []);
+    renderPanel({ onRecheckLedger: recheck });
+    const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+    await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+    expect(recheck).toHaveBeenCalledWith({ requireAllocations: true, allowInitialSetup: false });
+    expect(acknowledge).toBeDisabled();
+  });
+
   it("treats a setup request cut off by reload as unresolved, with a fresh usable recheck", async () => {
     window.localStorage.setItem(
       ledgerWriteUncertaintyKey("org1"),
@@ -854,7 +939,7 @@ describe("<LedgerSetupPanel> durable F2A-2 write lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
     await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
-    expect(recheck).toHaveBeenCalledWith({ requireAllocations: false });
+    expect(recheck).toHaveBeenCalledWith({ requireAllocations: false, allowInitialSetup: true });
     expect(acknowledge).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));

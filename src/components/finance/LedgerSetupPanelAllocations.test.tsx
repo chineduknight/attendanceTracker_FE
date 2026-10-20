@@ -184,7 +184,9 @@ describe("F3A gate", () => {
     const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
     expect(acknowledge).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
-    await waitFor(() => expect(recheck).toHaveBeenCalledWith({ requireAllocations: false }));
+    await waitFor(() =>
+      expect(recheck).toHaveBeenCalledWith({ requireAllocations: false, allowInitialSetup: false }),
+    );
     await waitFor(() => expect(acknowledge).toBeEnabled());
   });
 
@@ -534,7 +536,7 @@ describe("F3A unconfirmed outcomes", () => {
     // A failed reload is not a recheck.
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
     await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
-    expect(recheck).toHaveBeenCalledWith({ requireAllocations: true });
+    expect(recheck).toHaveBeenCalledWith({ requireAllocations: true, allowInitialSetup: false });
     expect(acknowledge).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));

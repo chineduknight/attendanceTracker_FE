@@ -1118,26 +1118,47 @@ export const ledgerWriteOutcomeUnknown = (failure: LedgerApiFailure): boolean =>
 /**
  * Whether a recheck after an unresolved ledger write reloaded something an
  * officer can actually compare against. An HTTP success is not enough: the
- * status must parse, have a recognised lifecycle state and a revision, and
- * the account list must parse. Anything else leaves "I've checked the
- * ledger" locked. Takes the response bodies' `data` values.
+ * status must parse, have a recognised lifecycle state and normally a
+ * revision, and the account list must parse. Anything else leaves "I've
+ * checked the ledger" locked. Takes the response bodies' `data` values.
  *
  * `requireAllocations` keeps the F3A rule (an F3-2 server must report a real
  * `allocationsEnabled` boolean). It is false for inherited F2A-2 writes, so a
  * compatible older backend is not required to send an F3-only field.
+ *
+ * `allowInitialSetup` is true only when the unresolved action was `setup`.
+ * An organisation with no ledger is defined by the backend as
+ * `not_active` + `revision: null` (explicitly null, not absent or malformed)
+ * + an empty account list; that is a valid result for an unknown setup that
+ * never committed. No other action and no existing ledger may use a missing
+ * revision, and a `not_active` status containing accounts is inconsistent.
  */
 export const ledgerRecheckUsable = (
   statusData: unknown,
   accountsData: unknown,
-  { requireAllocations = true }: { requireAllocations?: boolean } = {},
+  {
+    requireAllocations = true,
+    allowInitialSetup = false,
+  }: { requireAllocations?: boolean; allowInitialSetup?: boolean } = {},
 ): boolean => {
   const status = toLedgerStatus(statusData);
+  const accounts = toLedgerAccounts(accountsData);
+  if (!status || !accounts) return false;
+  const state = ledgerStateKey(status);
+  if (state === "unknown") return false;
+  if (requireAllocations && status.allocationsEnabled === null) return false;
+  if (status.revision !== null) return true;
+  // Only the explicit no-ledger shape qualifies. A missing or malformed
+  // revision on any other status must not look like an initial setup.
+  const rawRevision =
+    statusData !== null && typeof statusData === "object" && !Array.isArray(statusData)
+      ? (statusData as { revision?: unknown }).revision
+      : undefined;
   return (
-    status !== null &&
-    ledgerStateKey(status) !== "unknown" &&
-    status.revision !== null &&
-    (!requireAllocations || status.allocationsEnabled !== null) &&
-    toLedgerAccounts(accountsData) !== null
+    allowInitialSetup &&
+    state === "not_active" &&
+    rawRevision === null &&
+    accounts.length === 0
   );
 };
 

@@ -1006,6 +1006,38 @@ describe("ledgerRecheckUsable (review of FE #140)", () => {
     expect(ledgerRecheckUsable(withoutAllocations, undefined, { requireAllocations: false })).toBe(false);
   });
 
+  it("accepts a revision-less not_active status only for an initial setup recheck", () => {
+    const noLedger = {
+      state: "not_active",
+      currency: "NGN",
+      postingEnabled: false,
+      blockers: [],
+      revision: null,
+      memberReceiptsEnabled: null,
+      allocationsEnabled: null,
+      contractVersion: "f2-0.3",
+    };
+    // An account or settings write may not use the no-ledger shape.
+    expect(ledgerRecheckUsable(noLedger, [])).toBe(false);
+    const setupRecheck = { allowInitialSetup: true, requireAllocations: false } as const;
+    expect(ledgerRecheckUsable(noLedger, [], setupRecheck)).toBe(true);
+    // F3A still needs a real allocations setting.
+    expect(
+      ledgerRecheckUsable(noLedger, [], { allowInitialSetup: true, requireAllocations: true }),
+    ).toBe(false);
+    // An existing ledger with a missing revision still fails.
+    expect(ledgerRecheckUsable({ ...noLedger, state: "setup" }, [], setupRecheck)).toBe(false);
+    expect(ledgerRecheckUsable({ ...noLedger, state: "active" }, [], setupRecheck)).toBe(false);
+    // A no-ledger result with accounts is inconsistent, and accounts must parse.
+    expect(ledgerRecheckUsable(noLedger, ACCOUNTS, setupRecheck)).toBe(false);
+    expect(ledgerRecheckUsable(noLedger, undefined, setupRecheck)).toBe(false);
+    expect(ledgerRecheckUsable({ ...noLedger, state: "frozen" }, [], setupRecheck)).toBe(false);
+    expect(ledgerRecheckUsable({ ...noLedger, state: undefined }, [], setupRecheck)).toBe(false);
+    // `revision` must be explicitly null, not absent or malformed.
+    expect(ledgerRecheckUsable({ ...noLedger, revision: undefined }, [], setupRecheck)).toBe(false);
+    expect(ledgerRecheckUsable({ ...noLedger, revision: "bad" }, [], setupRecheck)).toBe(false);
+  });
+
   it.each([
     ["a missing status body", undefined, ACCOUNTS],
     ["a status that is not an object", "ok", ACCOUNTS],
