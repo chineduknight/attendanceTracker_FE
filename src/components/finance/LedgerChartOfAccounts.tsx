@@ -45,9 +45,8 @@ import {
   validateAccountBatch,
 } from "helpers/ledgerSetup";
 import { ledgerStateKey } from "helpers/ledger";
-import { LedgerWriteAction } from "helpers/ledgerWriteUncertainty";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
-import { useLedgerSetup } from "hooks/useLedgerSetup";
+import { LedgerWriteNotSentError, useLedgerSetup } from "hooks/useLedgerSetup";
 
 /**
  * F2A-2 chart-of-accounts manager (RFC v0.3 §4.3, §8.1).
@@ -534,8 +533,6 @@ interface LedgerChartOfAccountsProps {
   canManage: boolean;
   /** An earlier ledger write still has an unresolved outcome. */
   writesBlocked: boolean;
-  /** Persists the unresolved write so a reload cannot re-open it. */
-  onWriteUncertain: (action: LedgerWriteAction) => void;
 }
 
 const LedgerChartOfAccounts = ({
@@ -547,7 +544,6 @@ const LedgerChartOfAccounts = ({
   isRetryingAccounts,
   canManage,
   writesBlocked,
-  onWriteUncertain,
 }: LedgerChartOfAccountsProps) => {
   const headingId = useId();
   const { createAccounts, updateAccount, isCreatingAccounts, isUpdatingAccount } =
@@ -557,13 +553,20 @@ const LedgerChartOfAccounts = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const handleFailure = (error: unknown, action: LedgerWriteAction) => {
+  const handleFailure = (error: unknown) => {
+    if (error instanceof LedgerWriteNotSentError) {
+      setActionError(
+        error.reason === "blocked"
+          ? "An earlier ledger change is still waiting to be confirmed, so nothing was sent."
+          : "This browser couldn't keep a safety record of the change, so nothing was sent. Check that site storage is allowed and try again.",
+      );
+      return;
+    }
     const failure = ledgerApiFailure(error);
     // Timeouts, network errors, uncoded 5xx and an uncoded 503 may all have
-    // been saved. Persist the uncertainty; never present it as a refusal and
-    // never retry it here.
+    // been saved. The durable write has already latched uncertainty; never
+    // present it as a refusal and never retry it here.
     if (ledgerWriteOutcomeUnknown(failure)) {
-      onWriteUncertain(action);
       setActionError(null);
       return;
     }
@@ -605,7 +608,7 @@ const LedgerChartOfAccounts = ({
         setSelected([]);
         setActionError(null);
       },
-      onError: (error) => handleFailure(error, "create-accounts"),
+      onError: (error) => handleFailure(error),
     });
   };
 
@@ -624,10 +627,10 @@ const LedgerChartOfAccounts = ({
       },
       onError: (error) => {
         const failure = ledgerApiFailure(error);
-        // An ambiguous outcome is not a validation problem: it may have been
-        // saved, so it goes through the persisted latch instead of the form.
-        if (ledgerWriteOutcomeUnknown(failure)) {
-          handleFailure(error, "create-accounts");
+        // An ambiguous outcome or a write that was never sent is not a
+        // validation problem: it belongs in the action notice, not the form.
+        if (error instanceof LedgerWriteNotSentError || ledgerWriteOutcomeUnknown(failure)) {
+          handleFailure(error);
           return;
         }
         setFormError(
@@ -653,7 +656,7 @@ const LedgerChartOfAccounts = ({
           setActionError(null);
           onDone?.();
         },
-        onError: (error) => handleFailure(error, "update-account"),
+        onError: (error) => handleFailure(error),
       },
     );
   };

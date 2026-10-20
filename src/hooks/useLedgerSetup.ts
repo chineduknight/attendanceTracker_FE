@@ -47,10 +47,10 @@ interface MutationCallbacks<T> {
 const suppressGenericError = () => undefined;
 
 /**
- * An F3A write that was never sent: either an earlier write in this
- * organisation is still pending or unresolved (`blocked`), or the browser
- * could not store the pending marker (`storage`). Nothing reached the server,
- * so this is never an unknown outcome.
+ * A ledger configuration write that was never sent: either an earlier write
+ * in this organisation is still pending or unresolved (`blocked`), or the
+ * browser could not store the pending marker (`storage`). Nothing reached the
+ * server, so this is never an unknown outcome.
  */
 export class LedgerWriteNotSentError extends Error {
   constructor(readonly reason: "blocked" | "storage") {
@@ -118,15 +118,19 @@ export interface UpdateAccountChange {
 }
 
 export const useLedgerSetup = (organisationId: string) => {
-  // One prefix invalidation covers status, accounts and journals for this
-  // organisation only; other tenants' caches are never touched.
-  const invalidateLedger = () =>
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.finance.ledger.root(organisationId),
-    });
-
-  const setupMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
-  const settingsMutation = useMutationWrapper(patchRequest, undefined, suppressGenericError);
+  // Every write goes through the durable lifecycle: the marker and the reload
+  // are owned by the request promise, never by a component callback. Separate
+  // mutation instances keep each control's loading state independent.
+  const setupMutation = useMutationWrapper(
+    sendDurableLedgerWrite,
+    undefined,
+    suppressGenericError,
+  );
+  const settingsMutation = useMutationWrapper(
+    sendDurableLedgerWrite,
+    undefined,
+    suppressGenericError,
+  );
   // Its own instance so the allocation toggle's loading state never shows on
   // the member-receipts button (both PATCH /settings).
   const allocationsMutation = useMutationWrapper(
@@ -140,12 +144,12 @@ export const useLedgerSetup = (organisationId: string) => {
     suppressGenericError,
   );
   const createAccountsMutation = useMutationWrapper(
-    postRequest,
+    sendDurableLedgerWrite,
     undefined,
     suppressGenericError,
   );
   const updateAccountMutation = useMutationWrapper(
-    patchRequest,
+    sendDurableLedgerWrite,
     undefined,
     suppressGenericError,
   );
@@ -177,11 +181,11 @@ export const useLedgerSetup = (organisationId: string) => {
     { onSuccess, onError }: MutationCallbacks<LedgerStatus | null> = {},
   ) =>
     setupMutation.mutate(
-      { url: setupUrl, data: { memberReceiptsEnabled } },
+      durableWrite("setup", "post", setupUrl, { memberReceiptsEnabled }),
       {
-        onSettled: invalidateLedger,
         // The write response is a status object; it is the only way to see
-        // `setup` until GET /status adopts the F2 read shape (F2A-4).
+        // `setup` until GET /status adopts the F2 read shape (F2A-4). If this
+        // screen is gone, the durable write still settles its marker.
         onSuccess: (response: { data?: unknown }) =>
           onSuccess?.(toLedgerStatus(response?.data)),
         onError: onError ?? suppressGenericError,
@@ -193,12 +197,11 @@ export const useLedgerSetup = (organisationId: string) => {
     { onSuccess, onError }: MutationCallbacks<LedgerStatus | null> = {},
   ) =>
     settingsMutation.mutate(
+      durableWrite("member-receipts", "patch", settingsUrl, {
+        expectedLedgerRevision,
+        memberReceiptsEnabled: true,
+      }),
       {
-        url: settingsUrl,
-        data: { expectedLedgerRevision, memberReceiptsEnabled: true },
-      },
-      {
-        onSettled: invalidateLedger,
         onSuccess: (response: { data?: unknown }) =>
           onSuccess?.(toLedgerStatus(response?.data)),
         onError: onError ?? suppressGenericError,
@@ -256,9 +259,8 @@ export const useLedgerSetup = (organisationId: string) => {
     { onSuccess, onError }: MutationCallbacks<void> = {},
   ) =>
     createAccountsMutation.mutate(
-      { url: accountsUrl, data: { accounts } },
+      durableWrite("create-accounts", "post", accountsUrl, { accounts }),
       {
-        onSettled: invalidateLedger,
         onSuccess: () => onSuccess?.(),
         onError: onError ?? suppressGenericError,
       },
@@ -271,9 +273,11 @@ export const useLedgerSetup = (organisationId: string) => {
   ) => {
     const { expectedRevision, ...fields } = change;
     return updateAccountMutation.mutate(
-      { url: accountUrl(accountId), data: { expectedRevision, ...fields } },
+      durableWrite("update-account", "patch", accountUrl(accountId), {
+        expectedRevision,
+        ...fields,
+      }),
       {
-        onSettled: invalidateLedger,
         onSuccess: () => onSuccess?.(),
         onError: onError ?? suppressGenericError,
       },
@@ -288,11 +292,11 @@ export const useLedgerSetup = (organisationId: string) => {
     reactivateMemberIncomeAccount,
     createAccounts,
     updateAccount,
-    isStarting: Boolean(setupMutation.isLoading),
-    isEnablingReceipts: Boolean(settingsMutation.isLoading),
+    isStarting: savingHere(setupMutation),
+    isEnablingReceipts: savingHere(settingsMutation),
     isChangingAllocations: savingHere(allocationsMutation),
     isSavingMemberIncomeAccount: savingHere(memberIncomeAccountMutation),
-    isCreatingAccounts: Boolean(createAccountsMutation.isLoading),
-    isUpdatingAccount: Boolean(updateAccountMutation.isLoading),
+    isCreatingAccounts: savingHere(createAccountsMutation),
+    isUpdatingAccount: savingHere(updateAccountMutation),
   };
 };

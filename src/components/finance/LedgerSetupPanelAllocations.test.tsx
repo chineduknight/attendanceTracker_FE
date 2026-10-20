@@ -176,11 +176,18 @@ describe("F3A gate", () => {
     expect(screen.getAllByText("Income · Member dues income")).toHaveLength(1);
   });
 
-  it("keeps the F2 acknowledge flow unchanged while the F3A gate is off", () => {
+  it("requires a fresh recheck for an F2 write even while the F3A gate is off", async () => {
     markLedgerWriteUncertain("org1", "create-accounts");
-    renderPanel({ f3SetupEnabled: false });
-    expect(screen.getByRole("button", { name: "I've checked the ledger" })).toBeEnabled();
-    expect(screen.queryByText(/then compare it with the change you made/)).not.toBeInTheDocument();
+    const recheck = jest.fn().mockResolvedValue(true);
+    renderPanel({ f3SetupEnabled: false, onRecheckLedger: recheck });
+
+    const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
+    expect(acknowledge).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+    await waitFor(() =>
+      expect(recheck).toHaveBeenCalledWith({ requireAllocations: false, allowInitialSetup: false }),
+    );
+    await waitFor(() => expect(acknowledge).toBeEnabled());
   });
 
   it("is not shown before bookkeeping setup has started", () => {
@@ -529,6 +536,7 @@ describe("F3A unconfirmed outcomes", () => {
     // A failed reload is not a recheck.
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
     await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+    expect(recheck).toHaveBeenCalledWith({ requireAllocations: true, allowInitialSetup: false });
     expect(acknowledge).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
@@ -849,6 +857,35 @@ describe("F3A durable write lifecycle", () => {
     view.unmount();
 
     request.reject({ message: "timeout of 0ms exceeded", code: "ECONNABORTED" });
+    await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
+    expect(readLedgerWriteUncertainty("org1")?.action).toBe("update-account");
+  });
+
+  it("protects a specialised F3 income account through the generic account update route", async () => {
+    const request = holdRequest(api.patch);
+    const view = renderPanel({ accounts: [...BASE_CHART, DUES, LEVY] });
+    const chart = screen.getByRole("list", { name: "Chart of accounts" });
+    const row = within(chart)
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByText(DUES.name));
+    if (!row) throw new Error("member dues income row missing");
+    fireEvent.click(within(row).getByRole("button", { name: "Rename" }));
+    fireEvent.change(within(row).getByLabelText("Account name"), {
+      target: { value: "Dues income renamed" },
+    });
+    fireEvent.click(within(row).getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+
+    expect(request.markerAtDispatch).toEqual([
+      expect.objectContaining({ action: "update-account", pending: true }),
+    ]);
+    expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/dues", {
+      expectedRevision: 2,
+      name: "Dues income renamed",
+    });
+
+    view.unmount();
+    request.reject({ response: { status: 503, data: { error: "Service unavailable" } } });
     await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
     expect(readLedgerWriteUncertainty("org1")?.action).toBe("update-account");
   });

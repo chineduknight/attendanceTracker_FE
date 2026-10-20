@@ -428,7 +428,7 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           onRetryAccounts={accountsQuery.refetch}
           isRetryingAccounts={accountsQuery.isFetching}
           isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
-          onRecheckLedger={async () => {
+          onRecheckLedger={async ({ requireAllocations, allowInitialSetup }) => {
             // Reconciliation after an unresolved write needs both the status
             // and the account list, not just the list that failed. Only a
             // clean, usable reload of both counts as a recheck.
@@ -436,11 +436,16 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
               statusQuery.refetch(),
               accountsQuery.refetch(),
             ]);
-            // A 200 with a body this build can't read is not a recheck.
+            // A 200 with a body this build can't read is not a recheck. F2A-2
+            // writes don't require the F3-only allocations field; only an
+            // unresolved initial setup may reconcile without a revision.
             return (
               !statusResult.isError &&
               !accountsResult.isError &&
-              ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data)
+              ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data, {
+                requireAllocations,
+                allowInitialSetup,
+              })
             );
           }}
         />
