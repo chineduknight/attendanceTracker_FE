@@ -230,6 +230,84 @@ export const queryKeys = {
         ["finance", organisationId, "ledger", "reports", "balances", asOf] as const,
       summary: (organisationId: string, from: string, to: string) =>
         ["finance", organisationId, "ledger", "reports", "summary", from, to] as const,
+      /**
+       * F3-4 allocation history. Under `root`, so every ledger write refreshes
+       * it; every filter and the cursor are part of the identity.
+       */
+      allocations: (
+        organisationId: string,
+        params: {
+          sourceId: string;
+          memberId: string;
+          obligationId: string;
+          from: string;
+          to: string;
+          cursor: string;
+        },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "allocations",
+          params.sourceId,
+          params.memberId,
+          params.obligationId,
+          params.from,
+          params.to,
+          params.cursor,
+        ] as const,
+      /**
+       * F3-4 reconciliation reports. They read current F0 values too, so an
+       * F0 collection or correction refreshes this prefix as well
+       * (`invalidateFinance`), not only ledger writes.
+       */
+      reconciliation: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "reconciliation"] as const,
+      reconciliationSources: (
+        organisationId: string,
+        params: { asOf: string; open: string; minAgeDays: string; cursor: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reconciliation",
+          "sources",
+          params.asOf,
+          params.open,
+          params.minAgeDays,
+          params.cursor,
+        ] as const,
+      reconciliationPositions: (
+        organisationId: string,
+        params: { obligationId: string; memberId: string; flag: string; cursor: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reconciliation",
+          "positions",
+          params.obligationId,
+          params.memberId,
+          params.flag,
+          params.cursor,
+        ] as const,
+      reconciliationSummary: (
+        organisationId: string,
+        params: { from: string; to: string; minAgeDays: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reconciliation",
+          "summary",
+          params.from,
+          params.to,
+          params.minAgeDays,
+        ] as const,
     },
   },
 

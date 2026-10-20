@@ -131,6 +131,9 @@ export const useFinanceMembers = (organisationId: string) => {
 export const invalidateFinance = (organisationId: string) => {
   queryClient.invalidateQueries({ queryKey: queryKeys.finance.complianceRoot(organisationId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.finance.obligations(organisationId) });
+  // F3-4 positions and suggestions read current F0 values. Cache refresh
+  // only: no F0 request, payload or rule depends on it.
+  queryClient.invalidateQueries({ queryKey: queryKeys.finance.ledger.reconciliation(organisationId) });
 };
 
 interface PaymentTarget {

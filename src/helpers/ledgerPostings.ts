@@ -953,7 +953,14 @@ export const toPostingJournal = (value: unknown): PostingJournal | null => {
         : null,
     memberMoneySourceId: asText(source?.id),
     memberMoneySourceNumber: asText(source?.number),
+    memberMoneySourceKind: asText(source?.kind),
     reason: asText(entry?.reason),
+    obligationType: asText(entry?.obligationType),
+    confirmedMismatches:
+      Array.isArray(entry?.confirmedMismatches) &&
+      (entry?.confirmedMismatches as unknown[]).every((item) => typeof item === "string")
+        ? [...(entry?.confirmedMismatches as string[])]
+        : null,
     reversesJournalId: asText(raw.reversesJournalId),
   };
 };

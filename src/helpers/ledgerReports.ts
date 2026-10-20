@@ -221,7 +221,7 @@ const MEMBER_MONEY_FIELDS = [
 ] as const;
 
 /** undefined: malformed. null: the organisation has no member-money account. */
-const toMemberMoneySummary = (value: unknown): MemberMoneySummary | null | undefined => {
+export const toMemberMoneySummary = (value: unknown): MemberMoneySummary | null | undefined => {
   if (value === null) return null;
   const raw = asRecord(value);
   if (!raw) return undefined;

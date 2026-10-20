@@ -123,6 +123,12 @@ export const financeRequest = {
   LEDGER_CASHBOOK: "/finance/:organisationId/ledger/accounts/:accountId/cashbook",
   LEDGER_BALANCES: "/finance/:organisationId/ledger/balances",
   LEDGER_SUMMARY: "/finance/:organisationId/ledger/summary",
+  // F3-3 allocation posting (finance.manage) and F3-4 reads (finance.view).
+  // Gated behind config/ledgerF3Allocations and config/ledgerF3Reconciliation.
+  LEDGER_ALLOCATIONS: "/finance/:organisationId/ledger/allocations",
+  LEDGER_RECONCILIATION_SOURCES: "/finance/:organisationId/ledger/reconciliation/sources",
+  LEDGER_RECONCILIATION_POSITIONS: "/finance/:organisationId/ledger/reconciliation/positions",
+  LEDGER_RECONCILIATION_SUMMARY: "/finance/:organisationId/ledger/reconciliation/summary",
 };
 
 export const rbacRequest = {

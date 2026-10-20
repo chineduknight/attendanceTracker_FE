@@ -12,6 +12,9 @@ import JournalLines from "components/finance/JournalLines";
 import ReversalsPanel from "components/finance/reversals/ReversalsPanel";
 import UnconfirmedAttemptsPanel from "components/finance/attempts/UnconfirmedAttemptsPanel";
 import LedgerReportsPanel from "components/finance/reports/LedgerReportsPanel";
+import ReconciliationPanel, {
+  ReconciliationFocus,
+} from "components/finance/reconciliation/ReconciliationPanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
@@ -19,6 +22,7 @@ import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
+import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
   isLedgerUnavailable,
@@ -347,6 +351,8 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
   const journalsHeadingId = useId();
   // F2B-3: the journal whose details (and reversal) are open.
   const [openJournalId, setOpenJournalId] = useState<string | null>(null);
+  // F3: a request to show the reconciliation panel's allocation history.
+  const [reconciliationFocus, setReconciliationFocus] = useState<ReconciliationFocus | null>(null);
 
   if (statusQuery.isLoading) {
     return <PageLoader h="30vh" label="Loading books..." />;
@@ -530,6 +536,16 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           history. */}
       {LEDGER_REPORTS_UI_ENABLED && (
         <LedgerReportsPanel organisationId={organisationId} accounts={accountsQuery.accounts} />
+      )}
+
+      {/* F3B member-money reconciliation: read-only, finance.view, its own
+          gate (default off), independent of the allocation posting gate. */}
+      {LEDGER_F3_RECONCILIATION_UI_ENABLED && (
+        <ReconciliationPanel
+          organisationId={organisationId}
+          focus={reconciliationFocus}
+          onOpenJournal={LEDGER_REVERSALS_UI_ENABLED ? setOpenJournalId : undefined}
+        />
       )}
 
       <JournalsSection

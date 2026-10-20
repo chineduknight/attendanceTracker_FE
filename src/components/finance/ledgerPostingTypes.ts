@@ -371,10 +371,14 @@ export interface PostingJournal {
   memberId: string | null;
   obligationId: string | null;
   receivedAfterOpeningCount: boolean | null;
-  /** Refunds (F2B-2): the source this refund returned money from. */
+  /** Refunds (F2B-2) and allocations (F3-3): the source the money came from. */
   memberMoneySourceId: string | null;
   memberMoneySourceNumber: string | null;
+  memberMoneySourceKind: string | null;
   reason: string | null;
+  /** Allocations (F3-3): the obligation's type and the confirmed hint mismatches. */
+  obligationType: string | null;
+  confirmedMismatches: string[] | null;
   /** Reversals (F2B-3): the journal this one undoes. */
   reversesJournalId: string | null;
 }
