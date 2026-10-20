@@ -363,6 +363,23 @@ describe("the officer workflow", () => {
     expect(readLedgerPostingIntents("org1").kind).toBe("none");
   });
 
+  it("keeps the server's refusal on screen when the re-read source holds nothing any more", async () => {
+    api.post.mockImplementationOnce(() => {
+      // Another officer used the money first: the next read no longer lists it.
+      sources = [];
+      return Promise.reject({
+        response: { status: 422, data: { error: "The allocation is more than the source still holds.", code: "LEDGER_ALLOCATION_EXCEEDS_REMAINING" } },
+      });
+    });
+    render(panel());
+    await openForm();
+    await fillAmount("2000");
+    review();
+    await confirmInDialog("Allocate");
+    expect(await screen.findByText("Nothing is held to allocate any more")).toBeInTheDocument();
+    expect(screen.getByText("The allocation is more than the source still holds.")).toBeInTheDocument();
+  });
+
   it("starts from a chosen suggestion with its member and obligation", async () => {
     render(panel({ start: { sourceId: SOURCE_M12, sourceNumber: "M-000012", memberId: MEMBER_ADA, obligationId: OBLIGATION_DUES, nonce: 1 } }));
     expect(await screen.findByLabelText("Current position")).toBeInTheDocument();

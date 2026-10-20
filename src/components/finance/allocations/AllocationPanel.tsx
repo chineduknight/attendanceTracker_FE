@@ -305,6 +305,14 @@ const AllocationPanel = ({
           </Text>
         )}
 
+        {/* A refusal can close the form: the re-read source may now hold
+            nothing. The server's reason must stay on screen. */}
+        {formError && !(view === "allocation" && selected?.kind === "current") && (
+          <Text role="alert" fontSize="sm" color="fg.error">
+            {formError}
+          </Text>
+        )}
+
         {success && (
           <PostingReceipt
             result={success.result}
