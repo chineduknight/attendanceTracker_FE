@@ -22,6 +22,8 @@ import {
   useCollectionUncertainty,
 } from "helpers/financeUncertainty";
 import { CorrectionRejection, usePaymentMutations, useFinancialStartDate } from "hooks/useFinance";
+import { useLinkedAllocation } from "hooks/useLedgerReconciliation";
+import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
 import useGlobalStore from "zStore";
 import { usePermissions } from "rbac/usePermissions";
 import { ComplianceRow, CorrectionGuard, Obligation } from "components/finance/financeTypes";
@@ -299,13 +301,18 @@ const CreditNote = ({ row }: { row: ComplianceRow }) => {
  * (an older backend) it stays visible but cannot save.
  */
 const CorrectionEditor = ({
+  organisationId,
   correction: { row, guard },
   obligation,
   isSaving,
   locked = false,
   onCorrectDues,
   onCorrectLevy,
+  allocationWarningEnabled = LEDGER_F3_RECONCILIATION_UI_ENABLED,
 }: {
+  organisationId: string;
+  /** F3 O11(b) read-only warning; production reads config/ledgerF3Reconciliation. */
+  allocationWarningEnabled?: boolean;
   correction: CorrectionSnapshot;
   obligation: Obligation;
   isSaving: boolean;
@@ -313,17 +320,22 @@ const CorrectionEditor = ({
   locked?: boolean;
   onCorrectDues: (monthlyPaid: Record<string, number>, replace: boolean, guard: CorrectionGuard) => void;
   onCorrectLevy: (amountPaid: number, replace: boolean, guard: CorrectionGuard) => void;
-}) => (
-  <CorrectPaymentForm
-    obligation={obligation}
-    memberName={row.name}
-    row={row}
-    isSaving={isSaving}
-    locked={locked || !guard}
-    onCorrectDues={(monthlyPaid, replace) => guard && onCorrectDues(monthlyPaid, replace, guard)}
-    onCorrectLevy={(amountPaid, replace) => guard && onCorrectLevy(amountPaid, replace, guard)}
-  />
-);
+}) => {
+  // Read-only: never part of the correction request or its guard.
+  const linkedAllocation = useLinkedAllocation(organisationId, obligation.id, row.memberId, allocationWarningEnabled);
+  return (
+    <CorrectPaymentForm
+      obligation={obligation}
+      memberName={row.name}
+      row={row}
+      isSaving={isSaving}
+      locked={locked || !guard}
+      onCorrectDues={(monthlyPaid, replace) => guard && onCorrectDues(monthlyPaid, replace, guard)}
+      onCorrectLevy={(amountPaid, replace) => guard && onCorrectLevy(amountPaid, replace, guard)}
+      linkedAllocation={linkedAllocation}
+    />
+  );
+};
 
 /**
  * Everything about one member for one obligation: where they stand, and —
@@ -538,6 +550,7 @@ const MemberPaymentSheet = ({
                       </Text>
                     )}
                     <CorrectionEditor
+                      organisationId={organisationId}
                       correction={correction}
                       obligation={obligation}
                       isSaving={payments.isSaving}

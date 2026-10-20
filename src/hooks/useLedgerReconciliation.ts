@@ -11,6 +11,7 @@ import {
   toSourcesReport,
 } from "helpers/ledgerReconciliation";
 import { ReportQueryState } from "hooks/useLedgerReports";
+import { LinkedAllocation, linkedAllocationOf } from "helpers/f0AllocationWarning";
 
 /**
  * F3-4 allocation and reconciliation reads (`finance.view`, GET only).
@@ -150,4 +151,30 @@ export const useReconciliationSummary = (
     { enabled: enabled && Boolean(organisationId) },
   );
   return stateOf(query, toReconciliationSummary(query.data?.data));
+};
+
+/**
+ * O11(b): what the ledger has allocated to one F0 position, for the
+ * read-only correction warning. Read fresh whenever the correction editor
+ * opens; never written, never used to refuse anything.
+ */
+export const useLinkedAllocation = (
+  organisationId: string,
+  obligationId: string,
+  memberId: string,
+  enabled: boolean,
+): LinkedAllocation | undefined => {
+  const query = usePositions(
+    organisationId,
+    { obligationId, memberId, flag: "", cursor: "" },
+    enabled && Boolean(obligationId && memberId),
+  );
+  if (!enabled) return undefined;
+  return linkedAllocationOf({
+    report: query.report,
+    isLoading: query.isLoading,
+    isError: query.isError && !query.report,
+    memberId,
+    obligationId,
+  });
 };

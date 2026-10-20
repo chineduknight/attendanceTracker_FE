@@ -6,7 +6,8 @@ import { installPostingLockManager, removePostingLockManager } from "test-utils/
 import { queryClient } from "services/api/apiHelper";
 import AllocationPanel from "components/finance/allocations/AllocationPanel";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
-import { readLedgerPostingIntents } from "helpers/ledgerPostingIntent";
+import { act } from "@testing-library/react";
+import { beginLedgerPostingIntent, ledgerPostingIntentKey, readLedgerPostingIntents } from "helpers/ledgerPostingIntent";
 import { todayInLagos } from "helpers/openingBalances";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
@@ -442,6 +443,33 @@ describe("unconfirmed outcomes", () => {
     release(null);
     expect(await screen.findByText("Journal number: A-000001")).toBeInTheDocument();
     expect(allocationPosts()).toHaveLength(1);
+  });
+});
+
+describe("concurrent changes", () => {
+  it("locks an open form when another tab claims a posting, keeping the entries", async () => {
+    render(panel());
+    await openForm();
+    await fillAmount("2000");
+    // Another tab stores its own posting for this organisation.
+    await beginLedgerPostingIntent({
+      organisationId: "org1",
+      officerId: "officer-1",
+      key: "other-tab-key-1",
+      operation: "reversal",
+      body: { idempotencyKey: "other-tab-key-1", businessDate: TODAY, reason: "Elsewhere" },
+      reversalTarget: { journalId: "e".repeat(24), sourceType: "cash_receipt", number: "R-000001", businessDate: daysAgo(3), totalKobo: 5000 },
+      summary: { operation: "reversal", amountKobo: 5000, businessDate: TODAY, method: null, fromAccountName: null, toAccountName: null, categoryName: null },
+    });
+    const event = new Event("storage") as StorageEvent;
+    Object.defineProperty(event, "key", { value: ledgerPostingIntentKey("org1") });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    expect(await screen.findByText("Check the journal entries before posting this")).toBeInTheDocument();
+    expect(screen.getByLabelText("Amount")).toHaveValue("2,000");
+    expect(screen.getByRole("button", { name: "Review and allocate" })).toBeDisabled();
+    expect(allocationPosts()).toHaveLength(0);
   });
 });
 

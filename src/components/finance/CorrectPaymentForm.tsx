@@ -5,6 +5,12 @@ import { MONTHS, formatMoney } from "helpers/financeConstants";
 import { firstLiableMonth, isUnknownAmount, paidOf, unappliedCreditOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
+import {
+  LINKED_ALLOCATION_UNAVAILABLE_NOTE,
+  LinkedAllocation,
+  correctionAllocationWarning,
+  nairaAmountToKobo,
+} from "helpers/f0AllocationWarning";
 
 interface CorrectPaymentFormProps {
   obligation: Obligation;
@@ -17,6 +23,12 @@ interface CorrectPaymentFormProps {
   /** `replaceUnappliedCredit` is true once the officer confirmed it. */
   onCorrectDues: (monthlyPaid: Record<string, number>, replaceUnappliedCredit: boolean) => void;
   onCorrectLevy: (amountPaid: number, replaceUnappliedCredit: boolean) => void;
+  /**
+   * F3 O11(b), read-only: what the ledger has allocated to this position.
+   * Absent while the F3 reconciliation gate is off (no warning, no read).
+   * It only warns; it never blocks or changes the correction.
+   */
+  linkedAllocation?: LinkedAllocation;
 }
 
 interface PendingCorrection {
@@ -42,6 +54,7 @@ const CorrectPaymentForm = ({
   locked = false,
   onCorrectDues,
   onCorrectLevy,
+  linkedAllocation,
 }: CorrectPaymentFormProps) => {
   const isDues = obligation.type === "dues";
   const amountPerMonth = obligation.amountPerMonth ?? 0;
@@ -74,6 +87,20 @@ const CorrectPaymentForm = ({
   const creditClause = hasCredit
     ? ` The ${formatMoney(credit)} of unapplied credit on this record will be replaced too.`
     : "";
+
+  // The value this correction would record, exactly as the request will
+  // carry it (dues: every entered month; levy: the total). Display only.
+  const proposedKobo = (() => {
+    if (isDues) {
+      const total = Object.values(monthly)
+        .filter((value) => value !== "")
+        .reduce((sum, value) => sum + Number(value), 0);
+      return nairaAmountToKobo(total);
+    }
+    return amountPaid === "" ? null : nairaAmountToKobo(Number(amountPaid));
+  })();
+  const allocationWarning = correctionAllocationWarning(proposedKobo, linkedAllocation);
+  const warningClause = allocationWarning ? ` ${allocationWarning}` : "";
 
   const valueOf = (month: number) => monthly[String(month)] ?? "";
   const isComplete = (month: number) =>
@@ -116,8 +143,8 @@ const CorrectPaymentForm = ({
       setPending({
         body:
           count === 0
-            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.${creditClause}`
-            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.${creditClause}`,
+            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.${creditClause}${warningClause}`
+            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.${creditClause}${warningClause}`,
         confirmLabel: count === 0 ? "Yes, clear" : "Yes, update",
         confirmPalette: count === 0 || hasCredit ? "red" : "purple",
         run: () => onCorrectDues(monthlyPaid, hasCredit),
@@ -126,7 +153,7 @@ const CorrectPaymentForm = ({
     }
     if (amountPaid === "") return;
     setPending({
-      body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.${creditClause}`,
+      body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.${creditClause}${warningClause}`,
       confirmLabel: "Yes, update",
       confirmPalette: hasCredit ? "red" : "purple",
       run: () => onCorrectLevy(Number(amountPaid), hasCredit),
@@ -187,6 +214,17 @@ const CorrectPaymentForm = ({
             onChange={setAmountPaid}
           />
         </Field.Root>
+      )}
+
+      {allocationWarning && (
+        <Text role="status" fontSize="sm" color="fg.warning">
+          {allocationWarning}
+        </Text>
+      )}
+      {linkedAllocation?.kind === "unavailable" && (
+        <Text fontSize="xs" color="fg.muted">
+          {LINKED_ALLOCATION_UNAVAILABLE_NOTE}
+        </Text>
       )}
 
       <Button colorPalette="purple" onClick={requestSave} loading={isSaving} disabled={locked}>
