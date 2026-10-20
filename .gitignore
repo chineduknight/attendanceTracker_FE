@@ -7,6 +7,8 @@ yarn-error.log
 .qodo
 .DS_Store
 docs/f3a-evidence
+docs/f3bc-evidence/browser/
+docs/f3bc-evidence/real/
 .DS_STORE
 node_modules
 scripts/flow/*/.flowconfig
