@@ -32,6 +32,8 @@ export interface ReportQueryState<T> {
   error: unknown;
   refetch: () => unknown;
   isFetching: boolean;
+  /** False until a read has completed after the screen mounted (React Query). */
+  isFetchedAfterMount?: boolean;
   /** When the shown data was received (ms); 0 before the first success. */
   dataUpdatedAt: number;
 }

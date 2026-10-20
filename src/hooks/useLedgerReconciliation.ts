@@ -34,6 +34,7 @@ const stateOf = <T>(
     error: unknown;
     refetch: () => unknown;
     isFetching: boolean;
+    isFetchedAfterMount: boolean;
     dataUpdatedAt: number;
   },
   report: T | null,
@@ -45,6 +46,7 @@ const stateOf = <T>(
   error: query.error,
   refetch: query.refetch,
   isFetching: query.isFetching,
+  isFetchedAfterMount: query.isFetchedAfterMount,
   dataUpdatedAt: query.dataUpdatedAt,
 });
 
@@ -170,10 +172,12 @@ export const useLinkedAllocation = (
     enabled && Boolean(obligationId && memberId),
   );
   if (!enabled) return undefined;
+  if (!obligationId || !memberId) return { kind: "unavailable" };
   return linkedAllocationOf({
     report: query.report,
-    isLoading: query.isLoading,
-    isError: query.isError && !query.report,
+    isFetching: query.isFetching,
+    isFetchedAfterMount: query.isFetchedAfterMount === true,
+    isError: query.isError,
     memberId,
     obligationId,
   });

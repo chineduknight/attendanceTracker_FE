@@ -1,8 +1,9 @@
 # F3B + F3C verification evidence
 
 Branch: `feat/f3bc-allocation-reconciliation-ui`
-App code verified at `9910d51`; the only later change is `.gitignore`, so this
-evidence applies to the final review head.
+The initial F3B/F3C browser evidence was captured at `9910d51`. The
+review-round correction to the F0 allocation warning was verified separately
+at the final review head (see below).
 
 - Backend contract: backend `staging` at `cc1c4b8` (F3-1 … F3-4 and F3-R merged), plus the frontend F3B/F3C architecture note in `docs/Presence-Pro-F3BC-Allocation-Reconciliation-FE.md`.
 - All finance gates remain `false` in this branch, including the two new gates.
@@ -12,11 +13,11 @@ evidence applies to the final review head.
 
 | Check | Result |
 |---|---|
-| Focused F3B/F3C tests (7 suites) | **146 / 146 passed** |
-| Full frontend suite | **149 / 149 suites, 2383 / 2383 tests passed** (284 s, `--runInBand`) |
+| Focused F3B/F3C tests (7 suites) | **151 / 151 passed** |
+| Full frontend suite | **149 / 149 suites, 2388 / 2388 tests passed** (242 s, `--runInBand`) |
 | `npx tsc --noEmit` | exit 0 |
 | `npx eslint` on every changed file | exit 0 |
-| `CI=true yarn build` | exit 0 (23.3 s) |
+| `CI=true yarn build` | exit 0 (17.3 s) |
 
 Node 22.21.1, Yarn 1.22.22.
 
@@ -29,6 +30,22 @@ The focused suites were:
 - `src/components/finance/reversals/ReversalsAllocation.test.tsx`
 - `src/components/finance/CorrectPaymentFormAllocationWarning.test.tsx`
 - `src/components/finance/BooksTabF3.test.tsx`
+
+## Review-round correction: fresh positions read
+
+The F0 correction warning now treats only a positions read that completed
+after the correction editor mounted as current:
+
+- a read that is still in flight is **checking**, even when React Query has
+  cached data from an earlier read;
+- a failed fresh read is **unavailable**, even when an older report is cached;
+- once a fresh response arrives, its allocated amount and `readAt` are used;
+- the correction form explains checking/unavailable and never blocks saving.
+
+The focused suite gained five regression tests: cached ₦0 versus a fresh
+₦3,000, the pending state, the post-refresh over-link warning, a failed
+refresh with cached data, correction saving in every state, gate-off
+behaviour, and organisation-scoped cache isolation.
 
 ## Mocked-contract browser run
 
@@ -48,7 +65,7 @@ Log: `real-check.txt` · screenshots: `real/`
 ## Known limitations
 
 - The gates stay off. No deployed backend, shared staging or production run was performed.
-- One pre-existing timing flake in `LedgerReportsPanel › keeps the applied account, window and page across a tab switch` appeared in an earlier run of the full suite. The final full run passed 2383/2383; the same flake is documented on untouched base `staging`.
+- One pre-existing timing flake in `LedgerReportsPanel › keeps the applied account, window and page across a tab switch` appeared in an earlier run of the full suite. The final full run passed 2388/2388; the same flake is documented on untouched base `staging`.
 - The inherited F2A-2 setup/chart mutation-lifecycle weakness remains out of scope and is flagged for its separate safety review before the controlled pilot.
 - Finance-only officers (without `members.view`) resolve member names from at most 20 active obligations' Finance rows; a member outside that set is shown by a short id, never guessed.
 - A position with no F0 row and no allocation is not listed by `/reconciliation/positions`; the wizard explains that Finance records ₦0 for it and offers no allocation.

@@ -6,6 +6,7 @@ import { firstLiableMonth, isUnknownAmount, paidOf, unappliedCreditOf } from "he
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
 import {
+  LINKED_ALLOCATION_CHECKING_NOTE,
   LINKED_ALLOCATION_UNAVAILABLE_NOTE,
   LinkedAllocation,
   correctionAllocationWarning,
@@ -219,6 +220,11 @@ const CorrectPaymentForm = ({
       {allocationWarning && (
         <Text role="status" fontSize="sm" color="fg.warning">
           {allocationWarning}
+        </Text>
+      )}
+      {linkedAllocation?.kind === "loading" && (
+        <Text role="status" fontSize="xs" color="fg.muted">
+          {LINKED_ALLOCATION_CHECKING_NOTE}
         </Text>
       )}
       {linkedAllocation?.kind === "unavailable" && (

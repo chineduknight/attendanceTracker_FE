@@ -1,10 +1,12 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import CorrectPaymentForm from "components/finance/CorrectPaymentForm";
 import { Obligation } from "components/finance/financeTypes";
 import {
+  LINKED_ALLOCATION_CHECKING_NOTE,
   LINKED_ALLOCATION_UNAVAILABLE_NOTE,
   LinkedAllocation,
   correctionAllocationWarning,
@@ -68,7 +70,8 @@ describe("the warning rule", () => {
     const of = (items: unknown[]) =>
       linkedAllocationOf({
         report: toPositionsReport(positionsReport(items)),
-        isLoading: false,
+        isFetching: false,
+        isFetchedAfterMount: true,
         isError: false,
         memberId: (items[0] as { memberId?: string } | undefined)?.memberId ?? MEMBER_ADA,
         obligationId: OBLIGATION_DUES,
@@ -78,8 +81,28 @@ describe("the warning rule", () => {
     expect(of([unknownPosition("ambiguous")])).toMatchObject({ kind: "known", allocatedKobo: 100000 });
     expect(of([overLinkedPosition()])).toMatchObject({ allocatedKobo: 500000 });
     expect(
-      linkedAllocationOf({ report: null, isLoading: false, isError: true, memberId: MEMBER_ADA, obligationId: OBLIGATION_DUES }),
+      linkedAllocationOf({
+        report: null,
+        isFetching: false,
+        isFetchedAfterMount: true,
+        isError: true,
+        memberId: MEMBER_ADA,
+        obligationId: OBLIGATION_DUES,
+      }),
     ).toEqual({ kind: "unavailable" });
+  });
+
+  it("never treats a cached or in-flight read as a current answer", () => {
+    const report = toPositionsReport(positionsReport([knownPosition()]));
+    const base = { report, memberId: MEMBER_ADA, obligationId: OBLIGATION_DUES, isError: false };
+    // Cached data is not proof of the current position: wait for this mount's read.
+    expect(linkedAllocationOf({ ...base, isFetching: false, isFetchedAfterMount: false })).toEqual({ kind: "loading" });
+    // A background refresh is unconfirmed even after an earlier successful read.
+    expect(linkedAllocationOf({ ...base, isFetching: true, isFetchedAfterMount: true })).toEqual({ kind: "loading" });
+    // A failed refresh is unavailable, even while an older report is cached.
+    expect(linkedAllocationOf({ ...base, isFetching: false, isFetchedAfterMount: true, isError: true })).toEqual({
+      kind: "unavailable",
+    });
   });
 });
 
@@ -142,12 +165,54 @@ describe("on the correction form", () => {
     expect(screen.getByText(LINKED_ALLOCATION_UNAVAILABLE_NOTE)).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
+
+  it("says it is checking while the fresh read is pending, and still saves", async () => {
+    const { onCorrectLevy } = setup({ linkedAllocation: { kind: "loading" } });
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2000" } });
+    expect(screen.getByRole("status")).toHaveTextContent(LINKED_ALLOCATION_CHECKING_NOTE);
+    expect(screen.queryByText(/below the ₦/)).not.toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "Save correction" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    fireEvent.click(await screen.findByText("Yes, update"));
+    expect(onCorrectLevy).toHaveBeenCalledWith(2000, false);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
 });
 
 const Probe = ({ enabled }: { enabled: boolean }) => {
   const link = useLinkedAllocation("org1", OBLIGATION_DUES, MEMBER_ADA, enabled);
   return <p>{link ? (link.kind === "known" ? `allocated ${link.allocatedKobo}` : link.kind) : "off"}</p>;
 };
+
+const FormWithLink = ({
+  enabled = true,
+  onCorrectLevy,
+}: {
+  enabled?: boolean;
+  onCorrectLevy: (amountPaid: number, replaceUnappliedCredit: boolean) => void;
+}) => {
+  const link = useLinkedAllocation("org1", OBLIGATION_DUES, MEMBER_ADA, enabled);
+  return (
+    <CorrectPaymentForm
+      obligation={levy}
+      memberName="Ada"
+      row={{ memberId: MEMBER_ADA, name: "Ada", accountable: true, paid: 4000 }}
+      isSaving={false}
+      onCorrectDues={jest.fn()}
+      onCorrectLevy={onCorrectLevy}
+      linkedAllocation={link}
+    />
+  );
+};
+
+const positionsKey = (organisationId: string) =>
+  queryKeys.finance.ledger.reconciliationPositions(organisationId, {
+    obligationId: OBLIGATION_DUES,
+    memberId: MEMBER_ADA,
+    flag: "",
+    cursor: "",
+  });
 
 describe("wiring", () => {
   it("reads nothing while the gate is off", () => {
@@ -174,5 +239,79 @@ describe("wiring", () => {
     expect(url).toContain(`obligationId=${OBLIGATION_DUES}`);
     expect(url).toContain(`memberId=${MEMBER_ADA}`);
     expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("does not use another organisation's cached position", async () => {
+    queryClient.setQueryData(positionsKey("org2"), {
+      data: positionsReport([
+        knownPosition({ allocatedKobo: 0, linkedKobo: 0, unlinkedKobo: 1200000, overLinkedKobo: 0 }),
+      ]),
+    });
+    api.get.mockResolvedValue({ data: { data: positionsReport([knownPosition()]) } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Probe enabled />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("allocated 300000")).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect((api.get.mock.calls[0][0] as string).startsWith("/finance/org1/")).toBe(true);
+  });
+
+  it("does not count a cached ₦0 while the fresh read is pending, then warns from the fresh ₦3,000", async () => {
+    queryClient.setQueryData(positionsKey("org1"), {
+      data: positionsReport([
+        knownPosition({ allocatedKobo: 0, linkedKobo: 0, unlinkedKobo: 1200000, overLinkedKobo: 0 }),
+      ]),
+    });
+    let resolveFetch: ((value: unknown) => void) | undefined;
+    api.get.mockImplementation(() => new Promise((resolve) => { resolveFetch = resolve; }));
+    const onCorrectLevy = jest.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FormWithLink onCorrectLevy={onCorrectLevy} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2000" } });
+    // The cached ₦0 is not a confirmed current result, so no over-link
+    // warning is claimed while the fresh read is still in flight.
+    expect(screen.getByRole("status")).toHaveTextContent(LINKED_ALLOCATION_CHECKING_NOTE);
+    expect(screen.queryByText(/below the ₦/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save correction" })).toBeEnabled();
+    // The correction is not blocked by the unconfirmed warning read.
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByText("Yes, update"));
+    expect(onCorrectLevy).toHaveBeenCalledWith(2000, false);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+
+    await act(async () => {
+      resolveFetch?.({ data: { data: positionsReport([knownPosition()]) } });
+    });
+    expect(await screen.findByText(/₦2,000, below the ₦3,000 already allocated/)).toBeInTheDocument();
+  });
+
+  it("reports unavailable after a failed fresh read even with cached data, and still saves", async () => {
+    queryClient.setQueryData(positionsKey("org1"), {
+      data: positionsReport([
+        knownPosition({ allocatedKobo: 0, linkedKobo: 0, unlinkedKobo: 1200000, overLinkedKobo: 0 }),
+      ]),
+    });
+    api.get.mockRejectedValue(new Error("network"));
+    const onCorrectLevy = jest.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FormWithLink onCorrectLevy={onCorrectLevy} />
+      </QueryClientProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2000" } });
+    expect(await screen.findByText(LINKED_ALLOCATION_UNAVAILABLE_NOTE)).toBeInTheDocument();
+    expect(screen.queryByText(/below the ₦/)).not.toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "Save correction" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    fireEvent.click(await screen.findByText("Yes, update"));
+    expect(onCorrectLevy).toHaveBeenCalledWith(2000, false);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
   });
 });

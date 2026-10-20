@@ -21,6 +21,9 @@ export type LinkedAllocation =
   /** The ledger's allocated total for the position (0 when none). */
   | { kind: "known"; allocatedKobo: number; readAt: string };
 
+export const LINKED_ALLOCATION_CHECKING_NOTE =
+  "Checking what the books have already allocated to this record. The correction can still be saved.";
+
 export const LINKED_ALLOCATION_UNAVAILABLE_NOTE =
   "Allocations linked to this record couldn't be checked, so this screen can't warn if the new value is below them. The correction itself works as usual.";
 
@@ -29,22 +32,34 @@ export const LINKED_ALLOCATION_UNAVAILABLE_NOTE =
  * No row means nothing is allocated and Finance has no row: ₦0 allocated.
  * Allocations are ledger figures, so they stay known even when F0's own
  * value for the position is unknown or ambiguous.
+ *
+ * Only a read that completed after this screen mounted is trusted. While a
+ * fresh read is in flight, or before it completes, cached figures are not a
+ * current answer; a failed read is unavailable, never the old report.
  */
 export const linkedAllocationOf = ({
   report,
-  isLoading,
+  isFetching,
+  isFetchedAfterMount,
   isError,
   memberId,
   obligationId,
 }: {
   report: PositionsReport | null;
-  isLoading: boolean;
+  /** A fresh read is in flight: cached figures are not a current result. */
+  isFetching: boolean;
+  /** False until a read has completed after this screen mounted. */
+  isFetchedAfterMount: boolean;
   isError: boolean;
   memberId: string;
   obligationId: string;
 }): LinkedAllocation => {
-  if (isLoading) return { kind: "loading" };
-  if (isError || !report) return { kind: "unavailable" };
+  if (isFetching) return { kind: "loading" };
+  if (isError) return { kind: "unavailable" };
+  // The cache can hold an older allocated total from before this screen
+  // opened. Until the fresh read has completed, it is not a current answer.
+  if (!isFetchedAfterMount) return { kind: "loading" };
+  if (!report) return { kind: "unavailable" };
   if (report.items.length === 0) return { kind: "known", allocatedKobo: 0, readAt: report.readAt };
   const position = report.items[0];
   if (report.items.length > 1 || !sameId(position.memberId, memberId) || !sameId(position.obligationId, obligationId)) {
