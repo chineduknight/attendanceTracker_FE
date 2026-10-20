@@ -19,12 +19,11 @@ import {
 } from "helpers/ledgerSetup";
 import {
   LEDGER_WRITE_UNCERTAIN_NOTE,
-  LedgerWriteAction,
   ledgerWriteUncertaintyGuidance,
 } from "helpers/ledgerWriteUncertainty";
 import { ledgerStateKey } from "helpers/ledger";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
-import { useLedgerSetup } from "hooks/useLedgerSetup";
+import { LedgerWriteNotSentError, useLedgerSetup } from "hooks/useLedgerSetup";
 import { useLedgerWriteUncertainty } from "hooks/useLedgerWriteUncertainty";
 import { usePermissions } from "rbac/usePermissions";
 
@@ -102,7 +101,6 @@ const WriteUncertaintyNotice = ({
   onRecheck,
   onAcknowledge,
   isRechecking,
-  requireRecheck,
 }: {
   action: Parameters<typeof ledgerWriteUncertaintyGuidance>[0];
   canManage: boolean;
@@ -110,15 +108,12 @@ const WriteUncertaintyNotice = ({
   onRecheck: () => Promise<boolean> | void;
   onAcknowledge: () => void;
   isRechecking: boolean;
-  /**
-   * F3A: "I've checked" stays disabled until a recheck in this notice has
-   * reloaded the ledger, so nobody acknowledges against a stale screen.
-   */
-  requireRecheck: boolean;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
   const [rechecked, setRechecked] = useState(false);
-  const acknowledgeLocked = requireRecheck && !rechecked;
+  // Every unresolved write, F2A-2 or F3A, needs a fresh usable recheck before
+  // anyone can acknowledge it. Cached, failed or malformed reads never count.
+  const acknowledgeLocked = !rechecked;
 
   const recheck = async () => {
     if ((await onRecheck()) === true) setRechecked(true);
@@ -205,9 +200,10 @@ interface LedgerSetupPanelProps {
   onRetryAccounts: () => void;
   /**
    * Refetches status and accounts after an unresolved write; resolves `true`
-   * when both reloaded without error.
+   * when both reloaded into usable shapes. `requireAllocations` is false for
+   * F2A-2 writes, so an older F2 backend need not report the F3 setting.
    */
-  onRecheckLedger?: () => Promise<boolean> | void;
+  onRecheckLedger?: (options: { requireAllocations: boolean }) => Promise<boolean> | void;
   isRetryingAccounts: boolean;
   /** Status or accounts are refetching (F3A waits for the fresh revision). */
   isRefreshingLedger?: boolean;
@@ -238,7 +234,7 @@ const LedgerSetupPanel = ({
   const { confirm, confirmDialog } = useConfirm();
   const { startSetup, enableMemberReceipts, isStarting, isEnablingReceipts } =
     useLedgerSetup(organisationId);
-  const { uncertainty, mark, clear } = useLedgerWriteUncertainty(organisationId);
+  const { uncertainty, clear } = useLedgerWriteUncertainty(organisationId);
 
   const [memberReceiptsChoice, setMemberReceiptsChoice] = useState(false);
   const [localStatus, setLocalStatus] = useState<LedgerStatus | null>(null);
@@ -268,11 +264,19 @@ const LedgerSetupPanel = ({
   });
   const memberReceiptsKnown = status.memberReceiptsEnabled !== null;
 
-  const handleFailure = (error: unknown, action: LedgerWriteAction) => {
+  const handleFailure = (error: unknown) => {
+    if (error instanceof LedgerWriteNotSentError) {
+      setActionError(
+        error.reason === "blocked"
+          ? "An earlier ledger change is still waiting to be confirmed, so nothing was sent."
+          : "This browser couldn't keep a safety record of the change, so nothing was sent. Check that site storage is allowed and try again.",
+      );
+      return;
+    }
     const failure = ledgerApiFailure(error);
     if (ledgerWriteOutcomeUnknown(failure)) {
-      // Persisted: a reload must not re-open the same write.
-      mark(action);
+      // The durable write has already latched uncertainty, independent of
+      // this screen. Do not write a second marker from a callback.
       setActionError(null);
       return;
     }
@@ -305,7 +309,7 @@ const LedgerSetupPanel = ({
           );
           return;
         }
-        handleFailure(error, "setup");
+        handleFailure(error);
       },
     });
   };
@@ -323,7 +327,7 @@ const LedgerSetupPanel = ({
         setLocalStatus(next);
         setActionError(null);
       },
-      onError: (error) => handleFailure(error, "member-receipts"),
+      onError: (error) => handleFailure(error),
     });
   };
 
@@ -338,10 +342,19 @@ const LedgerSetupPanel = ({
             key={`${uncertainty.action}:${uncertainty.at}`}
             action={uncertainty.action}
             canManage={canManage}
-            onRecheck={() => (onRecheckLedger ?? onRetryAccounts)()}
+            onRecheck={() => {
+              if (onRecheckLedger)
+                return onRecheckLedger({
+                  // The allocations-setting action is F3-specific even if the
+                  // F3A gate is later turned off; F2A-2 actions are not.
+                  requireAllocations: uncertainty.action === "member-allocations",
+                });
+              // No status+accounts recheck is available: refetch what we can,
+              // but never unlock acknowledgement from a partial read.
+              onRetryAccounts();
+            }}
             onAcknowledge={clear}
             isRechecking={isRetryingAccounts}
-            requireRecheck={f3SetupEnabled}
           />
         )}
         {actionError && <AlertBox title="That change wasn't saved">{actionError}</AlertBox>}
@@ -498,7 +511,6 @@ const LedgerSetupPanel = ({
             isRetryingAccounts={isRetryingAccounts}
             canManage={canManage}
             writesBlocked={writeBlocked}
-            onWriteUncertain={mark}
           />
         )}
       </Stack>

@@ -991,6 +991,21 @@ describe("ledgerRecheckUsable (review of FE #140)", () => {
     expect(ledgerRecheckUsable({ ...STATUS, allocationsEnabled: true }, [])).toBe(true);
   });
 
+  it("accepts an older F2 status for an F2A-2 recheck", () => {
+    const withoutAllocations = { ...STATUS, allocationsEnabled: undefined };
+    expect(ledgerRecheckUsable(withoutAllocations, ACCOUNTS)).toBe(false);
+    expect(
+      ledgerRecheckUsable(withoutAllocations, ACCOUNTS, { requireAllocations: false }),
+    ).toBe(true);
+    // Even without the F3 field, the status and account list must still parse.
+    expect(
+      ledgerRecheckUsable({ ...withoutAllocations, revision: undefined }, ACCOUNTS, {
+        requireAllocations: false,
+      }),
+    ).toBe(false);
+    expect(ledgerRecheckUsable(withoutAllocations, undefined, { requireAllocations: false })).toBe(false);
+  });
+
   it.each([
     ["a missing status body", undefined, ACCOUNTS],
     ["a status that is not an object", "ok", ACCOUNTS],

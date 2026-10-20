@@ -1116,20 +1116,27 @@ export const ledgerWriteOutcomeUnknown = (failure: LedgerApiFailure): boolean =>
 };
 
 /**
- * Whether a recheck after an unresolved F3A write reloaded something an
- * officer can actually compare against (review of FE #140). An HTTP success
- * is not enough: the status must parse, have a recognised lifecycle state, a
- * revision and a real `allocationsEnabled` boolean (the F3A gate requires an
- * F3-2 server), and the account list must parse. Anything else leaves "I've
- * checked the ledger" locked. Takes the response bodies' `data` values.
+ * Whether a recheck after an unresolved ledger write reloaded something an
+ * officer can actually compare against. An HTTP success is not enough: the
+ * status must parse, have a recognised lifecycle state and a revision, and
+ * the account list must parse. Anything else leaves "I've checked the
+ * ledger" locked. Takes the response bodies' `data` values.
+ *
+ * `requireAllocations` keeps the F3A rule (an F3-2 server must report a real
+ * `allocationsEnabled` boolean). It is false for inherited F2A-2 writes, so a
+ * compatible older backend is not required to send an F3-only field.
  */
-export const ledgerRecheckUsable = (statusData: unknown, accountsData: unknown): boolean => {
+export const ledgerRecheckUsable = (
+  statusData: unknown,
+  accountsData: unknown,
+  { requireAllocations = true }: { requireAllocations?: boolean } = {},
+): boolean => {
   const status = toLedgerStatus(statusData);
   return (
     status !== null &&
     ledgerStateKey(status) !== "unknown" &&
     status.revision !== null &&
-    status.allocationsEnabled !== null &&
+    (!requireAllocations || status.allocationsEnabled !== null) &&
     toLedgerAccounts(accountsData) !== null
   );
 };
