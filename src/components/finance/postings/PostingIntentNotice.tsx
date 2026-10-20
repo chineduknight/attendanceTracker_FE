@@ -8,9 +8,12 @@ import {
   POSTING_UNKNOWN_RECORD_MESSAGE,
 } from "hooks/useLedgerPostings";
 import { formatLagosTimestamp } from "helpers/openingBalances";
-import { postingSummaryText } from "helpers/ledgerPostings";
+import { postingSummaryText, retrySectionFor } from "helpers/ledgerPostings";
 import { formatBusinessDate } from "helpers/financeCompliance";
-import { PostingOperation } from "components/finance/ledgerPostingTypes";
+import {
+  POSTING_SECTION_LABELS,
+  PostingSection,
+} from "components/finance/ledgerPostingTypes";
 
 /**
  * The block shown while a financial posting is unconfirmed.
@@ -27,8 +30,8 @@ const PostingIntentNotice = ({
   isRechecking,
   onRetry,
   onRecheck,
-  operations,
-  elsewhereLabel,
+  section,
+  shownSections,
 }: {
   read: LedgerPostingIntentRead;
   canManage: boolean;
@@ -37,13 +40,13 @@ const PostingIntentNotice = ({
   onRetry: (record: LedgerPostingIntentRecord) => void;
   onRecheck: () => void;
   /**
-   * The postings this section owns and retries. One pending posting blocks
-   * every new posting, but only its own section offers the retry, so the
-   * same request is never offered twice on one page. Omit to show all.
+   * This section. One pending posting blocks every new posting, but only one
+   * shown section offers its retry (`retrySectionFor`), so the same request
+   * is never offered twice on one page.
    */
-  operations?: readonly PostingOperation[];
-  /** Where the other postings are shown, e.g. "Member money". */
-  elsewhereLabel?: string;
+  section: PostingSection;
+  /** Every posting section Books currently shows. */
+  shownSections: readonly PostingSection[];
 }) => {
   if (read.kind === "none") return null;
 
@@ -87,14 +90,14 @@ const PostingIntentNotice = ({
     );
   }
 
-  const shown = operations
-    ? read.intents.filter((record) => operations.includes(record.operation))
-    : read.intents;
-  const shownElsewhere = read.intents.length - shown.length;
+  const ownerOf = (record: LedgerPostingIntentRecord) =>
+    retrySectionFor(record.operation, shownSections) ?? section;
+  const shown = read.intents.filter((record) => ownerOf(record) === section);
+  const elsewhere = read.intents.find((record) => ownerOf(record) !== section);
 
   return (
     <Stack gap={3}>
-      {shownElsewhere > 0 && (
+      {elsewhere && (
         <Box
           role="alert"
           borderWidth="1px"
@@ -107,7 +110,7 @@ const PostingIntentNotice = ({
             A financial posting is unconfirmed
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            {`It is shown in ${elsewhereLabel ?? "another section"}. Nothing new can be recorded until it is proved there.`}
+            {`It is shown in ${POSTING_SECTION_LABELS[ownerOf(elsewhere)]}. Nothing new can be recorded until it is proved there.`}
           </Text>
         </Box>
       )}

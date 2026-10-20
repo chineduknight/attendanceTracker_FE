@@ -1,6 +1,6 @@
 /**
- * F2B-1 cashbook and F2B-2 member-money posting rules (F2 Cashbook RFC v0.3
- * §5, §7, §8.2).
+ * F2B-1 cashbook, F2B-2 member-money and F2B-3 reversal posting rules (F2
+ * Cashbook RFC v0.3 §5, §7, §8.2).
  *
  * Pure helpers only: eligible-account filtering, strict field validation,
  * exact integer-kobo conversion, body building, tolerant response parsing and
@@ -22,6 +22,9 @@ import {
   POSTING_METHODS,
   POSTING_METHOD_LABELS,
   POSTING_OPERATION_LABELS,
+  POSTING_SECTIONS,
+  POSTING_SECTION_OPERATIONS,
+  PostingSection,
   PostingBody,
   PostingDraft,
   PostingJournal,
@@ -30,8 +33,12 @@ import {
   PostingSummary,
   ReceiptBody,
   ReceiptDraft,
+  REVERSIBLE_SOURCE_TYPE_LABELS,
   RefundBody,
   RefundDraft,
+  ReversalBody,
+  ReversalDraft,
+  ReversalTarget,
   TransferBody,
   TransferDraft,
 } from "components/finance/ledgerPostingTypes";
@@ -169,7 +176,7 @@ export const POSTING_TEXT_LIMITS = {
   evidenceReference: 500,
   reference: 64,
   note: 500,
-  /** Refund reason (RFC §8.2). */
+  /** Refund and reversal reason (RFC §5.3, §8.2). */
   reason: 500,
 } as const;
 
@@ -431,6 +438,35 @@ export const refundDraftIssue = (
   }) ??
   entryReferencesIssue(draft);
 
+/**
+ * A reversal's date (RFC §5.3, §4.6): not before the original, not before the
+ * opening date, after the locked period and not after today in Lagos. The
+ * server checks all of these again.
+ */
+export const reversalDateIssue = (
+  date: string,
+  original: Pick<ReversalTarget, "businessDate">,
+  context: PostingDateContext,
+): string | null =>
+  postingDateIssue(date, context) ??
+  (date < original.businessDate
+    ? `A reversal can't be dated before the entry it undoes (${formatBusinessDate(
+        original.businessDate,
+      )}).`
+    : null);
+
+export const reversalDraftIssue = (
+  draft: ReversalDraft,
+  context: PostingDateContext,
+): string | null =>
+  reversalDateIssue(draft.businessDate, draft.original, context) ??
+  postingTextIssue({
+    value: draft.reason,
+    label: "Reason",
+    max: POSTING_TEXT_LIMITS.reason,
+    required: true,
+  });
+
 export const postingDraftIssue = (
   draft: PostingDraft,
   context: PostingValidationContext,
@@ -446,6 +482,8 @@ export const postingDraftIssue = (
       return memberReceiptDraftIssue(draft.memberReceipt, context);
     case "refund":
       return refundDraftIssue(draft.refund, context);
+    case "reversal":
+      return reversalDraftIssue(draft.reversal, context);
   }
 };
 
@@ -589,6 +627,19 @@ export const buildRefundBody = (draft: RefundDraft, idempotencyKey: string): Ref
     draft,
   );
 
+/**
+ * The exact reversal body: these three fields only. The reason is trimmed as
+ * the server trims it, so the stored body is the one the server fingerprints.
+ */
+export const buildReversalBody = (
+  draft: ReversalDraft,
+  idempotencyKey: string,
+): ReversalBody => ({
+  idempotencyKey,
+  businessDate: draft.businessDate,
+  reason: draft.reason.trim(),
+});
+
 export const buildPostingBody = (
   draft: PostingDraft,
   idempotencyKey: string,
@@ -604,12 +655,27 @@ export const buildPostingBody = (
       return buildMemberReceiptBody(draft.memberReceipt, idempotencyKey);
     case "refund":
       return buildRefundBody(draft.refund, idempotencyKey);
+    case "reversal":
+      return buildReversalBody(draft.reversal, idempotencyKey);
   }
 };
 
 /** The refund's source id, which is part of the exact request (its route). */
 export const postingSourceId = (draft: PostingDraft): string | null =>
   draft.operation === "refund" ? draft.refund.source.id : null;
+
+/** The reversal's original journal, which is part of the exact request (its route). */
+export const postingReversalTarget = (draft: PostingDraft): ReversalTarget | null =>
+  draft.operation === "reversal" ? draft.reversal.original : null;
+
+/** The route parameters of a stored posting, beyond the organisation. */
+export const postingRouteParams = (request: {
+  sourceId: string | null;
+  reversalTarget: ReversalTarget | null;
+}): Record<string, string> => ({
+  ...(request.sourceId ? { sourceId: request.sourceId } : {}),
+  ...(request.reversalTarget ? { journalId: request.reversalTarget.journalId } : {}),
+});
 
 export const postingEndpoint = (operation: PostingOperation): string => {
   switch (operation) {
@@ -623,6 +689,8 @@ export const postingEndpoint = (operation: PostingOperation): string => {
       return financeRequest.LEDGER_MEMBER_RECEIPTS;
     case "refund":
       return financeRequest.LEDGER_MEMBER_MONEY_REFUNDS;
+    case "reversal":
+      return financeRequest.LEDGER_JOURNAL_REVERSAL;
   }
 };
 
@@ -645,26 +713,24 @@ export interface PostingReadiness {
 }
 
 /**
- * The server's actual readiness gates every form. `postingEnabled` alone is
- * not enough: the ledger must also be active with verified opening balances,
- * a known opening date and a known period lock so the client can validate the
- * business date without guessing.
+ * The server's actual write readiness, before any account check: the ledger
+ * must be active with verified opening balances, posting cleared by the
+ * server, and a known opening date and period lock so the client can validate
+ * the business date without guessing. Reversals need exactly this; ordinary
+ * postings also need eligible accounts (`postingReadiness`).
  */
-export const postingReadiness = ({
+export const ledgerWriteReadiness = ({
   status,
   canManage,
-  accounts,
+  forbiddenReason = "Only officers with permission to manage finance can record money. You can still view the books.",
 }: {
   status: LedgerStatus;
   canManage: boolean;
-  accounts: readonly LedgerAccount[] | null;
+  /** What to tell an officer without `finance.manage`. */
+  forbiddenReason?: string;
 }): PostingReadiness => {
   if (!canManage) {
-    return {
-      ready: false,
-      reason:
-        "Only officers with permission to manage finance can record money. You can still view the books.",
-    };
+    return { ready: false, reason: forbiddenReason };
   }
 
   const state = ledgerStateKey(status);
@@ -740,6 +806,24 @@ export const postingReadiness = ({
         "The server didn't report the current period lock, so a safe business date can't be checked.",
     };
   }
+  return { ready: true, reason: null };
+};
+
+/**
+ * Every posting form: write readiness plus eligible accounts. `postingEnabled`
+ * alone is never enough.
+ */
+export const postingReadiness = ({
+  status,
+  canManage,
+  accounts,
+}: {
+  status: LedgerStatus;
+  canManage: boolean;
+  accounts: readonly LedgerAccount[] | null;
+}): PostingReadiness => {
+  const write = ledgerWriteReadiness({ status, canManage });
+  if (!write.ready) return write;
   if (accounts === null) {
     return {
       ready: false,
@@ -870,6 +954,7 @@ export const toPostingJournal = (value: unknown): PostingJournal | null => {
     memberMoneySourceId: asText(source?.id),
     memberMoneySourceNumber: asText(source?.number),
     reason: asText(entry?.reason),
+    reversesJournalId: asText(raw.reversesJournalId),
   };
 };
 
@@ -897,7 +982,34 @@ export const POSTING_SOURCE_TYPES: Record<PostingOperation, string> = {
   transfer: "cash_transfer",
   member_receipt: "member_receipt",
   refund: "member_receipt_refund",
+  reversal: "reversal",
 };
+
+/** Ids compare as the server stores them (it lowercases a reversal's route id). */
+const sameJournalId = (left: string | null, right: string) =>
+  left !== null && left.toLowerCase() === right.toLowerCase();
+
+/**
+ * What a stored posting's response must match: its date, its amount (for a
+ * reversal, the original's total) and its route.
+ */
+export const postingExpectation = (request: {
+  operation: PostingOperation;
+  body: PostingBody;
+  sourceId: string | null;
+  reversalTarget: ReversalTarget | null;
+}) => ({
+  operation: request.operation,
+  businessDate: request.body.businessDate,
+  amountKobo:
+    "amountKobo" in request.body
+      ? request.body.amountKobo
+      : request.reversalTarget
+        ? request.reversalTarget.totalKobo
+        : null,
+  sourceId: request.sourceId,
+  reversalTarget: request.reversalTarget,
+});
 
 export type PostingConfirmationAssessment =
   | { confirmed: true; journal: PostingJournal; replayed: boolean }
@@ -924,14 +1036,18 @@ export const assessPostingConfirmation = ({
   businessDate,
   amountKobo,
   sourceId = null,
+  reversalTarget = null,
 }: {
   httpStatus: number | undefined;
   body: unknown;
   operation: PostingOperation;
   businessDate: string;
-  amountKobo: number;
+  /** null when this browser can't say what the amount must be. */
+  amountKobo: number | null;
   /** Refunds: the `:sourceId` the request was sent to. */
   sourceId?: string | null;
+  /** Reversals: the `:journalId` the request was sent to and its total. */
+  reversalTarget?: ReversalTarget | null;
 }): PostingConfirmationAssessment => {
   if (httpStatus !== 200 && httpStatus !== 201) {
     return unconfirmedPostingResponse(
@@ -970,10 +1086,32 @@ export const assessPostingConfirmation = ({
       "the journal business date did not match the posting",
     );
   }
-  if (parsed.journal.totalKobo !== amountKobo) {
+  if (amountKobo === null || parsed.journal.totalKobo !== amountKobo) {
     return unconfirmedPostingResponse(
       "the journal total did not match the posting amount",
     );
+  }
+  // A reversal is a new, unnumbered journal linked to its original. It is
+  // only the one asked for when it names that original, is not the original
+  // itself, and mirrors the original's total (checked above). The numbered
+  // receipt proof never applies to it.
+  if (operation === "reversal") {
+    if (!reversalTarget || reversalTarget.totalKobo !== amountKobo) {
+      return unconfirmedPostingResponse(
+        "this browser couldn't tell which journal the reversal was for",
+      );
+    }
+    if (!sameJournalId(parsed.journal.reversesJournalId, reversalTarget.journalId)) {
+      return unconfirmedPostingResponse(
+        "the reversal did not name the journal it was sent to undo",
+      );
+    }
+    if (sameJournalId(parsed.journal.id, reversalTarget.journalId)) {
+      return unconfirmedPostingResponse(
+        "the response returned the original journal instead of a new reversal",
+      );
+    }
+    return { confirmed: true, journal: parsed.journal, replayed: parsed.replayed };
   }
   if (!parsed.journal.number) {
     return unconfirmedPostingResponse(
@@ -1017,6 +1155,9 @@ export const POSTING_ERROR_CODES = {
   memberReceiptsDisabled: "LEDGER_MEMBER_RECEIPTS_DISABLED",
   requiredAccountMissing: "LEDGER_REQUIRED_ACCOUNT_MISSING",
   refundExceedsRemaining: "LEDGER_REFUND_EXCEEDS_REMAINING",
+  alreadyReversed: "LEDGER_ALREADY_REVERSED",
+  openingNotReversible: "LEDGER_OPENING_NOT_REVERSIBLE",
+  memberReceiptInUse: "LEDGER_MEMBER_RECEIPT_IN_USE",
 } as const;
 
 const NOTHING_WRITTEN_CODES: ReadonlySet<string> = new Set([
@@ -1069,7 +1210,13 @@ export const classifyPostingFailure = (
         "This request key was already used for a different posting. Don't send it again; an owner must resolve it from the unconfirmed attempts list.",
     };
   }
-  if (status === 400 || status === 422) {
+  // A reversal of an already-reversed journal is a business refusal like a
+  // 400/422: nothing was written for this request.
+  if (
+    status === 400 ||
+    status === 422 ||
+    (status === 409 && code === POSTING_ERROR_CODES.alreadyReversed)
+  ) {
     if (!hadAmbiguousAttempt) {
       return {
         kind: "clean-refusal",
@@ -1147,6 +1294,30 @@ export const classifyPostingFailure = (
 };
 
 /* ------------------------------------------------------------------ */
+/* Sections                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The shown section that offers a pending posting's retry: its own section
+ * when that is shown, otherwise the first shown section, so nothing pending is
+ * ever stranded out of view or offered twice.
+ */
+export const retrySectionFor = (
+  operation: PostingOperation,
+  shown: readonly PostingSection[],
+): PostingSection | null => {
+  const own = POSTING_SECTIONS.find((section) =>
+    POSTING_SECTION_OPERATIONS[section].includes(operation),
+  );
+  if (own && shown.includes(own)) return own;
+  return POSTING_SECTIONS.find((section) => shown.includes(section)) ?? null;
+};
+
+/** The sections Books shows, from the release gates. */
+export const shownPostingSections = (gates: Record<PostingSection, boolean>): PostingSection[] =>
+  POSTING_SECTIONS.filter((section) => gates[section]);
+
+/* ------------------------------------------------------------------ */
 /* Display helpers                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -1178,6 +1349,18 @@ export const postingSummaryText = (summary: PostingSummary): string => {
       } to ${summary.counterpartyName ?? "the recipient"}, against ${
         summary.sourceNumber ?? "the selected member money"
       }`;
+    case "reversal": {
+      const original =
+        [
+          summary.originalSourceType
+            ? REVERSIBLE_SOURCE_TYPE_LABELS[summary.originalSourceType].toLowerCase()
+            : null,
+          summary.originalNumber,
+        ]
+          .filter(Boolean)
+          .join(" ") || "an entry";
+      return `${operation} of ${original}: ${amount}`;
+    }
   }
 };
 

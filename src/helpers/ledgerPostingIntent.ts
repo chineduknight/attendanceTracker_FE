@@ -27,6 +27,9 @@ import {
   PostingMethod,
   PostingOperation,
   PostingSummary,
+  REVERSIBLE_SOURCE_TYPES,
+  ReversalTarget,
+  ReversibleSourceType,
 } from "components/finance/ledgerPostingTypes";
 import { isBusinessDate } from "helpers/openingBalances";
 
@@ -36,6 +39,7 @@ const OPERATIONS: readonly PostingOperation[] = [
   "transfer",
   "member_receipt",
   "refund",
+  "reversal",
 ];
 
 export const LEDGER_POSTING_INTENT_PREFIX = "presence-pro:ledger-posting-intent:";
@@ -75,6 +79,13 @@ export interface LedgerPostingIntentRecord {
    * retry goes to the same source. `null` for every other operation.
    */
   sourceId: string | null;
+  /**
+   * Reversals only: the journal in the route
+   * (`/journals/:journalId/reversal`) and the total the reversal must mirror.
+   * Part of the exact request, so a retry undoes the same journal. `null` for
+   * every other operation (and on every record written before F2B-3).
+   */
+  reversalTarget: ReversalTarget | null;
   summary: PostingSummary;
   startedAt: string;
   state: "dispatching" | "unresolved";
@@ -123,6 +134,12 @@ const isMethod = (value: unknown): value is PostingMethod =>
 const isPurpose = (value: unknown): value is MemberMoneyPurpose =>
   typeof value === "string" && (MEMBER_MONEY_PURPOSES as readonly string[]).includes(value);
 
+export const isReversibleSourceType = (value: unknown): value is ReversibleSourceType =>
+  typeof value === "string" && (REVERSIBLE_SOURCE_TYPES as readonly string[]).includes(value);
+
+const isPositiveKobo = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+
 const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
 
 /** The ids the server accepts in a route or hint (24 hex characters). */
@@ -161,13 +178,17 @@ const parseSummary = (value: unknown): PostingSummary | null => {
   const raw = asRecord(value);
   if (!raw) return null;
   if (!isOperation(raw.operation)) return null;
-  if (!isMethod(raw.method)) return null;
-  if (
-    typeof raw.amountKobo !== "number" ||
-    !Number.isSafeInteger(raw.amountKobo) ||
-    raw.amountKobo < 1
-  )
-    return null;
+  // A reversal has no payment method; every other posting must name one.
+  const method =
+    raw.operation === "reversal"
+      ? raw.method === null || raw.method === undefined
+        ? null
+        : undefined
+      : isMethod(raw.method)
+        ? raw.method
+        : undefined;
+  if (method === undefined) return null;
+  if (!isPositiveKobo(raw.amountKobo)) return null;
   if (typeof raw.businessDate !== "string" || !isBusinessDate(raw.businessDate))
     return null;
   const optionalText = (entry: unknown) =>
@@ -188,26 +209,38 @@ const parseSummary = (value: unknown): PostingSummary | null => {
       : isPurpose(raw.purpose)
         ? raw.purpose
         : undefined;
+  // F2B-3 additions: absent on records written by earlier builds.
+  const originalNumber = optionalText(raw.originalNumber);
+  const originalSourceType =
+    raw.originalSourceType === null || raw.originalSourceType === undefined
+      ? null
+      : isReversibleSourceType(raw.originalSourceType)
+        ? raw.originalSourceType
+        : undefined;
   if (
     fromAccountName === undefined ||
     toAccountName === undefined ||
     categoryName === undefined ||
     counterpartyName === undefined ||
     sourceNumber === undefined ||
-    purpose === undefined
+    purpose === undefined ||
+    originalNumber === undefined ||
+    originalSourceType === undefined
   )
     return null;
   return {
     operation: raw.operation,
     amountKobo: raw.amountKobo,
     businessDate: raw.businessDate,
-    method: raw.method,
+    method,
     fromAccountName,
     toAccountName,
     categoryName,
     counterpartyName,
     purpose,
     sourceNumber,
+    originalSourceType,
+    originalNumber,
   };
 };
 
@@ -216,25 +249,33 @@ const parseSummary = (value: unknown): PostingSummary | null => {
  * syntactically impossible body is not retried: it makes the record unreadable
  * and therefore blocks, rather than sending unknown fields.
  */
+const REVERSAL_BODY_FIELDS = ["businessDate", "idempotencyKey", "reason"];
+
 const isUsableBody = (value: unknown, operation: PostingOperation, key: string) => {
   const body = asRecord(value);
   if (!body) return false;
   if (body.idempotencyKey !== key) return false;
   if (typeof body.businessDate !== "string" || !isBusinessDate(body.businessDate))
     return false;
-  if (
-    typeof body.amountKobo !== "number" ||
-    !Number.isSafeInteger(body.amountKobo) ||
-    body.amountKobo < 1
-  )
-    return false;
+
+  const requiredText = (entry: unknown, max: number) =>
+    typeof entry === "string" && entry.trim().length > 0 && entry.length <= max;
+
+  // The server's reversal body is strict: exactly these three fields. A
+  // stored body with anything else would be refused, so it is never retried.
+  if (operation === "reversal") {
+    return (
+      Object.keys(body).sort().join(",") === REVERSAL_BODY_FIELDS.join(",") &&
+      requiredText(body.reason, 500)
+    );
+  }
+
+  if (!isPositiveKobo(body.amountKobo)) return false;
   if (!isMethod(body.method)) return false;
 
   const requiredId = (entry: unknown) => typeof entry === "string" && entry.trim().length > 0;
   const optionalText = (entry: unknown) =>
     entry === undefined || (typeof entry === "string" && entry.length <= 500);
-  const requiredText = (entry: unknown, max: number) =>
-    typeof entry === "string" && entry.trim().length > 0 && entry.length <= max;
   const optionalHint = (entry: unknown) => entry === undefined || isObjectId(entry);
 
   switch (operation) {
@@ -298,6 +339,52 @@ const isUsableSourceId = (value: unknown, operation: PostingOperation) =>
     ? isObjectId(value)
     : value === undefined || value === null;
 
+const parseReversalTarget = (value: unknown): ReversalTarget | null => {
+  const raw = asRecord(value);
+  if (!raw) return null;
+  if (!isObjectId(raw.journalId)) return null;
+  if (!isReversibleSourceType(raw.sourceType)) return null;
+  if (raw.number !== null && (typeof raw.number !== "string" || !raw.number.trim())) return null;
+  if (typeof raw.businessDate !== "string" || !isBusinessDate(raw.businessDate)) return null;
+  if (!isPositiveKobo(raw.totalKobo)) return null;
+  return {
+    journalId: raw.journalId,
+    sourceType: raw.sourceType,
+    number: raw.number,
+    businessDate: raw.businessDate,
+    totalKobo: raw.totalKobo,
+  };
+};
+
+/**
+ * A reversal must carry its route journal; nothing else may. Records written
+ * before F2B-3 have no `reversalTarget` at all and stay readable.
+ */
+const reversalTargetFor = (
+  value: unknown,
+  operation: PostingOperation,
+): { ok: true; target: ReversalTarget | null } | { ok: false } => {
+  if (operation !== "reversal") {
+    return value === undefined || value === null ? { ok: true, target: null } : { ok: false };
+  }
+  const target = parseReversalTarget(value);
+  return target ? { ok: true, target } : { ok: false };
+};
+
+/**
+ * Cross-field facts a reversal record must agree on: its summary mirrors the
+ * target's total, and its date is not before the original's.
+ */
+const reversalAgrees = (
+  target: ReversalTarget | null,
+  summary: PostingSummary,
+  body: { businessDate?: unknown },
+) =>
+  target === null ||
+  (summary.amountKobo === target.totalKobo &&
+    typeof body.businessDate === "string" &&
+    body.businessDate >= target.businessDate);
+
 const parseRecord = (
   organisationId: string,
   value: unknown,
@@ -311,9 +398,13 @@ const parseRecord = (
   if (!isOperation(raw.operation)) return null;
   if (!isUsableBody(raw.body, raw.operation, raw.key)) return null;
   if (!isUsableSourceId(raw.sourceId, raw.operation)) return null;
+  const reversal = reversalTargetFor(raw.reversalTarget, raw.operation);
+  if (!reversal.ok) return null;
   const summary = parseSummary(raw.summary);
   if (!summary) return null;
   if (summary.operation !== raw.operation) return null;
+  if (!reversalAgrees(reversal.target, summary, raw.body as { businessDate?: unknown }))
+    return null;
   if (typeof raw.startedAt !== "string") return null;
   if (raw.state !== "dispatching" && raw.state !== "unresolved") return null;
   const lastAttemptAt =
@@ -339,6 +430,7 @@ const parseRecord = (
     operation: raw.operation,
     body: raw.body as PostingBody,
     sourceId: raw.operation === "refund" ? (raw.sourceId as string) : null,
+    reversalTarget: reversal.target,
     summary,
     startedAt: raw.startedAt,
     state: raw.state,
@@ -435,7 +527,7 @@ export const ledgerPostingIntentLockName = (organisationId: string) =>
 
 const POSTING_LOCK_TIMEOUT_MS = 5000;
 
-interface LockManagerLike {
+export interface LockManagerLike {
   request: (
     name: string,
     optionsOrCallback: unknown,
@@ -443,7 +535,8 @@ interface LockManagerLike {
   ) => Promise<unknown>;
 }
 
-const getLockManager = (): LockManagerLike | null => {
+/** The browser's Web Locks API, or null where it is unavailable. */
+export const getLockManager = (): LockManagerLike | null => {
   if (typeof navigator === "undefined") return null;
   const locks = (navigator as unknown as { locks?: LockManagerLike }).locks;
   return locks && typeof locks.request === "function" ? locks : null;
@@ -494,6 +587,8 @@ export interface NewLedgerPostingIntent {
   body: PostingBody;
   /** Refunds only: the route's `:sourceId`. */
   sourceId?: string | null;
+  /** Reversals only: the route's `:journalId` and what the reversal mirrors. */
+  reversalTarget?: ReversalTarget | null;
   summary: PostingSummary;
 }
 
@@ -516,7 +611,12 @@ export const beginLedgerPostingIntent = async (
   if (!isPostingKey(key)) return { kind: "blocked", reason: "invalid" };
   if (!isUsableBody(body, operation, key)) return { kind: "blocked", reason: "invalid" };
   if (!isUsableSourceId(sourceId, operation)) return { kind: "blocked", reason: "invalid" };
+  const reversal = reversalTargetFor(input.reversalTarget ?? null, operation);
+  if (!reversal.ok) return { kind: "blocked", reason: "invalid" };
+  const reversalTarget = reversal.target;
   if (summary.operation !== operation) return { kind: "blocked", reason: "invalid" };
+  if (!parseSummary(summary)) return { kind: "blocked", reason: "invalid" };
+  if (!reversalAgrees(reversalTarget, summary, body)) return { kind: "blocked", reason: "invalid" };
 
   const outcome = await withIntentLock(
     organisationId,
@@ -539,6 +639,7 @@ export const beginLedgerPostingIntent = async (
         operation,
         body,
         sourceId,
+        reversalTarget,
         summary,
         startedAt: now.toISOString(),
         state: "dispatching",
@@ -565,6 +666,7 @@ export const beginLedgerPostingIntent = async (
         verified.intents.length !== 1 ||
         verified.intents[0].key !== key ||
         verified.intents[0].sourceId !== sourceId ||
+        !sameLedgerPostingBody(verified.intents[0].reversalTarget, reversalTarget) ||
         !sameLedgerPostingBody(verified.intents[0].body, body)
       ) {
         return { kind: "blocked", reason: "write-failed" };

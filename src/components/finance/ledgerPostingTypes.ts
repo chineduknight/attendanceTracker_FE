@@ -1,6 +1,6 @@
 /**
- * F2B-1 cashbook and F2B-2 member-money posting shapes (RFC v0.3 §5.1–§5.6,
- * §7, §8.2).
+ * F2B-1 cashbook, F2B-2 member-money and F2B-3 reversal posting shapes (RFC
+ * v0.3 §5.1–§5.6, §7, §8.2).
  *
  * These are the client's typed intents. The server builds the journal lines,
  * the entry number and the posting actor, and chooses the member-money
@@ -13,7 +13,8 @@ export type PostingOperation =
   | "expense"
   | "transfer"
   | "member_receipt"
-  | "refund";
+  | "refund"
+  | "reversal";
 
 /** Ordinary cashbook entries (F2B-1), shown under "Record money". */
 export const CASHBOOK_OPERATIONS: readonly PostingOperation[] = [
@@ -27,6 +28,57 @@ export const MEMBER_MONEY_OPERATIONS: readonly PostingOperation[] = [
   "member_receipt",
   "refund",
 ];
+
+/** Reversals (F2B-3), shown under "Reversals". */
+export const REVERSAL_OPERATIONS: readonly PostingOperation[] = ["reversal"];
+
+/**
+ * The Books sections that own postings. One pending posting blocks every
+ * section, but only one section offers its retry, so the same request is never
+ * offered twice on a page.
+ */
+export type PostingSection = "cashbook" | "memberMoney" | "reversals";
+
+/** Page order: a posting whose own section is hidden falls back to the first shown. */
+export const POSTING_SECTIONS: readonly PostingSection[] = [
+  "cashbook",
+  "memberMoney",
+  "reversals",
+];
+
+export const POSTING_SECTION_OPERATIONS: Record<PostingSection, readonly PostingOperation[]> = {
+  cashbook: CASHBOOK_OPERATIONS,
+  memberMoney: MEMBER_MONEY_OPERATIONS,
+  reversals: REVERSAL_OPERATIONS,
+};
+
+export const POSTING_SECTION_LABELS: Record<PostingSection, string> = {
+  cashbook: "Record money",
+  memberMoney: "Member money",
+  reversals: "Reversals",
+};
+
+/**
+ * The journal types F2B-3 may reverse (RFC v0.3 §5.3). The server's allow-list
+ * also has F3 allocations, which this phase does not offer.
+ */
+export const REVERSIBLE_SOURCE_TYPES = [
+  "cash_receipt",
+  "cash_expense",
+  "cash_transfer",
+  "member_receipt",
+  "member_receipt_refund",
+] as const;
+
+export type ReversibleSourceType = (typeof REVERSIBLE_SOURCE_TYPES)[number];
+
+export const REVERSIBLE_SOURCE_TYPE_LABELS: Record<ReversibleSourceType, string> = {
+  cash_receipt: "Money in",
+  cash_expense: "Money out",
+  cash_transfer: "Transfer",
+  member_receipt: "Member money in",
+  member_receipt_refund: "Member money refund",
+};
 
 /** Why a member paid (RFC D1a). A tag for later reconciliation, never an allocation. */
 export const MEMBER_MONEY_PURPOSES = ["dues", "levy", "unspecified"] as const;
@@ -65,6 +117,7 @@ export const POSTING_OPERATION_LABELS: Record<PostingOperation, string> = {
   transfer: "Transfer",
   member_receipt: "Member money in",
   refund: "Member money refund",
+  reversal: "Reversal",
 };
 
 export interface ReceiptDraft {
@@ -151,19 +204,43 @@ export interface RefundDraft {
   note: string;
 }
 
+/**
+ * The journal a reversal undoes, as the server last reported it. Part of the
+ * exact request: `journalId` is the route's `:journalId`, and the reversal is
+ * only proved when it names this journal and mirrors its total.
+ */
+export interface ReversalTarget {
+  journalId: string;
+  sourceType: ReversibleSourceType;
+  /** The original's server number (`R-…`, `M-…`), for display. */
+  number: string | null;
+  businessDate: string;
+  totalKobo: number;
+}
+
+export interface ReversalDraft {
+  original: ReversalTarget;
+  businessDate: string;
+  /** Why the entry is undone (required, ≤ 500). Stored as the reversal's note. */
+  reason: string;
+}
+
 export type PostingDraft =
   | { operation: "receipt"; receipt: ReceiptDraft }
   | { operation: "expense"; expense: ExpenseDraft }
   | { operation: "transfer"; transfer: TransferDraft }
   | { operation: "member_receipt"; memberReceipt: MemberReceiptDraft }
-  | { operation: "refund"; refund: RefundDraft };
+  | { operation: "refund"; refund: RefundDraft }
+  | { operation: "reversal"; reversal: ReversalDraft };
 
 /** Display facts kept beside the exact body so a pending posting is recognisable. */
 export interface PostingSummary {
   operation: PostingOperation;
+  /** For a reversal, the original's total, which the reversal mirrors. */
   amountKobo: number;
   businessDate: string;
-  method: PostingMethod;
+  /** `null` only for a reversal, which has no payment method. */
+  method: PostingMethod | null;
   fromAccountName: string | null;
   toAccountName: string | null;
   categoryName: string | null;
@@ -173,6 +250,9 @@ export interface PostingSummary {
   purpose?: MemberMoneyPurpose | null;
   /** Refunds: the source's `M-…` / `OM-…` number. */
   sourceNumber?: string | null;
+  /** Reversals: what the reversed journal was, and its number. */
+  originalSourceType?: ReversibleSourceType | null;
+  originalNumber?: string | null;
 }
 
 export interface ReceiptBody {
@@ -247,12 +327,24 @@ export interface RefundBody {
   note?: string;
 }
 
+/**
+ * The reversal body (RFC v0.3 §5.3), exactly these three fields. The journal
+ * travels in the route (`:journalId`); the server builds the mirrored lines,
+ * so no amount, account, method or number is ever sent.
+ */
+export interface ReversalBody {
+  idempotencyKey: string;
+  businessDate: string;
+  reason: string;
+}
+
 export type PostingBody =
   | ReceiptBody
   | ExpenseBody
   | TransferBody
   | MemberReceiptBody
-  | RefundBody;
+  | RefundBody
+  | ReversalBody;
 
 /**
  * The additive posting fields on a confirmed journal. Every value is read
@@ -283,4 +375,6 @@ export interface PostingJournal {
   memberMoneySourceId: string | null;
   memberMoneySourceNumber: string | null;
   reason: string | null;
+  /** Reversals (F2B-3): the journal this one undoes. */
+  reversesJournalId: string | null;
 }

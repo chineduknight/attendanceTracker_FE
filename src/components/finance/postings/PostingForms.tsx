@@ -74,7 +74,7 @@ export const nameOf = (accounts: readonly LedgerAccount[], id: string): string |
   accounts.find((account) => account.id === id)?.name ?? null;
 
 /** The datepicker disables days before the opening or on/before the lock. */
-const earliestPostingDate = (context: PostingDateContext): string | undefined => {
+export const earliestPostingDate = (context: PostingDateContext): string | undefined => {
   const bounds = [context.openingDate];
   if (context.lockedThroughState === "set" && context.lockedThrough) {
     bounds.push(format(addDays(parseISO(context.lockedThrough), 1), "yyyy-MM-dd"));

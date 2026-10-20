@@ -14,6 +14,7 @@ import {
   POSTING_STORAGE_CLEAR_FAILED_MESSAGE,
   PostingSubmitResult,
 } from "hooks/useLedgerPostings";
+import ReversalReceipt from "components/finance/reversals/ReversalReceipt";
 
 type Confirmed = Extract<PostingSubmitResult, { kind: "confirmed" }>;
 
@@ -37,6 +38,8 @@ const summaryText = (summary: PostingSummary) => {
       }, held for members (not income)`;
     case "refund":
       return `Member money refund from ${summary.fromAccountName ?? "the selected account"}`;
+    case "reversal":
+      return "Reversal of an earlier entry";
   }
 };
 
@@ -68,11 +71,29 @@ const PostingReceipt = ({
   summary: PostingSummary;
   onAnother: () => void;
 }) => {
+  // A reversal has no number or method; it proves a link to its original.
+  // A section that retried one on the Reversals section's behalf shows the
+  // same receipt.
+  if (summary.operation === "reversal") {
+    return <ReversalReceipt result={result} summary={summary} onDone={onAnother} />;
+  }
+  return <NumberedPostingReceipt result={result} summary={summary} onAnother={onAnother} />;
+};
+
+const NumberedPostingReceipt = ({
+  result,
+  summary,
+  onAnother,
+}: {
+  result: Confirmed;
+  summary: PostingSummary;
+  onAnother: () => void;
+}) => {
   const journal = result.journal;
   const amountKobo = journal?.totalKobo ?? summary.amountKobo;
   const method =
     postingMethodLabel(journal?.method ?? null) ??
-    POSTING_METHOD_LABELS[summary.method];
+    (summary.method ? POSTING_METHOD_LABELS[summary.method] : null);
   const purpose =
     summary.operation === "member_receipt"
       ? purposeLabel(journal?.purpose ?? null, summary.purpose)
@@ -119,7 +140,7 @@ const PostingReceipt = ({
               journal?.businessDate ?? summary.businessDate,
             )}`}
           </Text>
-          <Text fontSize="sm">{`Payment method: ${method}`}</Text>
+          {method && <Text fontSize="sm">{`Payment method: ${method}`}</Text>}
           <Text fontSize="sm">{summaryText(summary)}</Text>
           {purpose && <Text fontSize="sm">{`Purpose: ${purpose}`}</Text>}
           {sourceNumber && <Text fontSize="sm">{`Refunded from: ${sourceNumber}`}</Text>}

@@ -5,15 +5,17 @@ import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { SelectOption } from "components/ui/themed-select";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
+import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
-import {
-  MEMBER_MONEY_OPERATIONS,
-  MEMBER_MONEY_PURPOSE_LABELS,
-} from "components/finance/ledgerPostingTypes";
+import { MEMBER_MONEY_PURPOSE_LABELS } from "components/finance/ledgerPostingTypes";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { formatKobo } from "helpers/financeConstants";
 import { hasPendingLedgerPosting } from "helpers/ledgerPostingIntent";
-import { memberMoneyReadiness, postingReadiness } from "helpers/ledgerPostings";
+import {
+  memberMoneyReadiness,
+  postingReadiness,
+  shownPostingSections,
+} from "helpers/ledgerPostings";
 import {
   MEMBER_MONEY_NOT_DUES_NOTE,
   MEMBER_MONEY_SOURCE_KIND_LABELS,
@@ -159,6 +161,7 @@ const MemberMoneyPanel = ({
   isRechecking = false,
   enabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
   cashbookEnabled = LEDGER_POSTINGS_UI_ENABLED,
+  reversalsEnabled = LEDGER_REVERSALS_UI_ENABLED,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -169,6 +172,8 @@ const MemberMoneyPanel = ({
   enabled?: boolean;
   /** Whether "Record money" is shown; it owns retries of ordinary postings. */
   cashbookEnabled?: boolean;
+  /** Whether the Reversals section is shown; it owns retries of reversals. */
+  reversalsEnabled?: boolean;
 }) => {
   const headingId = useId();
   const { has } = usePermissions();
@@ -333,10 +338,15 @@ const MemberMoneyPanel = ({
             isRechecking={rechecking}
             onRetry={workflow.retry}
             onRecheck={recheck}
-            // Ordinary postings are retried in "Record money" when it is
-            // shown; otherwise nothing pending may be stranded out of view.
-            operations={cashbookEnabled ? MEMBER_MONEY_OPERATIONS : undefined}
-            elsewhereLabel="Record money"
+            // Ordinary postings and reversals are retried in their own
+            // sections when those are shown; otherwise nothing pending may be
+            // stranded out of view.
+            section="memberMoney"
+            shownSections={shownPostingSections({
+              cashbook: cashbookEnabled,
+              memberMoney: true,
+              reversals: reversalsEnabled,
+            })}
           />
         )}
 

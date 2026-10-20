@@ -111,6 +111,13 @@ export const financeRequest = {
   LEDGER_MEMBER_MONEY: "/finance/:organisationId/ledger/member-money",
   LEDGER_MEMBER_MONEY_REFUNDS:
     "/finance/:organisationId/ledger/member-money/:sourceId/refunds",
+  // F2B-3 (gated): one journal's detail, its reversal (a client-keyed
+  // posting), and the unconfirmed-attempts list and resolve.
+  LEDGER_JOURNAL: "/finance/:organisationId/ledger/journals/:journalId",
+  LEDGER_JOURNAL_REVERSAL:
+    "/finance/:organisationId/ledger/journals/:journalId/reversal",
+  LEDGER_ATTEMPTS: "/finance/:organisationId/ledger/attempts",
+  LEDGER_ATTEMPTS_RESOLVE: "/finance/:organisationId/ledger/attempts/resolve",
 };
 
 export const rbacRequest = {

@@ -4,6 +4,12 @@ import { generatedCss, render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import BooksTab from "components/finance/BooksTab";
 import { LEDGER_NOT_ACTIVE_NOTE } from "helpers/ledger";
+import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
+import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
+import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
+import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
+import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
+import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -303,6 +309,37 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     expect(screen.queryByText("Org A cash")).not.toBeInTheDocument();
     expect(api.get.mock.calls.length).toBeGreaterThan(0);
     expect(api.get.mock.calls.every(([url]) => String(url).includes("/finance/org2/"))).toBe(true);
+  });
+});
+
+describe("<BooksTab> release gates", () => {
+  it("keeps every finance gate off", () => {
+    expect({
+      setup: LEDGER_SETUP_UI_ENABLED,
+      openingBalances: LEDGER_OPENING_BALANCES_UI_ENABLED,
+      lifecycle: LEDGER_LIFECYCLE_UI_ENABLED,
+      postings: LEDGER_POSTINGS_UI_ENABLED,
+      memberMoney: LEDGER_MEMBER_MONEY_UI_ENABLED,
+      reversals: LEDGER_REVERSALS_UI_ENABLED,
+    }).toEqual({
+      setup: false,
+      openingBalances: false,
+      lifecycle: false,
+      postings: false,
+      memberMoney: false,
+      reversals: false,
+    });
+  });
+
+  it("shows no F2B-3 reversal or attempts UI, and reads neither, with its gate off", async () => {
+    serveLedger({ ...F2_ACTIVE, unconfirmedAttempts: 2 }, ACCOUNTS, JOURNALS);
+    renderBooks();
+    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Reversals" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Unconfirmed attempts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Details/ })).not.toBeInTheDocument();
+    const urls = api.get.mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => url.includes("/ledger/attempts") || /\/journals\/./.test(url))).toBe(false);
   });
 });
 
