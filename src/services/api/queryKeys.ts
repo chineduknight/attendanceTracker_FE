@@ -195,6 +195,12 @@ export const queryKeys = {
       /** Member-money sources still holding money (F2B-2 read). */
       openMemberMoney: (organisationId: string) =>
         ["finance", organisationId, "ledger", "member-money", "open"] as const,
+      /** One journal's detail (F2A-4 read, used by F2B-3 reversals). */
+      journal: (organisationId: string, journalId: string) =>
+        ["finance", organisationId, "ledger", "journal", journalId] as const,
+      /** The unresolved posting attempts this officer may see (F2B-3). */
+      unresolvedAttempts: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "attempts", "unresolved"] as const,
     },
   },
 

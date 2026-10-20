@@ -2,13 +2,14 @@ import { useId } from "react";
 import { Box, Button, SimpleGrid, Stack, Text } from "@chakra-ui/react";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
-import { CASHBOOK_OPERATIONS } from "components/finance/ledgerPostingTypes";
+import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { hasPendingLedgerPosting } from "helpers/ledgerPostingIntent";
 import {
   expenseOperationReadiness,
   postingReadiness,
   receiptOperationReadiness,
+  shownPostingSections,
   transferOperationReadiness,
 } from "helpers/ledgerPostings";
 import { todayInLagos } from "helpers/openingBalances";
@@ -42,6 +43,7 @@ const CashbookPostingsPanel = ({
   isRechecking = false,
   enabled = LEDGER_POSTINGS_UI_ENABLED,
   memberMoneyEnabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
+  reversalsEnabled = LEDGER_REVERSALS_UI_ENABLED,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -52,6 +54,8 @@ const CashbookPostingsPanel = ({
   enabled?: boolean;
   /** Whether the Member money section is shown; it owns retries of member-money postings. */
   memberMoneyEnabled?: boolean;
+  /** Whether the Reversals section is shown; it owns retries of reversals. */
+  reversalsEnabled?: boolean;
 }) => {
   const headingId = useId();
   const { has } = usePermissions();
@@ -119,10 +123,15 @@ const CashbookPostingsPanel = ({
             isRechecking={isRechecking}
             onRetry={workflow.retry}
             onRecheck={recheck}
-            // Member-money postings are retried in their own section when it
-            // is shown; otherwise nothing pending may be stranded out of view.
-            operations={memberMoneyEnabled ? CASHBOOK_OPERATIONS : undefined}
-            elsewhereLabel="Member money"
+            // Member-money postings and reversals are retried in their own
+            // sections when those are shown; otherwise nothing pending may be
+            // stranded out of view.
+            section="cashbook"
+            shownSections={shownPostingSections({
+              cashbook: true,
+              memberMoney: memberMoneyEnabled,
+              reversals: reversalsEnabled,
+            })}
           />
         )}
 

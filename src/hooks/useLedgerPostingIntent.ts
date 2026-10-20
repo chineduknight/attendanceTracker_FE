@@ -132,17 +132,23 @@ export const useLedgerPostingIntent = (
     [refreshAfterMutation],
   );
 
-  const clear = useCallback(
-    async (record: LedgerPostingIntentRecord) => {
-      const cleared = await clearLedgerPostingIntent(
-        record.organisationId,
-        record.key,
-      );
-      refreshAfterMutation(record.organisationId);
+  /**
+   * Clear one key of one organisation, e.g. after resolve proved its fate.
+   * Only that key is ever removed; a missing record is already clear.
+   */
+  const clearKey = useCallback(
+    async (mutatedOrganisationId: string, key: string) => {
+      const cleared = await clearLedgerPostingIntent(mutatedOrganisationId, key);
+      refreshAfterMutation(mutatedOrganisationId);
       return cleared;
     },
     [refreshAfterMutation],
   );
 
-  return { read, begin, markUnresolved, clear, refresh };
+  const clear = useCallback(
+    (record: LedgerPostingIntentRecord) => clearKey(record.organisationId, record.key),
+    [clearKey],
+  );
+
+  return { read, begin, markUnresolved, clear, clearKey, refresh };
 };

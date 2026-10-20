@@ -1,5 +1,5 @@
-import { useId } from "react";
-import { Badge, Box, Flex, Stack, Text } from "@chakra-ui/react";
+import { useId, useState } from "react";
+import { Badge, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
@@ -8,12 +8,15 @@ import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
 import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePanel";
 import CashbookPostingsPanel from "components/finance/postings/CashbookPostingsPanel";
 import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
+import JournalLines from "components/finance/JournalLines";
+import ReversalsPanel from "components/finance/reversals/ReversalsPanel";
+import UnconfirmedAttemptsPanel from "components/finance/attempts/UnconfirmedAttemptsPanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
-import { formatKobo } from "helpers/financeConstants";
+import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
   isLedgerUnavailable,
@@ -237,6 +240,8 @@ interface JournalsSectionProps {
   error: unknown;
   refetch: () => unknown;
   isFetching: boolean;
+  /** F2B-3: opens one journal's details (and its reversal, where offered). */
+  onOpenJournal?: (journalId: string) => void;
 }
 
 const JournalsSection = ({
@@ -247,12 +252,8 @@ const JournalsSection = ({
   error,
   refetch,
   isFetching,
+  onOpenJournal,
 }: JournalsSectionProps) => {
-  const accountNames = new Map((accounts ?? []).map((account) => [account.id, account.name]));
-  const accountName = (accountId: string) =>
-    accountNames.get(accountId) ??
-    (accountId ? `Unknown account (${accountId})` : "Unknown account");
-
   return (
     <Box as="section" aria-labelledby={headingId}>
       <SectionHeading id={headingId}>Journal entries</SectionHeading>
@@ -296,52 +297,26 @@ const JournalsSection = ({
                     {`Source: ${journal.sourceType}`}
                   </Text>
                 )}
-                {journal.lines.length === 0 ? (
-                  <Text fontSize="sm" color="fg.muted">
-                    No line detail available
-                  </Text>
-                ) : (
-                  <Box
-                    as="ul"
-                    listStyleType="none"
-                    m={0}
-                    p={0}
-                    borderTopWidth="1px"
-                    borderColor="border.muted"
-                  >
-                    {journal.lines.map((line, index) => (
-                      <Flex
-                        as="li"
-                        key={`${journal.id}-${index}`}
-                        justify="space-between"
-                        align="baseline"
-                        gap={3}
-                        py={1}
-                        borderTopWidth={index === 0 ? 0 : "1px"}
-                        borderColor="border.muted"
-                      >
-                        <Text fontSize="sm" flex="1" minW={0}>
-                          {accountName(line.accountId)}
-                        </Text>
-                        <Text fontSize="sm" color="fg.muted">
-                          {line.side === "debit"
-                            ? "Debit"
-                            : line.side === "credit"
-                              ? "Credit"
-                              : "Side unavailable"}
-                        </Text>
-                        <Text
-                          fontSize="sm"
-                          fontWeight="medium"
-                          css={{ fontVariantNumeric: "tabular-nums" }}
-                        >
-                          {line.amountKobo === null
-                            ? "Amount unavailable"
-                            : formatKobo(line.amountKobo)}
-                        </Text>
-                      </Flex>
-                    ))}
-                  </Box>
+                <JournalLines
+                  journalId={journal.id}
+                  lines={journal.lines}
+                  accounts={accounts}
+                />
+                {onOpenJournal && (
+                  <Flex>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label={`Details of the ${
+                        journal.businessDate
+                          ? formatBusinessDate(journal.businessDate)
+                          : "undated"
+                      } entry ${journal.reference || journal.id}`}
+                      onClick={() => onOpenJournal(journal.id)}
+                    >
+                      Details
+                    </Button>
+                  </Flex>
                 )}
               </Stack>
             </GroupedListItem>
@@ -367,6 +342,8 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
   const journalsQuery = useLedgerJournals(organisationId, listsEnabled);
   const accountsHeadingId = useId();
   const journalsHeadingId = useId();
+  // F2B-3: the journal whose details (and reversal) are open.
+  const [openJournalId, setOpenJournalId] = useState<string | null>(null);
 
   if (statusQuery.isLoading) {
     return <PageLoader h="30vh" label="Loading books..." />;
@@ -511,6 +488,29 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
         />
       )}
 
+      {/* F2B-3 unconfirmed attempts and reversals: one gate, default off.
+          Resolving needs no posting readiness (it works while suspended or
+          with writes off); a reversal is a posting and needs all of it. */}
+      {LEDGER_REVERSALS_UI_ENABLED && (
+        <UnconfirmedAttemptsPanel
+          organisationId={organisationId}
+          onOpenJournal={setOpenJournalId}
+        />
+      )}
+
+      {LEDGER_REVERSALS_UI_ENABLED && (
+        <ReversalsPanel
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          openJournalId={openJournalId}
+          onOpenJournal={setOpenJournalId}
+          onCloseJournal={() => setOpenJournalId(null)}
+          isRechecking={isRecheckingPostings}
+          onRecheckLedger={recheckPostings}
+        />
+      )}
+
       <JournalsSection
         headingId={journalsHeadingId}
         journals={journalsQuery.journals}
@@ -519,6 +519,7 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
         error={journalsQuery.error}
         refetch={journalsQuery.refetch}
         isFetching={journalsQuery.isFetching}
+        onOpenJournal={LEDGER_REVERSALS_UI_ENABLED ? setOpenJournalId : undefined}
       />
     </Stack>
   );

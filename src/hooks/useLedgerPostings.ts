@@ -21,8 +21,12 @@ import {
   buildPostingBody,
   classifyPostingFailure,
   postingEndpoint,
+  postingExpectation,
+  postingReversalTarget,
+  postingRouteParams,
   postingSourceId,
 } from "helpers/ledgerPostings";
+import { withLedgerKeyActivity } from "helpers/ledgerKeyActivity";
 import { useLedgerPostingIntent } from "hooks/useLedgerPostingIntent";
 
 export const POSTING_STORAGE_UNAVAILABLE_MESSAGE =
@@ -42,6 +46,9 @@ export const POSTING_COORDINATION_UNAVAILABLE_MESSAGE =
 
 export const POSTING_CLAIM_MISMATCH_MESSAGE =
   "The browser's posting safety record couldn't be verified before sending, so nothing was sent. Recheck the books, then try again.";
+
+export const POSTING_KEY_BEING_RESOLVED_MESSAGE =
+  "This request is being resolved in this browser right now, so it wasn't sent. Wait for the resolution result before retrying.";
 
 const claimBlockedMessage = (reason: LedgerPostingClaimBlockedReason): string => {
   switch (reason) {
@@ -82,11 +89,12 @@ const invalidateLedger = (organisationId: string) =>
   });
 
 /**
- * F2B-1 posting writes. Each dispatch persists `{ key, exact body, org,
- * officer }` before sending, sends that same object on every retry, and
- * accepts only a contract-consistent 201 or 200-replayed response as proof.
- * Everything else applies RFC §7.5. A posting in flight blocks every other
- * posting from this screen.
+ * F2B posting writes (receipts, expenses, transfers, member money and
+ * reversals). Each dispatch persists `{ key, exact body, route, org, officer }`
+ * before sending, sends that same request on every retry, and accepts only a
+ * contract-consistent 201 or 200-replayed response as proof. Everything else
+ * applies RFC §7.5. A posting in flight blocks every other posting from this
+ * screen, and a key being resolved in this browser is never sent.
  */
 export const useLedgerPostings = (
   organisationId: string,
@@ -111,13 +119,13 @@ export const useLedgerPostings = (
     },
   });
 
-  const dispatch = useCallback(
+  const send = useCallback(
     async (record: LedgerPostingIntentRecord): Promise<PostingSubmitResult> => {
-      // A refund's source is part of the route, so the stored `sourceId`
-      // sends every retry to the same member money.
+      // A refund's source and a reversal's journal are part of the route, so
+      // the stored ids send every retry to the same member money or journal.
       const url = convertParamsToString(postingEndpoint(record.operation), {
         organisationId: record.organisationId,
-        ...(record.sourceId ? { sourceId: record.sourceId } : {}),
+        ...postingRouteParams(record),
       });
       try {
         // Use the Axios instance directly: only this path needs the HTTP
@@ -127,10 +135,7 @@ export const useLedgerPostings = (
         const assessment = assessPostingConfirmation({
           httpStatus: response.status,
           body: response.data,
-          operation: record.operation,
-          businessDate: record.body.businessDate,
-          amountKobo: record.body.amountKobo,
-          sourceId: record.sourceId,
+          ...postingExpectation(record),
         });
         if (!assessment.confirmed) {
           // A 2xx alone is not proof. Keep the exact body/key pending and
@@ -190,6 +195,29 @@ export const useLedgerPostings = (
     [intent],
   );
 
+  // The key is held (shared) for the whole request and its outcome, so this
+  // browser never resolves a key it is still sending, from any tab.
+  const dispatch = useCallback(
+    async (record: LedgerPostingIntentRecord): Promise<PostingSubmitResult> => {
+      const outcome = await withLedgerKeyActivity(
+        record.organisationId,
+        record.key,
+        "posting",
+        () => send(record),
+      );
+      switch (outcome.kind) {
+        case "ran":
+          return outcome.value;
+        case "busy":
+          return { kind: "busy", message: POSTING_KEY_BEING_RESOLVED_MESSAGE };
+        case "uncoordinated":
+          // Nothing was sent; the stored record (if any) is untouched.
+          return { kind: "blocked", message: POSTING_COORDINATION_UNAVAILABLE_MESSAGE };
+      }
+    },
+    [send],
+  );
+
   const beginPosting = useCallback(() => {
     if (inFlight.current) return false;
     inFlight.current = true;
@@ -227,6 +255,7 @@ export const useLedgerPostings = (
           operation: draft.operation,
           body,
           sourceId: postingSourceId(draft),
+          reversalTarget: postingReversalTarget(draft),
           summary,
         });
         if (claim.kind === "blocked") {
