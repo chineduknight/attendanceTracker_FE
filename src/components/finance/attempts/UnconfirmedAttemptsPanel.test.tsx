@@ -123,6 +123,7 @@ const STATUS: LedgerStatus = {
   activatedAt: null,
   gapWindowAttestedAt: null,
   gapWindowAttestation: "not_attested",
+  allocationsEnabled: false,
 };
 
 const renderPanel = ({ organisationId = "org1", withCashbook = false } = {}) =>

@@ -70,6 +70,13 @@ export interface LedgerStatus {
   /** Client-visible CAS revision; null when absent/not a counter. */
   revision: number | null;
   memberReceiptsEnabled: boolean | null;
+  /**
+   * The organisation's `memberAllocationsEnabled` setting (F3-2 additive
+   * read). Only a real JSON boolean counts; a missing or malformed field is
+   * `null` and never read as "on" — or as proof the server supports the
+   * setting at all.
+   */
+  allocationsEnabled: boolean | null;
   /** Count of unresolved posting attempts; null when absent/not a counter. */
   unconfirmedAttempts: number | null;
   /**

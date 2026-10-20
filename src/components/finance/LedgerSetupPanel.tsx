@@ -2,8 +2,10 @@ import { useId, useState } from "react";
 import { Badge, Box, Button, Field, Flex, Stack, Text } from "@chakra-ui/react";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import LedgerChartOfAccounts from "components/finance/LedgerChartOfAccounts";
+import MemberAllocationSetup from "components/finance/allocations/MemberAllocationSetup";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { Switch } from "components/ui/switch";
+import { LEDGER_F3_SETUP_UI_ENABLED } from "config/ledgerF3Setup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import {
@@ -36,7 +38,8 @@ import { usePermissions } from "rbac/usePermissions";
  * It only starts setup, records the member-receipts decision and manages the
  * chart of accounts. Opening balances, verification, activation, suspension,
  * receipts, expenses, transfers, reversals and refunds are later phases and
- * have no control here.
+ * have no control here. Behind its own gate (`config/ledgerF3Setup`) it also
+ * hosts the F3A member-money allocation setup; allocation posting is not here.
  */
 
 const STEP_SCHEMES: Record<
@@ -99,14 +102,27 @@ const WriteUncertaintyNotice = ({
   onRecheck,
   onAcknowledge,
   isRechecking,
+  requireRecheck,
 }: {
   action: Parameters<typeof ledgerWriteUncertaintyGuidance>[0];
   canManage: boolean;
-  onRecheck: () => void;
+  /** Resolves `true` only when the status and accounts reloaded cleanly. */
+  onRecheck: () => Promise<boolean> | void;
   onAcknowledge: () => void;
   isRechecking: boolean;
+  /**
+   * F3A: "I've checked" stays disabled until a recheck in this notice has
+   * reloaded the ledger, so nobody acknowledges against a stale screen.
+   */
+  requireRecheck: boolean;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
+  const [rechecked, setRechecked] = useState(false);
+  const acknowledgeLocked = requireRecheck && !rechecked;
+
+  const recheck = async () => {
+    if ((await onRecheck()) === true) setRechecked(true);
+  };
 
   const acknowledge = async () => {
     const confirmed = await confirm({
@@ -138,20 +154,48 @@ const WriteUncertaintyNotice = ({
           {ledgerWriteUncertaintyGuidance(action)}
         </Text>
         <Flex gap={2} wrap="wrap">
-          <Button size="sm" variant="outline" loading={isRechecking} onClick={onRecheck}>
+          <Button size="sm" variant="outline" loading={isRechecking} onClick={() => void recheck()}>
             Recheck the ledger
           </Button>
           {canManage && (
-            <Button size="sm" variant="outline" onClick={() => void acknowledge()}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={acknowledgeLocked}
+              onClick={() => void acknowledge()}
+            >
               I've checked the ledger
             </Button>
           )}
         </Flex>
+        {canManage && acknowledgeLocked && (
+          <Text fontSize="xs" color="fg.muted">
+            Recheck the ledger first, then compare it with the change you made.
+          </Text>
+        )}
       </Stack>
       {confirmDialog}
     </Box>
   );
 };
+
+/**
+ * An F3A write from this page is still waiting for its response. Its outcome
+ * is not known yet, so there is nothing to recheck or acknowledge; every
+ * other ledger change waits. If the page goes away first, the marker stays
+ * and comes back as "We couldn't confirm that change".
+ */
+const PendingWriteNotice = () => (
+  <Box role="status" borderWidth="1px" borderColor="border.warning" borderRadius="md" p={3} bg="bg.panel">
+    <Text fontSize="sm" fontWeight="semibold">
+      Waiting for the server to confirm that change
+    </Text>
+    <Text fontSize="sm" color="fg.muted">
+      Other ledger changes are paused until it is confirmed. If this page is closed or reloaded
+      first, the change will need to be checked before anything else is changed.
+    </Text>
+  </Box>
+);
 
 interface LedgerSetupPanelProps {
   organisationId: string;
@@ -159,13 +203,20 @@ interface LedgerSetupPanelProps {
   accounts: LedgerAccount[] | null;
   accountsError: unknown;
   onRetryAccounts: () => void;
-  /** Refetches status and accounts after an unresolved write. */
-  onRecheckLedger?: () => void;
+  /**
+   * Refetches status and accounts after an unresolved write; resolves `true`
+   * when both reloaded without error.
+   */
+  onRecheckLedger?: () => Promise<boolean> | void;
   isRetryingAccounts: boolean;
+  /** Status or accounts are refetching (F3A waits for the fresh revision). */
+  isRefreshingLedger?: boolean;
   /** Tests can force the gate on; production reads config/ledgerSetup. */
   enabled?: boolean;
   /** Whether the opening-balance screens are offered; production reads config/ledgerOpeningBalances. */
   openingBalancesEnabled?: boolean;
+  /** F3A allocation setup; production reads config/ledgerF3Setup. */
+  f3SetupEnabled?: boolean;
 }
 
 const LedgerSetupPanel = ({
@@ -176,8 +227,10 @@ const LedgerSetupPanel = ({
   onRetryAccounts,
   onRecheckLedger,
   isRetryingAccounts,
+  isRefreshingLedger = false,
   enabled = LEDGER_SETUP_UI_ENABLED,
   openingBalancesEnabled = LEDGER_OPENING_BALANCES_UI_ENABLED,
+  f3SetupEnabled = LEDGER_F3_SETUP_UI_ENABLED,
 }: LedgerSetupPanelProps) => {
   const headingId = useId();
   const { has } = usePermissions();
@@ -191,8 +244,8 @@ const LedgerSetupPanel = ({
   const [localStatus, setLocalStatus] = useState<LedgerStatus | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Any unresolved write blocks every setup/account write in this
-  // organisation until an officer reconciles it.
+  // Any pending or unresolved write blocks every setup/account write in this
+  // organisation until it is confirmed or an officer reconciles it.
   const writeBlocked = uncertainty !== null;
 
   // The setup write response is the only place `setup` is visible until
@@ -278,13 +331,17 @@ const LedgerSetupPanel = ({
     <Box as="section" aria-labelledby={headingId}>
       <SectionHeading id={headingId}>Bookkeeping setup</SectionHeading>
       <Stack gap={4}>
-        {uncertainty && (
+        {uncertainty?.pending && <PendingWriteNotice />}
+        {uncertainty && !uncertainty.pending && (
           <WriteUncertaintyNotice
+            // A new marker starts a new check: an earlier recheck never counts.
+            key={`${uncertainty.action}:${uncertainty.at}`}
             action={uncertainty.action}
             canManage={canManage}
             onRecheck={() => (onRecheckLedger ?? onRetryAccounts)()}
             onAcknowledge={clear}
             isRechecking={isRetryingAccounts}
+            requireRecheck={f3SetupEnabled}
           />
         )}
         {actionError && <AlertBox title="That change wasn't saved">{actionError}</AlertBox>}
@@ -418,6 +475,17 @@ const LedgerSetupPanel = ({
               )}
             </Stack>
           </Box>
+        )}
+
+        {f3SetupEnabled && !notStarted && (
+          <MemberAllocationSetup
+            organisationId={organisationId}
+            status={status}
+            accounts={accounts}
+            canManage={canManage}
+            writesBlocked={writeBlocked}
+            isRefreshing={isRefreshingLedger}
+          />
         )}
 
         {!notStarted && (

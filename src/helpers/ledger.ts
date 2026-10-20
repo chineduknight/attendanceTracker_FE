@@ -138,6 +138,7 @@ export const toLedgerStatus = (value: unknown): LedgerStatus | null => {
     lockedThroughState: toPeriodLockState(raw),
     revision: asCount(raw.revision),
     memberReceiptsEnabled: asBoolean(raw.memberReceiptsEnabled),
+    allocationsEnabled: asBoolean(raw.allocationsEnabled),
     unconfirmedAttempts: asCount(raw.unconfirmedAttempts),
     // `undefined` (field absent) is unknown; an explicit `null` is "none";
     // only an object is an open proposal. Any other type stays unknown.

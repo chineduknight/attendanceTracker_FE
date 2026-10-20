@@ -57,6 +57,7 @@ const statusOf = (overrides: Partial<LedgerStatus> = {}): LedgerStatus => {
     activatedAt: ACTIVATED_AT,
     gapWindowAttestedAt: null,
     gapWindowAttestation: "not_attested",
+    allocationsEnabled: false,
     ...overrides,
   };
   // Status fixtures describe a readable server response unless a test says
