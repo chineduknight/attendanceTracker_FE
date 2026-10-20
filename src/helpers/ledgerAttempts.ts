@@ -8,6 +8,7 @@
  */
 
 import { PostingJournal } from "components/finance/ledgerPostingTypes";
+import { isObjectId } from "helpers/ledgerPostingIntent";
 import { ledgerApiFailure } from "helpers/ledgerSetup";
 import { toPostingJournal } from "helpers/ledgerPostings";
 import { isBusinessDate } from "helpers/openingBalances";
@@ -198,36 +199,60 @@ export type ResolveOutcome =
   | { kind: "committed"; journal: PostingJournal }
   | {
       kind: "voided";
-      voidId: string | null;
-      voidedBy: string | null;
-      voidedAt: string | null;
+      voidId: string;
+      voidedBy: string;
+      voidedAt: string;
       /** false: the key had already been voided earlier (nothing new was written). */
       voidedByThisRequest: boolean;
     };
 
+/** An ISO-8601 instant as the server writes it (`Date#toJSON`). */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+
+const asIsoInstant = (value: unknown): string | null =>
+  typeof value === "string" && ISO_INSTANT.test(value) && !Number.isNaN(Date.parse(value))
+    ? value
+    : null;
+
 /**
- * A resolve answer is proof only as a 200 with a recognisable outcome: a
- * committed key with a readable journal, or a void that says whether this
- * request made it. Anything else proves nothing and clears nothing.
+ * A resolve answer is proof only as a complete 200 (RFC §7.4):
+ *
+ * - committed: a journal with a real id, business date and total;
+ * - voided: the void's id, who voided it and when (the server writes all
+ *   three in the one transaction that creates the void), and whether this
+ *   request made it. A void this request made must name this officer.
+ *
+ * Anything partial, malformed or contradictory proves nothing and clears
+ * nothing; resolving again with the same key returns the stored outcome.
  */
-export const toResolveOutcome = (httpStatus: number | undefined, body: unknown): ResolveOutcome | null => {
+export const toResolveOutcome = (
+  httpStatus: number | undefined,
+  body: unknown,
+  officerId: string,
+): ResolveOutcome | null => {
   if (httpStatus !== 200) return null;
   const data = asRecord(asRecord(body)?.data);
   if (!data) return null;
   if (data.outcome === "committed") {
     const journal = toPostingJournal(data.journal);
-    return journal ? { kind: "committed", journal } : null;
+    if (!journal || !isObjectId(journal.id) || !journal.businessDate || journal.totalKobo === null)
+      return null;
+    return { kind: "committed", journal };
   }
-  if (data.outcome === "voided" && typeof data.voidedByThisRequest === "boolean") {
-    return {
-      kind: "voided",
-      voidId: asText(data.voidId),
-      voidedBy: asText(data.voidedBy),
-      voidedAt: asInstant(data.voidedAt),
-      voidedByThisRequest: data.voidedByThisRequest,
-    };
-  }
-  return null;
+  if (data.outcome !== "voided") return null;
+  const voidId = isObjectId(data.voidId) ? data.voidId : null;
+  const voidedBy = asText(data.voidedBy);
+  const voidedAt = asIsoInstant(data.voidedAt);
+  if (!voidId || !voidedBy || !voidedAt || typeof data.voidedByThisRequest !== "boolean") return null;
+  // The server records the caller as the voiding actor of a void it just made.
+  if (data.voidedByThisRequest && voidedBy !== officerId) return null;
+  return {
+    kind: "voided",
+    voidId,
+    voidedBy,
+    voidedAt,
+    voidedByThisRequest: data.voidedByThisRequest,
+  };
 };
 
 export const RESOLVE_ERROR_CODES = {

@@ -34,6 +34,7 @@ const api = require("services/api").default as Record<"get" | "post", jest.Mock>
 
 const TODAY = todayInLagos();
 const KEY = "key-unresolved1";
+const VOID_ID = "6512345678901234567890cd";
 const LONG_AGO = new Date(Date.now() - 10 * 60 * 1000);
 
 const attemptItem = (overrides: Record<string, unknown> = {}) => ({
@@ -359,7 +360,7 @@ describe("resolving", () => {
       data: {
         data: {
           outcome: "voided",
-          voidId: "void-1",
+          voidId: VOID_ID,
           voidedBy: "officer-1",
           voidedAt: new Date().toISOString(),
           voidedByThisRequest: byThis,
@@ -372,7 +373,7 @@ describe("resolving", () => {
     expect(panel().getByText(text)).toBeInTheDocument();
     expect(panel().getByText(/record it again as a new posting; it gets a new request key/)).toBeInTheDocument();
     expect(panel().getByText(/Voided by you/)).toBeInTheDocument();
-    expect(panel().getByText("Void id: void-1")).toBeInTheDocument();
+    expect(panel().getByText(`Void id: ${VOID_ID}`)).toBeInTheDocument();
     expect(readLedgerPostingIntents("org1")).toEqual({ kind: "none" });
   });
 
@@ -398,13 +399,32 @@ describe("resolving", () => {
     expect(second).toEqual(first);
   });
 
-  it("treats a 200 that proves nothing as unresolved", async () => {
+  const completeVoid = {
+    outcome: "voided",
+    voidId: VOID_ID,
+    voidedBy: "officer-1",
+    voidedAt: "2026-10-20T09:15:00.000Z",
+    voidedByThisRequest: true,
+  };
+
+  it.each([
+    ["only the outcome", { outcome: "voided" }],
+    ["no void id", { ...completeVoid, voidId: undefined }],
+    ["no actor", { ...completeVoid, voidedBy: null }],
+    ["no time", { ...completeVoid, voidedAt: undefined }],
+    ["a malformed time", { ...completeVoid, voidedAt: "20/10/2026" }],
+    ["a void made now by another officer", { ...completeVoid, voidedBy: "officer-9" }],
+    ["a committed key without a total", { outcome: "committed", journal: { id: "f".repeat(24), businessDate: TODAY } }],
+  ])("treats a 200 with %s as unproven and keeps the pending record intact", async (_label, data) => {
     await pendingLocally();
-    api.post.mockResolvedValue({ status: 200, data: { data: { outcome: "voided" } } });
+    const before = window.localStorage.getItem("presence-pro:ledger-posting-intent:org1");
+    api.post.mockResolvedValue({ status: 200, data: { data } });
     renderPanel();
     await resolveFirst();
     expect(await panel().findByText(/reply didn't prove an outcome/)).toBeInTheDocument();
-    expect(readLedgerPostingIntents("org1").kind).toBe("pending");
+    expect(panel().queryByText(/^Voided$/)).not.toBeInTheDocument();
+    expect(panel().queryByText(/^Posted$/)).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("presence-pro:ledger-posting-intent:org1")).toBe(before);
   });
 
   it("never resolves a key this browser is still sending", async () => {
@@ -442,7 +462,7 @@ describe("resolving", () => {
     await pendingLocally("org1", "key-local0001");
     api.post.mockResolvedValue({
       status: 200,
-      data: { data: { outcome: "voided", voidId: "v", voidedBy: "officer-1", voidedAt: new Date().toISOString(), voidedByThisRequest: true } },
+      data: { data: { outcome: "voided", voidId: VOID_ID, voidedBy: "officer-1", voidedAt: new Date().toISOString(), voidedByThisRequest: true } },
     });
     renderPanel();
     expect(await panel().findByText(/doesn't list this request as unconfirmed/)).toBeInTheDocument();
@@ -458,5 +478,140 @@ describe("resolving", () => {
     renderPanel();
     expect(await panel().findByText(/It can be resolved from/)).toBeInTheDocument();
     expect(panel().queryByRole("button", { name: "Resolve this request" })).not.toBeInTheDocument();
+  });
+});
+
+describe("owner: resolve by request key", () => {
+  const OWNER_KEY = "0f8e2c1a-3b44-4d1e-9a51-6f0f3c2b9a10";
+  const byKey = () => panel().getByLabelText("Request key");
+
+  const resolveByKey = async (key: string, { confirm = true } = {}) => {
+    fireEvent.change(byKey(), { target: { value: key } });
+    fireEvent.click(panel().getByRole("button", { name: "Resolve this key" }));
+    if (!confirm) return;
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/may already have been posted/)).toBeInTheDocument();
+    expect(within(dialog).getByText(new RegExp(`Request key: ${key.trim()}`))).toBeInTheDocument();
+    await confirmInDialog("Resolve request");
+  };
+
+  beforeEach(() => {
+    setSession({ isOwner: true });
+    pages[FIRST_PAGE] = { items: [], nextCursor: null };
+  });
+
+  it("is never offered to an officer who isn't the owner", async () => {
+    setSession();
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    expect(panel().queryByLabelText("Request key")).not.toBeInTheDocument();
+    expect(panel().queryByRole("button", { name: "Resolve this key" })).not.toBeInTheDocument();
+  });
+
+  it("resolves a key the list doesn't show, after confirmation", async () => {
+    api.post.mockResolvedValue({
+      status: 200,
+      data: { data: { outcome: "voided", voidId: VOID_ID, voidedBy: "officer-1", voidedAt: "2026-10-20T09:15:00.000Z", voidedByThisRequest: true } },
+    });
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    await resolveByKey(`  ${OWNER_KEY}  `);
+    expect(await panel().findByText("Voided now")).toBeInTheDocument();
+    expect(resolvePosts()).toEqual([["/finance/org1/ledger/attempts/resolve", { idempotencyKey: OWNER_KEY }]]);
+    // The input is cleared for the next key once the outcome is proved.
+    expect(byKey()).toHaveValue("");
+  });
+
+  it("shows a committed key's journal", async () => {
+    api.post.mockResolvedValue({ status: 200, data: { data: { outcome: "committed", journal: committedJournal } } });
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    await resolveByKey(OWNER_KEY);
+    expect(await panel().findByText("Posted")).toBeInTheDocument();
+    expect(panel().getByText(/R-000031/)).toBeInTheDocument();
+  });
+
+  it("sends nothing when cancelled", async () => {
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    fireEvent.change(byKey(), { target: { value: OWNER_KEY } });
+    fireEvent.click(panel().getByRole("button", { name: "Resolve this key" }));
+    await confirmInDialog("Cancel");
+    expect(resolvePosts()).toHaveLength(0);
+  });
+
+  it.each([
+    ["an empty key", ""],
+    ["a key that is too short", "abc"],
+    ["a key with spaces inside", "key with spaces"],
+    ["a key starting with punctuation", "-key-12345678"],
+    ["the server's own opening key", "opening:6512345678901234567890ab"],
+  ])("refuses %s before anything is sent", async (_label, key) => {
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    await resolveByKey(key, { confirm: false });
+    expect(await panel().findByText(/isn't a request key this app can resolve/)).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(resolvePosts()).toHaveLength(0);
+  });
+
+  it("shows the server's refusal for a key the owner may not resolve", async () => {
+    api.post.mockRejectedValue({
+      response: { status: 403, data: { error: "Only the owner can resolve another officer's attempt, or a key with no recorded attempt." } },
+    });
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    await resolveByKey(OWNER_KEY);
+    expect(await panel().findByText(/Only the owner can resolve/)).toBeInTheDocument();
+    expect(panel().queryByText(/Give the owner this request key/)).not.toBeInTheDocument();
+  });
+
+  it("resolves a key with no attempt row, and retries an unknown outcome with the same key", async () => {
+    api.post
+      .mockRejectedValueOnce({ response: { status: 503, data: { code: "LEDGER_RESOLVE_OUTCOME_UNKNOWN" } } })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { data: { outcome: "voided", voidId: VOID_ID, voidedBy: "officer-1", voidedAt: "2026-10-20T09:15:00.000Z", voidedByThisRequest: false } },
+      });
+    renderPanel();
+    await panel().findByText("No unconfirmed attempts");
+    await resolveByKey(OWNER_KEY);
+    expect(await panel().findByText(/couldn't confirm whether/)).toBeInTheDocument();
+    // The key stays in the field, so the retry is the same request.
+    expect(byKey()).toHaveValue(OWNER_KEY);
+    fireEvent.click(panel().getByRole("button", { name: "Resolve this key" }));
+    await confirmInDialog("Resolve request");
+    expect(await panel().findByText("Already voided")).toBeInTheDocument();
+    const [first, second] = resolvePosts();
+    expect(second).toEqual(first);
+  });
+
+  it("clears only this organisation's matching record, and only after proof", async () => {
+    await pendingLocally("org1", OWNER_KEY);
+    await pendingLocally("org2", OWNER_KEY);
+    api.post.mockResolvedValue({ status: 200, data: { data: { outcome: "committed", journal: committedJournal } } });
+    renderPanel();
+    await panel().findByText(/doesn't list this request as unconfirmed/);
+    await resolveByKey(OWNER_KEY);
+    expect(await panel().findByText("Posted")).toBeInTheDocument();
+    expect(resolvePosts()[0][0]).toBe("/finance/org1/ledger/attempts/resolve");
+    expect(readLedgerPostingIntents("org1")).toEqual({ kind: "none" });
+    expect(readLedgerPostingIntents("org2").kind).toBe("pending");
+  });
+});
+
+describe("an officer's key the server has no attempt for", () => {
+  it("tells the officer to give the key to the owner", async () => {
+    pages[FIRST_PAGE] = { items: [], nextCursor: null };
+    await pendingLocally("org1", "key-local0001");
+    api.post.mockRejectedValue({
+      response: { status: 403, data: { error: "Only the owner can resolve another officer's attempt, or a key with no recorded attempt." } },
+    });
+    renderPanel();
+    await resolveFirst();
+    expect(
+      await panel().findByText(/Give the owner this request key so they can resolve it: key-local0001/),
+    ).toBeInTheDocument();
+    expect(readLedgerPostingIntents("org1").kind).toBe("pending");
   });
 });

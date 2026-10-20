@@ -12,6 +12,8 @@
  *
  * Without the Web Locks API the work runs uncoordinated, as it did before
  * F2B-3; posting claims already require the API, so nothing new is sent then.
+ * Where the API exists but fails to grant (or answer), nothing runs: the
+ * caller reports that it couldn't coordinate, as the intent lock does.
  */
 
 import { getLockManager } from "helpers/ledgerPostingIntent";
@@ -26,7 +28,9 @@ export type LedgerKeyActivity = "posting" | "resolving";
 export type LedgerKeyActivityOutcome<T> =
   | { kind: "ran"; value: T }
   /** The key is busy with the other activity in this browser; nothing ran. */
-  | { kind: "busy" };
+  | { kind: "busy" }
+  /** The lock manager failed before granting anything; nothing ran. */
+  | { kind: "uncoordinated" };
 
 export const withLedgerKeyActivity = async <T>(
   organisationId: string,
@@ -51,9 +55,10 @@ export const withLedgerKeyActivity = async <T>(
     );
   } catch (error) {
     // The work's own failure belongs to the caller. A lock manager that
-    // failed before granting anything falls back to running uncoordinated.
+    // failed before granting anything must not be bypassed: running anyway
+    // would drop the same-browser guarantee silently.
     if (started) throw error;
-    return { kind: "ran", value: await run() };
+    return { kind: "uncoordinated" };
   }
   return started ? { kind: "ran", value: value as T } : { kind: "busy" };
 };

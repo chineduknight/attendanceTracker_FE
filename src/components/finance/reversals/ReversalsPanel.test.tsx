@@ -440,6 +440,32 @@ describe("posting a reversal", () => {
     await resolving.release();
   });
 
+  it("sends nothing when the key's lock can't be acquired, and keeps the record", async () => {
+    api.post.mockRejectedValueOnce(new Error("Network Error"));
+    render(<Harness />);
+    await startReversal();
+    await confirmReversal();
+    await panel().findByText(/The outcome is unknown/);
+    const before = window.localStorage.getItem(ledgerPostingIntentKey("org1"));
+
+    // The intent lock still works; only the per-key activity lock fails.
+    const locks = (navigator as unknown as { locks: { request: (...args: unknown[]) => Promise<unknown> } }).locks;
+    const working = locks.request;
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: {
+        request: (name: string, ...rest: unknown[]) =>
+          name.startsWith("presence-pro:ledger-key-activity:")
+            ? Promise.reject(new DOMException("denied", "SecurityError"))
+            : working(name, ...rest),
+      },
+    });
+    fireEvent.click(panel().getByRole("button", { name: "Retry this posting" }));
+    expect(await panel().findByText(/couldn't be coordinated safely across open tabs/)).toBeInTheDocument();
+    expect(reversalPosts()).toHaveLength(1);
+    expect(window.localStorage.getItem(ledgerPostingIntentKey("org1"))).toBe(before);
+  });
+
   it("shows an already-reversed refusal, clears the clean first attempt and rereads the entry", async () => {
     api.post.mockRejectedValue({
       response: { status: 409, data: { code: "LEDGER_ALREADY_REVERSED", error: "This journal has already been reversed." } },

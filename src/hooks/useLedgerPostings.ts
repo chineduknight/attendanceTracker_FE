@@ -205,9 +205,15 @@ export const useLedgerPostings = (
         "posting",
         () => send(record),
       );
-      return outcome.kind === "ran"
-        ? outcome.value
-        : { kind: "busy", message: POSTING_KEY_BEING_RESOLVED_MESSAGE };
+      switch (outcome.kind) {
+        case "ran":
+          return outcome.value;
+        case "busy":
+          return { kind: "busy", message: POSTING_KEY_BEING_RESOLVED_MESSAGE };
+        case "uncoordinated":
+          // Nothing was sent; the stored record (if any) is untouched.
+          return { kind: "blocked", message: POSTING_COORDINATION_UNAVAILABLE_MESSAGE };
+      }
     },
     [send],
   );

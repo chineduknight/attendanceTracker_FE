@@ -60,6 +60,31 @@ describe("withLedgerKeyActivity", () => {
   });
 });
 
+describe("a lock manager that fails before granting", () => {
+  const install = (request: () => Promise<unknown>) =>
+    Object.defineProperty(navigator, "locks", { configurable: true, value: { request } });
+
+  // Plain functions: CRA resets jest.fn implementations before each test.
+  const throwing = () => {
+    throw new Error("SecurityError");
+  };
+  const rejecting = () => Promise.reject(new DOMException("aborted", "AbortError"));
+
+  it.each([
+    ["throws", throwing],
+    ["rejects", rejecting],
+  ])("runs nothing and says so when it %s", async (_label, request) => {
+    install(request);
+    const run = jest.fn(async () => "sent");
+    for (const activity of ["posting", "resolving"] as const) {
+      expect(await withLedgerKeyActivity("org1", "key-1", activity, run)).toEqual({
+        kind: "uncoordinated",
+      });
+    }
+    expect(run).not.toHaveBeenCalled();
+  });
+});
+
 it("runs uncoordinated without the Web Locks API, as before F2B-3", async () => {
   removePostingLockManager();
   expect(await withLedgerKeyActivity("org1", "key-1", "resolving", async () => 7)).toEqual({

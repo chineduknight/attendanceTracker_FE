@@ -15,7 +15,9 @@ import {
   toResolveOutcome,
 } from "helpers/ledgerAttempts";
 import { withLedgerKeyActivity } from "helpers/ledgerKeyActivity";
+import { isPostingKey } from "helpers/ledgerPostingIntent";
 import { useLedgerPostingIntent } from "hooks/useLedgerPostingIntent";
+import useGlobalStore from "zStore";
 
 const PAGE_SIZE = 50;
 
@@ -69,10 +71,20 @@ export type ResolveResult =
       /** Whether this browser's own pending record for the key (if any) is gone. */
       cleared: boolean;
     }
-  | { kind: "not-resolved"; reason: ResolveFailureKind | "unproven" | "busy"; message: string };
+  | {
+      kind: "not-resolved";
+      reason: ResolveFailureKind | "unproven" | "busy" | "uncoordinated" | "invalid-key";
+      message: string;
+    };
 
 export const RESOLVE_KEY_BEING_SENT_MESSAGE =
   "This request is being sent from this browser right now. Wait for its result; resolve it only if it is still unconfirmed afterwards.";
+
+export const RESOLVE_UNCOORDINATED_MESSAGE =
+  "This browser couldn't coordinate resolving this request with its other open tabs, so nothing was sent. Close other tabs or use a current browser, then try again.";
+
+export const RESOLVE_INVALID_KEY_MESSAGE =
+  "That isn't a request key this app can resolve. Keys are 8–128 letters, digits, '_', '.', ':' or '-', start with a letter or digit, and never start with \"opening:\". Nothing was sent.";
 
 /**
  * `POST /ledger/attempts/resolve { idempotencyKey }` (RFC §7.4). Only a
@@ -83,9 +95,15 @@ export const RESOLVE_KEY_BEING_SENT_MESSAGE =
 export const useResolveLedgerAttempt = (organisationId: string) => {
   const intent = useLedgerPostingIntent(organisationId);
   const { clearKey } = intent;
+  const officerId = useGlobalStore((store) => store.user.id);
 
   const resolve = useCallback(
     async (key: string): Promise<ResolveResult> => {
+      // Client keys only, never generated or guessed here; the server's own
+      // `opening:` keys are refused before anything is sent.
+      if (!isPostingKey(key)) {
+        return { kind: "not-resolved", reason: "invalid-key", message: RESOLVE_INVALID_KEY_MESSAGE };
+      }
       // Captured: the officer may switch organisation while this runs, and
       // the result must only ever touch the organisation it was sent for.
       const target = organisationId;
@@ -95,7 +113,7 @@ export const useResolveLedgerAttempt = (organisationId: string) => {
       const activity = await withLedgerKeyActivity(target, key, "resolving", async () => {
         try {
           const response = await axiosInstance.post(url, { idempotencyKey: key });
-          const outcome = toResolveOutcome(response.status, response.data);
+          const outcome = toResolveOutcome(response.status, response.data, officerId);
           if (!outcome) {
             return {
               kind: "not-resolved",
@@ -114,12 +132,16 @@ export const useResolveLedgerAttempt = (organisationId: string) => {
       // proved key leaves the list and may add a journal; a refusal may mean
       // the list itself is out of date.
       void queryClient.invalidateQueries({ queryKey: queryKeys.finance.ledger.root(target) });
-      if (activity.kind === "busy") {
-        return { kind: "not-resolved", reason: "busy", message: RESOLVE_KEY_BEING_SENT_MESSAGE };
+      switch (activity.kind) {
+        case "ran":
+          return activity.value;
+        case "busy":
+          return { kind: "not-resolved", reason: "busy", message: RESOLVE_KEY_BEING_SENT_MESSAGE };
+        case "uncoordinated":
+          return { kind: "not-resolved", reason: "uncoordinated", message: RESOLVE_UNCOORDINATED_MESSAGE };
       }
-      return activity.value;
     },
-    [clearKey, organisationId],
+    [clearKey, officerId, organisationId],
   );
 
   return { resolve, intent };

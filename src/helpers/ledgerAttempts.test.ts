@@ -73,35 +73,95 @@ describe("toLedgerAttemptPage", () => {
 });
 
 describe("toResolveOutcome", () => {
-  const journal = { id: "j1", businessDate: "2026-10-18", sourceType: "cash_receipt", totalKobo: 750000, lines: [] };
+  const ME = "64f00000000000000000a001";
+  const OTHER = "64f00000000000000000a002";
+  // As the backend presents them (LedgerAttemptService.resolve).
+  const committed = {
+    outcome: "committed",
+    journal: {
+      id: "6512345678901234567890ab",
+      businessDate: "2026-10-18",
+      reference: null,
+      note: null,
+      sourceType: "cash_receipt",
+      lines: [
+        { accountId: "6512345678901234567890a1", side: "debit", amountKobo: 750000 },
+        { accountId: "6512345678901234567890a2", side: "credit", amountKobo: 750000 },
+      ],
+      totalKobo: 750000,
+      postedAt: "2026-10-18T10:00:00.120Z",
+      postedBy: { id: ME, name: "treasurer1" },
+      sourceId: null,
+      reversesJournalId: null,
+      reversedByJournalId: null,
+      entry: { number: "R-000031", method: "cash", counterpartyName: null, externalReference: null, evidenceReference: null },
+    },
+  };
+  const voided = {
+    outcome: "voided",
+    voidId: "6512345678901234567890cd",
+    voidedBy: ME,
+    voidedAt: "2026-10-18T10:05:00.000Z",
+    voidedByThisRequest: true,
+  };
+  const answer = (data: unknown, status = 200) => toResolveOutcome(status, { data }, ME);
 
-  it("proves a committed key only with a readable journal", () => {
-    expect(toResolveOutcome(200, { data: { outcome: "committed", journal } })).toMatchObject({
+  it("proves a committed key with a complete journal", () => {
+    expect(answer(committed)).toMatchObject({
       kind: "committed",
-      journal: { id: "j1" },
+      journal: { id: committed.journal.id, number: "R-000031", totalKobo: 750000 },
     });
-    expect(toResolveOutcome(200, { data: { outcome: "committed", journal: {} } })).toBeNull();
   });
 
-  it("proves a void only when it says whether this request made it", () => {
-    expect(
-      toResolveOutcome(200, {
-        data: { outcome: "voided", voidId: "v1", voidedBy: "officer-1", voidedAt: "2026-10-18T10:05:00.000Z", voidedByThisRequest: false },
-      }),
-    ).toEqual({
+  it.each([
+    ["no journal", { outcome: "committed" }],
+    ["an empty journal", { outcome: "committed", journal: {} }],
+    ["a journal id that isn't an id", { ...committed, journal: { ...committed.journal, id: "j1" } }],
+    ["no business date", { ...committed, journal: { ...committed.journal, businessDate: null } }],
+    ["no total", { ...committed, journal: { ...committed.journal, totalKobo: "750000" } }],
+  ])("treats a committed answer with %s as unproven", (_label, data) => {
+    expect(answer(data)).toBeNull();
+  });
+
+  it("proves a void made now, and one made earlier by anyone", () => {
+    expect(answer(voided)).toEqual({
       kind: "voided",
-      voidId: "v1",
-      voidedBy: "officer-1",
-      voidedAt: "2026-10-18T10:05:00.000Z",
+      voidId: voided.voidId,
+      voidedBy: ME,
+      voidedAt: voided.voidedAt,
+      voidedByThisRequest: true,
+    });
+    expect(answer({ ...voided, voidedBy: OTHER, voidedByThisRequest: false })).toEqual({
+      kind: "voided",
+      voidId: voided.voidId,
+      voidedBy: OTHER,
+      voidedAt: voided.voidedAt,
       voidedByThisRequest: false,
     });
-    expect(toResolveOutcome(200, { data: { outcome: "voided" } })).toBeNull();
+  });
+
+  it.each([
+    ["no void id", { ...voided, voidId: undefined }],
+    ["a null void id", { ...voided, voidId: null }],
+    ["a void id that isn't an id", { ...voided, voidId: "v1" }],
+    ["no actor", { ...voided, voidedBy: undefined }],
+    ["a blank actor", { ...voided, voidedBy: "  " }],
+    ["no time", { ...voided, voidedAt: undefined }],
+    ["a time that isn't an instant", { ...voided, voidedAt: "yesterday" }],
+    ["a date without a time", { ...voided, voidedAt: "2026-10-18" }],
+    ["no voidedByThisRequest", { ...voided, voidedByThisRequest: undefined }],
+    ["a string voidedByThisRequest", { ...voided, voidedByThisRequest: "true" }],
+    ["a void made now by someone else", { ...voided, voidedBy: OTHER }],
+    ["only the outcome", { outcome: "voided" }],
+  ])("treats a voided answer with %s as unproven", (_label, data) => {
+    expect(answer(data)).toBeNull();
   });
 
   it("proves nothing for any other status or shape", () => {
-    expect(toResolveOutcome(201, { data: { outcome: "committed", journal } })).toBeNull();
-    expect(toResolveOutcome(200, { data: { outcome: "failed" } })).toBeNull();
-    expect(toResolveOutcome(200, null)).toBeNull();
+    expect(answer(committed, 201)).toBeNull();
+    expect(answer(voided, 202)).toBeNull();
+    expect(answer({ outcome: "failed" })).toBeNull();
+    expect(toResolveOutcome(200, null, ME)).toBeNull();
   });
 });
 

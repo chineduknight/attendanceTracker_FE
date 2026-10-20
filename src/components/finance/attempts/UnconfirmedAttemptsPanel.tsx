@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Badge, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
+import { Badge, Box, Button, Field, Flex, Input, Stack, Text } from "@chakra-ui/react";
 import PageLoader from "components/PageLoader";
 import { useConfirm } from "components/ui/confirm-dialog";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
@@ -14,10 +14,11 @@ import {
   attemptTypeLabel,
   latestAttempt,
 } from "helpers/ledgerAttempts";
-import { LedgerPostingIntentRecord } from "helpers/ledgerPostingIntent";
+import { LedgerPostingIntentRecord, isPostingKey } from "helpers/ledgerPostingIntent";
 import { postingSummaryText } from "helpers/ledgerPostings";
 import { formatLagosTimestamp } from "helpers/openingBalances";
 import {
+  RESOLVE_INVALID_KEY_MESSAGE,
   ResolveResult,
   useResolveLedgerAttempt,
   useUnresolvedLedgerAttempts,
@@ -35,6 +36,90 @@ const Muted = ({ children }: { children: string }) => (
 
 const RESOLVE_EXPLANATION =
   "Resolving asks the server for this request's final outcome. If it was posted, you'll see its journal. If it wasn't, its request key is voided permanently: it can never post, and a genuine transaction must then be entered again as a new posting.";
+
+const RESOLVE_BY_KEY_EXPLANATION =
+  "Resolving this request key asks the server for its final outcome. It may already have been posted, and you'll see its journal. If it wasn't, the key is voided permanently: it can never post, and a genuine transaction must then be entered again as a new posting. Check the key with the officer who sent it before you continue.";
+
+/**
+ * Owner only: resolve a request key the list can't show, e.g. one an officer
+ * sent from a lost device, or one that never reached the server (no attempt
+ * row, which only the owner may void). The key is typed exactly as the
+ * officer reports it; nothing is generated or guessed.
+ */
+const ResolveByKeyForm = ({
+  resolvingKey,
+  failureFor,
+  onResolve,
+}: {
+  /** The key being resolved anywhere in this panel; one at a time. */
+  resolvingKey: string | null;
+  failureFor: (key: string) => string | null;
+  onResolve: (key: string) => Promise<boolean>;
+}) => {
+  const [raw, setRaw] = useState("");
+  const [attempted, setAttempted] = useState(false);
+  // Surrounding whitespace from a paste is never part of a key.
+  const key = raw.trim();
+  const invalid = !isPostingKey(key);
+  const failure = !invalid ? failureFor(key) : null;
+  const disabled = resolvingKey !== null;
+
+  const submit = async () => {
+    setAttempted(true);
+    if (invalid) return;
+    if (await onResolve(key)) {
+      setRaw("");
+      setAttempted(false);
+    }
+  };
+
+  return (
+    <Box borderWidth="1px" borderColor="border" borderRadius="md" p={3} bg="bg.panel">
+      <Stack gap={3}>
+        <Text fontWeight="semibold">Resolve by request key</Text>
+        <Muted>
+          For a request this list can't show: for example one sent from a lost device, or one
+          that never reached the server. Ask the officer for the request key shown on their
+          unconfirmed posting.
+        </Muted>
+        <Field.Root invalid={attempted && invalid} disabled={disabled}>
+          <Field.Label>Request key</Field.Label>
+          <Input
+            value={raw}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            fontFamily="mono"
+            onChange={(event) => setRaw(event.target.value)}
+          />
+          {attempted && invalid ? (
+            <Field.ErrorText>{RESOLVE_INVALID_KEY_MESSAGE}</Field.ErrorText>
+          ) : (
+            <Field.HelperText>Enter it exactly as the officer reports it.</Field.HelperText>
+          )}
+        </Field.Root>
+        {failure && (
+          <Text role="alert" fontSize="sm" color="fg.error">
+            {failure}
+          </Text>
+        )}
+        <Flex>
+          <Button
+            size="sm"
+            variant="outline"
+            colorPalette="orange"
+            loading={resolvingKey !== null && resolvingKey === key}
+            disabled={disabled}
+            onClick={() => void submit()}
+          >
+            Resolve this key
+          </Button>
+        </Flex>
+      </Stack>
+    </Box>
+  );
+};
 
 /** A server-listed key whose posting outcome was never confirmed. */
 const AttemptCard = ({
@@ -293,13 +378,14 @@ const UnconfirmedAttemptsPanel = ({
 
   if (!enabled || !canManage) return null;
 
-  const runResolve = async (key: string) => {
+  /** True only when the server proved the key's outcome. */
+  const runResolve = async (key: string, { byKey = false } = {}): Promise<boolean> => {
     const confirmed = await confirm({
-      title: "Resolve this request?",
-      body: RESOLVE_EXPLANATION,
+      title: byKey ? "Resolve this request key?" : "Resolve this request?",
+      body: byKey ? `${RESOLVE_BY_KEY_EXPLANATION}\n\nRequest key: ${key}` : RESOLVE_EXPLANATION,
       confirmLabel: "Resolve request",
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
     const hadLocalRecord = localRecords.some((record) => record.key === key);
     setResolvingKey(key);
     setFailures(({ [key]: _previous, ...rest }) => rest);
@@ -310,9 +396,16 @@ const UnconfirmedAttemptsPanel = ({
           { key, result, hadLocalRecord },
           ...current.filter((entry) => entry.key !== key),
         ]);
-      } else {
-        setFailures((current) => ({ ...current, [key]: result.message }));
+        return true;
       }
+      // An officer can't void a key the server has no attempt from them
+      // for; only the owner can, and only with the key itself.
+      const message =
+        result.reason === "forbidden" && !isOwner
+          ? `${result.message} Give the owner this request key so they can resolve it: ${key}`
+          : result.message;
+      setFailures((current) => ({ ...current, [key]: message }));
+      return false;
     } finally {
       setResolvingKey(null);
     }
@@ -408,6 +501,13 @@ const UnconfirmedAttemptsPanel = ({
           />
         ))}
         {list}
+        {isOwner && (
+          <ResolveByKeyForm
+            resolvingKey={resolvingKey}
+            failureFor={(key) => failures[key] ?? null}
+            onResolve={(key) => runResolve(key, { byKey: true })}
+          />
+        )}
       </Stack>
       {confirmDialog}
     </Box>
