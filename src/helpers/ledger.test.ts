@@ -47,6 +47,7 @@ describe("ledger parsing", () => {
       lockedThrough: null,
       revision: null,
       memberReceiptsEnabled: null,
+      allocationsEnabled: null,
       unconfirmedAttempts: null,
       hasPendingProposal: null,
       activatedAt: null,
@@ -66,6 +67,7 @@ describe("ledger parsing", () => {
       lockedThrough: null,
       revision: null,
       memberReceiptsEnabled: null,
+      allocationsEnabled: null,
       unconfirmedAttempts: null,
       hasPendingProposal: null,
       activatedAt: null,
@@ -276,6 +278,7 @@ describe("ledger F2 read compatibility", () => {
       lockedThrough: null,
       revision: null,
       memberReceiptsEnabled: null,
+      allocationsEnabled: null,
       unconfirmedAttempts: null,
       hasPendingProposal: null,
     });
@@ -337,6 +340,7 @@ describe("ledger F2 read compatibility", () => {
       openingDate: "2026-11-01",
       lockedThrough: "2026-10-31",
       memberReceiptsEnabled: true,
+      allocationsEnabled: true,
       revision: 7,
       pendingProposal: null,
       unconfirmedAttempts: 0,
@@ -356,6 +360,7 @@ describe("ledger F2 read compatibility", () => {
       lockedThrough: "2026-10-31",
       revision: 7,
       memberReceiptsEnabled: true,
+      allocationsEnabled: true,
       unconfirmedAttempts: 0,
       hasPendingProposal: false,
       activatedAt: "2026-10-18T10:00:00.000Z",
@@ -390,6 +395,18 @@ describe("ledger F2 read compatibility", () => {
       gapWindowAttestation: "unknown",
       lockedThroughState: "unknown",
     });
+  });
+
+  it("reads the F3-2 allocations setting only from a real boolean", () => {
+    expect(toLedgerStatus({ ...F1_STATUS, allocationsEnabled: true })?.allocationsEnabled).toBe(true);
+    expect(toLedgerStatus({ ...F1_STATUS, allocationsEnabled: false })?.allocationsEnabled).toBe(false);
+    // Missing (pre-F3-2 server) and malformed values are unknown, never "on".
+    expect(toLedgerStatus(F1_STATUS)?.allocationsEnabled).toBeNull();
+    for (const malformed of ["true", 1, null, {}, [true]]) {
+      expect(
+        toLedgerStatus({ ...F1_STATUS, allocationsEnabled: malformed })?.allocationsEnabled,
+      ).toBeNull();
+    }
   });
 
   it("keeps an explicit empty blocker list distinct from an absent one", () => {

@@ -60,6 +60,7 @@ const statusOf = (
   activatedAt: null,
   gapWindowAttestedAt: null,
   gapWindowAttestation: "not_attested",
+  allocationsEnabled: false,
   ...overrides,
 });
 

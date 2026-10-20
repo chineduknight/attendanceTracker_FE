@@ -341,6 +341,7 @@ describe("sections and readiness", () => {
       activatedAt: null,
       gapWindowAttestedAt: null,
       gapWindowAttestation: "not_attested",
+      allocationsEnabled: false,
       ...overrides,
     });
     expect(ledgerWriteReadiness({ status: status(), canManage: true }).ready).toBe(true);

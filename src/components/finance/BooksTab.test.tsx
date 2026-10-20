@@ -11,6 +11,7 @@ import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
+import { LEDGER_F3_SETUP_UI_ENABLED } from "config/ledgerF3Setup";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -323,6 +324,7 @@ describe("<BooksTab> release gates", () => {
       memberMoney: LEDGER_MEMBER_MONEY_UI_ENABLED,
       reversals: LEDGER_REVERSALS_UI_ENABLED,
       reports: LEDGER_REPORTS_UI_ENABLED,
+      f3Setup: LEDGER_F3_SETUP_UI_ENABLED,
     }).toEqual({
       setup: false,
       openingBalances: false,
@@ -331,7 +333,23 @@ describe("<BooksTab> release gates", () => {
       memberMoney: false,
       reversals: false,
       reports: false,
+      f3Setup: false,
     });
+  });
+
+  it("shows no F3A allocation setup, and writes nothing, with its gate off", async () => {
+    serveLedger({ ...F2_ACTIVE, allocationsEnabled: true }, [
+      ...ACCOUNTS,
+      { id: "mdi", name: "Dues income (from allocations)", class: "income", subtype: "member_dues_income", currency: "NGN", active: true, revision: 0 },
+    ], JOURNALS);
+    renderBooks();
+    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
+    expect(screen.queryByText("Member money allocations")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /allocations|income account/i })).not.toBeInTheDocument();
+    // The plain F1 account list still shows what the server sent.
+    expect(screen.getByText("Dues income (from allocations)")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.patch).not.toHaveBeenCalled();
   });
 
   it("shows no F2B-4 reports, and reads none, with its gate off", async () => {

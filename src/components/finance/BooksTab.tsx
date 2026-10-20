@@ -413,11 +413,16 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           accountsError={accountsQuery.isError ? accountsQuery.error : null}
           onRetryAccounts={accountsQuery.refetch}
           isRetryingAccounts={accountsQuery.isFetching}
-          onRecheckLedger={() => {
+          isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
+          onRecheckLedger={async () => {
             // Reconciliation after an unresolved write needs both the status
-            // and the account list, not just the list that failed.
-            statusQuery.refetch();
-            accountsQuery.refetch();
+            // and the account list, not just the list that failed. Only a
+            // clean reload of both counts as a recheck.
+            const results = await Promise.all([
+              statusQuery.refetch(),
+              accountsQuery.refetch(),
+            ]);
+            return results.every((result) => !result.isError);
           }}
         />
       )}

@@ -1,5 +1,9 @@
 import {
   ACCOUNT_CHANGE_UNAVAILABLE_NOTE,
+  ACCOUNT_SUBTYPES_BY_CLASS,
+  MEMBER_INCOME_ACCOUNTS,
+  MEMBER_INCOME_IN_USE_NOTE,
+  MEMBER_INCOME_SETTING_UNKNOWN_NOTE,
   MEMBER_RECEIPTS_REQUIRED_NOTE,
   OPENING_PENDING_ACCOUNTS_NOTE,
   SINGLETON_ACCOUNTS_NOTE,
@@ -7,20 +11,30 @@ import {
   SUSPENDED_ACCOUNTS_NOTE,
   accountActions,
   accountNameKey,
+  activeSingletonSubtypes,
+  allocationReadiness,
+  allocationSetting,
   buildAccountPayload,
+  buildCreateAccountsPayload,
+  buildMemberIncomeAccountPayload,
+  isSingletonRole,
   canCreateAccounts,
   canEnableMemberReceipts,
   canStartLedgerSetup,
   draftFromStarter,
   emptyAccountDraft,
   ledgerApiFailure,
+  ledgerSetupRefusalMessage,
   ledgerSetupSteps,
   ledgerWriteOutcomeUnknown,
+  memberIncomeAccountStates,
   moneyAccountsFrozen,
+  singletonTakenNote,
   starterAccountsFor,
   toAccountRole,
   validateAccountBatch,
   validateAccountDraft,
+  validateMemberIncomeAccount,
   AccountDraft,
 } from "helpers/ledgerSetup";
 import { LedgerAccount, LedgerKnownState, LedgerStatus } from "components/finance/ledgerTypes";
@@ -60,6 +74,7 @@ const statusOf = (
   activatedAt: null,
   gapWindowAttestedAt: null,
   gapWindowAttestation: "not_attested",
+  allocationsEnabled: false,
   ...overrides,
 });
 
@@ -616,5 +631,338 @@ describe("ledger write outcome detection", () => {
       expect(failure.transportFailure).toBe(true);
       expect(ledgerWriteOutcomeUnknown(failure)).toBe(true);
     }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* F3A: member income accounts and the allocation setting             */
+/* ------------------------------------------------------------------ */
+
+const duesIncome = (overrides: Partial<LedgerAccount> = {}) =>
+  account({
+    id: "dues",
+    name: "Dues income (from allocations)",
+    class: "income",
+    subtype: "member_dues_income",
+    ...overrides,
+  });
+
+const levyIncome = (overrides: Partial<LedgerAccount> = {}) =>
+  account({
+    id: "levy",
+    name: "Levy income (from allocations)",
+    class: "income",
+    subtype: "member_levy_income",
+    ...overrides,
+  });
+
+const donations = account({ id: "don", name: "Donations", class: "income", subtype: null });
+
+describe("F3 member income roles", () => {
+  it("recognises both specialised income subtypes as singletons", () => {
+    for (const subtype of ["member_dues_income", "member_levy_income"]) {
+      const role = toAccountRole({ class: "income", subtype });
+      expect(role).toEqual({ class: "income", subtype });
+      expect(isSingletonRole(role!)).toBe(true);
+    }
+  });
+
+  it("keeps ordinary income valid with no subtype and never requires one", () => {
+    expect(toAccountRole({ class: "income", subtype: null })).toEqual({
+      class: "income",
+      subtype: null,
+    });
+    expect(isSingletonRole({ class: "income", subtype: null })).toBe(false);
+    expect(ACCOUNT_SUBTYPES_BY_CLASS.income).toEqual([]);
+  });
+
+  it("does not widen the specialised subtypes to other classes", () => {
+    expect(toAccountRole({ class: "expense", subtype: "member_dues_income" })).toBeNull();
+    expect(toAccountRole({ class: "liability", subtype: "member_levy_income" })).toBeNull();
+    expect(toAccountRole({ class: "income", subtype: "member_welfare_income" })).toBeNull();
+  });
+
+  it("keeps the generic income flow on subtype null even if a draft carries one", () => {
+    // The generic form must never become a specialised-account flow.
+    const forced = draft({ name: "Dues", class: "income", subtype: "member_dues_income" });
+    expect(buildAccountPayload(forced)).toEqual({ name: "Dues", class: "income", subtype: null });
+    expect(buildCreateAccountsPayload([forced]).accounts[0].subtype).toBeNull();
+    expect(STARTER_ACCOUNTS.some((starter) => starter.subtype === "member_dues_income")).toBe(false);
+    expect(STARTER_ACCOUNTS.some((starter) => starter.subtype === "member_levy_income")).toBe(false);
+  });
+
+  it("builds the exact specialised account payload with a trimmed name", () => {
+    expect(buildMemberIncomeAccountPayload("member_dues_income", "  Dues income (from allocations) ")).toEqual({
+      name: "Dues income (from allocations)",
+      class: "income",
+      subtype: "member_dues_income",
+    });
+    expect(buildMemberIncomeAccountPayload("member_levy_income", MEMBER_INCOME_ACCOUNTS.member_levy_income.suggestedName)).toEqual({
+      name: "Levy income (from allocations)",
+      class: "income",
+      subtype: "member_levy_income",
+    });
+  });
+
+  it("refuses a second active account in the same role, but not an inactive twin", () => {
+    expect(validateMemberIncomeAccount("member_dues_income", "Dues 2", [duesIncome()])).toBe(
+      "This ledger already has an active member dues income account.",
+    );
+    expect(validateMemberIncomeAccount("member_levy_income", "Levy", [duesIncome()])).toBeNull();
+    expect(
+      validateMemberIncomeAccount("member_dues_income", "Dues 2", [duesIncome({ active: false })]),
+    ).toBeNull();
+  });
+
+  it("refuses a name an active account already uses, ignoring case and spaces", () => {
+    expect(
+      validateMemberIncomeAccount("member_dues_income", "  donations ", [donations]),
+    ).toBe('An active account named "donations" already exists.');
+    expect(validateMemberIncomeAccount("member_dues_income", " ", [])).toBe("Enter an account name.");
+    expect(validateMemberIncomeAccount("member_dues_income", "x".repeat(81), [])).toMatch(/at most 80/);
+  });
+
+  it("lists the roles held by active singletons only", () => {
+    expect(activeSingletonSubtypes([duesIncome(), levyIncome({ active: false }), donations])).toEqual(
+      new Set(["member_dues_income"]),
+    );
+  });
+
+  it("reports the active and inactive accounts held in each role", () => {
+    const states = memberIncomeAccountStates([
+      duesIncome({ active: false, id: "old-dues" }),
+      duesIncome(),
+      levyIncome({ active: false }),
+      donations,
+    ]);
+    expect(states.member_dues_income.active?.id).toBe("dues");
+    expect(states.member_dues_income.inactive.map((entry) => entry.id)).toEqual(["old-dues"]);
+    expect(states.member_levy_income.active).toBeNull();
+    expect(states.member_levy_income.inactive.map((entry) => entry.id)).toEqual(["levy"]);
+  });
+});
+
+describe("F3 member income row actions", () => {
+  const context = (overrides: Partial<Parameters<typeof accountActions>[1]> = {}) => ({
+    ledgerState: "active" as const,
+    memberReceiptsEnabled: true,
+    allocationsEnabled: false,
+    ...overrides,
+  });
+
+  it("allows deactivation only while allocations are explicitly off", () => {
+    expect(accountActions(duesIncome(), context())).toEqual({
+      canRename: true,
+      canDeactivate: true,
+      canReactivate: false,
+      note: null,
+    });
+    expect(accountActions(duesIncome(), context({ allocationsEnabled: true }))).toMatchObject({
+      canRename: true,
+      canDeactivate: false,
+      note: MEMBER_INCOME_IN_USE_NOTE,
+    });
+    // An unreported setting fails closed.
+    expect(accountActions(levyIncome(), context({ allocationsEnabled: null }))).toMatchObject({
+      canDeactivate: false,
+      note: MEMBER_INCOME_SETTING_UNKNOWN_NOTE,
+    });
+    expect(accountActions(levyIncome(), context({ allocationsEnabled: undefined }))).toMatchObject({
+      canDeactivate: false,
+    });
+  });
+
+  it("reactivates an inactive account without needing member receipts", () => {
+    expect(
+      accountActions(duesIncome({ active: false }), context({ memberReceiptsEnabled: false })),
+    ).toMatchObject({ canReactivate: true, note: null });
+  });
+
+  it("refuses to reactivate while another active account holds the role", () => {
+    expect(
+      accountActions(
+        duesIncome({ active: false, id: "old" }),
+        context({ activeSingletonSubtypes: activeSingletonSubtypes([duesIncome()]) }),
+      ),
+    ).toEqual({
+      canRename: true,
+      canDeactivate: false,
+      canReactivate: false,
+      note: singletonTakenNote("member_dues_income"),
+    });
+  });
+
+  it("keeps the earlier rules: suspended, unresolved write, no revision", () => {
+    expect(accountActions(duesIncome(), context({ ledgerState: "suspended" }))).toMatchObject({
+      canRename: true,
+      canDeactivate: false,
+      note: SUSPENDED_ACCOUNTS_NOTE,
+    });
+    expect(accountActions(duesIncome(), context({ writeBlocked: true }))).toMatchObject({
+      canRename: false,
+      note: LEDGER_WRITE_UNCERTAIN_NOTE,
+    });
+    expect(accountActions(duesIncome({ revision: null }), context())).toMatchObject({
+      canRename: false,
+      note: ACCOUNT_CHANGE_UNAVAILABLE_NOTE,
+    });
+  });
+
+  it("leaves the F2 singletons' deactivation rule unchanged", () => {
+    const equity = account({ class: "equity", subtype: "opening_balance_equity" });
+    expect(accountActions(equity, context({ allocationsEnabled: false }))).toMatchObject({
+      canDeactivate: false,
+      note: SINGLETON_ACCOUNTS_NOTE,
+    });
+  });
+});
+
+describe("allocation readiness", () => {
+  const READY = [duesIncome(), levyIncome()];
+  const manager = { canManage: true, writeBlocked: false };
+  const stateOf = (readiness: ReturnType<typeof allocationReadiness>) =>
+    Object.fromEntries(readiness.prerequisites.map((item) => [item.key, item.state]));
+
+  it("reads the setting three ways, never treating a missing one as on", () => {
+    expect(allocationSetting(statusOf("active", { allocationsEnabled: true }))).toBe("on");
+    expect(allocationSetting(statusOf("active", { allocationsEnabled: false }))).toBe("off");
+    expect(allocationSetting(statusOf("active", { allocationsEnabled: null }))).toBe("unknown");
+  });
+
+  it("can be enabled when every prerequisite is met", () => {
+    const readiness = allocationReadiness(statusOf("active", { memberReceiptsEnabled: true }), READY, manager);
+    expect(stateOf(readiness)).toEqual({
+      "member-receipts": "met",
+      member_dues_income: "met",
+      member_levy_income: "met",
+      "ledger-state": "met",
+      "server-writes": "met",
+      permission: "met",
+      "write-uncertainty": "met",
+    });
+    expect(readiness).toMatchObject({ setting: "off", canEnable: true, canDisable: false, note: null });
+  });
+
+  it.each(["setup", "pending_verification", "active"] as const)(
+    "allows the change in %s",
+    (state) => {
+      expect(
+        allocationReadiness(statusOf(state, { memberReceiptsEnabled: true }), READY, manager).canEnable,
+      ).toBe(true);
+    },
+  );
+
+  it("names each missing prerequisite instead of creating or enabling anything", () => {
+    const readiness = allocationReadiness(
+      statusOf("setup", { memberReceiptsEnabled: false }),
+      [levyIncome({ active: false })],
+      manager,
+    );
+    expect(stateOf(readiness)).toMatchObject({
+      "member-receipts": "missing",
+      member_dues_income: "missing",
+      member_levy_income: "missing",
+    });
+    expect(readiness.prerequisites.find((item) => item.key === "member_levy_income")?.detail).toMatch(
+      /is inactive\. Reactivate it/,
+    );
+    expect(readiness.canEnable).toBe(false);
+  });
+
+  it("refuses a suspended ledger for both directions", () => {
+    const on = allocationReadiness(statusOf("suspended", { allocationsEnabled: true }), READY, manager);
+    expect(stateOf(on)["ledger-state"]).toBe("missing");
+    expect(on.canDisable).toBe(false);
+    const off = allocationReadiness(statusOf("suspended"), READY, manager);
+    expect(off.canEnable).toBe(false);
+  });
+
+  it("fails closed on unknown inputs", () => {
+    const readiness = allocationReadiness(
+      statusOf("active", { memberReceiptsEnabled: null, blockers: null, revision: null }),
+      null,
+      manager,
+    );
+    expect(stateOf(readiness)).toMatchObject({
+      "member-receipts": "unknown",
+      member_dues_income: "unknown",
+      member_levy_income: "unknown",
+      "ledger-state": "unknown",
+      "server-writes": "unknown",
+    });
+    expect(readiness.canEnable).toBe(false);
+  });
+
+  it("blocks changes while the server reports a write blocker", () => {
+    const readiness = allocationReadiness(
+      statusOf("active", { blockers: ["LEDGER_WRITES_DISABLED"], allocationsEnabled: true }),
+      READY,
+      manager,
+    );
+    expect(stateOf(readiness)["server-writes"]).toBe("missing");
+    expect(readiness.canDisable).toBe(false);
+  });
+
+  it("needs finance.manage and no unresolved write", () => {
+    expect(
+      allocationReadiness(statusOf("active"), READY, { canManage: false, writeBlocked: false }).canEnable,
+    ).toBe(false);
+    const blocked = allocationReadiness(statusOf("active", { allocationsEnabled: true }), READY, {
+      canManage: true,
+      writeBlocked: true,
+    });
+    expect(stateOf(blocked).permission).toBe("met");
+    expect(stateOf(blocked)["write-uncertainty"]).toBe("missing");
+    expect(blocked.canDisable).toBe(false);
+  });
+
+  it("lets allocations be turned off without the accounts or member receipts", () => {
+    const readiness = allocationReadiness(
+      statusOf("active", { allocationsEnabled: true, memberReceiptsEnabled: null }),
+      [],
+      manager,
+    );
+    expect(readiness).toMatchObject({ setting: "on", canEnable: false, canDisable: true });
+  });
+
+  it("offers no change when the server does not report the setting", () => {
+    const readiness = allocationReadiness(statusOf("active", { allocationsEnabled: null }), READY, manager);
+    expect(readiness).toMatchObject({ setting: "unknown", canEnable: false, canDisable: false });
+    expect(readiness.note).toMatch(/doesn't report the allocations setting/);
+  });
+});
+
+describe("F3A refusal copy", () => {
+  const failureOf = (code?: string, message?: string) => ({
+    code,
+    message,
+    status: 422,
+    transportFailure: false,
+  });
+
+  it("explains a stale revision as reloaded rather than echoing the server", () => {
+    expect(
+      ledgerSetupRefusalMessage(failureOf("LEDGER_REVISION_CONFLICT", "Reload and try again."), "x"),
+    ).toMatch(/It has been reloaded/);
+  });
+
+  it("prefers the server's text, then a code fallback, then the caller's", () => {
+    expect(
+      ledgerSetupRefusalMessage(failureOf("LEDGER_REQUIRED_ACCOUNT_MISSING", "Server text."), "x"),
+    ).toBe("Server text.");
+    expect(ledgerSetupRefusalMessage(failureOf("LEDGER_MEMBER_RECEIPTS_DISABLED"), "x")).toBe(
+      "Turn on member receipts before turning on allocations.",
+    );
+    expect(ledgerSetupRefusalMessage(failureOf("LEDGER_REQUIRED_ACCOUNT_MISSING"), "x")).toMatch(
+      /dues income account and an active levy income account/,
+    );
+    expect(ledgerSetupRefusalMessage(failureOf("LEDGER_WRITES_DISABLED"), "x")).toMatch(/Nothing was saved/);
+    expect(ledgerSetupRefusalMessage(failureOf(undefined, undefined), "Fallback.")).toBe("Fallback.");
+  });
+
+  it("replaces the role-mismatch list with plain wording", () => {
+    expect(
+      ledgerSetupRefusalMessage(failureOf("LEDGER_ACCOUNT_ROLE_MISMATCH", "Account type not allowed. Use asset…"), "x"),
+    ).toBe("This server doesn't accept that account type yet, so nothing was created.");
   });
 });

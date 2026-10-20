@@ -30,6 +30,7 @@ import {
   SUSPENDED_CREATE_NOTE,
   accountActions,
   accountNameKey,
+  activeSingletonSubtypes,
   buildAccountPayload,
   canCreateAccounts,
   draftFromStarter,
@@ -112,6 +113,8 @@ interface AccountRowProps {
   canManage: boolean;
   isUpdating: boolean;
   writeBlocked: boolean;
+  /** Roles held by an active singleton: their inactive twins can't be reactivated. */
+  singletonSubtypes: ReadonlySet<AccountSubtype>;
   onUpdate: (
     account: LedgerAccount,
     change: { name?: string; active?: boolean },
@@ -125,6 +128,7 @@ const AccountRow = ({
   canManage,
   isUpdating,
   writeBlocked,
+  singletonSubtypes,
   onUpdate,
 }: AccountRowProps) => {
   const [renaming, setRenaming] = useState(false);
@@ -135,6 +139,8 @@ const AccountRow = ({
   const allowance = accountActions(account, {
     ledgerState: ledgerStateKey(status),
     memberReceiptsEnabled: status.memberReceiptsEnabled,
+    allocationsEnabled: status.allocationsEnabled,
+    activeSingletonSubtypes: singletonSubtypes,
     writeBlocked,
   });
   const canAct =
@@ -652,6 +658,8 @@ const LedgerChartOfAccounts = ({
     );
   };
 
+  const singletonSubtypes = activeSingletonSubtypes(accounts ?? []);
+
   const createNote =
     ledgerStateKey(status) === "suspended"
       ? SUSPENDED_CREATE_NOTE
@@ -736,6 +744,7 @@ const LedgerChartOfAccounts = ({
                     canManage={canManage}
                     isUpdating={isUpdatingAccount}
                     writeBlocked={writesBlocked}
+                    singletonSubtypes={singletonSubtypes}
                     onUpdate={requestUpdate}
                   />
                 ))}

@@ -52,6 +52,13 @@ export const useLedgerSetup = (organisationId: string) => {
 
   const setupMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
   const settingsMutation = useMutationWrapper(patchRequest, undefined, suppressGenericError);
+  // Its own instance so the allocation toggle's loading state never shows on
+  // the member-receipts button (both PATCH /settings).
+  const allocationsMutation = useMutationWrapper(
+    patchRequest,
+    undefined,
+    suppressGenericError,
+  );
   const createAccountsMutation = useMutationWrapper(
     postRequest,
     undefined,
@@ -111,6 +118,30 @@ export const useLedgerSetup = (organisationId: string) => {
       },
     );
 
+  /**
+   * F3-2: switch member money allocations on or off. Exactly one setting per
+   * request, never combined with `memberReceiptsEnabled` (the backend refuses
+   * both). Always settles with a reload of this organisation's ledger, so a
+   * stale-revision refusal leaves the authoritative status on screen.
+   */
+  const setMemberAllocations = (
+    memberAllocationsEnabled: boolean,
+    expectedLedgerRevision: number,
+    { onSuccess, onError }: MutationCallbacks<LedgerStatus | null> = {},
+  ) =>
+    allocationsMutation.mutate(
+      {
+        url: settingsUrl,
+        data: { expectedLedgerRevision, memberAllocationsEnabled },
+      },
+      {
+        onSettled: invalidateLedger,
+        onSuccess: (response: { data?: unknown }) =>
+          onSuccess?.(toLedgerStatus(response?.data)),
+        onError: onError ?? suppressGenericError,
+      },
+    );
+
   const createAccounts = (
     accounts: CreateAccountPayload[],
     { onSuccess, onError }: MutationCallbacks<void> = {},
@@ -143,10 +174,12 @@ export const useLedgerSetup = (organisationId: string) => {
   return {
     startSetup,
     enableMemberReceipts,
+    setMemberAllocations,
     createAccounts,
     updateAccount,
     isStarting: Boolean(setupMutation.isLoading),
     isEnablingReceipts: Boolean(settingsMutation.isLoading),
+    isChangingAllocations: Boolean(allocationsMutation.isLoading),
     isCreatingAccounts: Boolean(createAccountsMutation.isLoading),
     isUpdatingAccount: Boolean(updateAccountMutation.isLoading),
   };

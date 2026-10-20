@@ -3,7 +3,7 @@ import {
   LedgerKnownState,
   LedgerStatus,
 } from "components/finance/ledgerTypes";
-import { ledgerStateKey } from "helpers/ledger";
+import { LEDGER_STATE_LABELS, ledgerStateKey } from "helpers/ledger";
 import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
 
 /**
@@ -16,11 +16,20 @@ import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
  */
 
 export type AccountClass = "asset" | "equity" | "liability" | "income" | "expense";
+
+/**
+ * F3 member income (F3 RFC v0.3 §5.2, O1): credited only by allocations,
+ * never an ordinary receipt category. Created only through the dedicated F3A
+ * controls, never through the generic account form or the starter chart.
+ */
+export type MemberIncomeSubtype = "member_dues_income" | "member_levy_income";
+
 export type AccountSubtype =
   | "cash"
   | "bank"
   | "opening_balance_equity"
-  | "member_receipts_unallocated";
+  | "member_receipts_unallocated"
+  | MemberIncomeSubtype;
 
 export interface AccountRole {
   class: AccountClass;
@@ -43,7 +52,12 @@ export const ACCOUNT_CLASS_LABELS: Record<AccountClass, string> = {
   expense: "Expense",
 };
 
-/** Closed subtype vocabulary (D4). Income/expense categories carry none. */
+/**
+ * The subtypes a class must carry (D4). A class with an empty list is a
+ * category: the generic account form always sends `subtype: null` for it.
+ * Specialised income subtypes are deliberately not here, so the ordinary
+ * income flow can never become a specialised-account flow.
+ */
 export const ACCOUNT_SUBTYPES_BY_CLASS: Record<
   AccountClass,
   readonly AccountSubtype[]
@@ -55,11 +69,33 @@ export const ACCOUNT_SUBTYPES_BY_CLASS: Record<
   expense: [],
 };
 
+export const MEMBER_INCOME_SUBTYPES: readonly MemberIncomeSubtype[] = [
+  "member_dues_income",
+  "member_levy_income",
+];
+
+/**
+ * Optional specialised subtypes a category class may carry instead of
+ * `null` (F3-2). Only recognised on read and sent by the F3A controls.
+ */
+const SPECIALISED_SUBTYPES_BY_CLASS: Record<
+  AccountClass,
+  readonly AccountSubtype[]
+> = {
+  asset: [],
+  equity: [],
+  liability: [],
+  income: MEMBER_INCOME_SUBTYPES,
+  expense: [],
+};
+
 export const ACCOUNT_SUBTYPE_LABELS: Record<AccountSubtype, string> = {
   cash: "Cash",
   bank: "Bank",
   opening_balance_equity: "Opening balance equity",
   member_receipts_unallocated: "Member money – unallocated",
+  member_dues_income: "Member dues income",
+  member_levy_income: "Member levy income",
 };
 
 export const MAX_ACCOUNTS_PER_REQUEST = 20;
@@ -85,7 +121,11 @@ export const toAccountRole = (account: {
   const subtype = account.subtype ?? null;
   if (subtype !== null) {
     if (!isAccountSubtype(subtype)) return null;
-    if (!ACCOUNT_SUBTYPES_BY_CLASS[account.class].includes(subtype)) return null;
+    if (
+      !ACCOUNT_SUBTYPES_BY_CLASS[account.class].includes(subtype) &&
+      !SPECIALISED_SUBTYPES_BY_CLASS[account.class].includes(subtype)
+    )
+      return null;
   } else if (ACCOUNT_SUBTYPES_BY_CLASS[account.class].length > 0) {
     // Asset/equity/liability accounts always carry one of the closed subtypes.
     return null;
@@ -103,9 +143,31 @@ export const isOpeningEquityRole = (role: AccountRole) =>
 export const isMemberHoldingRole = (role: AccountRole) =>
   role.class === "liability" && role.subtype === "member_receipts_unallocated";
 
+export const isMemberIncomeSubtype = (
+  subtype: string | null,
+): subtype is MemberIncomeSubtype =>
+  (MEMBER_INCOME_SUBTYPES as readonly (string | null)[]).includes(subtype);
+
+/** Dues or levy income: credited only by allocations (F3-2). */
+export const isMemberIncomeRole = (role: AccountRole) =>
+  role.class === "income" && isMemberIncomeSubtype(role.subtype);
+
 /** At most one active account per organisation may carry these subtypes. */
 export const isSingletonRole = (role: AccountRole) =>
-  isOpeningEquityRole(role) || isMemberHoldingRole(role);
+  isOpeningEquityRole(role) || isMemberHoldingRole(role) || isMemberIncomeRole(role);
+
+/** Subtypes already held by an active singleton account. */
+export const activeSingletonSubtypes = (
+  accounts: readonly LedgerAccount[],
+): ReadonlySet<AccountSubtype> => {
+  const subtypes = new Set<AccountSubtype>();
+  for (const account of accounts) {
+    if (account.active !== true) continue;
+    const role = toAccountRole(account);
+    if (role?.subtype && isSingletonRole(role)) subtypes.add(role.subtype);
+  }
+  return subtypes;
+};
 
 /**
  * Names are labels, never identifiers, but two active accounts may not share
@@ -254,15 +316,21 @@ export const buildAccountPayload = (draft: AccountDraft): CreateAccountPayload =
   return payload;
 };
 
+const accountNameIssue = (rawName: string): string | null => {
+  const name = rawName.trim();
+  if (!name) return "Enter an account name.";
+  if (name.length > MAX_ACCOUNT_NAME_LENGTH)
+    return `Account names can be at most ${MAX_ACCOUNT_NAME_LENGTH} characters.`;
+  return null;
+};
+
 /**
  * The first thing to fix in one draft, or null. Mirrors the backend's
  * validator for convenience; the server still decides.
  */
 export const validateAccountDraft = (draft: AccountDraft): string | null => {
-  const name = draft.name.trim();
-  if (!name) return "Enter an account name.";
-  if (name.length > MAX_ACCOUNT_NAME_LENGTH)
-    return `Account names can be at most ${MAX_ACCOUNT_NAME_LENGTH} characters.`;
+  const nameIssue = accountNameIssue(draft.name);
+  if (nameIssue) return nameIssue;
 
   const role = draftRole(draft);
   const allowedSubtypes = ACCOUNT_SUBTYPES_BY_CLASS[draft.class];
@@ -361,6 +429,15 @@ export const SINGLETON_ACCOUNTS_NOTE =
 export const MEMBER_RECEIPTS_REQUIRED_NOTE =
   "Turn on member receipts before reactivating this account.";
 
+export const MEMBER_INCOME_IN_USE_NOTE =
+  "Allocations are on, so this account can't be deactivated. Turn allocations off first.";
+
+export const MEMBER_INCOME_SETTING_UNKNOWN_NOTE =
+  "This server didn't report whether allocations are on, so this account can't be deactivated from here.";
+
+export const singletonTakenNote = (subtype: AccountSubtype) =>
+  `This ledger already has an active ${ACCOUNT_SUBTYPE_LABELS[subtype].toLowerCase()} account, so this one can't be reactivated.`;
+
 /** Chart-level notes, distinct from the per-row notes above. */
 export const SUSPENDED_CREATE_NOTE =
   "No accounts can be added while the ledger is suspended.";
@@ -374,6 +451,17 @@ export const SUGGESTION_FROZEN_NOTE =
 export interface AccountActionContext {
   ledgerState: LedgerKnownState | "unknown";
   memberReceiptsEnabled: boolean | null;
+  /**
+   * The status's `allocationsEnabled`. Member income accounts can only be
+   * deactivated while it is explicitly `false`; unreported fails closed.
+   */
+  allocationsEnabled?: boolean | null;
+  /**
+   * Subtypes held by an active singleton (`activeSingletonSubtypes`). An
+   * inactive singleton whose role is taken cannot be reactivated. Without it
+   * the backend's refusal is the only check, as before F3A.
+   */
+  activeSingletonSubtypes?: ReadonlySet<AccountSubtype>;
   /**
    * True while a previous ledger write in this organisation still has an
    * unresolved outcome: no further write may be offered until an officer has
@@ -440,6 +528,22 @@ export const accountActions = (
       note: OPENING_PENDING_ACCOUNTS_NOTE,
     };
 
+  if (active && isMemberIncomeRole(role)) {
+    // F3-2: the ledger needs these accounts only while allocations are on.
+    // Only an explicit `false` proves they are off.
+    const canDeactivate = context.allocationsEnabled === false;
+    return {
+      canRename: true,
+      canDeactivate,
+      canReactivate: false,
+      note: canDeactivate
+        ? null
+        : context.allocationsEnabled === true
+          ? MEMBER_INCOME_IN_USE_NOTE
+          : MEMBER_INCOME_SETTING_UNKNOWN_NOTE,
+    };
+  }
+
   if (active) {
     const canDeactivate = !isSingletonRole(role);
     return {
@@ -449,6 +553,18 @@ export const accountActions = (
       note: canDeactivate ? null : SINGLETON_ACCOUNTS_NOTE,
     };
   }
+
+  if (
+    role.subtype &&
+    isSingletonRole(role) &&
+    context.activeSingletonSubtypes?.has(role.subtype)
+  )
+    return {
+      canRename: true,
+      canDeactivate: false,
+      canReactivate: false,
+      note: singletonTakenNote(role.subtype),
+    };
 
   const receiptsRequired =
     isMemberHoldingRole(role) && context.memberReceiptsEnabled !== true;
@@ -629,6 +745,293 @@ export const ledgerSetupSteps = (
 };
 
 /* ------------------------------------------------------------------ */
+/* F3A: member income accounts (F3 RFC v0.3 §5.2, O1)                 */
+/* ------------------------------------------------------------------ */
+
+export interface MemberIncomeAccountSpec {
+  subtype: MemberIncomeSubtype;
+  /** "Dues income account": what the role is called in setup copy. */
+  title: string;
+  /** Prefilled name; the officer may change it before confirming. */
+  suggestedName: string;
+  purpose: string;
+}
+
+export const MEMBER_INCOME_ACCOUNTS: Record<MemberIncomeSubtype, MemberIncomeAccountSpec> = {
+  member_dues_income: {
+    subtype: "member_dues_income",
+    title: "Dues income account",
+    suggestedName: "Dues income (from allocations)",
+    purpose: "Receives member money allocated to dues. Only allocations credit it.",
+  },
+  member_levy_income: {
+    subtype: "member_levy_income",
+    title: "Levy income account",
+    suggestedName: "Levy income (from allocations)",
+    purpose: "Receives member money allocated to levies. Only allocations credit it.",
+  },
+};
+
+export interface MemberIncomeAccountState {
+  /** The active account in this role, if any (at most one: singleton). */
+  active: LedgerAccount | null;
+  /** Earlier accounts in this role that were deactivated. */
+  inactive: LedgerAccount[];
+}
+
+/** Where each member income role stands in the current account list. */
+export const memberIncomeAccountStates = (
+  accounts: readonly LedgerAccount[],
+): Record<MemberIncomeSubtype, MemberIncomeAccountState> => {
+  const states: Record<MemberIncomeSubtype, MemberIncomeAccountState> = {
+    member_dues_income: { active: null, inactive: [] },
+    member_levy_income: { active: null, inactive: [] },
+  };
+  for (const account of accounts) {
+    const role = toAccountRole(account);
+    if (!role || !isMemberIncomeRole(role)) continue;
+    const state = states[role.subtype as MemberIncomeSubtype];
+    if (account.active === true) state.active = state.active ?? account;
+    else if (account.active === false) state.inactive.push(account);
+  }
+  return states;
+};
+
+/**
+ * Body entry for `POST /ledger/accounts`. The class is always `income` and the
+ * subtype is the specialised role: never built from a generic draft, so the
+ * ordinary income flow keeps `subtype: null`.
+ */
+export const buildMemberIncomeAccountPayload = (
+  subtype: MemberIncomeSubtype,
+  name: string,
+): CreateAccountPayload => ({ name: name.trim(), class: "income", subtype });
+
+/**
+ * The first problem with creating a member income account, or null: the name
+ * rules, an active account already using the name, or an active account
+ * already holding the role (singleton). Convenience only; the server decides.
+ */
+export const validateMemberIncomeAccount = (
+  subtype: MemberIncomeSubtype,
+  name: string,
+  accounts: readonly LedgerAccount[],
+): string | null => {
+  const nameIssue = accountNameIssue(name);
+  if (nameIssue) return nameIssue;
+  if (activeSingletonSubtypes(accounts).has(subtype))
+    return `This ledger already has an active ${ACCOUNT_SUBTYPE_LABELS[subtype].toLowerCase()} account.`;
+  const key = accountNameKey(name);
+  if (
+    accounts.some(
+      (account) => account.active === true && accountNameKey(account.name) === key,
+    )
+  )
+    return `An active account named "${name.trim()}" already exists.`;
+  return null;
+};
+
+/* ------------------------------------------------------------------ */
+/* F3A: allocation setting and readiness (F3 RFC v0.3 §9, O9)         */
+/* ------------------------------------------------------------------ */
+
+/** `unknown`: the server did not report the setting (pre-F3-2 or malformed). */
+export type AllocationSetting = "on" | "off" | "unknown";
+
+export const allocationSetting = (status: LedgerStatus): AllocationSetting =>
+  status.allocationsEnabled === true
+    ? "on"
+    : status.allocationsEnabled === false
+      ? "off"
+      : "unknown";
+
+export type PrerequisiteState = "met" | "missing" | "unknown";
+
+export type AllocationPrerequisiteKey =
+  | "member-receipts"
+  | MemberIncomeSubtype
+  | "ledger-state"
+  | "server-writes"
+  | "permission"
+  | "write-uncertainty";
+
+export interface AllocationPrerequisite {
+  key: AllocationPrerequisiteKey;
+  title: string;
+  state: PrerequisiteState;
+  detail: string;
+}
+
+export interface AllocationReadiness {
+  setting: AllocationSetting;
+  /** Everything turning allocations on needs, in display order. */
+  prerequisites: AllocationPrerequisite[];
+  canEnable: boolean;
+  canDisable: boolean;
+  /** Why the setting can't be changed from here at all, or null. */
+  note: string | null;
+}
+
+export interface AllocationReadinessContext {
+  canManage: boolean;
+  /** An earlier ledger write in this organisation is still unresolved. */
+  writeBlocked: boolean;
+}
+
+/** States in which the backend accepts a settings change (not `suspended`). */
+const SETTINGS_STATES: readonly LedgerKnownState[] = [
+  "setup",
+  "pending_verification",
+  "active",
+];
+
+const memberReceiptsPrerequisite = (status: LedgerStatus): AllocationPrerequisite => {
+  const title = "Member receipts are on";
+  if (status.memberReceiptsEnabled === true)
+    return { key: "member-receipts", title, state: "met", detail: "Member money is held as a liability." };
+  if (status.memberReceiptsEnabled === false)
+    return {
+      key: "member-receipts",
+      title,
+      state: "missing",
+      detail: "Turn on member receipts first. Allocations move held member money into income.",
+    };
+  return {
+    key: "member-receipts",
+    title,
+    state: "unknown",
+    detail: "This server did not report the member-receipts setting.",
+  };
+};
+
+const incomeAccountPrerequisite = (
+  subtype: MemberIncomeSubtype,
+  accounts: readonly LedgerAccount[] | null,
+): AllocationPrerequisite => {
+  const spec = MEMBER_INCOME_ACCOUNTS[subtype];
+  const title = `An active ${spec.title.toLowerCase()}`;
+  if (accounts === null)
+    return { key: subtype, title, state: "unknown", detail: "Waiting for the current account list." };
+  const { active, inactive } = memberIncomeAccountStates(accounts)[subtype];
+  if (active) return { key: subtype, title, state: "met", detail: `"${active.name}" is active.` };
+  return {
+    key: subtype,
+    title,
+    state: "missing",
+    detail: inactive.length
+      ? `"${inactive[0].name}" is inactive. Reactivate it or add a new one.`
+      : "Not added yet. Nothing is created automatically.",
+  };
+};
+
+const ledgerStatePrerequisite = (status: LedgerStatus): AllocationPrerequisite => {
+  const title = "The ledger accepts setting changes";
+  const state = ledgerStateKey(status);
+  if (state === "unknown")
+    return {
+      key: "ledger-state",
+      title,
+      state: "unknown",
+      detail: "This app version doesn't recognise the bookkeeping state.",
+    };
+  if (state === "suspended")
+    return {
+      key: "ledger-state",
+      title,
+      state: "missing",
+      detail: "The ledger is suspended. This setting can't change until an owner resumes it.",
+    };
+  if (!SETTINGS_STATES.includes(state))
+    return { key: "ledger-state", title, state: "missing", detail: "Start bookkeeping setup first." };
+  if (status.revision === null)
+    return {
+      key: "ledger-state",
+      title,
+      state: "unknown",
+      detail: "This server doesn't send the ledger revision, so the setting can't be changed from here.",
+    };
+  return {
+    key: "ledger-state",
+    title,
+    state: "met",
+    detail: `Bookkeeping state: ${LEDGER_STATE_LABELS[state]}.`,
+  };
+};
+
+const serverWritesPrerequisite = (status: LedgerStatus): AllocationPrerequisite => {
+  const title = "The server accepts ledger changes";
+  if (status.blockers === null)
+    return {
+      key: "server-writes",
+      title,
+      state: "unknown",
+      detail: "This server did not report whether ledger changes are available.",
+    };
+  if (status.blockers.length > 0)
+    return {
+      key: "server-writes",
+      title,
+      state: "missing",
+      detail: "Ledger changes aren't available on this server right now.",
+    };
+  return { key: "server-writes", title, state: "met", detail: "Ledger changes are available." };
+};
+
+/**
+ * What the allocation setting needs, from the data on screen only. A step is
+ * `met` only on the server's evidence; nothing is inferred from an absent
+ * field, nothing is created, and the backend still decides every refusal.
+ * Turning allocations off needs only the change conditions (state, server,
+ * permission, no unresolved write), never the accounts.
+ */
+export const allocationReadiness = (
+  status: LedgerStatus,
+  accounts: readonly LedgerAccount[] | null,
+  { canManage, writeBlocked }: AllocationReadinessContext,
+): AllocationReadiness => {
+  const setting = allocationSetting(status);
+  const change: AllocationPrerequisite[] = [
+    ledgerStatePrerequisite(status),
+    serverWritesPrerequisite(status),
+    {
+      key: "permission",
+      title: "You can manage finance",
+      state: canManage ? "met" : "missing",
+      detail: canManage
+        ? "You have the finance manage permission."
+        : "Changing this setting needs the finance manage permission.",
+    },
+    {
+      key: "write-uncertainty",
+      title: "No unconfirmed ledger change",
+      state: writeBlocked ? "missing" : "met",
+      detail: writeBlocked
+        ? "An earlier ledger change couldn't be confirmed. Recheck the ledger first."
+        : "Every earlier change here was confirmed.",
+    },
+  ];
+  const prerequisites: AllocationPrerequisite[] = [
+    memberReceiptsPrerequisite(status),
+    incomeAccountPrerequisite("member_dues_income", accounts),
+    incomeAccountPrerequisite("member_levy_income", accounts),
+    ...change,
+  ];
+  const allMet = (list: readonly AllocationPrerequisite[]) =>
+    list.every((item) => item.state === "met");
+
+  return {
+    setting,
+    prerequisites,
+    canEnable: setting === "off" && allMet(prerequisites),
+    canDisable: setting === "on" && allMet(change),
+    note:
+      setting === "unknown"
+        ? "This server doesn't report the allocations setting, so it can't be changed from here."
+        : null,
+  };
+};
+
+/* ------------------------------------------------------------------ */
 /* Error reading                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -639,6 +1042,11 @@ export const LEDGER_SETUP_ERROR_CODES = {
   writesDisabled: "LEDGER_WRITES_DISABLED",
   transactionsUnavailable: "LEDGER_TRANSACTIONS_UNAVAILABLE",
   indexesNotInstalled: "LEDGER_INDEXES_NOT_INSTALLED",
+  notStarted: "LEDGER_NOT_ACTIVE",
+  suspended: "LEDGER_SUSPENDED",
+  roleMismatch: "LEDGER_ACCOUNT_ROLE_MISMATCH",
+  memberReceiptsDisabled: "LEDGER_MEMBER_RECEIPTS_DISABLED",
+  requiredAccountMissing: "LEDGER_REQUIRED_ACCOUNT_MISSING",
 } as const;
 
 /**
@@ -700,4 +1108,47 @@ export const ledgerWriteOutcomeUnknown = (failure: LedgerApiFailure): boolean =>
     return false;
   if (failure.code && NOTHING_WRITTEN_CODES.has(failure.code)) return false;
   return true;
+};
+
+/**
+ * Codes whose wording here is clearer than the server's generic text: a stale
+ * revision has already triggered a reload, and the role-mismatch text lists
+ * every account type, which reads as an officer mistake.
+ */
+const REFUSAL_COPY: Readonly<Record<string, string>> = {
+  [LEDGER_SETUP_ERROR_CODES.revisionConflict]:
+    "The ledger changed since it was loaded, so nothing was saved. It has been reloaded: check what it shows now before trying again.",
+  [LEDGER_SETUP_ERROR_CODES.roleMismatch]:
+    "This server doesn't accept that account type yet, so nothing was created.",
+};
+
+/** Used only when the server sent a code without any `error` text. */
+const REFUSAL_FALLBACKS: Readonly<Record<string, string>> = {
+  [LEDGER_SETUP_ERROR_CODES.memberReceiptsDisabled]:
+    "Turn on member receipts before turning on allocations.",
+  [LEDGER_SETUP_ERROR_CODES.requiredAccountMissing]:
+    "Add an active dues income account and an active levy income account before turning on allocations.",
+  [LEDGER_SETUP_ERROR_CODES.alreadyStarted]:
+    "This ledger already has an active account in that role.",
+  [LEDGER_SETUP_ERROR_CODES.nameTaken]: "Another active account already has that name.",
+  [LEDGER_SETUP_ERROR_CODES.suspended]: "The ledger is suspended, so nothing was changed.",
+  [LEDGER_SETUP_ERROR_CODES.notStarted]: "Bookkeeping setup hasn't started for this organisation.",
+  [LEDGER_SETUP_ERROR_CODES.writesDisabled]:
+    "Ledger changes aren't available on this server right now. Nothing was saved.",
+  [LEDGER_SETUP_ERROR_CODES.transactionsUnavailable]:
+    "Ledger changes aren't available on this server right now. Nothing was saved.",
+  [LEDGER_SETUP_ERROR_CODES.indexesNotInstalled]:
+    "Ledger changes aren't available on this server right now. Nothing was saved.",
+};
+
+/**
+ * Officer-facing text for a definite refusal (never for an unknown outcome;
+ * check `ledgerWriteOutcomeUnknown` first). Used by the F3A controls.
+ */
+export const ledgerSetupRefusalMessage = (
+  failure: LedgerApiFailure,
+  fallback: string,
+): string => {
+  const code = failure.code ?? "";
+  return REFUSAL_COPY[code] ?? failure.message ?? REFUSAL_FALLBACKS[code] ?? fallback;
 };

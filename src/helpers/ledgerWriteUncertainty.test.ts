@@ -73,9 +73,20 @@ describe("ledger write uncertainty marker", () => {
       "member-receipts",
       "create-accounts",
       "update-account",
+      "member-allocations",
       "unknown",
     ] as const) {
       expect(ledgerWriteUncertaintyGuidance(action)).toMatch(/Check/);
     }
+  });
+
+  it("round-trips the F3A allocation-setting action across a reload", () => {
+    markLedgerWriteUncertain("org1", "member-allocations", AT);
+    expect(readLedgerWriteUncertainty("org1")).toEqual({
+      organisationId: "org1",
+      action: "member-allocations",
+      at: AT.toISOString(),
+    });
+    expect(ledgerWriteUncertaintyGuidance("member-allocations")).toMatch(/allocations are now on or off/);
   });
 });

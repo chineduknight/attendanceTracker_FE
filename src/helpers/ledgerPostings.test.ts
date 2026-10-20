@@ -128,6 +128,7 @@ const status = (overrides: Partial<LedgerStatus> = {}): LedgerStatus => ({
   activatedAt: "2026-10-02T09:00:00.000Z",
   gapWindowAttestedAt: null,
   gapWindowAttestation: "not_attested",
+  allocationsEnabled: false,
   ...overrides,
 });
 
@@ -220,6 +221,21 @@ describe("F3 member income accounts", () => {
     account({ id: "levy-income", name: "Levy income", class: "income", subtype: "member_levy_income", openingVerified: null }),
     account({ id: "grants", name: "Grants", class: "income", subtype: null, openingVerified: null }),
   ];
+
+  it("offers exactly class income with subtype null, never class alone", () => {
+    const candidates = [
+      account({ id: "plain", class: "income", subtype: null, openingVerified: null }),
+      account({ id: "dues", class: "income", subtype: "member_dues_income", openingVerified: null }),
+      account({ id: "levy", class: "income", subtype: "member_levy_income", openingVerified: null }),
+      // A future specialised income subtype this build has never seen.
+      account({ id: "future", class: "income", subtype: "member_welfare_income", openingVerified: null }),
+      account({ id: "expense", class: "expense", subtype: null, openingVerified: null }),
+    ];
+    expect(postingIncomeCategories(candidates).map((entry) => entry.id)).toEqual(["plain"]);
+    for (const offered of postingIncomeCategories(candidates)) {
+      expect(offered.class === "income" && offered.subtype === null).toBe(true);
+    }
+  });
 
   it("keeps them out of the ordinary receipt categories", () => {
     expect(postingIncomeCategories(withF3).map((entry) => entry.id)).toEqual([

@@ -36,6 +36,7 @@ const statusOf = (overrides: Partial<LedgerStatus> = {}): LedgerStatus => ({
   activatedAt: "2026-10-02T09:00:00.000Z",
   gapWindowAttestedAt: null,
   gapWindowAttestation: "not_attested",
+  allocationsEnabled: false,
   ...overrides,
 });
 

@@ -291,12 +291,8 @@ export const asOfIssue = (asOf: string, today: string): string | null => {
 /* Balances grouping                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Display only. F3's member income subtypes are rendered as returned. */
-const REPORT_SUBTYPE_LABELS: Record<string, string> = {
-  ...ACCOUNT_SUBTYPE_LABELS,
-  member_dues_income: "Member dues income",
-  member_levy_income: "Member levy income",
-};
+/** Display only; widened so an unrecognised subtype falls through verbatim. */
+const REPORT_SUBTYPE_LABELS: Readonly<Record<string, string>> = ACCOUNT_SUBTYPE_LABELS;
 
 /** "Bank", "Income", "Member dues income"; an unrecognised subtype verbatim. */
 export const accountTypeLabel = (account: LedgerAccount): string => {

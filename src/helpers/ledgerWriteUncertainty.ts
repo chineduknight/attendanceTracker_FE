@@ -17,6 +17,7 @@ export type LedgerWriteAction =
   | "member-receipts"
   | "create-accounts"
   | "update-account"
+  | "member-allocations"
   | "unknown";
 
 export interface UnresolvedLedgerWrite {
@@ -36,6 +37,7 @@ const ACTIONS: readonly LedgerWriteAction[] = [
   "member-receipts",
   "create-accounts",
   "update-account",
+  "member-allocations",
   "unknown",
 ];
 
@@ -129,6 +131,8 @@ export const ledgerWriteUncertaintyGuidance = (action: LedgerWriteAction) => {
       return "Check whether the account now exists before adding it again.";
     case "update-account":
       return "Check whether the account's name or status changed before trying again.";
+    case "member-allocations":
+      return "Check whether member money allocations are now on or off before trying again.";
     default:
       return "Check the current ledger state before trying again.";
   }
