@@ -9,6 +9,7 @@ import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import { LedgerAccount, LedgerKnownState, LedgerStatus } from "components/finance/ledgerTypes";
 import { MEMBER_INCOME_IN_USE_NOTE } from "helpers/ledgerSetup";
 import {
+  ledgerWriteUncertaintyKey,
   markLedgerWriteUncertain,
   readLedgerWriteUncertainty,
 } from "helpers/ledgerWriteUncertainty";
@@ -585,5 +586,270 @@ describe("F3A organisation isolation", () => {
 
     await waitFor(() => expect(readLedgerWriteUncertainty("org2")?.action).toBe("member-allocations"));
     expect(readLedgerWriteUncertainty("org1")).toBeNull();
+  });
+});
+
+/**
+ * Review of FE #140: an F3A write must not lose its marker when the screen
+ * unmounts (FinanceWorkspace is keyed by organisation, so a switch unmounts
+ * it, and TanStack Query v4 drops `mutate` callbacks on unmount).
+ */
+describe("F3A durable write lifecycle", () => {
+  const READY = [...BASE_CHART, DUES, LEVY];
+
+  const deferred = () => {
+    let resolve: (value: unknown) => void = () => undefined;
+    let reject: (reason: unknown) => void = () => undefined;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+
+  /** The request is held open; records the marker the server call saw. */
+  const holdRequest = (method: jest.Mock, organisationId = "org1") => {
+    const response = deferred();
+    const markerAtDispatch: unknown[] = [];
+    method.mockImplementation(() => {
+      markerAtDispatch.push(readLedgerWriteUncertainty(organisationId));
+      return response.promise;
+    });
+    return { ...response, markerAtDispatch };
+  };
+
+  const storedPhase = (organisationId: string) =>
+    JSON.parse(window.localStorage.getItem(ledgerWriteUncertaintyKey(organisationId)) ?? "null")
+      ?.phase;
+
+  const turnOn = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Turn on allocations" }));
+    await confirmInDialog("Turn on allocations");
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  };
+
+  it("stores the marker before sending, keeps it while the screen unmounts, and clears it once confirmed", async () => {
+    const request = holdRequest(api.patch);
+    const view = renderPanel({ accounts: READY });
+    await turnOn();
+
+    // Durable before the request left: the server call saw it.
+    expect(request.markerAtDispatch).toEqual([
+      expect.objectContaining({ organisationId: "org1", action: "member-allocations", pending: true }),
+    ]);
+    expect(await screen.findByText("Waiting for the server to confirm that change")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I've checked the ledger" })).not.toBeInTheDocument();
+    // The toggle shows its spinner (and loses its name); nothing in the
+    // section can be pressed while the outcome is pending.
+    const section = screen.getByRole("region", { name: "Member money allocations" });
+    expect(within(section).getAllByRole("button").length).toBeGreaterThan(0);
+    within(section)
+      .getAllByRole("button")
+      .forEach((button) => expect(button).toBeDisabled());
+
+    view.unmount();
+    expect(storedPhase("org1")).toBe("pending");
+
+    request.resolve({ data: { data: {} } });
+    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") });
+
+    renderPanel({ status: statusOf("active", { allocationsEnabled: true }), accounts: READY });
+    expect(screen.queryByText("We couldn't confirm that change")).not.toBeInTheDocument();
+    expect(screen.queryByText("Waiting for the server to confirm that change")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn off allocations" })).toBeEnabled();
+  });
+
+  it("latches an ambiguous failure that arrives after the officer left Books", async () => {
+    const request = holdRequest(api.patch);
+    const view = renderPanel({ accounts: READY });
+    await turnOn();
+    view.unmount();
+
+    request.reject({ message: "Network Error" });
+    await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
+    expect(readLedgerWriteUncertainty("org1")).toMatchObject({
+      action: "member-allocations",
+      pending: false,
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") });
+
+    renderPanel({ accounts: READY });
+    expect(screen.getByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "I've checked the ledger" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Turn on allocations" })).toBeDisabled();
+    // Never retried.
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("latches an ambiguous failure under the sending organisation after a switch, and leaves the other alone", async () => {
+    const request = holdRequest(api.patch);
+    const view = renderPanel({ accounts: READY });
+    await turnOn();
+
+    // FinanceWorkspace is keyed by organisation: a switch is a remount.
+    view.unmount();
+    setPermissions(["finance.manage"], false, "org2");
+    renderPanel({ organisationId: "org2", status: statusOf("active", { revision: 11 }), accounts: READY });
+    // Org 1's pending write never blocks Org 2.
+    expect(screen.queryByText("Waiting for the server to confirm that change")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn on allocations" })).toBeEnabled();
+
+    request.reject({ response: { status: 502, data: { error: "Bad gateway" } } });
+    await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
+    expect(readLedgerWriteUncertainty("org2")).toBeNull();
+    expect(screen.queryByText("We couldn't confirm that change")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn on allocations" })).toBeEnabled();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org2") });
+  });
+
+  it("clears only the sending organisation's marker when a confirmation arrives after a switch", async () => {
+    markLedgerWriteUncertain("org2", "create-accounts");
+    const request = holdRequest(api.patch);
+    const view = renderPanel({ accounts: READY });
+    await turnOn();
+    view.unmount();
+    setPermissions(["finance.manage"], false, "org2");
+    renderPanel({ organisationId: "org2", accounts: READY });
+
+    request.resolve({ data: { data: {} } });
+    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
+    expect(readLedgerWriteUncertainty("org2")?.action).toBe("create-accounts");
+    expect(screen.getByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org2") });
+  });
+
+  it("treats a request cut off by a hard reload as unresolved, with acknowledgement after a clean recheck", async () => {
+    // What a reload leaves: the stored pending marker, no running request.
+    window.localStorage.setItem(
+      ledgerWriteUncertaintyKey("org1"),
+      JSON.stringify({
+        organisationId: "org1",
+        action: "member-allocations",
+        at: "2026-10-20T09:00:00.000Z",
+        phase: "pending",
+        writeId: "sent-before-the-reload",
+      }),
+    );
+    const recheck = jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderPanel({ accounts: READY, onRecheckLedger: recheck });
+
+    expect(screen.getByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.queryByText("Waiting for the server to confirm that change")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn on allocations" })).toBeDisabled();
+    const acknowledge = screen.getByRole("button", { name: "I've checked the ledger" });
+    expect(acknowledge).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+    await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+    expect(acknowledge).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Recheck the ledger" }));
+    await waitFor(() => expect(acknowledge).toBeEnabled());
+
+    fireEvent.click(acknowledge);
+    await confirmInDialog("I've checked");
+    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when another tab left a marker this screen hasn't seen", async () => {
+    renderPanel({ accounts: READY });
+    // Written straight to storage: this screen was never told.
+    window.localStorage.setItem(
+      ledgerWriteUncertaintyKey("org1"),
+      JSON.stringify({ organisationId: "org1", action: "create-accounts", at: "" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Turn on allocations" }));
+    await confirmInDialog("Turn on allocations");
+
+    expect(
+      await screen.findByText("An earlier ledger change is still waiting to be confirmed, so nothing was sent."),
+    ).toBeInTheDocument();
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(readLedgerWriteUncertainty("org1")?.action).toBe("create-accounts");
+  });
+
+  it("sends nothing when the browser cannot store the marker", async () => {
+    renderPanel({ accounts: READY });
+    const setItem = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Turn on allocations" }));
+      await confirmInDialog("Turn on allocations");
+      expect(await screen.findByText(/couldn't keep a safety record of the change, so nothing was sent/)).toBeInTheDocument();
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("creates a member income account under the same model: pending before sending, latched after unmount", async () => {
+    const request = holdRequest(api.post);
+    const view = renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Add the dues income account" }));
+    await confirmInDialog("Add account");
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    expect(request.markerAtDispatch).toEqual([
+      expect.objectContaining({ action: "create-accounts", pending: true }),
+    ]);
+    expect(await screen.findByText("Waiting for the server to confirm that change")).toBeInTheDocument();
+    view.unmount();
+
+    request.reject({ response: { status: 503, data: { error: "Service unavailable" } } });
+    await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
+    expect(readLedgerWriteUncertainty("org1")?.action).toBe("create-accounts");
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") });
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears an account creation's marker when it is confirmed after unmount", async () => {
+    const request = holdRequest(api.post);
+    const view = renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Add the levy income account" }));
+    await confirmInDialog("Add account");
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    request.resolve({ data: { data: { accounts: [] } } });
+    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") });
+  });
+
+  it("reactivates under the same model and clears the marker on a definite refusal", async () => {
+    const request = holdRequest(api.patch);
+    renderPanel({ accounts: [...BASE_CHART, DUES, { ...LEVY, active: false }] });
+    fireEvent.click(screen.getByRole("button", { name: `Reactivate ${LEVY.name}` }));
+    await confirmInDialog("Reactivate");
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+
+    expect(request.markerAtDispatch).toEqual([
+      expect.objectContaining({ action: "update-account", pending: true }),
+    ]);
+    request.reject({
+      response: {
+        status: 409,
+        data: { error: "The account has changed since you loaded it.", code: "LEDGER_REVISION_CONFLICT" },
+      },
+    });
+    expect(await screen.findByText(/nothing was saved\. It has been reloaded/)).toBeInTheDocument();
+    expect(readLedgerWriteUncertainty("org1")).toBeNull();
+  });
+
+  it("latches a reactivation whose response is lost after unmount", async () => {
+    const request = holdRequest(api.patch);
+    const view = renderPanel({ accounts: [...BASE_CHART, DUES, { ...LEVY, active: false }] });
+    fireEvent.click(screen.getByRole("button", { name: `Reactivate ${LEVY.name}` }));
+    await confirmInDialog("Reactivate");
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    request.reject({ message: "timeout of 0ms exceeded", code: "ECONNABORTED" });
+    await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
+    expect(readLedgerWriteUncertainty("org1")?.action).toBe("update-account");
   });
 });

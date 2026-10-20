@@ -1,4 +1,5 @@
 import {
+  ledgerRecheckUsable,
   ACCOUNT_CHANGE_UNAVAILABLE_NOTE,
   ACCOUNT_SUBTYPES_BY_CLASS,
   MEMBER_INCOME_ACCOUNTS,
@@ -964,5 +965,43 @@ describe("F3A refusal copy", () => {
     expect(
       ledgerSetupRefusalMessage(failureOf("LEDGER_ACCOUNT_ROLE_MISMATCH", "Account type not allowed. Use asset…"), "x"),
     ).toBe("This server doesn't accept that account type yet, so nothing was created.");
+  });
+});
+
+describe("ledgerRecheckUsable (review of FE #140)", () => {
+  const STATUS = {
+    state: "active",
+    currency: "NGN",
+    openingBalancesVerified: true,
+    postingEnabled: false,
+    blockers: [],
+    openingDate: "2026-09-01",
+    lockedThrough: null,
+    memberReceiptsEnabled: true,
+    allocationsEnabled: false,
+    revision: 4,
+    pendingProposal: null,
+    unconfirmedAttempts: 0,
+    contractVersion: "f2-0.3",
+  };
+  const ACCOUNTS = [{ id: "a1", name: "Cash", class: "asset", subtype: "cash", currency: "NGN", active: true }];
+
+  it("accepts a parsed status and account list", () => {
+    expect(ledgerRecheckUsable(STATUS, ACCOUNTS)).toBe(true);
+    expect(ledgerRecheckUsable({ ...STATUS, allocationsEnabled: true }, [])).toBe(true);
+  });
+
+  it.each([
+    ["a missing status body", undefined, ACCOUNTS],
+    ["a status that is not an object", "ok", ACCOUNTS],
+    ["an unrecognised lifecycle state", { ...STATUS, state: "frozen" }, ACCOUNTS],
+    ["a status without a revision", { ...STATUS, revision: undefined }, ACCOUNTS],
+    ["a status without the allocations setting", { ...STATUS, allocationsEnabled: undefined }, ACCOUNTS],
+    ["a malformed allocations setting", { ...STATUS, allocationsEnabled: "true" }, ACCOUNTS],
+    ["a missing account list", STATUS, undefined],
+    ["an account list that is not an array", STATUS, { accounts: ACCOUNTS }],
+    ["an account without an id", STATUS, [{ name: "Cash" }]],
+  ])("refuses %s, even after an HTTP success", (_label, status, accounts) => {
+    expect(ledgerRecheckUsable(status, accounts)).toBe(false);
   });
 });

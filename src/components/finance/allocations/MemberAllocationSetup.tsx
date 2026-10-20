@@ -23,8 +23,7 @@ import {
   validateMemberIncomeAccount,
 } from "helpers/ledgerSetup";
 import { ledgerStateKey } from "helpers/ledger";
-import { LedgerWriteAction } from "helpers/ledgerWriteUncertainty";
-import { useLedgerSetup } from "hooks/useLedgerSetup";
+import { LedgerWriteNotSentError, useLedgerSetup } from "hooks/useLedgerSetup";
 
 /**
  * F3A member-money allocation setup (F3 RFC v0.3 §5.2, §9, O1, O9).
@@ -191,10 +190,8 @@ interface MemberAllocationSetupProps {
   status: LedgerStatus;
   accounts: LedgerAccount[] | null;
   canManage: boolean;
-  /** An earlier ledger write still has an unresolved outcome. */
+  /** An earlier ledger write is still pending or has an unresolved outcome. */
   writesBlocked: boolean;
-  /** Persists the unresolved write so a reload cannot re-open it. */
-  onWriteUncertain: (action: LedgerWriteAction) => void;
   /** Status or accounts are reloading: the toggle waits for the fresh revision. */
   isRefreshing: boolean;
 }
@@ -205,17 +202,15 @@ const MemberAllocationSetup = ({
   accounts,
   canManage,
   writesBlocked,
-  onWriteUncertain,
   isRefreshing,
 }: MemberAllocationSetupProps) => {
   const headingId = useId();
   const { confirm, confirmDialog } = useConfirm();
   const {
-    createAccounts,
-    updateAccount,
+    createMemberIncomeAccount,
+    reactivateMemberIncomeAccount,
     setMemberAllocations,
-    isCreatingAccounts,
-    isUpdatingAccount,
+    isSavingMemberIncomeAccount,
     isChangingAllocations,
   } = useLedgerSetup(organisationId);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -232,13 +227,23 @@ const MemberAllocationSetup = ({
     canCreateAccounts(status, canManage) &&
     !writesBlocked &&
     readiness.setting !== "unknown";
-  const isSaving = isCreatingAccounts || isUpdatingAccount || isChangingAllocations;
+  const isSaving = isSavingMemberIncomeAccount || isChangingAllocations;
 
-  const handleFailure = (error: unknown, action: LedgerWriteAction, fallback: string) => {
+  // Screen copy only. The pending/unresolved marker and the reload are owned
+  // by the durable write itself and happen even if this screen is gone.
+  const handleFailure = (error: unknown, fallback: string) => {
+    if (error instanceof LedgerWriteNotSentError) {
+      setActionError(
+        error.reason === "blocked"
+          ? "An earlier ledger change is still waiting to be confirmed, so nothing was sent."
+          : "This browser couldn't keep a safety record of the change, so nothing was sent. Check that site storage is allowed and try again.",
+      );
+      return;
+    }
     const failure = ledgerApiFailure(error);
-    // A lost response may have been applied: latch it, never call it refused.
+    // A lost response may have been applied: it is already latched; never
+    // call it refused.
     if (ledgerWriteOutcomeUnknown(failure)) {
-      onWriteUncertain(action);
       setActionError(null);
       return;
     }
@@ -248,25 +253,22 @@ const MemberAllocationSetup = ({
   const create = (subtype: MemberIncomeSubtype, name: string, onDone: () => void) => {
     if (writesBlocked || !accounts) return;
     if (validateMemberIncomeAccount(subtype, name, accounts)) return;
-    createAccounts([buildMemberIncomeAccountPayload(subtype, name)], {
+    createMemberIncomeAccount(buildMemberIncomeAccountPayload(subtype, name), {
       onSuccess: () => {
         setActionError(null);
         onDone();
       },
-      onError: (error) =>
-        handleFailure(error, "create-accounts", "The account wasn't added. Try again."),
+      onError: (error) => handleFailure(error, "The account wasn't added. Try again."),
     });
   };
 
   const reactivate = (account: LedgerAccount) => {
     if (writesBlocked || account.revision === null) return;
-    updateAccount(
-      account.id,
-      { expectedRevision: account.revision, active: true },
+    reactivateMemberIncomeAccount(
+      { id: account.id, revision: account.revision },
       {
         onSuccess: () => setActionError(null),
-        onError: (error) =>
-          handleFailure(error, "update-account", "The account wasn't reactivated. Try again."),
+        onError: (error) => handleFailure(error, "The account wasn't reactivated. Try again."),
       },
     );
   };
@@ -287,8 +289,7 @@ const MemberAllocationSetup = ({
     // stale value is refused (409) and the settle reload shows the truth.
     setMemberAllocations(enable, status.revision, {
       onSuccess: () => setActionError(null),
-      onError: (error) =>
-        handleFailure(error, "member-allocations", "The setting wasn't changed. Try again."),
+      onError: (error) => handleFailure(error, "The setting wasn't changed. Try again."),
     });
   };
 

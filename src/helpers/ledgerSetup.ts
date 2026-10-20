@@ -3,7 +3,12 @@ import {
   LedgerKnownState,
   LedgerStatus,
 } from "components/finance/ledgerTypes";
-import { LEDGER_STATE_LABELS, ledgerStateKey } from "helpers/ledger";
+import {
+  LEDGER_STATE_LABELS,
+  ledgerStateKey,
+  toLedgerAccounts,
+  toLedgerStatus,
+} from "helpers/ledger";
 import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
 
 /**
@@ -1108,6 +1113,25 @@ export const ledgerWriteOutcomeUnknown = (failure: LedgerApiFailure): boolean =>
     return false;
   if (failure.code && NOTHING_WRITTEN_CODES.has(failure.code)) return false;
   return true;
+};
+
+/**
+ * Whether a recheck after an unresolved F3A write reloaded something an
+ * officer can actually compare against (review of FE #140). An HTTP success
+ * is not enough: the status must parse, have a recognised lifecycle state, a
+ * revision and a real `allocationsEnabled` boolean (the F3A gate requires an
+ * F3-2 server), and the account list must parse. Anything else leaves "I've
+ * checked the ledger" locked. Takes the response bodies' `data` values.
+ */
+export const ledgerRecheckUsable = (statusData: unknown, accountsData: unknown): boolean => {
+  const status = toLedgerStatus(statusData);
+  return (
+    status !== null &&
+    ledgerStateKey(status) !== "unknown" &&
+    status.revision !== null &&
+    status.allocationsEnabled !== null &&
+    toLedgerAccounts(accountsData) !== null
+  );
 };
 
 /**

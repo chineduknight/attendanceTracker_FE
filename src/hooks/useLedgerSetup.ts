@@ -8,8 +8,19 @@ import { financeRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toLedgerStatus } from "helpers/ledger";
-import { LedgerStatus } from "components/finance/ledgerTypes";
-import { CreateAccountPayload } from "helpers/ledgerSetup";
+import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
+import {
+  CreateAccountPayload,
+  ledgerApiFailure,
+  ledgerWriteOutcomeUnknown,
+} from "helpers/ledgerSetup";
+import {
+  LedgerWriteAction,
+  LedgerWriteOutcome,
+  beginLedgerWrite,
+  readLedgerWriteUncertainty,
+  settleLedgerWrite,
+} from "helpers/ledgerWriteUncertainty";
 
 /**
  * F2A-2 ledger setup and chart-of-accounts mutations (RFC v0.3 §8.1).
@@ -35,6 +46,70 @@ interface MutationCallbacks<T> {
  */
 const suppressGenericError = () => undefined;
 
+/**
+ * An F3A write that was never sent: either an earlier write in this
+ * organisation is still pending or unresolved (`blocked`), or the browser
+ * could not store the pending marker (`storage`). Nothing reached the server,
+ * so this is never an unknown outcome.
+ */
+export class LedgerWriteNotSentError extends Error {
+  constructor(readonly reason: "blocked" | "storage") {
+    super(`Ledger write not sent (${reason})`);
+    this.name = "LedgerWriteNotSentError";
+  }
+}
+
+export interface DurableLedgerWrite {
+  /** Captured when the officer confirmed; the screen may show another org later. */
+  organisationId: string;
+  action: LedgerWriteAction;
+  method: "post" | "patch";
+  url: string;
+  data: unknown;
+}
+
+/**
+ * The F3A write lifecycle (review of FE #140). Everything that must outlive
+ * the screen happens inside this promise, not in `mutate` callbacks:
+ * TanStack Query v4 drops those when the component unmounts (an organisation
+ * switch remounts FinanceWorkspace), so a marker written there could be lost.
+ *
+ * 1. Store this organisation's pending marker; refuse to send without it.
+ * 2. Send the request once. Mutations never retry (TanStack's default).
+ * 3. Settle the marker: cleared on success or on a refusal that wrote
+ *    nothing, latched as unresolved on an ambiguous outcome. A reload before
+ *    this point leaves the pending marker, which then reads as unresolved.
+ * 4. Reload the sending organisation's ledger caches, and no other.
+ */
+export const sendDurableLedgerWrite = async ({
+  organisationId,
+  action,
+  method,
+  url,
+  data,
+}: DurableLedgerWrite) => {
+  const writeId = beginLedgerWrite(organisationId, action);
+  if (!writeId) {
+    throw new LedgerWriteNotSentError(
+      readLedgerWriteUncertainty(organisationId) ? "blocked" : "storage",
+    );
+  }
+  let outcome: LedgerWriteOutcome = "unknown";
+  try {
+    const response = await (method === "post" ? postRequest : patchRequest)({ url, data });
+    outcome = "confirmed";
+    return response;
+  } catch (error) {
+    outcome = ledgerWriteOutcomeUnknown(ledgerApiFailure(error)) ? "unknown" : "refused";
+    throw error;
+  } finally {
+    settleLedgerWrite(organisationId, writeId, outcome);
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.finance.ledger.root(organisationId),
+    });
+  }
+};
+
 export interface UpdateAccountChange {
   /** The account's `revision` from the read shape; required by the backend. */
   expectedRevision: number;
@@ -55,7 +130,12 @@ export const useLedgerSetup = (organisationId: string) => {
   // Its own instance so the allocation toggle's loading state never shows on
   // the member-receipts button (both PATCH /settings).
   const allocationsMutation = useMutationWrapper(
-    patchRequest,
+    sendDurableLedgerWrite,
+    undefined,
+    suppressGenericError,
+  );
+  const memberIncomeAccountMutation = useMutationWrapper(
+    sendDurableLedgerWrite,
     undefined,
     suppressGenericError,
   );
@@ -79,6 +159,13 @@ export const useLedgerSetup = (organisationId: string) => {
   const accountsUrl = convertParamsToString(financeRequest.LEDGER_ACCOUNTS, {
     organisationId,
   });
+  // The organisation is captured here, when the officer confirms.
+  const durableWrite = (
+    action: LedgerWriteAction,
+    method: DurableLedgerWrite["method"],
+    url: string,
+    data: unknown,
+  ): DurableLedgerWrite => ({ organisationId, action, method, url, data });
   const accountUrl = (accountId: string) =>
     convertParamsToString(financeRequest.LEDGER_ACCOUNT, {
       organisationId,
@@ -121,8 +208,9 @@ export const useLedgerSetup = (organisationId: string) => {
   /**
    * F3-2: switch member money allocations on or off. Exactly one setting per
    * request, never combined with `memberReceiptsEnabled` (the backend refuses
-   * both). Always settles with a reload of this organisation's ledger, so a
-   * stale-revision refusal leaves the authoritative status on screen.
+   * both). Durable (`sendDurableLedgerWrite`): the marker and the reload of
+   * this organisation's ledger never depend on the screen staying mounted.
+   * The callbacks below only update the screen that sent it, if still there.
    */
   const setMemberAllocations = (
     memberAllocationsEnabled: boolean,
@@ -130,17 +218,38 @@ export const useLedgerSetup = (organisationId: string) => {
     { onSuccess, onError }: MutationCallbacks<LedgerStatus | null> = {},
   ) =>
     allocationsMutation.mutate(
+      durableWrite("member-allocations", "patch", settingsUrl, { expectedLedgerRevision, memberAllocationsEnabled }),
       {
-        url: settingsUrl,
-        data: { expectedLedgerRevision, memberAllocationsEnabled },
-      },
-      {
-        onSettled: invalidateLedger,
         onSuccess: (response: { data?: unknown }) =>
           onSuccess?.(toLedgerStatus(response?.data)),
         onError: onError ?? suppressGenericError,
       },
     );
+
+  /** F3A: create one member income account, durably (one per request). */
+  const createMemberIncomeAccount = (
+    payload: CreateAccountPayload,
+    { onSuccess, onError }: MutationCallbacks<void> = {},
+  ) =>
+    memberIncomeAccountMutation.mutate(
+      durableWrite("create-accounts", "post", accountsUrl, { accounts: [payload] }),
+      { onSuccess: () => onSuccess?.(), onError: onError ?? suppressGenericError },
+    );
+
+  /** F3A: reactivate an inactive member income account, durably. */
+  const reactivateMemberIncomeAccount = (
+    account: Pick<LedgerAccount, "id"> & { revision: number },
+    { onSuccess, onError }: MutationCallbacks<void> = {},
+  ) =>
+    memberIncomeAccountMutation.mutate(
+      durableWrite("update-account", "patch", accountUrl(account.id), { expectedRevision: account.revision, active: true }),
+      { onSuccess: () => onSuccess?.(), onError: onError ?? suppressGenericError },
+    );
+
+  // A durable write keeps running after an organisation switch; it is only
+  // "saving" for the organisation that sent it.
+  const savingHere = (mutation: { isLoading?: boolean; variables?: DurableLedgerWrite }) =>
+    Boolean(mutation.isLoading) && mutation.variables?.organisationId === organisationId;
 
   const createAccounts = (
     accounts: CreateAccountPayload[],
@@ -175,11 +284,14 @@ export const useLedgerSetup = (organisationId: string) => {
     startSetup,
     enableMemberReceipts,
     setMemberAllocations,
+    createMemberIncomeAccount,
+    reactivateMemberIncomeAccount,
     createAccounts,
     updateAccount,
     isStarting: Boolean(setupMutation.isLoading),
     isEnablingReceipts: Boolean(settingsMutation.isLoading),
-    isChangingAllocations: Boolean(allocationsMutation.isLoading),
+    isChangingAllocations: savingHere(allocationsMutation),
+    isSavingMemberIncomeAccount: savingHere(memberIncomeAccountMutation),
     isCreatingAccounts: Boolean(createAccountsMutation.isLoading),
     isUpdatingAccount: Boolean(updateAccountMutation.isLoading),
   };

@@ -32,6 +32,7 @@ import {
   ledgerStateKey,
   ledgerStatusNote,
 } from "helpers/ledger";
+import { ledgerRecheckUsable } from "helpers/ledgerSetup";
 import { useLedgerAccounts, useLedgerJournals, useLedgerStatus } from "hooks/useLedger";
 import {
   LedgerAccount,
@@ -417,12 +418,17 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           onRecheckLedger={async () => {
             // Reconciliation after an unresolved write needs both the status
             // and the account list, not just the list that failed. Only a
-            // clean reload of both counts as a recheck.
-            const results = await Promise.all([
+            // clean, usable reload of both counts as a recheck.
+            const [statusResult, accountsResult] = await Promise.all([
               statusQuery.refetch(),
               accountsQuery.refetch(),
             ]);
-            return results.every((result) => !result.isError);
+            // A 200 with a body this build can't read is not a recheck.
+            return (
+              !statusResult.isError &&
+              !accountsResult.isError &&
+              ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data)
+            );
           }}
         />
       )}

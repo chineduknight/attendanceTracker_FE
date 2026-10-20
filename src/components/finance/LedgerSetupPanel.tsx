@@ -179,6 +179,24 @@ const WriteUncertaintyNotice = ({
   );
 };
 
+/**
+ * An F3A write from this page is still waiting for its response. Its outcome
+ * is not known yet, so there is nothing to recheck or acknowledge; every
+ * other ledger change waits. If the page goes away first, the marker stays
+ * and comes back as "We couldn't confirm that change".
+ */
+const PendingWriteNotice = () => (
+  <Box role="status" borderWidth="1px" borderColor="border.warning" borderRadius="md" p={3} bg="bg.panel">
+    <Text fontSize="sm" fontWeight="semibold">
+      Waiting for the server to confirm that change
+    </Text>
+    <Text fontSize="sm" color="fg.muted">
+      Other ledger changes are paused until it is confirmed. If this page is closed or reloaded
+      first, the change will need to be checked before anything else is changed.
+    </Text>
+  </Box>
+);
+
 interface LedgerSetupPanelProps {
   organisationId: string;
   status: LedgerStatus;
@@ -226,8 +244,8 @@ const LedgerSetupPanel = ({
   const [localStatus, setLocalStatus] = useState<LedgerStatus | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Any unresolved write blocks every setup/account write in this
-  // organisation until an officer reconciles it.
+  // Any pending or unresolved write blocks every setup/account write in this
+  // organisation until it is confirmed or an officer reconciles it.
   const writeBlocked = uncertainty !== null;
 
   // The setup write response is the only place `setup` is visible until
@@ -313,7 +331,8 @@ const LedgerSetupPanel = ({
     <Box as="section" aria-labelledby={headingId}>
       <SectionHeading id={headingId}>Bookkeeping setup</SectionHeading>
       <Stack gap={4}>
-        {uncertainty && (
+        {uncertainty?.pending && <PendingWriteNotice />}
+        {uncertainty && !uncertainty.pending && (
           <WriteUncertaintyNotice
             // A new marker starts a new check: an earlier recheck never counts.
             key={`${uncertainty.action}:${uncertainty.at}`}
@@ -465,7 +484,6 @@ const LedgerSetupPanel = ({
             accounts={accounts}
             canManage={canManage}
             writesBlocked={writeBlocked}
-            onWriteUncertain={mark}
             isRefreshing={isRefreshingLedger}
           />
         )}
