@@ -6,7 +6,7 @@ node_modules
 yarn-error.log
 .qodo
 .DS_Store
-
+docs/f3a-evidence
 .DS_STORE
 node_modules
 scripts/flow/*/.flowconfig
