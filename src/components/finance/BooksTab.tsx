@@ -11,12 +11,14 @@ import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
 import JournalLines from "components/finance/JournalLines";
 import ReversalsPanel from "components/finance/reversals/ReversalsPanel";
 import UnconfirmedAttemptsPanel from "components/finance/attempts/UnconfirmedAttemptsPanel";
+import LedgerReportsPanel from "components/finance/reports/LedgerReportsPanel";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
+import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
   isLedgerUnavailable,
@@ -509,6 +511,14 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           isRechecking={isRecheckingPostings}
           onRecheckLedger={recheckPostings}
         />
+      )}
+
+      {/* F2B-4 cashbook, balances and summary: read-only, finance.view, its
+          own gate (default off). Shown whatever the ledger state: the server
+          answers unknown balances as unknown, and suspension never hides
+          history. */}
+      {LEDGER_REPORTS_UI_ENABLED && (
+        <LedgerReportsPanel organisationId={organisationId} accounts={accountsQuery.accounts} />
       )}
 
       <JournalsSection

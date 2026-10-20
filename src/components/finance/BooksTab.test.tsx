@@ -10,6 +10,7 @@ import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
+import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -321,6 +322,7 @@ describe("<BooksTab> release gates", () => {
       postings: LEDGER_POSTINGS_UI_ENABLED,
       memberMoney: LEDGER_MEMBER_MONEY_UI_ENABLED,
       reversals: LEDGER_REVERSALS_UI_ENABLED,
+      reports: LEDGER_REPORTS_UI_ENABLED,
     }).toEqual({
       setup: false,
       openingBalances: false,
@@ -328,7 +330,18 @@ describe("<BooksTab> release gates", () => {
       postings: false,
       memberMoney: false,
       reversals: false,
+      reports: false,
     });
+  });
+
+  it("shows no F2B-4 reports, and reads none, with its gate off", async () => {
+    serveLedger(F2_ACTIVE, ACCOUNTS, JOURNALS);
+    renderBooks();
+    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Reports" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Cashbook" })).not.toBeInTheDocument();
+    const urls = api.get.mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => /\/cashbook|\/ledger\/balances|\/ledger\/summary/.test(url))).toBe(false);
   });
 
   it("shows no F2B-3 reversal or attempts UI, and reads neither, with its gate off", async () => {

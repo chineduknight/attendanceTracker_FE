@@ -201,6 +201,35 @@ export const queryKeys = {
       /** The unresolved posting attempts this officer may see (F2B-3). */
       unresolvedAttempts: (organisationId: string) =>
         ["finance", organisationId, "ledger", "attempts", "unresolved"] as const,
+      /**
+       * F2B-4 reports. Every key sits under `root`, so each ledger write's
+       * root invalidation (postings, reversals, openings, lifecycle) also
+       * refreshes them, for that organisation only. Every report parameter is
+       * part of the identity, so a page or window never answers for another.
+       */
+      reports: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "reports"] as const,
+      cashbook: (
+        organisationId: string,
+        accountId: string,
+        params: { from: string; to: string; limit: number; cursor: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reports",
+          "cashbook",
+          accountId,
+          params.from,
+          params.to,
+          params.limit,
+          params.cursor,
+        ] as const,
+      balances: (organisationId: string, asOf: string) =>
+        ["finance", organisationId, "ledger", "reports", "balances", asOf] as const,
+      summary: (organisationId: string, from: string, to: string) =>
+        ["finance", organisationId, "ledger", "reports", "summary", from, to] as const,
     },
   },
 
