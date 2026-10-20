@@ -158,6 +158,10 @@ const Harness = ({
   const [openJournalId, setOpenJournalId] = useState<string | null>(initialJournalId);
   return (
     <QueryClientProvider client={queryClient}>
+      {/* Plays a Details button in Journal entries. */}
+      <button type="button" onClick={() => setOpenJournalId(MEMBER_RECEIPT_ID)}>
+        Details of M-000004
+      </button>
       {withCashbook && (
         <CashbookPostingsPanel
           organisationId={organisationId}
@@ -333,6 +337,20 @@ describe("posting a reversal", () => {
     expect(panel().getByText(`Reversal journal id: ${REVERSAL_ID}`)).toBeInTheDocument();
     expect(panel().getByText(`Reverses journal id: ${RECEIPT_ID}`)).toBeInTheDocument();
     expect(panel().getByText(/stays in the books unchanged, linked to its reversal/)).toBeInTheDocument();
+  });
+
+  it("retires the receipt when another entry is opened, so it can be reversed too", async () => {
+    api.post.mockResolvedValue({ status: 201, data: { data: { replayed: false, journal: reversalJournal() } } });
+    render(<Harness />);
+    await startReversal();
+    await confirmReversal();
+    expect(await panel().findByText("Reversed")).toBeInTheDocument();
+    journals[`org1:${RECEIPT_ID}`] = journal(RECEIPT_ID, { reversedByJournalId: REVERSAL_ID });
+
+    fireEvent.click(screen.getByRole("button", { name: "Details of M-000004" }));
+    expect(await panel().findByText("Member money in M-000004")).toBeInTheDocument();
+    expect(panel().queryByText(`Reversal journal id: ${REVERSAL_ID}`)).not.toBeInTheDocument();
+    expect(panel().getByRole("button", { name: "Reverse this entry" })).toBeInTheDocument();
   });
 
   it("never shows a 2xx that doesn't name the original as a reversal", async () => {

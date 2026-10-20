@@ -90,15 +90,25 @@ const ReversalsPanel = ({
   // The journal the open form reverses; the form never follows another one.
   const [formTarget, setFormTarget] = useState<ReversalTarget | null>(null);
 
-  // Opening another journal closes a form for the previous one (unless its
-  // request is in flight; its outcome is then shown here regardless), and
-  // moves focus to the details so they are announced and scrolled into view.
-  const backRef = useRef(workflow.back);
-  backRef.current = workflow.back;
+  // Opening another journal closes a form and retires a receipt for the
+  // previous one (unless its request is in flight; its outcome is then shown
+  // here regardless), and moves focus to the details so they are announced
+  // and scrolled into view. The reversed original keeps its link either way.
+  const resetRef = useRef(() => {
+    workflow.back();
+    workflow.dismissSuccess();
+  });
+  resetRef.current = () => {
+    workflow.back();
+    workflow.dismissSuccess();
+  };
   const postingRef = useRef(postings.isPosting);
   postingRef.current = postings.isPosting;
+  const shownJournalId = useRef(openJournalId);
   useEffect(() => {
-    if (!postingRef.current) backRef.current();
+    if (shownJournalId.current === openJournalId) return;
+    shownJournalId.current = openJournalId;
+    if (!postingRef.current) resetRef.current();
     if (openJournalId) detailHeadingRef.current?.focus();
   }, [openJournalId]);
 

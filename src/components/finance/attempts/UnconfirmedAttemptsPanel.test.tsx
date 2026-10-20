@@ -260,6 +260,7 @@ describe("access and listing", () => {
     expect(panel().getByText(/Refused; this attempt wrote nothing · LEDGER_SUSPENDED/)).toBeInTheDocument();
     // A later refusal never makes the key look settled.
     expect(panel().getByText("Latest known outcome: Refused; this attempt wrote nothing")).toBeInTheDocument();
+    expect(panel().getByText(/this later refusal doesn't settle it/)).toBeInTheDocument();
     expect(panel().getByText("Outcome unconfirmed")).toBeInTheDocument();
   });
 

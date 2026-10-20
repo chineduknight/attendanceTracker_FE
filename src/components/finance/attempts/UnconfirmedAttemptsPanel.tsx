@@ -59,6 +59,10 @@ const AttemptCard = ({
   const [showHistory, setShowHistory] = useState(false);
   const historyId = useId();
   const latest = latestAttempt(item);
+  // A later clean refusal never settles an earlier unknown attempt (§7.5).
+  const refusalAfterUnknown =
+    latest?.outcome?.outcome === "refused" &&
+    item.attempts.some((attempt) => !attempt.outcome || attempt.outcome.outcome === "unknown");
   const settlesAt = attemptSettlesAt(item);
   const settled = settlesAt !== null && settlesAt.getTime() <= now;
   const actor = (actorId: string | null) =>
@@ -89,6 +93,11 @@ const AttemptCard = ({
         </Text>
         <Muted>{`Officer: ${actor(latest?.actorId ?? null)}`}</Muted>
         <Muted>{`Latest known outcome: ${attemptOutcomeLabel(latest?.outcome ?? null)}`}</Muted>
+        {refusalAfterUnknown && (
+          <Muted>
+            An earlier attempt's outcome is unknown, so this later refusal doesn't settle it.
+          </Muted>
+        )}
         {localRecord && <Muted>{postingSummaryText(localRecord.summary)}</Muted>}
         <Muted>
           This may or may not have been posted. It is not a failed transaction until resolving
