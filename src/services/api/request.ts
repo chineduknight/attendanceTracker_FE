@@ -118,6 +118,11 @@ export const financeRequest = {
     "/finance/:organisationId/ledger/journals/:journalId/reversal",
   LEDGER_ATTEMPTS: "/finance/:organisationId/ledger/attempts",
   LEDGER_ATTEMPTS_RESOLVE: "/finance/:organisationId/ledger/attempts/resolve",
+  // F2B-4 read-only reports (RFC v0.3 §5.5, §8.4), finance.view. Gated
+  // behind config/ledgerReports.
+  LEDGER_CASHBOOK: "/finance/:organisationId/ledger/accounts/:accountId/cashbook",
+  LEDGER_BALANCES: "/finance/:organisationId/ledger/balances",
+  LEDGER_SUMMARY: "/finance/:organisationId/ledger/summary",
 };
 
 export const rbacRequest = {
