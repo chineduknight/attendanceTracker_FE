@@ -215,13 +215,14 @@ describe("unallocated money (sources)", () => {
     expect(calls("asOf=2026-10-05")).toHaveLength(1);
   });
 
-  it("refuses a future date before asking the server", async () => {
+  it("refuses an invalid age before asking the server", async () => {
     render(panel());
     await selectTab(screen.getByRole("tab", { name: "Unallocated money" }));
     await screen.findByText("Suggestions from current Finance values");
     fireEvent.change(screen.getByLabelText("At least this many days old"), { target: { value: "-3" } });
     expect(screen.getByText("Enter a whole number of days from 0 to 36500.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show" })).toBeDisabled();
+    for (const button of screen.getAllByRole("button", { name: "Show" })) expect(button).toBeDisabled();
+    expect(calls("minAgeDays")).toHaveLength(0);
   });
 });
 

@@ -6,6 +6,7 @@ import { SelectOption } from "components/ui/themed-select";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
+import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { MEMBER_MONEY_PURPOSE_LABELS } from "components/finance/ledgerPostingTypes";
 import { formatBusinessDate } from "helpers/financeCompliance";
@@ -162,6 +163,7 @@ const MemberMoneyPanel = ({
   enabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
   cashbookEnabled = LEDGER_POSTINGS_UI_ENABLED,
   reversalsEnabled = LEDGER_REVERSALS_UI_ENABLED,
+  allocationsEnabled = LEDGER_F3_ALLOCATION_UI_ENABLED,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -174,6 +176,8 @@ const MemberMoneyPanel = ({
   cashbookEnabled?: boolean;
   /** Whether the Reversals section is shown; it owns retries of reversals. */
   reversalsEnabled?: boolean;
+  /** Whether "Allocate member money" is shown; it owns retries of allocations. */
+  allocationsEnabled?: boolean;
 }) => {
   const headingId = useId();
   const { has } = usePermissions();
@@ -346,6 +350,7 @@ const MemberMoneyPanel = ({
               cashbook: cashbookEnabled,
               memberMoney: true,
               reversals: reversalsEnabled,
+              allocations: allocationsEnabled,
             })}
           />
         )}

@@ -3,6 +3,7 @@ import { Box, Button, SimpleGrid, Stack, Text } from "@chakra-ui/react";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
+import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { hasPendingLedgerPosting } from "helpers/ledgerPostingIntent";
 import {
@@ -44,6 +45,7 @@ const CashbookPostingsPanel = ({
   enabled = LEDGER_POSTINGS_UI_ENABLED,
   memberMoneyEnabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
   reversalsEnabled = LEDGER_REVERSALS_UI_ENABLED,
+  allocationsEnabled = LEDGER_F3_ALLOCATION_UI_ENABLED,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -56,6 +58,8 @@ const CashbookPostingsPanel = ({
   memberMoneyEnabled?: boolean;
   /** Whether the Reversals section is shown; it owns retries of reversals. */
   reversalsEnabled?: boolean;
+  /** Whether "Allocate member money" is shown; it owns retries of allocations. */
+  allocationsEnabled?: boolean;
 }) => {
   const headingId = useId();
   const { has } = usePermissions();
@@ -131,6 +135,7 @@ const CashbookPostingsPanel = ({
               cashbook: true,
               memberMoney: memberMoneyEnabled,
               reversals: reversalsEnabled,
+              allocations: allocationsEnabled,
             })}
           />
         )}

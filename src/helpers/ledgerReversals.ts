@@ -9,6 +9,7 @@
  */
 
 import {
+  F2_REVERSIBLE_SOURCE_TYPES,
   PostingJournal,
   REVERSIBLE_SOURCE_TYPE_LABELS,
   ReversalTarget,
@@ -74,7 +75,8 @@ const notEligible = (reason: string, reversedByJournalId: string | null = null) 
 
 const OPENING_SOURCE_TYPES = ["opening_balance", "opening_balance_correction"];
 
-const REVERSIBLE_LIST = Object.values(REVERSIBLE_SOURCE_TYPE_LABELS)
+// The F2 list: allocations are named in the message only when offered.
+const REVERSIBLE_LIST = F2_REVERSIBLE_SOURCE_TYPES.map((type) => REVERSIBLE_SOURCE_TYPE_LABELS[type])
   .map((label) => label.toLowerCase())
   .join(", ")
   .replace(/, ([^,]*)$/, " and $1");
@@ -82,10 +84,16 @@ const REVERSIBLE_LIST = Object.values(REVERSIBLE_SOURCE_TYPE_LABELS)
 /**
  * Whether this build offers to reverse the journal (RFC §5.3). Openings,
  * corrections, reversals, already-reversed journals and every type outside
- * the five F2 postings are never offered; F3 allocations wait for their own
- * phase. Anything the server did not report clearly is not offered either.
+ * the five F2 postings are never offered. F3 allocations are offered only
+ * with the F3 allocation gate on (`allocations`); with it off the answer is
+ * exactly F2B-3's. An allocation reversal never depends on member receipts
+ * or the allocations setting: it stays available after either is turned
+ * off. Anything the server did not report clearly is not offered either.
  */
-export const reversalEligibility = (journal: JournalDetail): ReversalEligibility => {
+export const reversalEligibility = (
+  journal: JournalDetail,
+  { allocations = false }: { allocations?: boolean } = {},
+): ReversalEligibility => {
   if (journal.sourceType === "reversal" || journal.reversesJournalId) {
     return notEligible(
       "This entry is itself a reversal. A reversal can't be reversed; record a new entry instead.",
@@ -96,7 +104,10 @@ export const reversalEligibility = (journal: JournalDetail): ReversalEligibility
       "Opening balance entries are never reversed. Correct the opening balance instead.",
     );
   }
-  if (!isReversibleSourceType(journal.sourceType)) {
+  if (
+    !isReversibleSourceType(journal.sourceType) ||
+    (journal.sourceType === "member_money_allocation" && !allocations)
+  ) {
     return notEligible(`Only ${REVERSIBLE_LIST} entries can be reversed here.`);
   }
   if (journal.reversedBy.kind === "reversed") {
@@ -140,6 +151,8 @@ export const reversalCaution = (target: ReversalTarget): string | null => {
       return "A member receipt can be reversed only while none of its money has been refunded or allocated. Reverse those first. Undoing it also takes the money back out of the account it went into, which must not close any day below zero.";
     case "member_receipt_refund":
       return "Undoing a refund puts the money back into what its member money source holds.";
+    case "member_money_allocation":
+      return "Undoing an allocation moves the amount out of member dues or levy income and back into what its member money source holds. The allocation itself stays recorded, and no payment recorded in Finance changes. This works even if allocations have since been turned off.";
     case "cash_expense":
       return null;
   }

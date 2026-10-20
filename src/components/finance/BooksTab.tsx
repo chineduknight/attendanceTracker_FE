@@ -12,6 +12,7 @@ import JournalLines from "components/finance/JournalLines";
 import ReversalsPanel from "components/finance/reversals/ReversalsPanel";
 import UnconfirmedAttemptsPanel from "components/finance/attempts/UnconfirmedAttemptsPanel";
 import LedgerReportsPanel from "components/finance/reports/LedgerReportsPanel";
+import AllocationPanel from "components/finance/allocations/AllocationPanel";
 import ReconciliationPanel, {
   ReconciliationFocus,
 } from "components/finance/reconciliation/ReconciliationPanel";
@@ -23,6 +24,9 @@ import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
+import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
+import { AllocationStart } from "components/finance/ledgerReconciliationTypes";
+import { usePermissions } from "rbac/usePermissions";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import {
   isLedgerUnavailable,
@@ -351,8 +355,11 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
   const journalsHeadingId = useId();
   // F2B-3: the journal whose details (and reversal) are open.
   const [openJournalId, setOpenJournalId] = useState<string | null>(null);
-  // F3: a request to show the reconciliation panel's allocation history.
+  // F3: a request to show the reconciliation panel's allocation history, and
+  // a request (e.g. a chosen suggestion) to start an allocation.
   const [reconciliationFocus, setReconciliationFocus] = useState<ReconciliationFocus | null>(null);
+  const [allocationStart, setAllocationStart] = useState<AllocationStart | null>(null);
+  const canManageFinance = usePermissions().has("finance.manage");
 
   if (statusQuery.isLoading) {
     return <PageLoader h="30vh" label="Loading books..." />;
@@ -507,6 +514,33 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
         />
       )}
 
+      {/* F3C allocation posting: its own gate, default off. It shares the one
+          pending posting with every section above. */}
+      {LEDGER_F3_ALLOCATION_UI_ENABLED && (
+        <AllocationPanel
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          start={allocationStart}
+          isRechecking={isRecheckingPostings}
+          onRecheckLedger={recheckPostings}
+          onViewHistory={
+            LEDGER_F3_RECONCILIATION_UI_ENABLED
+              ? (journalId, sourceId, sourceNumber) =>
+                  setReconciliationFocus({
+                    tab: "allocations",
+                    history: {
+                      sourceId: sourceId ?? "",
+                      sourceNumber: sourceNumber ?? "",
+                      highlightJournalId: journalId,
+                    },
+                    nonce: Date.now(),
+                  })
+              : undefined
+          }
+        />
+      )}
+
       {/* F2B-3 unconfirmed attempts and reversals: one gate, default off.
           Resolving needs no posting readiness (it works while suspended or
           with writes off); a reversal is a posting and needs all of it. */}
@@ -545,6 +579,11 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           organisationId={organisationId}
           focus={reconciliationFocus}
           onOpenJournal={LEDGER_REVERSALS_UI_ENABLED ? setOpenJournalId : undefined}
+          onAllocate={
+            LEDGER_F3_ALLOCATION_UI_ENABLED && canManageFinance
+              ? (start) => setAllocationStart({ ...start, nonce: Date.now() })
+              : undefined
+          }
         />
       )}
 
