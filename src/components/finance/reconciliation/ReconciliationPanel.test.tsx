@@ -260,14 +260,15 @@ describe("positions", () => {
     expect(await screen.findByText("Page 1")).toBeInTheDocument();
   });
 
-  it("names members from the obligation's Finance rows for a finance-only officer", async () => {
+  it("names members from Finance rows for a finance-only officer, without the members list", async () => {
     render(panel());
     await selectTab(screen.getByRole("tab", { name: "Positions" }));
-    await screen.findByRole("list", { name: "Positions" });
-    expect(screen.getAllByText(/^Member …/).length).toBeGreaterThan(0);
-    await chooseOption(screen.getByLabelText("Obligation"), "Dues (2026)");
-    expect(await screen.findAllByText("Ada Obi")).not.toHaveLength(0);
+    const list = await screen.findByRole("list", { name: "Positions" });
+    expect(await within(list).findAllByText("Ada Obi")).not.toHaveLength(0);
+    // A member no Finance row names is shown by a short id, never guessed.
+    expect(within(list).getAllByText(/^Member …/).length).toBeGreaterThan(0);
     expect(calls("/members")).toHaveLength(0);
+    expect(calls("/compliance").every((url) => url.startsWith("/finance/org1/"))).toBe(true);
   });
 
   it("jumps to a position's allocations", async () => {
@@ -314,6 +315,8 @@ describe("organisation isolation", () => {
   it("reads only the organisation on screen after a switch", async () => {
     const view = render(panel());
     await screen.findByText("Totals are incomplete");
+    // Org 1's own name lookups finish while Org 1 is on screen.
+    await waitFor(() => expect(calls("/compliance")).toHaveLength(2));
     api.get.mockClear();
     setPermissions(["finance.view"], "org2");
     view.rerender(panel({ organisationId: "org2" }));

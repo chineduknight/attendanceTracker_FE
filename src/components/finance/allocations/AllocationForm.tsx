@@ -233,10 +233,7 @@ const AllocationForm = ({
 
   return (
     <Stack gap={4}>
-      <FormHeading>Allocate member money</FormHeading>
-      <Text fontSize="sm" color="fg.muted">
-        {ALLOCATION_NOT_PAYMENT_NOTE}
-      </Text>
+      <FormHeading>{`Allocate from ${source.number}`}</FormHeading>
 
       <Box borderWidth="1px" borderColor="border" borderRadius="md" p={3}>
         <Flex gap={2} align="center" wrap="wrap">
