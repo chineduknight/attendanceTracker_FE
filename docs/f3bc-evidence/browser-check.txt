@@ -1,0 +1,182 @@
+PASS seeded an earlier allocation, then an F0 correction over-linked it
+--- mobile-light ---
+PASS summary shows unknown totals, never ₦0
+PASS summary never says violation
+SHOT mobile-light-01-summary
+PASS mobile-light: no horizontal scroll
+SHOT mobile-light-02-sources-current
+PASS historical asOf shows no suggestions
+PASS historical asOf offers no allocation
+SHOT mobile-light-03-sources-historical
+SHOT mobile-light-04-positions
+SHOT mobile-light-05-allocation-form
+SHOT mobile-light-06-allocation-confirm
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"5e78f7c4-4775-4cde-99f8-502775847e14","businessDate":"2026-10-20","amountKobo":200000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000a1","obligationId":"0000000000000000000000d1"}
+PASS first allocation body is exact, no flags
+PASS no account, line or number sent
+SHOT mobile-light-07-allocation-receipt
+SHOT mobile-light-08-history-highlight
+PASS over-linked position blocks allocation
+SHOT mobile-light-09-overlinked-blocked
+PASS unknown F0 value blocks allocation
+PASS one mismatched hint (member) needs one confirmation
+SHOT mobile-light-10-mismatch-confirmed
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"8f6e05d1-42fa-467c-819f-037c2f217cd1","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS only the confirmed member flag was sent
+PASS reload: new allocations blocked while unconfirmed
+SHOT mobile-light-11-unconfirmed-after-reload
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"8f6e05d1-42fa-467c-819f-037c2f217cd1","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS retry resent the exact body and key; server replayed
+PASS the lost allocation exists exactly once
+SHOT mobile-light-12-replayed
+SHOT mobile-light-13-reversal-confirm
+WRITE POST /finance/org1/ledger/journals/000000000000000000000092/reversal {"idempotencyKey":"6d4ad34c-e1d4-45b3-a69a-3def8c7e1de8","businessDate":"2026-10-20","reason":"Allocated to the wrong member"}
+PASS reversal body has exactly three fields
+SHOT mobile-light-14-history-reversed
+PASS mobile-light after workflow: no horizontal scroll
+SHOT mobile-light-15-full-page
+PASS warning never disables saving
+SHOT mobile-light-16-f0-warning
+PASS confirmation repeats the warning
+SHOT mobile-light-17-f0-warning-confirm
+PASS no F0 write from the warning check
+PASS viewer: no allocation start in reports
+PASS viewer: allocation panel explains permission
+SHOT mobile-light-18-viewer
+PASS seeded an earlier allocation, then an F0 correction over-linked it
+--- mobile-dark ---
+PASS summary shows unknown totals, never ₦0
+PASS summary never says violation
+SHOT mobile-dark-01-summary
+PASS mobile-dark: no horizontal scroll
+SHOT mobile-dark-02-sources-current
+PASS historical asOf shows no suggestions
+PASS historical asOf offers no allocation
+SHOT mobile-dark-03-sources-historical
+SHOT mobile-dark-04-positions
+SHOT mobile-dark-05-allocation-form
+SHOT mobile-dark-06-allocation-confirm
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"53c671c6-8f98-4678-81e3-a36d8e3f78c0","businessDate":"2026-10-20","amountKobo":200000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000a1","obligationId":"0000000000000000000000d1"}
+PASS first allocation body is exact, no flags
+PASS no account, line or number sent
+SHOT mobile-dark-07-allocation-receipt
+SHOT mobile-dark-08-history-highlight
+PASS over-linked position blocks allocation
+SHOT mobile-dark-09-overlinked-blocked
+PASS unknown F0 value blocks allocation
+PASS one mismatched hint (member) needs one confirmation
+SHOT mobile-dark-10-mismatch-confirmed
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"09424f77-e6b6-454f-b3b6-c25e8adeef82","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS only the confirmed member flag was sent
+PASS reload: new allocations blocked while unconfirmed
+SHOT mobile-dark-11-unconfirmed-after-reload
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"09424f77-e6b6-454f-b3b6-c25e8adeef82","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS retry resent the exact body and key; server replayed
+PASS the lost allocation exists exactly once
+SHOT mobile-dark-12-replayed
+SHOT mobile-dark-13-reversal-confirm
+WRITE POST /finance/org1/ledger/journals/000000000000000000000092/reversal {"idempotencyKey":"36869b82-6c78-4308-a1ff-879ed10b11ac","businessDate":"2026-10-20","reason":"Allocated to the wrong member"}
+PASS reversal body has exactly three fields
+SHOT mobile-dark-14-history-reversed
+PASS mobile-dark after workflow: no horizontal scroll
+SHOT mobile-dark-15-full-page
+PASS warning never disables saving
+SHOT mobile-dark-16-f0-warning
+PASS confirmation repeats the warning
+SHOT mobile-dark-17-f0-warning-confirm
+PASS no F0 write from the warning check
+PASS viewer: no allocation start in reports
+PASS viewer: allocation panel explains permission
+SHOT mobile-dark-18-viewer
+PASS seeded an earlier allocation, then an F0 correction over-linked it
+--- desktop-light ---
+PASS summary shows unknown totals, never ₦0
+PASS summary never says violation
+SHOT desktop-light-01-summary
+PASS desktop-light: no horizontal scroll
+SHOT desktop-light-02-sources-current
+PASS historical asOf shows no suggestions
+PASS historical asOf offers no allocation
+SHOT desktop-light-03-sources-historical
+SHOT desktop-light-04-positions
+SHOT desktop-light-05-allocation-form
+SHOT desktop-light-06-allocation-confirm
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"4cb65145-73a6-4a9a-b7b1-1d5774d52c32","businessDate":"2026-10-20","amountKobo":200000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000a1","obligationId":"0000000000000000000000d1"}
+PASS first allocation body is exact, no flags
+PASS no account, line or number sent
+SHOT desktop-light-07-allocation-receipt
+SHOT desktop-light-08-history-highlight
+PASS over-linked position blocks allocation
+SHOT desktop-light-09-overlinked-blocked
+PASS unknown F0 value blocks allocation
+PASS one mismatched hint (member) needs one confirmation
+SHOT desktop-light-10-mismatch-confirmed
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"51734714-57f4-4ffc-9f04-9e259a617ab6","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS only the confirmed member flag was sent
+PASS reload: new allocations blocked while unconfirmed
+SHOT desktop-light-11-unconfirmed-after-reload
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"51734714-57f4-4ffc-9f04-9e259a617ab6","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS retry resent the exact body and key; server replayed
+PASS the lost allocation exists exactly once
+SHOT desktop-light-12-replayed
+SHOT desktop-light-13-reversal-confirm
+WRITE POST /finance/org1/ledger/journals/000000000000000000000092/reversal {"idempotencyKey":"bb34125b-2d23-494a-9e4d-712c37fe9c57","businessDate":"2026-10-20","reason":"Allocated to the wrong member"}
+PASS reversal body has exactly three fields
+SHOT desktop-light-14-history-reversed
+PASS desktop-light after workflow: no horizontal scroll
+SHOT desktop-light-15-full-page
+PASS warning never disables saving
+SHOT desktop-light-16-f0-warning
+PASS confirmation repeats the warning
+SHOT desktop-light-17-f0-warning-confirm
+PASS no F0 write from the warning check
+PASS viewer: no allocation start in reports
+PASS viewer: allocation panel explains permission
+SHOT desktop-light-18-viewer
+PASS seeded an earlier allocation, then an F0 correction over-linked it
+--- desktop-dark ---
+PASS summary shows unknown totals, never ₦0
+PASS summary never says violation
+SHOT desktop-dark-01-summary
+PASS desktop-dark: no horizontal scroll
+SHOT desktop-dark-02-sources-current
+PASS historical asOf shows no suggestions
+PASS historical asOf offers no allocation
+SHOT desktop-dark-03-sources-historical
+SHOT desktop-dark-04-positions
+SHOT desktop-dark-05-allocation-form
+SHOT desktop-dark-06-allocation-confirm
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"a5ee660b-65c1-4b69-b690-033919d7b66e","businessDate":"2026-10-20","amountKobo":200000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000a1","obligationId":"0000000000000000000000d1"}
+PASS first allocation body is exact, no flags
+PASS no account, line or number sent
+SHOT desktop-dark-07-allocation-receipt
+SHOT desktop-dark-08-history-highlight
+PASS over-linked position blocks allocation
+SHOT desktop-dark-09-overlinked-blocked
+PASS unknown F0 value blocks allocation
+PASS one mismatched hint (member) needs one confirmation
+SHOT desktop-dark-10-mismatch-confirmed
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"44927cef-f951-49a3-9dae-18aaf2406ebb","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS only the confirmed member flag was sent
+PASS reload: new allocations blocked while unconfirmed
+SHOT desktop-dark-11-unconfirmed-after-reload
+WRITE POST /finance/org1/ledger/allocations {"idempotencyKey":"44927cef-f951-49a3-9dae-18aaf2406ebb","businessDate":"2026-10-20","amountKobo":100000,"sourceId":"000000000000000000000f12","memberId":"0000000000000000000000c1","obligationId":"0000000000000000000000d1","confirmMemberMismatch":true}
+PASS retry resent the exact body and key; server replayed
+PASS the lost allocation exists exactly once
+SHOT desktop-dark-12-replayed
+SHOT desktop-dark-13-reversal-confirm
+WRITE POST /finance/org1/ledger/journals/000000000000000000000092/reversal {"idempotencyKey":"0e5b5ab2-57e2-4812-8257-6066fe3c6711","businessDate":"2026-10-20","reason":"Allocated to the wrong member"}
+PASS reversal body has exactly three fields
+SHOT desktop-dark-14-history-reversed
+PASS desktop-dark after workflow: no horizontal scroll
+SHOT desktop-dark-15-full-page
+PASS warning never disables saving
+SHOT desktop-dark-16-f0-warning
+PASS confirmation repeats the warning
+SHOT desktop-dark-17-f0-warning-confirm
+PASS no F0 write from the warning check
+PASS viewer: no allocation start in reports
+PASS viewer: allocation panel explains permission
+SHOT desktop-dark-18-viewer
+PASS no request left localhost/mock host ()
+ALL CHECKS PASSED

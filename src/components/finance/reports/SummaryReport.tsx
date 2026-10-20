@@ -70,7 +70,7 @@ const CategorySection = ({
  * Member money in the server's own identity. Each figure is shown with the
  * operator it carries in that identity; none is derived from the others.
  */
-const MemberMoneySection = ({ memberMoney }: { memberMoney: MemberMoneySummary | null }) => (
+export const MemberMoneySection = ({ memberMoney }: { memberMoney: MemberMoneySummary | null }) => (
   <Box as="section" aria-label="Member money held">
     <Text as="h5" fontSize="sm" fontWeight="semibold" mb={1}>
       Member money held

@@ -15,6 +15,7 @@ import {
   PostingSubmitResult,
 } from "hooks/useLedgerPostings";
 import ReversalReceipt from "components/finance/reversals/ReversalReceipt";
+import { ALLOCATION_NOT_PAYMENT_NOTE } from "helpers/ledgerAllocations";
 
 type Confirmed = Extract<PostingSubmitResult, { kind: "confirmed" }>;
 
@@ -40,6 +41,10 @@ const summaryText = (summary: PostingSummary) => {
       return `Member money refund from ${summary.fromAccountName ?? "the selected account"}`;
     case "reversal":
       return "Reversal of an earlier entry";
+    case "allocation":
+      return `Allocation to ${summary.memberName ?? "the selected member"}, ${
+        summary.obligationName ?? "the selected obligation"
+      }${summary.obligationType ? ` (${summary.obligationType} income)` : ""}`;
   }
 };
 
@@ -66,10 +71,13 @@ const PostingReceipt = ({
   result,
   summary,
   onAnother,
+  onViewHistory,
 }: {
   result: Confirmed;
   summary: PostingSummary;
   onAnother: () => void;
+  /** Allocations: show it in the allocation history (when that is shown). */
+  onViewHistory?: (journalId: string, sourceId: string | null, sourceNumber: string | null) => void;
 }) => {
   // A reversal has no number or method; it proves a link to its original.
   // A section that retried one on the Reversals section's behalf shows the
@@ -77,17 +85,21 @@ const PostingReceipt = ({
   if (summary.operation === "reversal") {
     return <ReversalReceipt result={result} summary={summary} onDone={onAnother} />;
   }
-  return <NumberedPostingReceipt result={result} summary={summary} onAnother={onAnother} />;
+  return (
+    <NumberedPostingReceipt result={result} summary={summary} onAnother={onAnother} onViewHistory={onViewHistory} />
+  );
 };
 
 const NumberedPostingReceipt = ({
   result,
   summary,
   onAnother,
+  onViewHistory,
 }: {
   result: Confirmed;
   summary: PostingSummary;
   onAnother: () => void;
+  onViewHistory?: (journalId: string, sourceId: string | null, sourceNumber: string | null) => void;
 }) => {
   const journal = result.journal;
   const amountKobo = journal?.totalKobo ?? summary.amountKobo;
@@ -99,9 +111,10 @@ const NumberedPostingReceipt = ({
       ? purposeLabel(journal?.purpose ?? null, summary.purpose)
       : null;
   const sourceNumber =
-    summary.operation === "refund"
+    summary.operation === "refund" || summary.operation === "allocation"
       ? journal?.memberMoneySourceNumber ?? summary.sourceNumber ?? null
       : null;
+  const allocation = summary.operation === "allocation";
 
   return (
     <Box
@@ -143,7 +156,13 @@ const NumberedPostingReceipt = ({
           {method && <Text fontSize="sm">{`Payment method: ${method}`}</Text>}
           <Text fontSize="sm">{summaryText(summary)}</Text>
           {purpose && <Text fontSize="sm">{`Purpose: ${purpose}`}</Text>}
-          {sourceNumber && <Text fontSize="sm">{`Refunded from: ${sourceNumber}`}</Text>}
+          {sourceNumber && (
+            <Text fontSize="sm">{`${allocation ? "Allocated from" : "Refunded from"}: ${sourceNumber}`}</Text>
+          )}
+          {allocation && journal?.confirmedMismatches && journal.confirmedMismatches.length > 0 && (
+            <Text fontSize="sm">{`Confirmed despite a different ${journal.confirmedMismatches.join(", ")} hint`}</Text>
+          )}
+          {allocation && <Text fontSize="sm">{ALLOCATION_NOT_PAYMENT_NOTE}</Text>}
           {journal?.counterpartyName && (
             <Text fontSize="sm">{`${
               COUNTERPARTY_LABELS[summary.operation] ?? "Counterparty"
@@ -179,9 +198,17 @@ const NumberedPostingReceipt = ({
           </Text>
         )}
 
-        <Flex>
+        <Flex gap={2} wrap="wrap">
+          {allocation && onViewHistory && journal?.id && (
+            <Button
+              variant="outline"
+              onClick={() => onViewHistory(journal.id, journal.memberMoneySourceId, sourceNumber)}
+            >
+              View in allocation history
+            </Button>
+          )}
           <Button variant="outline" onClick={onAnother}>
-            Record another posting
+            {allocation ? "Done" : "Record another posting"}
           </Button>
         </Flex>
       </Stack>

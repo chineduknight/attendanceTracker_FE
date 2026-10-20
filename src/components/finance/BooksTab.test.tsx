@@ -12,6 +12,8 @@ import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { LEDGER_F3_SETUP_UI_ENABLED } from "config/ledgerF3Setup";
+import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
+import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -325,6 +327,8 @@ describe("<BooksTab> release gates", () => {
       reversals: LEDGER_REVERSALS_UI_ENABLED,
       reports: LEDGER_REPORTS_UI_ENABLED,
       f3Setup: LEDGER_F3_SETUP_UI_ENABLED,
+      f3Reconciliation: LEDGER_F3_RECONCILIATION_UI_ENABLED,
+      f3Allocations: LEDGER_F3_ALLOCATION_UI_ENABLED,
     }).toEqual({
       setup: false,
       openingBalances: false,
@@ -334,7 +338,20 @@ describe("<BooksTab> release gates", () => {
       reversals: false,
       reports: false,
       f3Setup: false,
+      f3Reconciliation: false,
+      f3Allocations: false,
     });
+  });
+
+  it("shows no F3 reconciliation or allocation UI, and reads neither, with their gates off", async () => {
+    serveLedger({ ...F2_ACTIVE, allocationsEnabled: true }, ACCOUNTS, JOURNALS);
+    renderBooks();
+    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Member money reconciliation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Allocate member money" })).not.toBeInTheDocument();
+    const urls = api.get.mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => /\/reconciliation\/|\/ledger\/allocations|\/member-money/.test(url))).toBe(false);
+    expect(api.post).not.toHaveBeenCalled();
   });
 
   it("shows no F3A allocation setup, and writes nothing, with its gate off", async () => {

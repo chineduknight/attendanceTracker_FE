@@ -12,6 +12,8 @@ import { formatBusinessDate } from "helpers/financeCompliance";
 import { formatKobo } from "helpers/financeConstants";
 import { LedgerAccount, LedgerStatus, PeriodLockState } from "components/finance/ledgerTypes";
 import {
+  AllocationBody,
+  AllocationDraft,
   ExpenseBody,
   ExpenseDraft,
   MEMBER_MONEY_PURPOSES,
@@ -43,6 +45,7 @@ import {
   TransferDraft,
 } from "components/finance/ledgerPostingTypes";
 import { ledgerApiFailure } from "helpers/ledgerSetup";
+import { confirmationFlags, confirmationsMatch, hintMismatches } from "helpers/allocationHints";
 import { ledgerStateKey } from "helpers/ledger";
 import { activeMemberMoneyAccount, isBusinessDate } from "helpers/openingBalances";
 import { financeRequest } from "services/api/request";
@@ -467,6 +470,42 @@ export const reversalDraftIssue = (
     required: true,
   });
 
+const OBJECT_ID = /^[a-f0-9]{24}$/i;
+
+/**
+ * An allocation (F3-3). What the client can check: the date rules, a whole
+ * positive amount no larger than the source still holds, a real source,
+ * member and obligation, and every mismatched hint confirmed (and nothing
+ * else). The position's recorded cap is checked by the wizard against the
+ * server's current position; the server checks both caps again.
+ */
+export const allocationDraftIssue = (
+  draft: AllocationDraft,
+  context: PostingDateContext,
+): string | null =>
+  postingDateIssue(draft.businessDate, context) ??
+  (draft.businessDate < draft.source.businessDate
+    ? `An allocation can't be dated before its money was received (${formatBusinessDate(
+        draft.source.businessDate,
+      )}).`
+    : null) ??
+  (Number.isSafeInteger(draft.amountKobo) && draft.amountKobo >= 1
+    ? null
+    : "Enter a valid amount in naira.") ??
+  (draft.amountKobo > draft.source.remainingKobo
+    ? `An allocation can't be more than the ${formatKobo(draft.source.remainingKobo)} ${
+        draft.source.number
+      } still holds.`
+    : null) ??
+  (OBJECT_ID.test(draft.source.id) && OBJECT_ID.test(draft.memberId) && OBJECT_ID.test(draft.obligationId)
+    ? null
+    : "Choose the member money, the member and the obligation.") ??
+  (confirmationsMatch(hintMismatches(draft.source, draft), draft.confirmedMismatches)
+    ? null
+    : "Confirm each hint on the money that differs from what you are allocating to.") ??
+  postingTextIssue({ value: draft.reference, label: "Reference", max: POSTING_TEXT_LIMITS.reference }) ??
+  postingTextIssue({ value: draft.note, label: "Note", max: POSTING_TEXT_LIMITS.note });
+
 export const postingDraftIssue = (
   draft: PostingDraft,
   context: PostingValidationContext,
@@ -484,6 +523,8 @@ export const postingDraftIssue = (
       return refundDraftIssue(draft.refund, context);
     case "reversal":
       return reversalDraftIssue(draft.reversal, context);
+    case "allocation":
+      return allocationDraftIssue(draft.allocation, context);
   }
 };
 
@@ -640,6 +681,27 @@ export const buildReversalBody = (
   reason: draft.reason.trim(),
 });
 
+/**
+ * The exact allocation body. Flags only for the confirmed mismatches (each
+ * `true`); blank reference and note are omitted. No account, line or number.
+ */
+export const buildAllocationBody = (draft: AllocationDraft, idempotencyKey: string): AllocationBody => {
+  const body: AllocationBody = {
+    idempotencyKey,
+    businessDate: draft.businessDate,
+    amountKobo: draft.amountKobo,
+    sourceId: draft.source.id,
+    memberId: draft.memberId,
+    obligationId: draft.obligationId,
+    ...confirmationFlags(draft.confirmedMismatches),
+  };
+  const reference = optionalText(draft.reference);
+  const note = optionalText(draft.note);
+  if (reference) body.reference = reference;
+  if (note) body.note = note;
+  return body;
+};
+
 export const buildPostingBody = (
   draft: PostingDraft,
   idempotencyKey: string,
@@ -657,6 +719,8 @@ export const buildPostingBody = (
       return buildRefundBody(draft.refund, idempotencyKey);
     case "reversal":
       return buildReversalBody(draft.reversal, idempotencyKey);
+    case "allocation":
+      return buildAllocationBody(draft.allocation, idempotencyKey);
   }
 };
 
@@ -691,6 +755,8 @@ export const postingEndpoint = (operation: PostingOperation): string => {
       return financeRequest.LEDGER_MEMBER_MONEY_REFUNDS;
     case "reversal":
       return financeRequest.LEDGER_JOURNAL_REVERSAL;
+    case "allocation":
+      return financeRequest.LEDGER_ALLOCATIONS;
   }
 };
 
@@ -953,7 +1019,14 @@ export const toPostingJournal = (value: unknown): PostingJournal | null => {
         : null,
     memberMoneySourceId: asText(source?.id),
     memberMoneySourceNumber: asText(source?.number),
+    memberMoneySourceKind: asText(source?.kind),
     reason: asText(entry?.reason),
+    obligationType: asText(entry?.obligationType),
+    confirmedMismatches:
+      Array.isArray(entry?.confirmedMismatches) &&
+      (entry?.confirmedMismatches as unknown[]).every((item) => typeof item === "string")
+        ? [...(entry?.confirmedMismatches as string[])]
+        : null,
     reversesJournalId: asText(raw.reversesJournalId),
   };
 };
@@ -983,6 +1056,7 @@ export const POSTING_SOURCE_TYPES: Record<PostingOperation, string> = {
   member_receipt: "member_receipt",
   refund: "member_receipt_refund",
   reversal: "reversal",
+  allocation: "member_money_allocation",
 };
 
 /** Ids compare as the server stores them (it lowercases a reversal's route id). */
@@ -1009,6 +1083,14 @@ export const postingExpectation = (request: {
         : null,
   sourceId: request.sourceId,
   reversalTarget: request.reversalTarget,
+  allocationTarget:
+    request.operation === "allocation" && "sourceId" in request.body
+      ? {
+          sourceId: (request.body as AllocationBody).sourceId,
+          memberId: (request.body as AllocationBody).memberId,
+          obligationId: (request.body as AllocationBody).obligationId,
+        }
+      : null,
 });
 
 export type PostingConfirmationAssessment =
@@ -1037,6 +1119,7 @@ export const assessPostingConfirmation = ({
   amountKobo,
   sourceId = null,
   reversalTarget = null,
+  allocationTarget = null,
 }: {
   httpStatus: number | undefined;
   body: unknown;
@@ -1048,6 +1131,8 @@ export const assessPostingConfirmation = ({
   sourceId?: string | null;
   /** Reversals: the `:journalId` the request was sent to and its total. */
   reversalTarget?: ReversalTarget | null;
+  /** Allocations: the source, member and obligation the body named. */
+  allocationTarget?: { sourceId: string; memberId: string; obligationId: string } | null;
 }): PostingConfirmationAssessment => {
   if (httpStatus !== 200 && httpStatus !== 201) {
     return unconfirmedPostingResponse(
@@ -1125,6 +1210,20 @@ export const assessPostingConfirmation = ({
       "the refund did not name the member money it was sent against",
     );
   }
+  // An allocation is only the one asked for when it links the same source to
+  // the same member and obligation (ids compared as the server stores them).
+  if (operation === "allocation") {
+    if (
+      !allocationTarget ||
+      !sameJournalId(parsed.journal.memberMoneySourceId, allocationTarget.sourceId) ||
+      !sameJournalId(parsed.journal.memberId, allocationTarget.memberId) ||
+      !sameJournalId(parsed.journal.obligationId, allocationTarget.obligationId)
+    ) {
+      return unconfirmedPostingResponse(
+        "the allocation did not name the member money, member and obligation it was sent for",
+      );
+    }
+  }
 
   return {
     confirmed: true,
@@ -1158,6 +1257,12 @@ export const POSTING_ERROR_CODES = {
   alreadyReversed: "LEDGER_ALREADY_REVERSED",
   openingNotReversible: "LEDGER_OPENING_NOT_REVERSIBLE",
   memberReceiptInUse: "LEDGER_MEMBER_RECEIPT_IN_USE",
+  allocationExceedsRemaining: "LEDGER_ALLOCATION_EXCEEDS_REMAINING",
+  allocationExceedsRecorded: "LEDGER_ALLOCATION_EXCEEDS_RECORDED",
+  positionNeedsReview: "LEDGER_POSITION_NEEDS_REVIEW",
+  positionAmbiguous: "LEDGER_POSITION_AMBIGUOUS",
+  allocationsDisabled: "LEDGER_ALLOCATIONS_DISABLED",
+  mismatchUnconfirmed: "LEDGER_MISMATCH_UNCONFIRMED",
 } as const;
 
 const NOTHING_WRITTEN_CODES: ReadonlySet<string> = new Set([
@@ -1361,6 +1466,10 @@ export const postingSummaryText = (summary: PostingSummary): string => {
           .join(" ") || "an entry";
       return `${operation} of ${original}: ${amount}`;
     }
+    case "allocation":
+      return `${operation}: ${amount} from ${summary.sourceNumber ?? "the selected member money"} to ${
+        summary.memberName ?? "the selected member"
+      }, ${summary.obligationName ?? "the selected obligation"}`;
   }
 };
 

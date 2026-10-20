@@ -69,7 +69,20 @@ const JournalDetailCard = ({
           {journal.counterpartyName && <Fact>{`Counterparty: ${journal.counterpartyName}`}</Fact>}
           {purpose && <Fact>{`Purpose: ${purpose}`}</Fact>}
           {journal.memberMoneySourceNumber && (
-            <Fact>{`Refunded from: ${journal.memberMoneySourceNumber}`}</Fact>
+            <Fact>{`${
+              journal.sourceType === "member_money_allocation" ? "Allocated from" : "Refunded from"
+            }: ${journal.memberMoneySourceNumber}`}</Fact>
+          )}
+          {journal.sourceType === "member_money_allocation" && (
+            <>
+              {(journal.obligationType === "dues" || journal.obligationType === "levy") && (
+                <Fact>{`Recognised as: member ${journal.obligationType} income`}</Fact>
+              )}
+              {journal.confirmedMismatches && journal.confirmedMismatches.length > 0 && (
+                <Fact>{`Confirmed despite a different ${journal.confirmedMismatches.join(", ")} hint`}</Fact>
+              )}
+              <Fact>An allocation records no payment in Finance and never changes compliance.</Fact>
+            </>
           )}
           {journal.reason && <Fact>{`Reason: ${journal.reason}`}</Fact>}
           {journal.reference && <Fact>{`Reference: ${journal.reference}`}</Fact>}

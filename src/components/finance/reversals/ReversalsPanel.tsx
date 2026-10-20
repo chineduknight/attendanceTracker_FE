@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
+import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import { ReversalTarget } from "components/finance/ledgerPostingTypes";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { ledgerHttpStatus } from "helpers/ledger";
@@ -56,6 +57,7 @@ const ReversalsPanel = ({
   enabled = LEDGER_REVERSALS_UI_ENABLED,
   cashbookEnabled = LEDGER_POSTINGS_UI_ENABLED,
   memberMoneyEnabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
+  allocationsEnabled = LEDGER_F3_ALLOCATION_UI_ENABLED,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -70,6 +72,11 @@ const ReversalsPanel = ({
   enabled?: boolean;
   cashbookEnabled?: boolean;
   memberMoneyEnabled?: boolean;
+  /**
+   * F3 allocation gate: whether allocations may be reversed here and whether
+   * "Allocate member money" is shown (it owns retries of allocations).
+   */
+  allocationsEnabled?: boolean;
 }) => {
   const headingId = useId();
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -123,7 +130,7 @@ const ReversalsPanel = ({
       "Only officers with permission to manage finance can reverse entries. You can still view them.",
   });
   const journal = journalQuery.journal;
-  const eligibility = journal ? reversalEligibility(journal) : null;
+  const eligibility = journal ? reversalEligibility(journal, { allocations: allocationsEnabled }) : null;
   const formOpen =
     view === "reversal" &&
     formTarget !== null &&
@@ -253,6 +260,7 @@ const ReversalsPanel = ({
               cashbook: cashbookEnabled,
               memberMoney: memberMoneyEnabled,
               reversals: true,
+              allocations: allocationsEnabled,
             })}
           />
         )}

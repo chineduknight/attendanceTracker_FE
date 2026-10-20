@@ -14,7 +14,8 @@ export type PostingOperation =
   | "transfer"
   | "member_receipt"
   | "refund"
-  | "reversal";
+  | "reversal"
+  | "allocation";
 
 /** Ordinary cashbook entries (F2B-1), shown under "Record money". */
 export const CASHBOOK_OPERATIONS: readonly PostingOperation[] = [
@@ -32,43 +33,56 @@ export const MEMBER_MONEY_OPERATIONS: readonly PostingOperation[] = [
 /** Reversals (F2B-3), shown under "Reversals". */
 export const REVERSAL_OPERATIONS: readonly PostingOperation[] = ["reversal"];
 
+/** F3-3 allocations, shown under "Allocate member money". */
+export const ALLOCATION_OPERATIONS: readonly PostingOperation[] = ["allocation"];
+
 /**
  * The Books sections that own postings. One pending posting blocks every
  * section, but only one section offers its retry, so the same request is never
  * offered twice on a page.
  */
-export type PostingSection = "cashbook" | "memberMoney" | "reversals";
+export type PostingSection = "cashbook" | "memberMoney" | "reversals" | "allocations";
 
-/** Page order: a posting whose own section is hidden falls back to the first shown. */
+/**
+ * Page order: a posting whose own section is hidden falls back to the first
+ * shown. Allocations come last, so every F2 posting keeps its fallback.
+ */
 export const POSTING_SECTIONS: readonly PostingSection[] = [
   "cashbook",
   "memberMoney",
   "reversals",
+  "allocations",
 ];
 
 export const POSTING_SECTION_OPERATIONS: Record<PostingSection, readonly PostingOperation[]> = {
   cashbook: CASHBOOK_OPERATIONS,
   memberMoney: MEMBER_MONEY_OPERATIONS,
   reversals: REVERSAL_OPERATIONS,
+  allocations: ALLOCATION_OPERATIONS,
 };
 
 export const POSTING_SECTION_LABELS: Record<PostingSection, string> = {
   cashbook: "Record money",
   memberMoney: "Member money",
   reversals: "Reversals",
+  allocations: "Allocate member money",
 };
 
-/**
- * The journal types F2B-3 may reverse (RFC v0.3 §5.3). The server's allow-list
- * also has F3 allocations, which this phase does not offer.
- */
-export const REVERSIBLE_SOURCE_TYPES = [
+/** The five F2 journal types F2B-3 reverses (RFC v0.3 §5.3). */
+export const F2_REVERSIBLE_SOURCE_TYPES = [
   "cash_receipt",
   "cash_expense",
   "cash_transfer",
   "member_receipt",
   "member_receipt_refund",
 ] as const;
+
+/**
+ * Every type a stored reversal may name: the F2 five plus F3-3 allocations.
+ * Whether an allocation reversal is OFFERED is decided by the F3 allocation
+ * gate (`reversalEligibility`), so with that gate off F2 is unchanged.
+ */
+export const REVERSIBLE_SOURCE_TYPES = [...F2_REVERSIBLE_SOURCE_TYPES, "member_money_allocation"] as const;
 
 export type ReversibleSourceType = (typeof REVERSIBLE_SOURCE_TYPES)[number];
 
@@ -78,6 +92,7 @@ export const REVERSIBLE_SOURCE_TYPE_LABELS: Record<ReversibleSourceType, string>
   cash_transfer: "Transfer",
   member_receipt: "Member money in",
   member_receipt_refund: "Member money refund",
+  member_money_allocation: "Allocation",
 };
 
 /** Why a member paid (RFC D1a). A tag for later reconciliation, never an allocation. */
@@ -118,6 +133,7 @@ export const POSTING_OPERATION_LABELS: Record<PostingOperation, string> = {
   member_receipt: "Member money in",
   refund: "Member money refund",
   reversal: "Reversal",
+  allocation: "Allocation",
 };
 
 export interface ReceiptDraft {
@@ -225,13 +241,39 @@ export interface ReversalDraft {
   reason: string;
 }
 
+/** A source hint that disagrees with the allocation's target (F3 RFC O5). */
+export type HintMismatch = "member" | "obligation" | "purpose";
+
+export const HINT_MISMATCHES: readonly HintMismatch[] = ["member", "obligation", "purpose"];
+
+/** The member money an allocation takes from, with the hints it carries. */
+export interface AllocationSourceDraft extends MemberMoneySourceRef {
+  memberId: string | null;
+  obligationId: string | null;
+  purpose: MemberMoneyPurpose | null;
+}
+
+export interface AllocationDraft {
+  source: AllocationSourceDraft;
+  memberId: string;
+  obligationId: string;
+  obligationType: "dues" | "levy";
+  businessDate: string;
+  amountKobo: number;
+  /** The mismatches the officer confirmed, one by one. */
+  confirmedMismatches: HintMismatch[];
+  reference: string;
+  note: string;
+}
+
 export type PostingDraft =
   | { operation: "receipt"; receipt: ReceiptDraft }
   | { operation: "expense"; expense: ExpenseDraft }
   | { operation: "transfer"; transfer: TransferDraft }
   | { operation: "member_receipt"; memberReceipt: MemberReceiptDraft }
   | { operation: "refund"; refund: RefundDraft }
-  | { operation: "reversal"; reversal: ReversalDraft };
+  | { operation: "reversal"; reversal: ReversalDraft }
+  | { operation: "allocation"; allocation: AllocationDraft };
 
 /** Display facts kept beside the exact body so a pending posting is recognisable. */
 export interface PostingSummary {
@@ -239,7 +281,7 @@ export interface PostingSummary {
   /** For a reversal, the original's total, which the reversal mirrors. */
   amountKobo: number;
   businessDate: string;
-  /** `null` only for a reversal, which has no payment method. */
+  /** `null` only for a reversal or an allocation, which move no money. */
   method: PostingMethod | null;
   fromAccountName: string | null;
   toAccountName: string | null;
@@ -253,6 +295,10 @@ export interface PostingSummary {
   /** Reversals: what the reversed journal was, and its number. */
   originalSourceType?: ReversibleSourceType | null;
   originalNumber?: string | null;
+  /** Allocations: who and what the money is linked to (display only). */
+  memberName?: string | null;
+  obligationName?: string | null;
+  obligationType?: "dues" | "levy" | null;
 }
 
 export interface ReceiptBody {
@@ -338,13 +384,33 @@ export interface ReversalBody {
   reason: string;
 }
 
+/**
+ * The allocation body (F3-3). The server chooses both accounts; no account,
+ * line, method or number is ever sent. A confirmation flag is present only as
+ * `true`, and only for a mismatch the officer confirmed.
+ */
+export interface AllocationBody {
+  idempotencyKey: string;
+  businessDate: string;
+  amountKobo: number;
+  sourceId: string;
+  memberId: string;
+  obligationId: string;
+  confirmMemberMismatch?: true;
+  confirmObligationMismatch?: true;
+  confirmPurposeMismatch?: true;
+  reference?: string;
+  note?: string;
+}
+
 export type PostingBody =
   | ReceiptBody
   | ExpenseBody
   | TransferBody
   | MemberReceiptBody
   | RefundBody
-  | ReversalBody;
+  | ReversalBody
+  | AllocationBody;
 
 /**
  * The additive posting fields on a confirmed journal. Every value is read
@@ -371,10 +437,14 @@ export interface PostingJournal {
   memberId: string | null;
   obligationId: string | null;
   receivedAfterOpeningCount: boolean | null;
-  /** Refunds (F2B-2): the source this refund returned money from. */
+  /** Refunds (F2B-2) and allocations (F3-3): the source the money came from. */
   memberMoneySourceId: string | null;
   memberMoneySourceNumber: string | null;
+  memberMoneySourceKind: string | null;
   reason: string | null;
+  /** Allocations (F3-3): the obligation's type and the confirmed hint mismatches. */
+  obligationType: string | null;
+  confirmedMismatches: string[] | null;
   /** Reversals (F2B-3): the journal this one undoes. */
   reversesJournalId: string | null;
 }

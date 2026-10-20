@@ -1,0 +1,31 @@
+PASS real summary: server identities agree
+SHOT real-01-summary
+SHOT real-02-sources
+SHOT real-03-confirm
+PASS real server holds A-000001: ₦2,000 from OM-000001 to Ada
+SHOT real-04-receipt
+SHOT real-05-history
+PASS member and purpose mismatches each need a checkbox
+SHOT real-06-mismatches
+PASS real server stored confirmedMismatches [member, purpose]
+LOST 201 (committed on the server, aborted to the browser)
+PASS the lost allocation committed on the real server
+SHOT real-07-unconfirmed-after-reload
+PASS retry replayed: still exactly three allocations (no duplicate)
+SHOT real-08-replayed
+PASS another officer refunds what M-000001 still holds (201)
+PASS stale source: the real server refused (EXCEEDS_REMAINING) and its reason stays on screen
+SHOT real-09-stale-refused
+PASS nothing was written by the refused allocation
+SHOT real-10-reversal-confirm
+PASS real server: A-000001 reversed, still listed
+PASS allocations switched off (setting, via the real API)
+PASS with allocations off, history stays and reversal is still offered
+SHOT real-11-allocations-off
+SHOT real-12-f0-warning
+PASS real: the correction confirmation repeats the warning
+PASS real reconciliation identities consistent (6 checks)
+SHOT real-13-mobile-dark-summary
+SHOT real-14-mobile-dark-positions
+PASS mobile dark: no horizontal scroll
+ALL CHECKS PASSED

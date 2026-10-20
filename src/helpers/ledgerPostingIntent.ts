@@ -40,6 +40,7 @@ const OPERATIONS: readonly PostingOperation[] = [
   "member_receipt",
   "refund",
   "reversal",
+  "allocation",
 ];
 
 export const LEDGER_POSTING_INTENT_PREFIX = "presence-pro:ledger-posting-intent:";
@@ -178,9 +179,10 @@ const parseSummary = (value: unknown): PostingSummary | null => {
   const raw = asRecord(value);
   if (!raw) return null;
   if (!isOperation(raw.operation)) return null;
-  // A reversal has no payment method; every other posting must name one.
+  // A reversal or an allocation has no payment method; every other posting
+  // must name one.
   const method =
-    raw.operation === "reversal"
+    raw.operation === "reversal" || raw.operation === "allocation"
       ? raw.method === null || raw.method === undefined
         ? null
         : undefined
@@ -217,7 +219,19 @@ const parseSummary = (value: unknown): PostingSummary | null => {
       : isReversibleSourceType(raw.originalSourceType)
         ? raw.originalSourceType
         : undefined;
+  // F3-3 additions: absent on records written by earlier builds.
+  const memberName = optionalText(raw.memberName);
+  const obligationName = optionalText(raw.obligationName);
+  const obligationType =
+    raw.obligationType === null || raw.obligationType === undefined
+      ? null
+      : raw.obligationType === "dues" || raw.obligationType === "levy"
+        ? raw.obligationType
+        : undefined;
   if (
+    memberName === undefined ||
+    obligationName === undefined ||
+    obligationType === undefined ||
     fromAccountName === undefined ||
     toAccountName === undefined ||
     categoryName === undefined ||
@@ -241,6 +255,9 @@ const parseSummary = (value: unknown): PostingSummary | null => {
     sourceNumber,
     originalSourceType,
     originalNumber,
+    memberName,
+    obligationName,
+    obligationType,
   };
 };
 
@@ -250,6 +267,21 @@ const parseSummary = (value: unknown): PostingSummary | null => {
  * and therefore blocks, rather than sending unknown fields.
  */
 const REVERSAL_BODY_FIELDS = ["businessDate", "idempotencyKey", "reason"];
+
+/** Every field the server's allocation schema accepts (it refuses others). */
+const ALLOCATION_BODY_FIELDS = new Set([
+  "idempotencyKey",
+  "businessDate",
+  "amountKobo",
+  "sourceId",
+  "memberId",
+  "obligationId",
+  "confirmMemberMismatch",
+  "confirmObligationMismatch",
+  "confirmPurposeMismatch",
+  "reference",
+  "note",
+]);
 
 const isUsableBody = (value: unknown, operation: PostingOperation, key: string) => {
   const body = asRecord(value);
@@ -271,6 +303,26 @@ const isUsableBody = (value: unknown, operation: PostingOperation, key: string) 
   }
 
   if (!isPositiveKobo(body.amountKobo)) return false;
+
+  // An allocation moves no money, so it has no method. Its body is strict:
+  // known fields only, real ids, and a confirmation flag only as `true`.
+  if (operation === "allocation") {
+    const flag = (entry: unknown) => entry === undefined || entry === true;
+    const text = (entry: unknown, max: number) =>
+      entry === undefined || (typeof entry === "string" && entry.trim().length > 0 && entry.length <= max);
+    return (
+      Object.keys(body).every((field) => ALLOCATION_BODY_FIELDS.has(field)) &&
+      isObjectId(body.sourceId) &&
+      isObjectId(body.memberId) &&
+      isObjectId(body.obligationId) &&
+      flag(body.confirmMemberMismatch) &&
+      flag(body.confirmObligationMismatch) &&
+      flag(body.confirmPurposeMismatch) &&
+      text(body.reference, 64) &&
+      text(body.note, 500)
+    );
+  }
+
   if (!isMethod(body.method)) return false;
 
   const requiredId = (entry: unknown) => typeof entry === "string" && entry.trim().length > 0;
