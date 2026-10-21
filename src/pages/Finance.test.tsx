@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
+import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
 import { system } from "styles/theme";
 import { generatedCss, toggle, chooseOption, shownValue } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
@@ -95,11 +96,24 @@ const setOrg = (id: string, permissions: PermissionKey[] | "owner") =>
     },
   });
 
-const renderFinance = () =>
+/** The last location and how it was reached, for URL assertions. */
+const routerSeen: { search: string; type: string } = { search: "", type: "" };
+const RouterSpy = () => {
+  const location = useLocation();
+  const type = useNavigationType();
+  routerSeen.search = location.search;
+  routerSeen.type = type;
+  return null;
+};
+
+const renderFinance = (entry = "/finance") =>
   render(
     <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
-        <Finance />
+        <MemoryRouter initialEntries={[entry]}>
+          <Finance />
+          <RouterSpy />
+        </MemoryRouter>
       </QueryClientProvider>
     </ChakraProvider>,
   );
@@ -1701,5 +1715,37 @@ describe("<Finance> Books (F1)", () => {
       .filter((url) => url.includes("/ledger/"));
     expect(ledgerCalls.length).toBeGreaterThan(0);
     expect(ledgerCalls.every((url) => url.includes("/finance/org2/"))).toBe(true);
+  });
+});
+
+describe("<Finance> tab in the URL", () => {
+  it("opens Collect when the URL names no tab", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    renderFinance();
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Collect" })).toHaveAttribute("aria-selected", "true"),
+    );
+  });
+
+  it("opens the tab the URL names", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    renderFinance("/finance?tab=obligations");
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Obligations" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
+  });
+
+  it("switches tabs by replacing the entry, so Back still leaves Finance", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    renderFinance();
+    await openTab("Start dates");
+    expect(routerSeen.search).toBe("?tab=start-dates");
+    expect(routerSeen.type).toBe("REPLACE");
   });
 });
