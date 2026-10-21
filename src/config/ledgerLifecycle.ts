@@ -21,4 +21,4 @@
  *
  * While false, Books renders exactly what the merged F2A-3A PR shipped.
  */
-export const LEDGER_LIFECYCLE_UI_ENABLED: boolean = false;
+export const LEDGER_LIFECYCLE_UI_ENABLED: boolean = true;

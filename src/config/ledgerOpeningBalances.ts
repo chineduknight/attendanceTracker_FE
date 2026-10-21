@@ -18,4 +18,4 @@
  *
  * While false, Books renders exactly what #132 shipped.
  */
-export const LEDGER_OPENING_BALANCES_UI_ENABLED: boolean = false;
+export const LEDGER_OPENING_BALANCES_UI_ENABLED: boolean = true;
