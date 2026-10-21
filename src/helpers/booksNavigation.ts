@@ -97,6 +97,16 @@ export const writeBooksLocation = (
   return next;
 };
 
+/**
+ * How many history entries Books pushed above the Finance entry it opened on,
+ * kept in each entry's history state. Leaving Books steps back this many
+ * entries first, so Back from another tab never lands on a Books screen.
+ */
+export const booksDepthOf = (state: unknown): number => {
+  const depth = (state as { booksDepth?: unknown } | null)?.booksDepth;
+  return typeof depth === "number" && Number.isInteger(depth) && depth > 0 ? depth : 0;
+};
+
 export const parentOf = (location: BooksLocation): BooksLocation => {
   if (location.sheet) return { ...location, sheet: null };
   if (location.screen === "entry") return { screen: "transactions", sheet: null, journalId: null };

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { system } from "styles/theme";
 import { generatedCss, toggle, chooseOption, shownValue } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
@@ -97,20 +97,31 @@ const setOrg = (id: string, permissions: PermissionKey[] | "owner") =>
   });
 
 /** The last location and how it was reached, for URL assertions. */
-const routerSeen: { search: string; type: string } = { search: "", type: "" };
+const routerSeen: { pathname: string; search: string; type: string } = {
+  pathname: "",
+  search: "",
+  type: "",
+};
 const RouterSpy = () => {
   const location = useLocation();
   const type = useNavigationType();
+  const navigate = useNavigate();
+  routerSeen.pathname = location.pathname;
   routerSeen.search = location.search;
   routerSeen.type = type;
-  return null;
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Browser back
+    </button>
+  );
 };
 
-const renderFinance = (entry = "/finance") =>
+/** `before`: history entries under Finance, e.g. the page the officer came from. */
+const renderFinance = (entry = "/finance", before: string[] = []) =>
   render(
     <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[entry]}>
+        <MemoryRouter initialEntries={[...before, entry]} initialIndex={before.length}>
           <Finance />
           <RouterSpy />
         </MemoryRouter>
@@ -1695,6 +1706,23 @@ describe("<Finance> Books (F1)", () => {
     expect(api.put).not.toHaveBeenCalled();
     expect(api.patch).not.toHaveBeenCalled();
     expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("unwinds the Books screens when the officer switches tab, so Back leaves Finance", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    serveLedger();
+    renderFinance("/finance?tab=books", ["/dashboard"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Setup & accounts/ }));
+    await waitFor(() => expect(routerSeen.search).toContain("books=manage-setup"));
+
+    await openTab("Collect");
+    await waitFor(() => expect(routerSeen.search).toBe("?tab=collect"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Browser back" }));
+    await waitFor(() => expect(routerSeen.pathname).toBe("/dashboard"));
   });
 
   it("reloads Books only for the newly selected organisation", async () => {

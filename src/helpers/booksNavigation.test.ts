@@ -1,4 +1,5 @@
 import {
+  booksDepthOf,
   BOOKS_HOME,
   BooksLocation,
   parentOf,
@@ -103,5 +104,15 @@ describe("parentOf", () => {
     });
     expect(parentOf({ screen: "overview", sheet: "transfer", journalId: null })).toEqual(BOOKS_HOME);
     expect(parentOf({ screen: "manage", sheet: null, journalId: null })).toEqual(BOOKS_HOME);
+  });
+});
+
+describe("booksDepthOf", () => {
+  it("reads the depth Books stored, and treats anything else as the entry Books opened on", () => {
+    expect(booksDepthOf({ booksDepth: 3 })).toBe(3);
+    expect(booksDepthOf(null)).toBe(0);
+    expect(booksDepthOf({ booksDepth: -1 })).toBe(0);
+    expect(booksDepthOf({ booksDepth: "2" })).toBe(0);
+    expect(booksDepthOf({ booksPushed: true })).toBe(0);
   });
 });

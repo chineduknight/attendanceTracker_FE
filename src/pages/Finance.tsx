@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Tabs } from "@chakra-ui/react";
 import BooksTab from "components/finance/BooksTab";
 import CollectTab from "components/finance/CollectTab";
 import ObligationsTab from "components/finance/ObligationsTab";
 import StartDatesTab from "components/finance/StartDatesTab";
 import { defaultObligationId } from "helpers/financeCompliance";
-import { FINANCE_TABS, FinanceTab, readFinanceTab, writeFinanceTab } from "helpers/booksNavigation";
+import {
+  FINANCE_TABS,
+  FinanceTab,
+  booksDepthOf,
+  readFinanceTab,
+  writeFinanceTab,
+} from "helpers/booksNavigation";
 import { useObligations } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import useGlobalStore from "zStore";
@@ -27,9 +33,28 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   // and Forward move through them). Switching tabs replaces the entry, so
   // Back from Collect, Obligations or Start dates leaves Finance as before.
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const tab = readFinanceTab(searchParams);
-  const setTab = (next: FinanceTab) =>
+  // Leaving Books from one of its inner screens first steps back over every
+  // entry Books pushed, then replaces the entry it opened on. Otherwise Back
+  // from the new tab would land on an earlier Books screen.
+  const leavingBooksFor = useRef<FinanceTab | null>(null);
+  const setTab = (next: FinanceTab) => {
+    const depth = booksDepthOf(location.state);
+    if (tab === "books" && next !== "books" && depth > 0) {
+      leavingBooksFor.current = next;
+      navigate(-depth);
+      return;
+    }
     setSearchParams(writeFinanceTab(searchParams, next), { replace: true });
+  };
+  useEffect(() => {
+    const next = leavingBooksFor.current;
+    if (next === null || booksDepthOf(location.state) > 0) return;
+    leavingBooksFor.current = null;
+    setSearchParams(writeFinanceTab(searchParams, next), { replace: true });
+  }, [location, searchParams, setSearchParams]);
   const [chosenId, setChosenId] = useState("");
   const { obligations, hasData, isLoading, isError, error, refetch } =
     useObligations(organisationId);

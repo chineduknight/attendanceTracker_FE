@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   BOOKS_HOME,
+  booksDepthOf,
   BooksLocation,
   BooksScreen,
   BooksSheet,
@@ -10,9 +11,6 @@ import {
   readFinanceTab,
   writeBooksLocation,
 } from "helpers/booksNavigation";
-
-/** Marks history entries Books pushed, so closing can step Back to them. */
-const PUSHED = { booksPushed: true };
 
 /**
  * Books screen and sheet navigation. Every move forward pushes a history
@@ -27,17 +25,25 @@ export const useBooksNav = (organisationId: string) => {
   const navigate = useNavigate();
   const { location, valid } = readBooksLocation(params, organisationId);
   const onBooks = readFinanceTab(params) === "books";
+  // Entries Books pushed carry their depth, so closing can step Back to them
+  // and leaving Books can step back over all of them.
+  const depth = booksDepthOf(routerLocation.state);
 
   const push = useCallback(
     (next: BooksLocation) =>
-      setParams(writeBooksLocation(params, organisationId, next), { state: PUSHED }),
-    [params, organisationId, setParams],
+      setParams(writeBooksLocation(params, organisationId, next), {
+        state: { booksDepth: depth + 1 },
+      }),
+    [params, organisationId, setParams, depth],
   );
 
   const replace = useCallback(
     (next: BooksLocation) =>
-      setParams(writeBooksLocation(params, organisationId, next), { replace: true }),
-    [params, organisationId, setParams],
+      setParams(writeBooksLocation(params, organisationId, next), {
+        replace: true,
+        state: { booksDepth: depth },
+      }),
+    [params, organisationId, setParams, depth],
   );
 
   // Another organisation's or a malformed Books URL: show this
@@ -52,10 +58,9 @@ export const useBooksNav = (organisationId: string) => {
   const openSheet = (sheet: BooksSheet) => push({ ...location, sheet });
 
   const close = () => {
-    const state = routerLocation.state as { booksPushed?: boolean } | null;
-    if (state?.booksPushed) navigate(-1);
+    if (depth > 0) navigate(-1);
     else replace(parentOf(location));
   };
 
-  return { location, go, openSheet, close, replace };
+  return { location, onBooks, go, openSheet, close, replace };
 };
