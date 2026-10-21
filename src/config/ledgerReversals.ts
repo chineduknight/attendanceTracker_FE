@@ -17,4 +17,4 @@
  *
  * While false, Books renders exactly what the F2B-2 release shipped.
  */
-export const LEDGER_REVERSALS_UI_ENABLED: boolean = false;
+export const LEDGER_REVERSALS_UI_ENABLED: boolean = true;

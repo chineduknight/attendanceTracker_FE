@@ -63,8 +63,8 @@ const CONTEXT = {
 };
 
 describe("gate", () => {
-  it("is off by default", () => {
-    expect(LEDGER_REVERSALS_UI_ENABLED).toBe(false);
+  it("ships on", () => {
+    expect(LEDGER_REVERSALS_UI_ENABLED).toBe(true);
   });
 });
 
