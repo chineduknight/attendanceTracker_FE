@@ -8,7 +8,7 @@ import {
   markLedgerWriteIntentUnresolved,
   readLedgerWriteIntent,
 } from "helpers/ledgerWriteIntent";
-import { useLedgerLifecycleWrites } from "hooks/useLedgerLifecycle";
+import { LifecycleCallbacks, useLedgerLifecycleWrites } from "hooks/useLedgerLifecycle";
 import { useOpeningBalanceWrites } from "hooks/useOpeningBalances";
 import {
   INTENT_BLOCKED_MESSAGE,
@@ -71,6 +71,11 @@ const wire = (overrides: Record<string, unknown> = {}) => ({
       ...overrides,
     },
   },
+});
+
+/** An Axios response whose body is `{ data: { proposal, status, ...extra } }`. */
+const opening = (proposal: unknown, extra: Record<string, unknown> = {}) => ({
+  data: { data: { proposal, status: wire().data.data, ...extra } },
 });
 
 const NETWORK_ERROR = { message: "Network Error", code: "ERR_NETWORK" };
@@ -172,18 +177,58 @@ describe("lifecycle writes outlive the screen that sent them", () => {
     ]);
   });
 
-  it("keeps a 2xx that doesn't show the requested change unresolved", async () => {
-    // The server answered, but the ledger is still active after a suspend.
-    api.post.mockResolvedValue(wire());
+  type Writes = ReturnType<typeof useLedgerLifecycleWrites>;
+  const LOCK = { expectedLedgerRevision: 7, lockedThrough: "2026-10-01" };
+  it.each([
+    ["a suspend answered with an active ledger", "post", wire(), (w: Writes, cb: LifecycleCallbacks) => w.suspendLedger(SUSPEND, cb)],
+    ["a suspend answered with an unreadable body", "post", { data: { data: "suspended" } }, (w: Writes, cb: LifecycleCallbacks) => w.suspendLedger(SUSPEND, cb)],
+    ["a suspend answered with no body", "post", { data: undefined }, (w: Writes, cb: LifecycleCallbacks) => w.suspendLedger(SUSPEND, cb)],
+    ["a resume answered with a suspended ledger", "post", wire({ state: "suspended" }), (w: Writes, cb: LifecycleCallbacks) => w.resumeLedger(SUSPEND, cb)],
+    ["a lock answered with another date", "put", wire({ lockedThrough: "2026-09-30" }), (w: Writes, cb: LifecycleCallbacks) => w.setPeriodLock(LOCK, cb)],
+    ["an attestation answered as unattested", "post", wire(), (w: Writes, cb: LifecycleCallbacks) => w.attestGapWindow({ expectedLedgerRevision: 7, attestation: true }, cb)],
+  ] as const)("never confirms %s", async (_label, method, body, send) => {
+    const request = deferred();
+    api[method].mockReturnValue(request.promise);
     const onSuccess = jest.fn();
+    const onUnconfirmed = jest.fn();
+    const onError = jest.fn();
     const { result } = renderLifecycle();
 
-    act(() => result.current.suspendLedger(SUSPEND, { onSuccess }));
+    act(() => send(result.current, { onSuccess, onUnconfirmed, onError }));
+    let sentId = "";
+    await waitFor(() => {
+      const read = readLedgerWriteIntent("org1");
+      expect(read).toMatchObject({ kind: "pending", inFlight: true });
+      if (read.kind === "pending") sentId = read.intent.intentId;
+    });
+    await act(async () => request.resolve(body));
 
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    await waitFor(() => expect(onUnconfirmed).toHaveBeenCalledTimes(1));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    // The same persisted intent, now unresolved; nothing resent.
     expect(readLedgerWriteIntent("org1")).toMatchObject({
       kind: "pending",
-      intent: { action: "suspend-ledger", state: "unresolved" },
+      inFlight: false,
+      intent: { intentId: sentId, state: "unresolved" },
+    });
+    expect(api[method]).toHaveBeenCalledTimes(1);
+    expect(ledgerInvalidations(invalidate)).toEqual([queryKeys.finance.ledger.root("org1")]);
+  });
+
+  it("reports an unconfirmed 2xx as an unknown failure to a screen without onUnconfirmed", async () => {
+    api.post.mockResolvedValue(wire());
+    const onSuccess = jest.fn();
+    const onError = jest.fn();
+    const { result } = renderLifecycle();
+
+    act(() => result.current.suspendLedger(SUSPEND, { onSuccess, onError }));
+
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(classifyIntentWriteFailure(onError.mock.calls[0][0])).toEqual({
+      kind: "unknown",
+      response: wire().data,
     });
   });
 
@@ -229,6 +274,7 @@ describe("lifecycle writes outlive the screen that sent them", () => {
     await waitFor(() => expect(first).toHaveBeenCalled());
     expect(classifyIntentWriteFailure(first.mock.calls[0][0])).toEqual({
       kind: "unknown",
+      response: null,
     });
     expect(result.current.intent.blocked).toBe(true);
 
@@ -348,7 +394,7 @@ describe("opening-balance writes outlive the screen that sent them", () => {
     );
     unmount();
     await act(async () =>
-      request.resolve({ data: { data: { proposal: null, status: null } } })
+      request.resolve(opening({ id: "p-new", kind: "supplementary", status: "submitted" }))
     );
 
     await waitFor(() =>
@@ -424,6 +470,98 @@ describe("opening-balance writes outlive the screen that sent them", () => {
       expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" });
     }
   );
+
+  type Writes = ReturnType<typeof useOpeningBalanceWrites>;
+  type Cb = { onSuccess?: () => void; onError?: (error: unknown) => void };
+  const VERIFY = { expectedFingerprint: PROPOSAL.fingerprint, expectedLedgerRevision: 7, attestation: true as const };
+  const sends: Record<string, (w: Writes, cb: Cb) => void> = {
+    submit: (w, cb) => w.submitOpening(SUBMIT, cb),
+    verify: (w, cb) => w.verifyOpening(PROPOSAL, VERIFY, cb),
+    reject: (w, cb) => w.rejectOpening(PROPOSAL, "Wrong date", cb),
+    withdraw: (w, cb) => w.withdrawOpening(PROPOSAL, cb),
+  };
+  const done = (status: string) => ({ ...PROPOSAL, status });
+
+  it.each([
+    ["submit", "no proposal", opening(null)],
+    ["submit", "an empty body", { data: {} }],
+    ["submit", "no body", { data: undefined }],
+    ["submit", "a proposal of another kind", opening({ id: "p-new", kind: "initial", status: "submitted" })],
+    ["submit", "a proposal that isn't submitted", opening({ id: "p-new", kind: "supplementary", status: "rejected" })],
+    ["verify", "a proposal still submitted", opening(done("submitted"))],
+    ["verify", "another fingerprint", opening({ ...done("verified"), fingerprint: "e".repeat(64) })],
+    ["verify", "another proposal", opening({ ...done("verified"), id: "p2" })],
+    ["verify", "no proposal", { data: { data: { status: null, journal: null, replayed: true } } }],
+    ["reject", "a withdrawn proposal", opening(done("withdrawn"))],
+    ["reject", "another proposal", opening({ ...done("rejected"), id: "p2" })],
+    ["withdraw", "a rejected proposal", opening(done("rejected"))],
+    ["withdraw", "an unreadable proposal", { data: { data: { proposal: "withdrawn" } } }],
+  ])("never confirms a %s answered with %s", async (action, _label, body) => {
+    const request = deferred();
+    api.post.mockReturnValue(request.promise);
+    const onSuccess = jest.fn();
+    const onError = jest.fn();
+    const { result } = renderOpening();
+
+    act(() => sends[action](result.current, { onSuccess, onError }));
+    let sentId = "";
+    await waitFor(() => {
+      const read = readLedgerWriteIntent("org1");
+      expect(read).toMatchObject({ kind: "pending", inFlight: true });
+      if (read.kind === "pending") sentId = read.intent.intentId;
+    });
+    await act(async () => request.resolve(body));
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(classifyIntentWriteFailure(onError.mock.calls[0][0]).kind).toBe("unknown");
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      inFlight: false,
+      intent: { intentId: sentId, state: "unresolved" },
+    });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(ledgerInvalidations(invalidate)).toEqual([queryKeys.finance.ledger.root("org1")]);
+  });
+
+  it.each([
+    ["verify", opening(done("verified"), { status: null, journal: null, replayed: true })],
+    ["reject", opening(done("rejected"))],
+    ["withdraw", opening(done("withdrawn"))],
+  ])("confirms a valid %s after its screen unmounts", async (action, body) => {
+    const request = deferred();
+    api.post.mockReturnValue(request.promise);
+    const { result, unmount } = renderOpening();
+
+    act(() => sends[action](result.current, {}));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => request.resolve(body));
+
+    await waitFor(() => expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" }));
+    expect(ledgerInvalidations(invalidate)).toEqual([queryKeys.finance.ledger.root("org1")]);
+  });
+
+  it("confirms a valid verify for the organisation that sent it after a switch", async () => {
+    const request = deferred();
+    api.post.mockReturnValueOnce(request.promise);
+    const onSuccess = jest.fn();
+    const { result, rerender } = renderHook(({ org }) => useOpeningBalanceWrites(org), {
+      wrapper,
+      initialProps: { org: "orgA" },
+    });
+
+    act(() => result.current.verifyOpening(PROPOSAL, VERIFY, { onSuccess }));
+    await waitFor(() => expect(result.current.isVerifying).toBe(true));
+    rerender({ org: "orgB" });
+    expect(result.current.isVerifying).toBe(false);
+
+    await act(async () => request.resolve(opening(done("verified"), { journal: null, replayed: false })));
+    await waitFor(() => expect(readLedgerWriteIntent("orgA")).toEqual({ kind: "none" }));
+    expect(readLedgerWriteIntent("orgB")).toEqual({ kind: "none" });
+    expect(api.post).toHaveBeenCalledWith("/finance/orgA/ledger/opening-balances/p1/verify", VERIFY);
+    expect(ledgerInvalidations(invalidate)).toEqual([queryKeys.finance.ledger.root("orgA")]);
+  });
 
   it("shares one slot with lifecycle writes", async () => {
     const request = deferred();

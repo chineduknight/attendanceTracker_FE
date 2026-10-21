@@ -9,7 +9,11 @@ import {
   toLedgerAuditPage,
 } from "helpers/ledgerLifecycle";
 import { savingFor } from "hooks/useLedgerSetup";
-import { DurableIntentWrite, sendDurableIntentWrite } from "hooks/useLedgerWriteIntent";
+import {
+  DurableIntentWrite,
+  LedgerWriteUnconfirmedError,
+  sendDurableIntentWrite,
+} from "hooks/useLedgerWriteIntent";
 import {
   GapWindowAttestInput,
   LifecycleWriteResult,
@@ -49,7 +53,14 @@ const toWriteResult = (response: unknown): LifecycleWriteResult => {
 };
 
 export interface LifecycleCallbacks {
+  /** Only a confirmed change: the returned status shows what was requested. */
   onSuccess?: (result: LifecycleWriteResult) => void;
+  /**
+   * A 2xx whose status is unreadable or contradicts the request. The outcome
+   * is unknown and the intent stays unresolved; `result` is only what the
+   * server reported, for explaining that, never for claiming the change.
+   */
+  onUnconfirmed?: (result: LifecycleWriteResult) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -102,7 +113,7 @@ export const useLedgerLifecycleWrites = (organisationId: string) => {
   const run = (
     mutation: typeof suspendMutation,
     write: Omit<DurableIntentWrite, "organisationId">,
-    { onSuccess, onError }: LifecycleCallbacks,
+    { onSuccess, onUnconfirmed, onError }: LifecycleCallbacks,
   ) =>
     mutation.mutate(
       // The organisation is captured here, when the officer confirms.
@@ -110,7 +121,11 @@ export const useLedgerLifecycleWrites = (organisationId: string) => {
       {
         // Screen updates only; the durable write settles without them.
         onSuccess: (response: unknown) => onSuccess?.(toWriteResult(response)),
-        onError: onError ?? suppressGenericError,
+        onError: (error: unknown) => {
+          if (error instanceof LedgerWriteUnconfirmedError && onUnconfirmed)
+            onUnconfirmed(toWriteResult(error.response));
+          else (onError ?? suppressGenericError)(error);
+        },
       },
     );
 

@@ -141,6 +141,9 @@ const fillCounts = (cash = "0", bank = "340,500.50") => {
   );
 };
 
+/** The fields of the backend's created proposal that confirm a submit. */
+const SUBMITTED = { id: "p-new", kind: "initial", status: "submitted" };
+
 const submitAndConfirm = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Submit proposal" }));
   await confirmInDialog("Submit opening proposal");
@@ -152,7 +155,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   setSession();
   serveOpenings();
-  api.post.mockResolvedValue({ data: { data: { proposal: {}, status: null } } });
+  api.post.mockResolvedValue({ data: { data: { proposal: SUBMITTED, status: null } } });
 });
 
 afterEach(() => {
@@ -237,6 +240,10 @@ describe("<OpeningProposalForm> guided initial proposal", () => {
       ),
     );
     expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" });
+    // A confirmed submit leaves the form.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Submit proposal" })).not.toBeInTheDocument(),
+    );
   });
 
   it("records member-money items individually and never a holding total", async () => {
@@ -307,6 +314,36 @@ describe("<OpeningProposalForm> guided initial proposal", () => {
       kind: "pending",
       intent: { action: "submit-opening", state: "unresolved" },
     });
+  });
+
+  it.each([
+    ["an empty proposal", { proposal: {}, status: null }],
+    ["no proposal", { proposal: null, status: null }],
+    ["no body", undefined],
+    ["a proposal in another status", { proposal: { ...SUBMITTED, status: "rejected" }, status: null }],
+    ["a proposal of another kind", { proposal: { ...SUBMITTED, kind: "correction" }, status: null }],
+  ])("never treats a 2xx with %s as a submitted proposal", async (_label, body) => {
+    api.post.mockResolvedValue({ data: body === undefined ? undefined : { data: body } });
+    renderPanel();
+    await openForm();
+
+    fillEvidence();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fillCounts();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await submitAndConfirm();
+
+    expect(
+      await screen.findByText("We couldn't confirm the last ledger change"),
+    ).toBeInTheDocument();
+    // Still on the form: the screen never moved on as if it were submitted.
+    expect(screen.getByRole("button", { name: "Submit proposal" })).toBeDisabled();
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { action: "submit-opening", state: "unresolved" },
+    });
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 
   it("clears the intent after a provable refusal", async () => {

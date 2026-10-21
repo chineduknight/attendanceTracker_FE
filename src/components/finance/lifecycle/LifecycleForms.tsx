@@ -16,14 +16,22 @@ import {
   periodLockNeedsReason,
 } from "helpers/ledgerLifecycle";
 import { formatLagosTimestamp } from "helpers/openingBalances";
-import { useLedgerLifecycleWrites } from "hooks/useLedgerLifecycle";
+import { LifecycleCallbacks, useLedgerLifecycleWrites } from "hooks/useLedgerLifecycle";
 import { classifyIntentWriteFailure, useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
 
 type Writes = ReturnType<typeof useLedgerLifecycleWrites>;
 type Intent = ReturnType<typeof useLedgerWriteIntent>;
 
-/** `null` means the outcome could not be established; claim nothing. */
-type Done = (result: LifecycleWriteResult | null, lockedThrough?: string | null) => void;
+/**
+ * How a sent lifecycle write ended for the screen. `unconfirmed` is an
+ * unknown outcome: `result` is what a 2xx reported (unreadable or
+ * contradicting the request), or null when no usable answer arrived.
+ */
+export type LifecycleDone =
+  | { kind: "confirmed"; result: LifecycleWriteResult; lockedThrough?: string | null }
+  | { kind: "unconfirmed"; result: LifecycleWriteResult | null; lockedThrough?: string | null };
+
+type Done = (outcome: LifecycleDone) => void;
 
 /**
  * Screen handling shared by every lifecycle write. The write intent itself is
@@ -34,18 +42,19 @@ const useLifecycleSubmit = (onDone: Done) => {
   const [error, setError] = useState<string | null>(null);
 
   const submit = (
-    send: (callbacks: {
-      onSuccess: (result: LifecycleWriteResult) => void;
-      onError: (error: unknown) => void;
-    }) => void,
+    send: (callbacks: Required<LifecycleCallbacks>) => void,
     lockedThrough?: string | null,
   ) => {
     send({
+      // Only a status that shows the requested change arrives here.
       onSuccess: (result) => {
-        // The panel compares the result with the request: an unreadable or
-        // contradicting status is reported, never claimed as done.
         setError(null);
-        onDone(result, lockedThrough);
+        onDone({ kind: "confirmed", result, lockedThrough });
+      },
+      // A 2xx that doesn't prove the change: unknown, intent kept.
+      onUnconfirmed: (result) => {
+        setError(null);
+        onDone({ kind: "unconfirmed", result, lockedThrough });
       },
       onError: (failure) => {
         const outcome = classifyIntentWriteFailure(failure);
@@ -53,7 +62,7 @@ const useLifecycleSubmit = (onDone: Done) => {
           // The request may have committed; the intent notice makes the
           // officer reconcile before any further ledger write.
           setError(null);
-          onDone(null);
+          onDone({ kind: "unconfirmed", result: null, lockedThrough });
           return;
         }
         setError(outcome.message ?? "The change wasn't saved. Try again.");

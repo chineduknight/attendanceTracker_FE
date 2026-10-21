@@ -1122,3 +1122,45 @@ export const openingKindLabels: Record<OpeningProposalKind, string> = {
   supplementary: "Supplementary opening",
   correction: "Correction",
 };
+
+/** What an opening-balance write must show in its 2xx body to be confirmed. */
+export type OpeningWriteExpectation =
+  | { action: "submit-opening"; kind: OpeningProposalKind }
+  | { action: "verify-opening"; proposalId: string; fingerprint: string }
+  | { action: "reject-opening" | "withdraw-opening"; proposalId: string };
+
+const OPENING_WRITE_RESULT: Record<OpeningWriteExpectation["action"], OpeningProposalKnownStatus> = {
+  "submit-opening": "submitted",
+  "verify-opening": "verified",
+  "reject-opening": "rejected",
+  "withdraw-opening": "withdrawn",
+};
+
+const sameId = (left: string | null, right: string) =>
+  left !== null && left.toLowerCase() === right.toLowerCase();
+
+/**
+ * Whether an opening-balance write response proves the requested result.
+ * Every successful backend response carries `data.proposal` (the decided or
+ * created proposal, `toProposalShape`), so only its identity and status are
+ * checked: the status the action produces, the proposal acted on (or, for a
+ * submit, the requested kind) and, for a verify, the fingerprint the verifier
+ * echoed. The ledger `status` is not required: a replayed verify may answer
+ * `status: null`. Anything else is an unknown outcome, never a success.
+ */
+export const openingWriteConfirmed = (
+  expectation: OpeningWriteExpectation,
+  response: unknown,
+): boolean => {
+  const proposal = asRecord(asRecord(asRecord(response)?.data)?.proposal);
+  if (!proposal || asText(proposal.status) !== OPENING_WRITE_RESULT[expectation.action]) return false;
+  const id = asText(proposal.id);
+  switch (expectation.action) {
+    case "submit-opening":
+      return id !== null && proposal.kind === expectation.kind;
+    case "verify-opening":
+      return sameId(id, expectation.proposalId) && proposal.fingerprint === expectation.fingerprint;
+    default:
+      return sameId(id, expectation.proposalId);
+  }
+};

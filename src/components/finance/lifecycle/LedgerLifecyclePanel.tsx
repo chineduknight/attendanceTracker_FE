@@ -10,6 +10,7 @@ import {
 import LedgerWriteIntentNotice from "components/finance/LedgerWriteIntentNotice";
 import {
   GapWindowAttestationForm,
+  LifecycleDone,
   PeriodLockForm,
   ResumeLedgerForm,
   SuspendLedgerForm,
@@ -112,15 +113,14 @@ const LedgerLifecyclePanel = ({
     audit.refetch();
   };
 
-  const done =
-    (action: LifecycleAction) =>
-    (result: LifecycleWriteResult | null, lockedThrough?: string | null) => {
-      setView({ kind: "overview" });
-      // A null result means the outcome is unknown: the intent notice already
-      // says so, and claiming anything else would be false.
-      setOutcome(result ? { action, result, lockedThrough } : null);
-      recheck();
-    };
+  const done = (action: LifecycleAction) => (ended: LifecycleDone) => {
+    setView({ kind: "overview" });
+    // An unconfirmed 2xx keeps its explanation of what the server reported
+    // (which always says the safety record is kept); with no usable answer
+    // the intent notice alone speaks. Neither claims the change.
+    setOutcome(ended.result ? { action, result: ended.result, lockedThrough: ended.lockedThrough } : null);
+    recheck();
+  };
 
   const suspend = lifecyclePermission({ action: "suspend", status, canManage, isOwner });
   const resume = lifecyclePermission({ action: "resume", status, canManage, isOwner });

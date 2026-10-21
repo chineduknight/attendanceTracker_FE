@@ -5,7 +5,12 @@ import { financeRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toLedgerStatus } from "helpers/ledger";
-import { toEffectiveOpenings, toOpeningProposal, toOpeningProposalPage } from "helpers/openingBalances";
+import {
+  openingWriteConfirmed,
+  toEffectiveOpenings,
+  toOpeningProposal,
+  toOpeningProposalPage,
+} from "helpers/openingBalances";
 import { LedgerStatus } from "components/finance/ledgerTypes";
 import { LedgerWriteIntentRefs } from "helpers/ledgerWriteIntent";
 import { savingFor } from "hooks/useLedgerSetup";
@@ -185,7 +190,14 @@ export const useOpeningBalanceWrites = (organisationId: string) => {
   ) =>
     run(
       submitMutation,
-      { action: "submit-opening", refs: { kind: input.kind }, url: baseUrl, data: input },
+      {
+        action: "submit-opening",
+        refs: { kind: input.kind },
+        url: baseUrl,
+        data: input,
+        confirms: (response) =>
+          openingWriteConfirmed({ action: "submit-opening", kind: input.kind }, response),
+      },
       toDecideResult,
       callbacks,
     );
@@ -202,6 +214,12 @@ export const useOpeningBalanceWrites = (organisationId: string) => {
         refs: proposalRefs(proposal),
         url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_VERIFY, proposal.id),
         data: input,
+        // The fingerprint that must come back is the one the verifier sent.
+        confirms: (response) =>
+          openingWriteConfirmed(
+            { action: "verify-opening", proposalId: proposal.id, fingerprint: input.expectedFingerprint },
+            response,
+          ),
       },
       (response) => {
         const body = asRecord(response?.data);
@@ -226,6 +244,8 @@ export const useOpeningBalanceWrites = (organisationId: string) => {
         refs: proposalRefs(proposal),
         url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_REJECT, proposal.id),
         data: { reason },
+        confirms: (response) =>
+          openingWriteConfirmed({ action: "reject-opening", proposalId: proposal.id }, response),
       },
       toDecideResult,
       callbacks,
@@ -242,6 +262,8 @@ export const useOpeningBalanceWrites = (organisationId: string) => {
         refs: proposalRefs(proposal),
         url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_WITHDRAW, proposal.id),
         data: {},
+        confirms: (response) =>
+          openingWriteConfirmed({ action: "withdraw-opening", proposalId: proposal.id }, response),
       },
       toDecideResult,
       callbacks,

@@ -22,6 +22,19 @@ export const INTENT_BLOCKED_MESSAGE =
 export const INTENT_STORAGE_MESSAGE =
   "This browser can't store the safety record required before a ledger change. Allow site storage and try again.";
 
+/**
+ * The server answered 2xx, but the body doesn't establish the requested
+ * result (unreadable, or reporting something else). The outcome is unknown:
+ * the intent stays unresolved and no success callback runs. `response` is the
+ * body, so a screen can say what the server reported without claiming it.
+ */
+export class LedgerWriteUnconfirmedError extends Error {
+  constructor(readonly response: unknown) {
+    super("Ledger write not confirmed by its response");
+    this.name = "LedgerWriteUnconfirmedError";
+  }
+}
+
 export interface DurableIntentWrite {
   /** Captured when the officer confirmed; the screen may show another org later. */
   organisationId: string;
@@ -31,10 +44,10 @@ export interface DurableIntentWrite {
   url: string;
   data: unknown;
   /**
-   * Whether a 2xx proves the requested change. A response that doesn't keeps
-   * the intent unresolved, so a reload cannot permit a blind retry.
+   * Whether a 2xx body proves the requested result, per the backend
+   * contract. Required: no write accepts a 2xx on status alone.
    */
-  confirms?: (response: unknown) => boolean;
+  confirms: (response: unknown) => boolean;
 }
 
 /**
@@ -49,7 +62,9 @@ export interface DurableIntentWrite {
  *    minted: an unresolved intent blocks every further write until an
  *    officer reconciles.
  * 3. Settle the intent: cleared on a confirmed 2xx or a refusal that wrote
- *    nothing, latched as unresolved on anything ambiguous.
+ *    nothing, latched as unresolved on anything ambiguous. A 2xx whose body
+ *    doesn't prove the result is ambiguous too, and rejects with
+ *    `LedgerWriteUnconfirmedError` so no success callback runs.
  * 4. Reload the sending organisation's ledger caches, and no other.
  */
 export const sendDurableIntentWrite = async ({
@@ -59,7 +74,7 @@ export const sendDurableIntentWrite = async ({
   method,
   url,
   data,
-  confirms = () => true,
+  confirms,
 }: DurableIntentWrite) => {
   const intent = startLedgerWriteIntent(organisationId, action, refs);
   if (!intent) {
@@ -68,19 +83,32 @@ export const sendDurableIntentWrite = async ({
       current === "pending" || current === "unknown" ? "blocked" : "storage",
     );
   }
-  let outcome: LedgerWriteOutcome = "unknown";
-  try {
-    const response = await (method === "post" ? postRequest : putRequest)({ url, data });
-    outcome = confirms(response) ? "confirmed" : "unknown";
-    return response;
-  } catch (error) {
-    outcome = ledgerWriteOutcomeUnknown(ledgerApiFailure(error)) ? "unknown" : "refused";
-    throw error;
-  } finally {
+  // Settled from the request alone, before any screen callback can run.
+  const settle = (outcome: LedgerWriteOutcome) => {
     settleLedgerWriteIntent(intent, outcome);
     void queryClient.invalidateQueries({
       queryKey: queryKeys.finance.ledger.root(organisationId),
     });
+  };
+  let response: unknown;
+  try {
+    response = await (method === "post" ? postRequest : putRequest)({ url, data });
+  } catch (error) {
+    settle(ledgerWriteOutcomeUnknown(ledgerApiFailure(error)) ? "unknown" : "refused");
+    throw error;
+  }
+  const confirmed = isConfirmed(confirms, response);
+  settle(confirmed ? "confirmed" : "unknown");
+  if (!confirmed) throw new LedgerWriteUnconfirmedError(response);
+  return response;
+};
+
+/** A parser that throws on a body is an unreadable body, never a confirmation. */
+const isConfirmed = (confirms: (response: unknown) => boolean, response: unknown) => {
+  try {
+    return confirms(response);
+  } catch {
+    return false;
   }
 };
 
@@ -88,8 +116,11 @@ export const sendDurableIntentWrite = async ({
 export type IntentWriteFailure =
   /** Nothing reached the server. */
   | { kind: "not-sent"; message: string }
-  /** The request may have committed; the intent notice says so. */
-  | { kind: "unknown" }
+  /**
+   * The request may have committed; the intent notice says so. `response` is
+   * the 2xx body when the server answered without proving the result.
+   */
+  | { kind: "unknown"; response: unknown | null }
   /** The server refused and wrote nothing. */
   | { kind: "refused"; message: string | null };
 
@@ -100,9 +131,11 @@ export const classifyIntentWriteFailure = (failure: unknown): IntentWriteFailure
       message: failure.reason === "blocked" ? INTENT_BLOCKED_MESSAGE : INTENT_STORAGE_MESSAGE,
     };
   }
+  if (failure instanceof LedgerWriteUnconfirmedError)
+    return { kind: "unknown", response: failure.response ?? null };
   const parsed = ledgerApiFailure(failure);
   return ledgerWriteOutcomeUnknown(parsed)
-    ? { kind: "unknown" }
+    ? { kind: "unknown", response: null }
     : { kind: "refused", message: parsed.message ?? null };
 };
 
