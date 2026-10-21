@@ -16,4 +16,4 @@
  *
  * While false, Books renders exactly what the F2B-1 release shipped.
  */
-export const LEDGER_MEMBER_MONEY_UI_ENABLED: boolean = false;
+export const LEDGER_MEMBER_MONEY_UI_ENABLED: boolean = true;

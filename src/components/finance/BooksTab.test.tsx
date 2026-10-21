@@ -4,7 +4,6 @@ import { generatedCss, render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import BooksTab from "components/finance/BooksTab";
 import { LEDGER_NOT_ACTIVE_NOTE } from "helpers/ledger";
-import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
 import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
@@ -20,6 +19,7 @@ jest.mock("config/ledgerOpeningBalances", () => ({ LEDGER_OPENING_BALANCES_UI_EN
 jest.mock("config/ledgerLifecycle", () => ({ LEDGER_LIFECYCLE_UI_ENABLED: false }));
 jest.mock("config/ledgerPostings", () => ({ LEDGER_POSTINGS_UI_ENABLED: false }));
 jest.mock("config/ledgerReversals", () => ({ LEDGER_REVERSALS_UI_ENABLED: false }));
+jest.mock("config/ledgerMemberMoney", () => ({ LEDGER_MEMBER_MONEY_UI_ENABLED: false }));
 
 /** The shipped value, not this file's fallback mock. */
 const shipped = (path: string, name: string): boolean => jest.requireActual(path)[name];
@@ -326,13 +326,13 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
 });
 
 describe("<BooksTab> release gates", () => {
-  it("ships every gate on except member money and allocation posting", () => {
+  it("ships every gate on except allocation posting", () => {
     expect({
       setup: shipped("config/ledgerSetup", "LEDGER_SETUP_UI_ENABLED"),
       openingBalances: shipped("config/ledgerOpeningBalances", "LEDGER_OPENING_BALANCES_UI_ENABLED"),
       lifecycle: shipped("config/ledgerLifecycle", "LEDGER_LIFECYCLE_UI_ENABLED"),
       postings: shipped("config/ledgerPostings", "LEDGER_POSTINGS_UI_ENABLED"),
-      memberMoney: LEDGER_MEMBER_MONEY_UI_ENABLED,
+      memberMoney: shipped("config/ledgerMemberMoney", "LEDGER_MEMBER_MONEY_UI_ENABLED"),
       reversals: shipped("config/ledgerReversals", "LEDGER_REVERSALS_UI_ENABLED"),
       reports: LEDGER_REPORTS_UI_ENABLED,
       f3Setup: shipped("config/ledgerF3Setup", "LEDGER_F3_SETUP_UI_ENABLED"),
@@ -343,7 +343,7 @@ describe("<BooksTab> release gates", () => {
       openingBalances: true,
       lifecycle: true,
       postings: true,
-      memberMoney: false,
+      memberMoney: true,
       reversals: true,
       reports: true,
       f3Setup: true,
