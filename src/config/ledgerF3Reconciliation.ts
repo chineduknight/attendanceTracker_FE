@@ -19,4 +19,4 @@
  * While false, Books and the Finance correction screen render exactly what
  * the F3A release shipped.
  */
-export const LEDGER_F3_RECONCILIATION_UI_ENABLED: boolean = false;
+export const LEDGER_F3_RECONCILIATION_UI_ENABLED: boolean = true;

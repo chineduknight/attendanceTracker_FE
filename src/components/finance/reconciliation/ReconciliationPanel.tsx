@@ -32,6 +32,9 @@ const TABS = [
 
 export type ReconciliationTab = (typeof TABS)[number]["value"];
 
+export const RECONCILIATION_NOT_LIVE_NOTE =
+  "Member money is reconciled once the books are active. These books aren't active, so nothing has been reconciled and no figures are shown.";
+
 /** A request from elsewhere in Books to show the allocation history, filtered. */
 export interface ReconciliationFocus {
   tab: ReconciliationTab;
@@ -51,12 +54,20 @@ export interface ReconciliationFocus {
  */
 const ReconciliationPanel = ({
   organisationId,
+  booksLive,
   focus,
   onOpenJournal,
   onAllocate,
   enabled = LEDGER_F3_RECONCILIATION_UI_ENABLED,
 }: {
   organisationId: string;
+  /**
+   * The books are active or suspended. Before activation (or in a state this
+   * build doesn't recognise) the server still answers current ledger figures
+   * as ₦0 and its checks as agreeing, which would read as a clean
+   * reconciliation of books that don't exist yet, so nothing is read or shown.
+   */
+  booksLive: boolean;
   focus?: ReconciliationFocus | null;
   /** Opens a journal's details in Reversals (absent when Reversals is hidden). */
   onOpenJournal?: (journalId: string) => void;
@@ -73,11 +84,12 @@ const ReconciliationPanel = ({
   const [positionsView, setPositionsView] = useState<PositionsView>(INITIAL_POSITIONS_VIEW);
   const [historyView, setHistoryView] = useState<AllocationHistoryView>(INITIAL_ALLOCATION_HISTORY_VIEW);
   const showing = enabled && canView;
+  const reading = showing && booksLive;
   // Member names for the obligation a filter names (compliance rows work
   // with finance.view alone).
   const filterObligation =
     tab === "positions" ? positionsView.obligationId : tab === "allocations" ? historyView.obligationId : "";
-  const names = useLedgerNames(organisationId, { enabled: showing, complianceObligationId: filterObligation });
+  const names = useLedgerNames(organisationId, { enabled: reading, complianceObligationId: filterObligation });
 
   const lastFocus = useRef<number | null>(null);
   useEffect(() => {
@@ -91,6 +103,19 @@ const ReconciliationPanel = ({
   }, [focus]);
 
   if (!showing) return null;
+
+  if (!booksLive) {
+    return (
+      <Box as="section" aria-labelledby={headingId}>
+        <Text as="h2" id={headingId} fontSize="lg" fontWeight="semibold" mb={2}>
+          Member money reconciliation
+        </Text>
+        <Text fontSize="sm" color="fg.muted">
+          {RECONCILIATION_NOT_LIVE_NOTE}
+        </Text>
+      </Box>
+    );
+  }
 
   const showAllocationsOf = (position: ReconciliationPosition) => {
     setHistoryView({

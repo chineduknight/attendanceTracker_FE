@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { chooseOption, render, selectTab } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
-import ReconciliationPanel from "components/finance/reconciliation/ReconciliationPanel";
+import ReconciliationPanel, { RECONCILIATION_NOT_LIVE_NOTE } from "components/finance/reconciliation/ReconciliationPanel";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import {
@@ -73,7 +73,7 @@ const setPermissions = (permissions: PermissionKey[], orgId = "org1") =>
 
 const panel = (props: Partial<ComponentProps<typeof ReconciliationPanel>> = {}) => (
   <QueryClientProvider client={queryClient}>
-    <ReconciliationPanel organisationId="org1" enabled {...props} />
+    <ReconciliationPanel organisationId="org1" booksLive enabled {...props} />
   </QueryClientProvider>
 );
 
@@ -105,6 +105,15 @@ describe("gate and permissions", () => {
     expect(await screen.findByText("Member money reconciliation")).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
     expect(api.patch).not.toHaveBeenCalled();
+  });
+  it("shows no figures, and reads nothing, for books that aren't live", () => {
+    render(panel({ booksLive: false }));
+    expect(screen.getByRole("region", { name: "Member money reconciliation" })).toHaveTextContent(
+      RECONCILIATION_NOT_LIVE_NOTE,
+    );
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByText(/checks agree/)).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalled();
   });
 });
 

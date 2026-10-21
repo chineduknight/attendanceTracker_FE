@@ -582,6 +582,7 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
       {LEDGER_F3_RECONCILIATION_UI_ENABLED && (
         <ReconciliationPanel
           organisationId={organisationId}
+          booksLive={stateKey === "active" || stateKey === "suspended"}
           focus={reconciliationFocus}
           onOpenJournal={LEDGER_REVERSALS_UI_ENABLED ? setOpenJournalId : undefined}
           onAllocate={
