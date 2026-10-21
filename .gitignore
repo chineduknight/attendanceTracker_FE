@@ -2,7 +2,7 @@ node_modules
 .vscode
 
 .env
-
+.env.locad
 yarn-error.log
 .qodo
 .DS_Store
