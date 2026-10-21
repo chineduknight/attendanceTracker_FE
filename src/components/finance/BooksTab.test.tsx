@@ -6,7 +6,6 @@ import BooksTab from "components/finance/BooksTab";
 import { LEDGER_NOT_ACTIVE_NOTE } from "helpers/ledger";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
-import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { RECONCILIATION_NOT_LIVE_NOTE } from "components/finance/reconciliation/ReconciliationPanel";
 
@@ -20,6 +19,7 @@ jest.mock("config/ledgerLifecycle", () => ({ LEDGER_LIFECYCLE_UI_ENABLED: false 
 jest.mock("config/ledgerPostings", () => ({ LEDGER_POSTINGS_UI_ENABLED: false }));
 jest.mock("config/ledgerReversals", () => ({ LEDGER_REVERSALS_UI_ENABLED: false }));
 jest.mock("config/ledgerMemberMoney", () => ({ LEDGER_MEMBER_MONEY_UI_ENABLED: false }));
+jest.mock("config/ledgerF3Allocations", () => ({ LEDGER_F3_ALLOCATION_UI_ENABLED: false }));
 
 /** The shipped value, not this file's fallback mock. */
 const shipped = (path: string, name: string): boolean => jest.requireActual(path)[name];
@@ -326,7 +326,7 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
 });
 
 describe("<BooksTab> release gates", () => {
-  it("ships every gate on except allocation posting", () => {
+  it("ships every finance gate on", () => {
     expect({
       setup: shipped("config/ledgerSetup", "LEDGER_SETUP_UI_ENABLED"),
       openingBalances: shipped("config/ledgerOpeningBalances", "LEDGER_OPENING_BALANCES_UI_ENABLED"),
@@ -337,7 +337,7 @@ describe("<BooksTab> release gates", () => {
       reports: LEDGER_REPORTS_UI_ENABLED,
       f3Setup: shipped("config/ledgerF3Setup", "LEDGER_F3_SETUP_UI_ENABLED"),
       f3Reconciliation: LEDGER_F3_RECONCILIATION_UI_ENABLED,
-      f3Allocations: LEDGER_F3_ALLOCATION_UI_ENABLED,
+      f3Allocations: shipped("config/ledgerF3Allocations", "LEDGER_F3_ALLOCATION_UI_ENABLED"),
     }).toEqual({
       setup: true,
       openingBalances: true,
@@ -348,7 +348,7 @@ describe("<BooksTab> release gates", () => {
       reports: true,
       f3Setup: true,
       f3Reconciliation: true,
-      f3Allocations: false,
+      f3Allocations: true,
     });
   });
 
