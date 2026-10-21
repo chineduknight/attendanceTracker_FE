@@ -1,9 +1,12 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { useLocation } from "react-router-dom";
+import { format, endOfMonth, startOfMonth } from "date-fns";
 import { queryClient } from "services/api/apiHelper";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import Analytics, { sessionColumnsByDate } from "pages/Analytics";
 import { CUSTOM_STATUSES } from "test-utils/attendanceStatusFixtures";
 import { renderRoute } from "test-utils/renderWithProviders";
+import { chooseMenuItem } from "test-utils/render";
 import { DEFAULT_TERMINOLOGY } from "helpers/organisationPresentation";
 
 jest.mock("services/api", () => ({
@@ -20,6 +23,13 @@ jest.mock("react-router-dom", () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mockGet: jest.Mock = require("services/api").default.get;
+
+// jsdom has no layout, so no scrollIntoView.
+const scrollIntoView = jest.fn();
+beforeAll(() => {
+  Element.prototype.scrollIntoView = scrollIntoView;
+});
+beforeEach(() => scrollIntoView.mockClear());
 
 const D1 = "Rehearsal 2026-09-01";
 const D2 = "Rehearsal 2026-09-08";
@@ -352,5 +362,167 @@ describe("sessionColumnsByDate", () => {
       "Mass 2026-04-22",
       "Rehearsal 2026-07-30",
     ]);
+  });
+});
+
+describe("<Analytics> keeps its report in the address", () => {
+  const SEPT = "/analytics?fromDate=2026-09-01&toDate=2026-09-30";
+
+  // Shows the address the page wrote, as Back would find it.
+  const LocationProbe = () => {
+    const location = useLocation();
+    return <output data-testid="location">{location.search}</output>;
+  };
+  const shownSearch = () =>
+    new URLSearchParams(screen.getByTestId("location").textContent ?? "");
+
+  const renderAt = (path: string) =>
+    renderRoute(
+      <>
+        <Analytics />
+        <LocationProbe />
+      </>,
+      "/analytics",
+      path
+    );
+
+  const analyticsCalls = () =>
+    mockGet.mock.calls
+      .map(([url]) => url as string)
+      .filter((url) => url.includes("/analytics?"));
+
+  const setOrg = (id: string) =>
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id, attendanceStatuses: CUSTOM_STATUSES },
+    });
+
+  beforeEach(() => {
+    queryClient.clear();
+    mockGet.mockReset();
+    mockNavigate.mockReset();
+    setOrg("org1");
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.includes("/analytics")
+          ? { data: { ...ANALYTICS, attendanceStatuses: RESPONSE_STATUSES } }
+          : { data: {} },
+      })
+    );
+  });
+
+  it("opens on this month's report without a Search tap", async () => {
+    renderAt("/analytics");
+    await screen.findByText("Ada");
+    const today = new Date();
+    const from = format(startOfMonth(today), "yyyy-MM-dd");
+    const to = format(endOfMonth(today), "yyyy-MM-dd");
+    expect(analyticsCalls()).toEqual([
+      expect.stringContaining(`fromDate=${from}&toDate=${to}&sort=ranking`),
+    ]);
+    expect(screen.getByRole("button", { name: "This Month" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  it("restores the report, view and name search from the address", async () => {
+    renderAt(`${SEPT}&status=active&view=grid&q=bo`);
+    const table = await screen.findByRole("table");
+    expect(analyticsCalls()).toEqual([
+      expect.stringContaining("fromDate=2026-09-01&toDate=2026-09-30&sort=ranking&status=active"),
+    ]);
+    expect(screen.getByPlaceholderText("From date")).toHaveValue("Sep 1, 2026");
+    expect(screen.getByPlaceholderText("To date")).toHaveValue("Sep 30, 2026");
+    expect(screen.getByLabelText("Search member")).toHaveValue("bo");
+    const rows = within(table).getAllByRole("button");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent(/Bola/);
+  });
+
+  it("falls back to this month for a malformed range", async () => {
+    renderAt("/analytics?fromDate=2026-09-30&toDate=2026-09-01");
+    await screen.findByText("Ada");
+    expect(analyticsCalls()[0]).not.toContain("2026-09-");
+  });
+
+  it("shows a cached report at once on return and refreshes it quietly", async () => {
+    const { unmount } = renderAt(SEPT);
+    await screen.findByText("Ada");
+    unmount();
+
+    // The refresh never answers: what shows is the cache.
+    mockGet.mockImplementation(() => new Promise(() => {}));
+    renderAt(SEPT);
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+    expect(screen.getByLabelText("Refreshing")).toBeInTheDocument();
+  });
+
+  it("remembers the opened member, then marks and scrolls to them on return", async () => {
+    const { unmount } = renderAt(SEPT);
+    await screen.findByText("Bola");
+    fireEvent.click(screen.getByRole("button", { name: /^Bola:/ }));
+    await waitFor(() => expect(shownSearch().get("member")).toBe("m2"));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/\/m2\?fromDate=2026-09-01&toDate=2026-09-30$/)
+    );
+    const returnTo = `/analytics${screen.getByTestId("location").textContent}`;
+    unmount();
+    scrollIntoView.mockClear();
+
+    renderAt(returnTo);
+    const bola = await screen.findByRole("button", { name: /^Bola:/ });
+    expect(bola).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: /^Ada:/ })).not.toHaveAttribute("aria-current");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(bola);
+  });
+
+  it("hides an edited report until Search, then writes the new one and forgets the opened member", async () => {
+    renderAt(`${SEPT}&member=m2`);
+    await screen.findByText("Ada");
+    fireEvent.change(screen.getByPlaceholderText("From date"), {
+      target: { value: "2026-08-01" },
+    });
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    expect(screen.getByText("Choose a date range")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByText("Ada");
+    expect(shownSearch().get("fromDate")).toBe("2026-08-01");
+    expect(shownSearch().get("member")).toBeNull();
+    expect(analyticsCalls().at(-1)).toContain("fromDate=2026-08-01&toDate=2026-09-30");
+  });
+
+  it("exports the report on screen", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.includes("/export/")
+          ? { data: {} }
+          : url.includes("/analytics")
+            ? { data: { ...ANALYTICS, attendanceStatuses: RESPONSE_STATUSES } }
+            : { data: {} },
+      })
+    );
+    renderAt(`${SEPT}&status=active`);
+    await screen.findByText("Ada");
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await chooseMenuItem(await screen.findByRole("menuitem", { name: "Export Excel" }));
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        "/attendance/org1/analytics/export/excel?fromDate=2026-09-01&toDate=2026-09-30&sort=ranking&status=active"
+      )
+    );
+  });
+
+  it("never shows one organisation's cached report under another", async () => {
+    const { unmount } = renderAt(SEPT);
+    await screen.findByText("Ada");
+    unmount();
+
+    setOrg("org2");
+    mockGet.mockImplementation(() => new Promise(() => {}));
+    renderAt(SEPT);
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    expect(analyticsCalls().at(-1)).toContain("/attendance/org2/analytics?");
   });
 });

@@ -2,9 +2,16 @@ import { useState } from "react";
 import { Button, Flex, SimpleGrid, Stack, Text, Field } from "@chakra-ui/react";
 import { AmountInput } from "components/ui/amount-input";
 import { MONTHS, formatMoney } from "helpers/financeConstants";
-import { firstLiableMonth, paidOf } from "helpers/financeCompliance";
+import { firstLiableMonth, isUnknownAmount, paidOf, unappliedCreditOf } from "helpers/financeCompliance";
 import { ComplianceRow, Obligation } from "components/finance/financeTypes";
 import { ConfirmDialog } from "components/ui/confirm-dialog";
+import {
+  LINKED_ALLOCATION_CHECKING_NOTE,
+  LINKED_ALLOCATION_UNAVAILABLE_NOTE,
+  LinkedAllocation,
+  correctionAllocationWarning,
+  nairaAmountToKobo,
+} from "helpers/f0AllocationWarning";
 
 interface CorrectPaymentFormProps {
   obligation: Obligation;
@@ -12,8 +19,17 @@ interface CorrectPaymentFormProps {
   /** The member's current compliance row; seeds and locks the dues grid. */
   row?: ComplianceRow;
   isSaving: boolean;
-  onCorrectDues: (monthlyPaid: Record<string, number>) => void;
-  onCorrectLevy: (amountPaid: number) => void;
+  /** Saving is unavailable; the parent explains why. */
+  locked?: boolean;
+  /** `replaceUnappliedCredit` is true once the officer confirmed it. */
+  onCorrectDues: (monthlyPaid: Record<string, number>, replaceUnappliedCredit: boolean) => void;
+  onCorrectLevy: (amountPaid: number, replaceUnappliedCredit: boolean) => void;
+  /**
+   * F3 O11(b), read-only: what the ledger has allocated to this position.
+   * Absent while the F3 reconciliation gate is off (no warning, no read).
+   * It only warns; it never blocks or changes the correction.
+   */
+  linkedAllocation?: LinkedAllocation;
 }
 
 interface PendingCorrection {
@@ -25,7 +41,9 @@ interface PendingCorrection {
 
 /**
  * Overwrites a member's record for one obligation — an admin fix, so every
- * save is confirmed. Dues are entered month by month in order with no gaps:
+ * save is confirmed. A correction replaces the whole recorded amount, so when
+ * the record holds unapplied credit the officer is shown it and the
+ * confirmation says it will be replaced. Dues are entered month by month in order with no gaps:
  * only the first not-fully-paid month and the last fully-paid one before it
  * are editable, so the most recent payment can still be reduced.
  */
@@ -34,8 +52,10 @@ const CorrectPaymentForm = ({
   memberName,
   row,
   isSaving,
+  locked = false,
   onCorrectDues,
   onCorrectLevy,
+  linkedAllocation,
 }: CorrectPaymentFormProps) => {
   const isDues = obligation.type === "dues";
   const amountPerMonth = obligation.amountPerMonth ?? 0;
@@ -57,8 +77,31 @@ const CorrectPaymentForm = ({
     }
     return seed;
   });
-  const [amountPaid, setAmountPaid] = useState(() => (row && !isDues ? String(paidOf(row)) : ""));
+  // An invalid record has no known amount to pre-fill.
+  const unknown = !!row && isUnknownAmount(row);
+  const [amountPaid, setAmountPaid] = useState(() =>
+    row && !isDues && !unknown ? String(paidOf(row)) : "",
+  );
   const [pending, setPending] = useState<PendingCorrection | null>(null);
+  const credit = row ? unappliedCreditOf(row) : 0;
+  const hasCredit = credit > 0;
+  const creditClause = hasCredit
+    ? ` The ${formatMoney(credit)} of unapplied credit on this record will be replaced too.`
+    : "";
+
+  // The value this correction would record, exactly as the request will
+  // carry it (dues: every entered month; levy: the total). Display only.
+  const proposedKobo = (() => {
+    if (isDues) {
+      const total = Object.values(monthly)
+        .filter((value) => value !== "")
+        .reduce((sum, value) => sum + Number(value), 0);
+      return nairaAmountToKobo(total);
+    }
+    return amountPaid === "" ? null : nairaAmountToKobo(Number(amountPaid));
+  })();
+  const allocationWarning = correctionAllocationWarning(proposedKobo, linkedAllocation);
+  const warningClause = allocationWarning ? ` ${allocationWarning}` : "";
 
   const valueOf = (month: number) => monthly[String(month)] ?? "";
   const isComplete = (month: number) =>
@@ -90,6 +133,7 @@ const CorrectPaymentForm = ({
   };
 
   const requestSave = () => {
+    if (locked) return;
     if (isDues) {
       const monthlyPaid: Record<string, number> = {};
       Object.entries(monthly).forEach(([m, v]) => {
@@ -100,25 +144,35 @@ const CorrectPaymentForm = ({
       setPending({
         body:
           count === 0
-            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.`
-            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.`,
+            ? `This clears all recorded payments for ${memberName} on ${obligation.name}.${creditClause}${warningClause}`
+            : `Set ${memberName}'s payments on ${obligation.name} to ${formatMoney(total)} across ${count} month(s)? This overwrites the current record.${creditClause}${warningClause}`,
         confirmLabel: count === 0 ? "Yes, clear" : "Yes, update",
-        confirmPalette: count === 0 ? "red" : "purple",
-        run: () => onCorrectDues(monthlyPaid),
+        confirmPalette: count === 0 || hasCredit ? "red" : "purple",
+        run: () => onCorrectDues(monthlyPaid, hasCredit),
       });
       return;
     }
     if (amountPaid === "") return;
     setPending({
-      body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.`,
+      body: `Set ${memberName}'s paid amount on ${obligation.name} to ${formatMoney(Number(amountPaid))}? This overwrites the current record.${creditClause}${warningClause}`,
       confirmLabel: "Yes, update",
-      confirmPalette: "purple",
-      run: () => onCorrectLevy(Number(amountPaid)),
+      confirmPalette: hasCredit ? "red" : "purple",
+      run: () => onCorrectLevy(Number(amountPaid), hasCredit),
     });
   };
 
   return (
     <Stack gap={3}>
+      {unknown && (
+        <Text fontSize="sm" color="fg.warning">
+          The current record holds an invalid amount, so nothing is pre-filled. Saving replaces it with the amounts you enter.
+        </Text>
+      )}
+      {hasCredit && (
+        <Text fontSize="sm" color="fg.muted">
+          {`Recorded in total: ${formatMoney(row?.recordedTotal ?? 0)}, including ${formatMoney(credit)} of unapplied credit. A correction replaces the whole recorded amount, credit included.`}
+        </Text>
+      )}
       {isDues ? (
         <>
           <Text fontSize="sm" color="fg.muted">
@@ -163,7 +217,23 @@ const CorrectPaymentForm = ({
         </Field.Root>
       )}
 
-      <Button colorPalette="purple" onClick={requestSave} loading={isSaving}>
+      {allocationWarning && (
+        <Text role="status" fontSize="sm" color="fg.warning">
+          {allocationWarning}
+        </Text>
+      )}
+      {linkedAllocation?.kind === "loading" && (
+        <Text role="status" fontSize="xs" color="fg.muted">
+          {LINKED_ALLOCATION_CHECKING_NOTE}
+        </Text>
+      )}
+      {linkedAllocation?.kind === "unavailable" && (
+        <Text fontSize="xs" color="fg.muted">
+          {LINKED_ALLOCATION_UNAVAILABLE_NOTE}
+        </Text>
+      )}
+
+      <Button colorPalette="purple" onClick={requestSave} loading={isSaving} disabled={locked}>
         Save correction
       </Button>
 

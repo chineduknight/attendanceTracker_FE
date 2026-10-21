@@ -70,6 +70,65 @@ export const financeRequest = {
     "/finance/:organisationId/obligations/:id/compliance/export/pdf",
   FINANCIAL_START_DATE: "/finance/members/:memberId/financial-start-date",
   BULK_FINANCIAL_START_DATE: "/finance/:organisationId/members/financial-start-date",
+  // Read-only ledger foundation (F1). No write endpoints yet.
+  LEDGER_STATUS: "/finance/:organisationId/ledger/status",
+  LEDGER_ACCOUNTS: "/finance/:organisationId/ledger/accounts",
+  LEDGER_JOURNALS: "/finance/:organisationId/ledger/journals",
+  // F2A-2 ledger setup and chart of accounts (RFC v0.3 §8.1). Gated behind
+  // config/ledgerSetup until the backend routes and F2 read shape are live.
+  LEDGER_SETUP: "/finance/:organisationId/ledger/setup",
+  LEDGER_SETTINGS: "/finance/:organisationId/ledger/settings",
+  LEDGER_ACCOUNT: "/finance/:organisationId/ledger/accounts/:accountId",
+  // F2A-3 opening balances and independent verification (RFC v0.3 §4.4–§4.5,
+  // §8.1). Provisional until backend PR #40 is corrected and merged.
+  LEDGER_OPENING_BALANCES: "/finance/:organisationId/ledger/opening-balances",
+  LEDGER_OPENING_BALANCES_EFFECTIVE:
+    "/finance/:organisationId/ledger/opening-balances/effective",
+  LEDGER_OPENING_BALANCE_VERIFY:
+    "/finance/:organisationId/ledger/opening-balances/:proposalId/verify",
+  LEDGER_OPENING_BALANCE_REJECT:
+    "/finance/:organisationId/ledger/opening-balances/:proposalId/reject",
+  LEDGER_OPENING_BALANCE_WITHDRAW:
+    "/finance/:organisationId/ledger/opening-balances/:proposalId/withdraw",
+  // F2A-3 lifecycle (RFC v0.3 §4.2, §4.6, §4.7; D9, D12, D28). Suspend,
+  // resume and period-lock are owner-only; the gap-window attestation needs
+  // finance.manage. The audit read is the lifecycle trail (F2A-4 §8.1).
+  LEDGER_SUSPEND: "/finance/:organisationId/ledger/suspend",
+  LEDGER_RESUME: "/finance/:organisationId/ledger/resume",
+  LEDGER_PERIOD_LOCK: "/finance/:organisationId/ledger/period-lock",
+  LEDGER_GAP_WINDOW_ATTEST:
+    "/finance/:organisationId/ledger/gap-window/attest",
+  LEDGER_AUDIT: "/finance/:organisationId/ledger/audit",
+  // F2B-1 cashbook postings (RFC v0.3 §5.1–§5.5, §8.2). The client sends a
+  // typed intent plus one idempotency key; the server builds the lines and
+  // the gapless entry number. Gated behind config/ledgerPostings.
+  LEDGER_RECEIPTS: "/finance/:organisationId/ledger/receipts",
+  LEDGER_EXPENSES: "/finance/:organisationId/ledger/expenses",
+  LEDGER_TRANSFERS: "/finance/:organisationId/ledger/transfers",
+  // F2B-2 member money (gated): receipts credit the holding liability, never
+  // income; refunds name one source in the route.
+  LEDGER_MEMBER_RECEIPTS: "/finance/:organisationId/ledger/member-receipts",
+  LEDGER_MEMBER_MONEY: "/finance/:organisationId/ledger/member-money",
+  LEDGER_MEMBER_MONEY_REFUNDS:
+    "/finance/:organisationId/ledger/member-money/:sourceId/refunds",
+  // F2B-3 (gated): one journal's detail, its reversal (a client-keyed
+  // posting), and the unconfirmed-attempts list and resolve.
+  LEDGER_JOURNAL: "/finance/:organisationId/ledger/journals/:journalId",
+  LEDGER_JOURNAL_REVERSAL:
+    "/finance/:organisationId/ledger/journals/:journalId/reversal",
+  LEDGER_ATTEMPTS: "/finance/:organisationId/ledger/attempts",
+  LEDGER_ATTEMPTS_RESOLVE: "/finance/:organisationId/ledger/attempts/resolve",
+  // F2B-4 read-only reports (RFC v0.3 §5.5, §8.4), finance.view. Gated
+  // behind config/ledgerReports.
+  LEDGER_CASHBOOK: "/finance/:organisationId/ledger/accounts/:accountId/cashbook",
+  LEDGER_BALANCES: "/finance/:organisationId/ledger/balances",
+  LEDGER_SUMMARY: "/finance/:organisationId/ledger/summary",
+  // F3-3 allocation posting (finance.manage) and F3-4 reads (finance.view).
+  // Gated behind config/ledgerF3Allocations and config/ledgerF3Reconciliation.
+  LEDGER_ALLOCATIONS: "/finance/:organisationId/ledger/allocations",
+  LEDGER_RECONCILIATION_SOURCES: "/finance/:organisationId/ledger/reconciliation/sources",
+  LEDGER_RECONCILIATION_POSITIONS: "/finance/:organisationId/ledger/reconciliation/positions",
+  LEDGER_RECONCILIATION_SUMMARY: "/finance/:organisationId/ledger/reconciliation/summary",
 };
 
 export const rbacRequest = {

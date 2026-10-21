@@ -172,6 +172,143 @@ export const queryKeys = {
         format,
         ...(asOf ? [asOf] : []),
       ] as const,
+    ledger: {
+      /** Prefix covering every read-only Books query for one organisation. */
+      root: (organisationId: string) =>
+        ["finance", organisationId, "ledger"] as const,
+      status: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "status"] as const,
+      accounts: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "accounts"] as const,
+      journals: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "journals"] as const,
+      /** Prefix covering every opening-balance read for one organisation. */
+      openingBalances: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "opening-balances"] as const,
+      openingBalanceList: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "opening-balances", "list"] as const,
+      effectiveOpenings: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "opening-balances", "effective"] as const,
+      /** Lifecycle audit trail for one organisation (F2A-4 read). */
+      audit: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "audit"] as const,
+      /** Member-money sources still holding money (F2B-2 read). */
+      openMemberMoney: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "member-money", "open"] as const,
+      /** One journal's detail (F2A-4 read, used by F2B-3 reversals). */
+      journal: (organisationId: string, journalId: string) =>
+        ["finance", organisationId, "ledger", "journal", journalId] as const,
+      /** The unresolved posting attempts this officer may see (F2B-3). */
+      unresolvedAttempts: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "attempts", "unresolved"] as const,
+      /**
+       * F2B-4 reports. Every key sits under `root`, so each ledger write's
+       * root invalidation (postings, reversals, openings, lifecycle) also
+       * refreshes them, for that organisation only. Every report parameter is
+       * part of the identity, so a page or window never answers for another.
+       */
+      reports: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "reports"] as const,
+      cashbook: (
+        organisationId: string,
+        accountId: string,
+        params: { from: string; to: string; limit: number; cursor: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reports",
+          "cashbook",
+          accountId,
+          params.from,
+          params.to,
+          params.limit,
+          params.cursor,
+        ] as const,
+      balances: (organisationId: string, asOf: string) =>
+        ["finance", organisationId, "ledger", "reports", "balances", asOf] as const,
+      summary: (organisationId: string, from: string, to: string) =>
+        ["finance", organisationId, "ledger", "reports", "summary", from, to] as const,
+      /**
+       * F3-4 allocation history. Under `root`, so every ledger write refreshes
+       * it; every filter and the cursor are part of the identity.
+       */
+      allocations: (
+        organisationId: string,
+        params: {
+          sourceId: string;
+          memberId: string;
+          obligationId: string;
+          from: string;
+          to: string;
+          cursor: string;
+        },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "allocations",
+          params.sourceId,
+          params.memberId,
+          params.obligationId,
+          params.from,
+          params.to,
+          params.cursor,
+        ] as const,
+      /**
+       * F3-4 reconciliation reports. They read current F0 values too, so an
+       * F0 collection or correction refreshes this prefix as well
+       * (`invalidateFinance`), not only ledger writes.
+       */
+      reconciliation: (organisationId: string) =>
+        ["finance", organisationId, "ledger", "reconciliation"] as const,
+      reconciliationSources: (
+        organisationId: string,
+        params: { asOf: string; open: string; minAgeDays: string; cursor: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reconciliation",
+          "sources",
+          params.asOf,
+          params.open,
+          params.minAgeDays,
+          params.cursor,
+        ] as const,
+      reconciliationPositions: (
+        organisationId: string,
+        params: { obligationId: string; memberId: string; flag: string; cursor: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reconciliation",
+          "positions",
+          params.obligationId,
+          params.memberId,
+          params.flag,
+          params.cursor,
+        ] as const,
+      reconciliationSummary: (
+        organisationId: string,
+        params: { from: string; to: string; minAgeDays: string },
+      ) =>
+        [
+          "finance",
+          organisationId,
+          "ledger",
+          "reconciliation",
+          "summary",
+          params.from,
+          params.to,
+          params.minAgeDays,
+        ] as const,
+    },
   },
 
   rbac: {

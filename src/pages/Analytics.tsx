@@ -1,16 +1,17 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Box,
   Button,
   Flex,
   Group,
+  Spinner,
   Text,
   useBreakpointValue,
 } from "@chakra-ui/react";
 import { useQueryWrapper } from "services/api/apiHelper";
 import useGlobalStore from "zStore";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { FaListUl, FaTable } from "react-icons/fa";
 import { FiBarChart2 } from "react-icons/fi";
 import { MultiValue } from "react-select";
@@ -26,7 +27,16 @@ import {
 import {
   useDateRange,
   formatRangeLabel,
+  presetFor,
 } from "components/analytics/useDateRange";
+import {
+  AnalyticsPageState,
+  AnalyticsSearch,
+  AnalyticsView,
+  readAnalyticsParams,
+  sameSearch,
+  writeAnalyticsParams,
+} from "components/analytics/analyticsSearchParams";
 import DateRangeControls from "components/analytics/DateRangeControls";
 import SessionSummary from "components/analytics/SessionSummary";
 import ExportMenu from "components/analytics/ExportMenu";
@@ -50,8 +60,6 @@ type StatusOption = {
   label: string;
 };
 
-type View = "list" | "grid";
-
 const DATE_KEY = /\d{4}-\d{2}-\d{2}$/;
 
 /** The session (date-suffixed) columns, sorted by their YYYY-MM-DD suffix. */
@@ -73,42 +81,89 @@ const behaviorCountOf = (row: any, behavior: AttendanceBehavior): number =>
 const AttendanceAnalyticsPage: React.FC = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
-  const [hasSearched, setHasSearched] = useState(false);
+  const navigate = useNavigate();
+  // The searched report, view, name search and last-opened member live in the
+  // address: Back from a member (or a refresh) returns to the same report.
+  // Every write replaces the entry, so Back leaves Analytics in one step.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = useMemo(
+    () => readAnalyticsParams(searchParams, new Date()),
+    [searchParams]
+  );
+  const applied: AnalyticsSearch = useMemo(
+    () => ({
+      fromDate: page.fromDate,
+      toDate: page.toDate,
+      statuses: page.statuses,
+    }),
+    [page.fromDate, page.toDate, page.statuses]
+  );
+  const updatePage = (patch: Partial<AnalyticsPageState>) =>
+    setSearchParams(writeAnalyticsParams({ ...page, ...patch }), {
+      replace: true,
+    });
+
+  // The inputs are a draft until Search; they start from the searched report.
   const {
     fromDate,
     toDate,
     setFromDate,
     setToDate,
     activePreset,
+    setActivePreset,
     applyPreset,
     handleDateChange,
-  } = useDateRange({ onChange: () => setHasSearched(false) });
-  const [statusFilter, setStatusFilter] = useState<string[]>(["all"]);
+  } = useDateRange({ initialFrom: applied.fromDate, initialTo: applied.toDate });
+  const [statusFilter, setStatusFilter] = useState<string[]>(() =>
+    applied.statuses.length ? applied.statuses : ["all"]
+  );
   const [statusOptions, setStatusOptions] = useState<string[]>([
     "active",
     "inactive",
   ]);
-  const navigate = useNavigate();
+
+  // A searched report arriving from outside the form (a link, the nav going
+  // to a bare /analytics) resets the draft to it.
+  const appliedKey = `${applied.fromDate}|${applied.toDate}|${applied.statuses.join(",")}`;
+  useEffect(() => {
+    setFromDate(applied.fromDate);
+    setToDate(applied.toDate);
+    setActivePreset(presetFor(applied.fromDate, applied.toDate, new Date()));
+    setStatusFilter(applied.statuses.length ? applied.statuses : ["all"]);
+    // appliedKey covers every field of `applied`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedKey]);
+
   // Phones start on the ranked list (193 session columns don't fit a phone);
   // wider screens start on the grid. The officer's choice then sticks.
   const isWide = useBreakpointValue({ base: false, md: true }, { ssr: false });
-  const [chosenView, setChosenView] = useState<View | null>(null);
-  const [nameQuery, setNameQuery] = useState("");
+  const view: AnalyticsView = page.view ?? (isWide ? "grid" : "list");
+  const nameQuery = page.q;
+  const setNameQuery = (q: string) => updatePage({ q });
   const pinnedSearch = usePinnedSearch(nameQuery);
-  const view: View = chosenView ?? (isWide ? "grid" : "list");
 
   const goToMemberAnalytics = (memberId: string) => {
+    // Remembered so the row is marked and scrolled to on the way back.
+    updatePage({ member: memberId });
     const path = convertParamsToString(PROTECTED_PATHS.MEMBER_ANALYTICS, {
       memberId,
     });
-    const params = new URLSearchParams();
-    if (fromDate) params.set("fromDate", fromDate);
-    if (toDate) params.set("toDate", toDate);
-    const search = params.toString();
-    navigate(search ? `${path}?${search}` : path);
+    const params = new URLSearchParams({
+      fromDate: applied.fromDate,
+      toDate: applied.toDate,
+    });
+    navigate(`${path}?${params.toString()}`);
   };
 
-  const canRunQuery = Boolean(fromDate && toDate && org.id);
+  const selectedStatuses = useMemo(
+    () => statusFilter.filter((status) => status !== "all"),
+    [statusFilter]
+  );
+  const draft: AnalyticsSearch = { fromDate, toDate, statuses: selectedStatuses };
+  // Edited inputs hide the report until Search, so what is shown (and
+  // exported) always matches the inputs.
+  const isDirty = !sameSearch(draft, applied);
+  const canSearch = Boolean(fromDate && toDate && org.id);
 
   const modelURL = convertParamsToString(orgRequest.CONFIG_MODEL, {
     organisationId: org.id,
@@ -125,36 +180,31 @@ const AttendanceAnalyticsPage: React.FC = () => {
     },
   });
 
-  const selectedStatuses = useMemo(
-    () => statusFilter.filter((status) => status !== "all"),
-    [statusFilter]
-  );
-
   const queryString = useMemo(() => {
-    if (!canRunQuery) return "";
     const queryParams = new URLSearchParams({
-      fromDate,
-      toDate,
+      fromDate: applied.fromDate,
+      toDate: applied.toDate,
       sort: "ranking",
     });
 
-    if (selectedStatuses.length) {
-      queryParams.set("status", selectedStatuses.join(","));
+    if (applied.statuses.length) {
+      queryParams.set("status", applied.statuses.join(","));
     }
 
     return queryParams.toString();
-  }, [canRunQuery, fromDate, toDate, selectedStatuses]);
+  }, [applied]);
 
-  // build the request URL once both dates are set
   const url = useMemo(() => {
-    if (!canRunQuery) return "";
+    if (!org.id) return "";
     const analyticsPath = convertParamsToString(attendanceRequest.ANALYTICS, {
       organisationId: org.id,
     });
     return `${analyticsPath}?${queryString}`;
-  }, [canRunQuery, org.id, queryString]);
+  }, [org.id, queryString]);
 
-  // react‑query wrapper: don't run until we call refetch()
+  // Runs for the searched report as soon as the page opens. Coming back to a
+  // report still in the cache shows it at once and refreshes it quietly.
+  // Not on window focus: a long range is an expensive report.
   const {
     data: analyticsResponse,
     isFetching,
@@ -163,18 +213,19 @@ const AttendanceAnalyticsPage: React.FC = () => {
   } = useQueryWrapper(
     queryKeys.analytics.organisation(
       org.id,
-      fromDate,
-      toDate,
-      selectedStatuses.join(",")
+      applied.fromDate,
+      applied.toDate,
+      applied.statuses.join(",")
     ),
     url,
     {
-      enabled: false,
+      enabled: Boolean(org.id),
+      refetchOnWindowFocus: false,
     }
   );
 
   const exportExcelUrl = useMemo(() => {
-    if (!canRunQuery) return "";
+    if (!org.id) return "";
     const path = convertParamsToString(
       attendanceRequest.ANALYTICS_EXPORT_EXCEL,
       {
@@ -182,24 +233,24 @@ const AttendanceAnalyticsPage: React.FC = () => {
       }
     );
     return `${path}?${queryString}`;
-  }, [canRunQuery, org.id, queryString]);
+  }, [org.id, queryString]);
 
   const exportPdfUrl = useMemo(() => {
-    if (!canRunQuery) return "";
+    if (!org.id) return "";
     const path = convertParamsToString(attendanceRequest.ANALYTICS_EXPORT_PDF, {
       organisationId: org.id,
     });
     return `${path}?${queryString}`;
-  }, [canRunQuery, org.id, queryString]);
+  }, [org.id, queryString]);
 
   const { refetch: refetchExcel, isFetching: isExportingExcel } =
     useQueryWrapper(
       [
         "attendanceAnalyticsExportExcel",
-        fromDate,
-        toDate,
+        applied.fromDate,
+        applied.toDate,
         org.id,
-        selectedStatuses.join(","),
+        applied.statuses.join(","),
       ],
       exportExcelUrl,
       {
@@ -212,10 +263,10 @@ const AttendanceAnalyticsPage: React.FC = () => {
   const { refetch: refetchPdf, isFetching: isExportingPdf } = useQueryWrapper(
     [
       "attendanceAnalyticsExportPdf",
-      fromDate,
-      toDate,
+      applied.fromDate,
+      applied.toDate,
       org.id,
-      selectedStatuses.join(","),
+      applied.statuses.join(","),
     ],
     exportPdfUrl,
     {
@@ -226,8 +277,11 @@ const AttendanceAnalyticsPage: React.FC = () => {
   );
 
   const handleSearch = () => {
-    if (canRunQuery) {
-      setHasSearched(true);
+    if (!canSearch) return;
+    if (isDirty) {
+      // A new report: the last-opened member belongs to the old one.
+      updatePage({ ...draft, member: null });
+    } else {
       refetch();
     }
   };
@@ -306,7 +360,6 @@ const AttendanceAnalyticsPage: React.FC = () => {
 
   const handleStatusChange = (selected: MultiValue<StatusOption>) => {
     const values = selected.map((item) => item.value);
-    setHasSearched(false);
     if (values.length === 0) {
       setStatusFilter(["all"]);
     } else if (values.includes("all") && values.length > 1) {
@@ -317,7 +370,22 @@ const AttendanceAnalyticsPage: React.FC = () => {
     }
   };
 
-  const showResults = hasSearched && !isFetching && !error;
+  const isFirstLoad = isFetching && !analyticsResponse;
+  const showResults = !isDirty && Boolean(analyticsResponse) && !error;
+
+  // Back from a member: bring their row into view once, centred so the
+  // pinned search bar doesn't cover it.
+  const lastOpened = page.member;
+  const scrolledTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showResults || !lastOpened || scrolledTo.current === lastOpened) return;
+    const row = pinnedSearch.resultsRef.current?.querySelector<HTMLElement>(
+      `[data-member-id="${CSS.escape(lastOpened)}"]`
+    );
+    if (!row) return;
+    scrolledTo.current = lastOpened;
+    row.scrollIntoView({ block: "center" });
+  }, [showResults, lastOpened, view, pinnedSearch.resultsRef]);
 
   return (
     <PageContainer width="wide">
@@ -345,7 +413,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
             <Button
               colorPalette="blue"
               onClick={handleSearch}
-              disabled={!canRunQuery}
+              disabled={!canSearch}
               minH="44px"
               flexShrink={0}
             >
@@ -355,7 +423,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
         }
       />
 
-      {isFetching && <PageLoader h="30vh" />}
+      {isFirstLoad && <PageLoader h="30vh" />}
       {!isFetching && Boolean(error) && (
         <ErrorState
           title="Couldn't load analytics"
@@ -363,7 +431,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
           onRetry={() => refetch()}
         />
       )}
-      {!isFetching && !error && !hasSearched && (
+      {!isFirstLoad && !error && isDirty && (
         <EmptyState
           icon={<FiBarChart2 />}
           title="Choose a date range"
@@ -375,11 +443,15 @@ const AttendanceAnalyticsPage: React.FC = () => {
         <>
           {/* What is shown, then how: the summary line, view and Export. */}
           <Box mb={3}>
-            <Text fontWeight="semibold">
-              {`${formatRangeLabel(fromDate, toDate)} · ${rows.length} ${lowerTerm(
-                rows.length === 1 ? terms.memberSingular : terms.memberPlural
-              )}`}
-            </Text>
+            <Flex align="center" gap={2}>
+              <Text fontWeight="semibold">
+                {`${formatRangeLabel(applied.fromDate, applied.toDate)} · ${rows.length} ${lowerTerm(
+                  rows.length === 1 ? terms.memberSingular : terms.memberPlural
+                )}`}
+              </Text>
+              {/* A cached report on screen while it refreshes. */}
+              {isFetching && <Spinner size="sm" color="fg.muted" aria-label="Refreshing" />}
+            </Flex>
             {sessionSummary && (
               <Box color="fg.muted" mt={1}>
                 <SessionSummary summary={sessionSummary} />
@@ -400,7 +472,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
                     variant={view === option.value ? "solid" : "outline"}
                     colorPalette={view === option.value ? "blue" : "gray"}
                     aria-pressed={view === option.value}
-                    onClick={() => setChosenView(option.value)}
+                    onClick={() => updatePage({ view: option.value })}
                   >
                     {option.icon}
                     {option.label}
@@ -457,7 +529,11 @@ const AttendanceAnalyticsPage: React.FC = () => {
               )}
 
               {visibleRows.length > 0 && view === "list" && (
-                <AnalyticsMemberList rows={visibleRows} onOpen={goToMemberAnalytics} />
+                <AnalyticsMemberList
+                  rows={visibleRows}
+                  onOpen={goToMemberAnalytics}
+                  lastOpenedId={lastOpened}
+                />
               )}
 
               {visibleRows.length > 0 && view === "grid" && (
@@ -475,6 +551,7 @@ const AttendanceAnalyticsPage: React.FC = () => {
                     dateKeys={dateKeys}
                     statuses={statuses}
                     onOpen={goToMemberAnalytics}
+                    lastOpenedId={lastOpened}
                   />
                 </>
               )}

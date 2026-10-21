@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button, Tabs } from "@chakra-ui/react";
+import BooksTab from "components/finance/BooksTab";
 import CollectTab from "components/finance/CollectTab";
 import ObligationsTab from "components/finance/ObligationsTab";
 import StartDatesTab from "components/finance/StartDatesTab";
@@ -11,9 +12,10 @@ import PageLoader from "components/PageLoader";
 import PageContainer from "components/layout/PageContainer";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 
-const TABS = ["Collect", "Obligations", "Start dates"] as const;
+const TABS = ["Collect", "Obligations", "Start dates", "Books"] as const;
 const COLLECT = 0;
 const OBLIGATIONS = 1;
+const BOOKS = 3;
 
 const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   const canManage = usePermissions().has("finance.manage");
@@ -124,6 +126,9 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
           </Tabs.Content>
           <Tabs.Content value="2" p={0}>
             <StartDatesTab organisationId={organisationId} />
+          </Tabs.Content>
+          <Tabs.Content value={String(BOOKS)} p={0}>
+            <BooksTab organisationId={organisationId} />
           </Tabs.Content>
         </Tabs.Root>
     </PageContainer>

@@ -1,5 +1,7 @@
 import {
-  CLEAR_WARNING,
+  appliedOf,
+  CLEAR_START_DATE_NOTE,
+  START_DATE_CHANGE_NOTE,
   collectionPct,
   defaultObligationId,
   duesPaymentHint,
@@ -59,7 +61,7 @@ describe("filters, search and sort", () => {
   ];
 
   it("counts each chip, keeping members without a start date out of owing/paid", () => {
-    expect(filterCounts(rows)).toEqual({ all: 4, behind: 0, owing: 2, paid: 1, "not-set": 1 });
+    expect(filterCounts(rows)).toEqual({ all: 4, behind: 0, owing: 2, paid: 1, "not-set": 1, review: 0 });
   });
 
   it("never counts a levy the member is not liable for as owing", () => {
@@ -67,7 +69,25 @@ describe("filters, search and sort", () => {
       memberId: "x", name: "Late joiner", accountable: true, liable: false,
       expected: 0, paid: 0, balance: 0, status: "not-due",
     };
-    expect(filterCounts([notLiable])).toEqual({ all: 1, behind: 0, owing: 0, paid: 0, "not-set": 0 });
+    expect(filterCounts([notLiable])).toEqual({ all: 1, behind: 0, owing: 0, paid: 0, "not-set": 0, review: 0 });
+  });
+
+  it("keeps a needs-review row out of behind / owing / paid and counts it under review", () => {
+    const invalid = duesRow({
+      memberId: "z", name: "Invalid", status: "needs-review", invalidStoredAmount: true,
+      months: twelve([], "unknown"), totalPaid: null, balance: null, arrears: null,
+      compliance: null, paidUpToMonth: null, monthsBehind: null, dueToDate: 6000,
+    });
+    // Owes nothing (not liable) yet flagged: still a review item, never owing.
+    const flaggedNotLiable: ComplianceRow = {
+      memberId: "y", name: "Flagged", accountable: true, liable: false, status: "not-due",
+      expected: 0, paid: 0, balance: 0, invalidStoredAmount: true, recordedTotal: null,
+    };
+
+    expect(filterCounts([invalid, flaggedNotLiable])).toEqual({
+      all: 2, behind: 0, owing: 0, paid: 0, "not-set": 0, review: 2,
+    });
+    expect(standingLabel(invalid, dues)).toBe("Needs review · amount unknown");
   });
 
   it("searches by name case-insensitively", () => {
@@ -100,6 +120,7 @@ describe("standingLabel", () => {
     const row: ComplianceRow = { memberId: "m", name: "M", accountable: true, liable: true, status: "partial" };
     expect(standingLabel(row, levy)).toBe("Part paid");
     expect(standingLabel({ ...row, liable: false }, levy)).toBe("Not liable for this levy");
+    expect(standingLabel({ ...row, liable: false, status: "not-due" }, dues)).toBe("Not liable this year");
   });
 });
 
@@ -152,6 +173,14 @@ describe("defaultObligationId", () => {
     expect(defaultObligationId([old, levy, newerLevy], today)).toBe("lv2");
     expect(defaultObligationId([old], today)).toBe("d25");
     expect(defaultObligationId([], today)).toBe("");
+  });
+});
+
+describe("appliedOf", () => {
+  it("prefers the explicit totalApplied, falling back to totalCollected on older backends", () => {
+    expect(appliedOf({ totalCollected: 300, totalApplied: 300 })).toBe(300);
+    expect(appliedOf({ totalCollected: 300 })).toBe(300);
+    expect(collectionPct({ totalCollected: 999, totalApplied: 300, totalOutstanding: 700 })).toBe(30);
   });
 });
 
@@ -244,7 +273,11 @@ describe("business dates and warnings", () => {
     expect(todayBusinessDate(new Date(2026, 9, 8, 23, 30))).toBe("2026-10-08");
   });
 
-  it("warns that clearing a start date clears payments", () => {
-    expect(CLEAR_WARNING).toMatch(/recorded payments, on every obligation, will be cleared/);
+  it("says start-date changes keep recorded payments, with no destructive wording", () => {
+    expect(CLEAR_START_DATE_NOTE).toMatch(/recorded payments are kept, not deleted/);
+    expect(START_DATE_CHANGE_NOTE).toMatch(/kept as they are.*unapplied credit/);
+    for (const note of [CLEAR_START_DATE_NOTE, START_DATE_CHANGE_NOTE]) {
+      expect(note).not.toMatch(/can't be undone|dropped|will be cleared/i);
+    }
   });
 });

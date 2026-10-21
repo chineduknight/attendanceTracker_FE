@@ -9,7 +9,8 @@ import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { PermissionKey } from "rbac/permissions";
 import Finance from "pages/Finance";
 import { ComplianceRow, MonthStatus, Obligation } from "components/finance/financeTypes";
-import { CLEAR_WARNING, todayBusinessDate } from "helpers/financeCompliance";
+import { CLEAR_START_DATE_NOTE, todayBusinessDate } from "helpers/financeCompliance";
+import { clearAllCollectionUncertainty } from "helpers/financeUncertainty";
 
 jest.mock("react-toastify", () => ({
   toast: { error: jest.fn(), success: jest.fn(), info: jest.fn(), warn: jest.fn() },
@@ -140,13 +141,63 @@ beforeEach(() => {
 });
 
 describe("Collect", () => {
+  it("shows an invalid payment record as needs review / unknown, never as unpaid or owing", async () => {
+    complianceRows = [
+      ...ARREARS_ROWS,
+      {
+        memberId: "dayo", name: "Dayo", accountable: true, liable: true, status: "needs-review",
+        invalidStoredAmount: true, months: months(Array(12).fill("unknown")),
+        totalExpected: 6000, dueToDate: 2000, totalPaid: null, balance: null, arrears: null,
+        compliance: null, paidUpToMonth: null, monthsBehind: null,
+        recordedTotal: null, appliedTotal: null, unappliedCredit: null,
+      },
+    ];
+    complianceSummary = { ...ARREARS_SUMMARY, invalidPaymentRows: 1, invalidRowsExpected: 6000 };
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    expect(await screen.findByText(/1 payment record needs review: the amount is invalid, so it is left out of these totals/))
+      .toBeInTheDocument();
+    expect(screen.getByText("Amount unknown")).toBeInTheDocument();
+    expect(screen.getByText("Needs review · amount unknown")).toBeInTheDocument();
+    const chips = screen.getByRole("group", { name: "Filter by payment status" });
+    expect(within(chips).getByText(/Needs review/)).toBeInTheDocument();
+    // Not counted as owing / not paid in full.
+    expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Dayo"));
+    const sheet = await screen.findByRole("dialog");
+    // Paid and Left to pay, plus all 12 month cells.
+    expect(within(sheet).getAllByText("Unknown")).toHaveLength(14);
+    expect(within(sheet).getByText(/New payments are paused for this record/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/what was paid is unknown/)).toBeInTheDocument();
+    expect(within(sheet).queryByText(/₦0/)).not.toBeInTheDocument();
+  });
+
+  it("distinguishes recorded, applied and unapplied credit when credit is held", async () => {
+    complianceSummary = {
+      ...SUMMARY, totalCollected: 6000, totalApplied: 6000, totalOutstanding: 6000, totalExpected: 12000,
+      totalRecorded: 8000, totalUnappliedCredit: 2000,
+    };
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    expect(await screen.findByText(/applied · 50%/)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded .*8,000 · Applied .*6,000 · Unapplied credit .*2,000/)).toBeInTheDocument();
+    expect(screen.getByText(/6,000 left to pay/)).toBeInTheDocument();
+  });
+
   it("opens on this year's dues with totals and status counts", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
 
-    expect(await screen.findByText(/collected · 63%/)).toBeInTheDocument();
+    expect(await screen.findByText(/applied · 63%/)).toBeInTheDocument();
     expect(shownValue(screen.getByLabelText("Obligation"))).toBe(`${YEAR} Dues`);
     expect(screen.getByText("1 of 2 paid in full")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Share applied of expected" })).toBeInTheDocument();
+    expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
+    // No credit in this summary, so no recorded / credit breakdown.
+    expect(screen.queryByText(/Unapplied credit/)).not.toBeInTheDocument();
     const chips = screen.getByRole("group", { name: "Filter by payment status" });
     expect(within(chips).getByRole("button", { name: "Owing 1" })).toBeInTheDocument();
     expect(within(chips).getByRole("button", { name: "No start date 1" })).toBeInTheDocument();
@@ -241,7 +292,7 @@ describe("Obligations", () => {
     await openTab("Obligations");
 
     expect(await screen.findByText(/of .*12,000.* · 63%/)).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Share collected")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Share applied of expected")).toHaveLength(1);
   });
 
   it("shows amounts, not a member count that would include people not liable", async () => {
@@ -261,10 +312,31 @@ describe("Obligations", () => {
     renderFinance();
     await openTab("Obligations");
 
-    expect(await screen.findByText(/1,400 of .*2,000 · 70%$/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Share collected")).toBeInTheDocument();
+    expect(await screen.findByText(/1,400 applied of .*2,000 · 70%$/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Share applied of expected")).toBeInTheDocument();
     expect(screen.queryByText(/1 of 3/)).not.toBeInTheDocument();
     expect(screen.queryByText(/paid in full/)).not.toBeInTheDocument();
+  });
+
+  it("names the card figure as applied and shows unapplied credit separately", async () => {
+    serve([
+      levy,
+      {
+        ...duesNow,
+        summary: {
+          totalMembers: 3, accountableMembers: 2, paidMembers: 1,
+          totalExpected: 12000, totalCollected: 6000, totalOutstanding: 6000,
+          totalRecorded: 8000, totalUnappliedCredit: 2000,
+        },
+      },
+    ]);
+    setOrg("org1", "owner");
+    renderFinance();
+    await openTab("Obligations");
+
+    expect(await screen.findByText(/6,000 applied of .*12,000 · 50%$/)).toBeInTheDocument();
+    expect(screen.getByText(/2,000 unapplied credit held/)).toBeInTheDocument();
+    expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
   });
 
   it("opens an obligation in Collect when tapped", async () => {
@@ -345,7 +417,7 @@ describe("Start dates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Set date" }));
 
     // Both already have a start date, so the confirm says payments move.
-    expect(await screen.findByText(/2 already have a start date\. Their recorded dues payments will be re-applied/))
+    expect(await screen.findByText(/2 already have a start date\. Their recorded payments are kept as they are/))
       .toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Yes, set 2" }));
 
@@ -359,7 +431,7 @@ describe("Start dates", () => {
     expect(screen.getByLabelText("Select Bola")).toBeChecked();
   });
 
-  it("warns that clearing a start date clears the member's payments", async () => {
+  it("tells the officer that clearing a start date keeps the member's payments", async () => {
     setOrg("org1", MANAGER);
     renderFinance();
     await openTab("Start dates");
@@ -367,7 +439,7 @@ describe("Start dates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Clear" }));
 
     const dialog = await screen.findByRole("alertdialog", { name: "Clear financial start date" });
-    expect(dialog).toHaveTextContent(CLEAR_WARNING);
+    expect(dialog).toHaveTextContent(CLEAR_START_DATE_NOTE);
     fireEvent.click(within(dialog).getByRole("button", { name: "Yes, clear" }));
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith("/finance/members/ada/financial-start-date", {
@@ -684,4 +756,950 @@ describe("<Finance> pinned search", () => {
       expect(bar!.parentElement).toContainElement(row);
     },
   );
+});
+
+describe("<Finance> stale-screen correction guard (F0c)", () => {
+  const GUARD = { paymentRowExists: true, paymentRevision: 2, memberFinanceRevision: 5 };
+  const NEWER = { paymentRowExists: true, paymentRevision: 3, memberFinanceRevision: 5 };
+  const adaWith = (correctionGuard?: object, extra: Partial<ComplianceRow> = {}): ComplianceRow[] => [
+    { ...ROWS[0], correctionGuard, ...extra } as ComplianceRow,
+    ROWS[1],
+    ROWS[2],
+  ];
+  /** Ada after another officer recorded April. */
+  const adaPaidToApr = (correctionGuard: object) =>
+    adaWith(correctionGuard, {
+      months: months(["paid", "paid", "paid", "paid", U, U, U, U, U, U, U, U]),
+      totalPaid: 2000, balance: 4000, paidUpToMonth: 4,
+    });
+  const levyRows = (correctionGuard?: object, extra: Partial<ComplianceRow> = {}): ComplianceRow[] => [
+    { memberId: "ada", name: "Ada", accountable: true, liable: true, status: "partial",
+      expected: 10000, paid: 2000, balance: 8000, correctionGuard, ...extra } as ComplianceRow,
+  ];
+  const httpError = (status: number, error = "Rejected", code?: string) => ({
+    response: { status, data: code ? { error, code } : { error } },
+  });
+
+  /**
+   * A compliance fetch that stays pending until released. Created up front so
+   * releasing it can never race the fetch invalidateQueries starts.
+   */
+  const hungCompliance = (obligation: Obligation, summary: Record<string, number> = SUMMARY) => {
+    let resolve: (rows: ComplianceRow[]) => void = () => undefined;
+    const promise = new Promise((res) => {
+      resolve = (rows) => res({ data: { data: { obligation, summary, rows } } });
+    });
+    return { promise, release: (rows: ComplianceRow[]) => resolve(rows) };
+  };
+
+  const openCorrection = async (name = "Ada") => {
+    fireEvent.click(await memberRow(name));
+    fireEvent.click(await screen.findByRole("button", { name: /Correct the record/ }));
+    return screen.findByRole("dialog");
+  };
+  const openLevyCorrection = async () => {
+    await chooseOption(await screen.findByLabelText("Obligation"), "Building Levy");
+    return openCorrection();
+  };
+  const saveDuesApr = async () => {
+    fireEvent.change(await screen.findByLabelText("Apr"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+  };
+
+  beforeEach(() => {
+    api.put.mockResolvedValue({ data: { data: {} } });
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    clearAllCollectionUncertainty();
+  });
+
+  it("sends the displayed guard on a dues correction, and never on recording", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+
+    fireEvent.click(await memberRow("Ada"));
+    fireEvent.click(await screen.findByRole("button", { name: /1 month/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Record/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty("expectedCorrectionGuard");
+    // Saving closes the sheet; the list is aria-hidden until it has gone.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await openCorrection();
+    await saveDuesApr();
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith("/finance/payments", {
+        organisationId: "org1",
+        obligationId: "dues-now",
+        memberId: "ada",
+        monthlyPaid: { "1": 500, "2": 500, "3": 500, "4": 500 },
+        expectedCorrectionGuard: GUARD,
+      }),
+    );
+  });
+
+  it("sends zero revisions on a levy correction instead of dropping them", async () => {
+    const zero = { paymentRowExists: true, paymentRevision: 0, memberFinanceRevision: 0 };
+    complianceRows = levyRows(zero);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openLevyCorrection();
+
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith("/finance/payments", {
+        organisationId: "org1", obligationId: "levy", memberId: "ada",
+        amountPaid: 2500, expectedCorrectionGuard: zero,
+      }),
+    );
+  });
+
+  it("sends the guard with replaceUnappliedCredit only after the red confirmation", async () => {
+    complianceRows = levyRows(GUARD, { recordedTotal: 3000, appliedTotal: 2000, unappliedCredit: 1000 });
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openLevyCorrection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent(/unapplied credit on this record will be replaced too/);
+    expect(api.put).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Yes, update" }));
+    await waitFor(() =>
+      expect(api.put.mock.calls[0][1]).toMatchObject({
+        amountPaid: 2000, replaceUnappliedCredit: true, expectedCorrectionGuard: GUARD,
+      }),
+    );
+  });
+
+  it("repairs an invalid stored amount with the guard it was opened with", async () => {
+    const legacy = { paymentRowExists: true, paymentRevision: null, memberFinanceRevision: 4 };
+    complianceRows = levyRows(legacy, {
+      status: "needs-review", invalidStoredAmount: true, paid: null, balance: null,
+    });
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openLevyCorrection();
+
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "3000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() =>
+      expect(api.put.mock.calls[0][1]).toMatchObject({ amountPaid: 3000, expectedCorrectionGuard: legacy }),
+    );
+  });
+
+  it("on a 409 keeps the sheet open, refetches this organisation and makes the officer start again", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+
+    // Another officer recorded April after this editor opened.
+    complianceRows = adaPaidToApr(NEWER);
+    api.put.mockRejectedValueOnce(httpError(409, "Payment changed"));
+    await saveDuesApr();
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent("Record changed");
+    expect(notice).toHaveTextContent(/Your correction was not saved/);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // The stale amounts are gone, not left waiting to be resent.
+    expect(within(sheet).queryByLabelText("Apr")).not.toBeInTheDocument();
+    expect(invalidate.mock.calls.every(([filters]) => (filters as unknown as { queryKey: readonly unknown[] }).queryKey[1] === "org1"))
+      .toBe(true);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["finance", "org1", "compliance"] });
+
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Review and correct again" }));
+    // A fresh editor from the reloaded row: April is now part of the record.
+    expect(await within(sheet).findByLabelText("Apr")).toHaveValue("500");
+    expect(api.put).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText("May"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));
+    expect(api.put.mock.calls[1][1]).toMatchObject({
+      monthlyPaid: { "1": 500, "2": 500, "3": 500, "4": 500, "5": 500 },
+      expectedCorrectionGuard: NEWER,
+    });
+  });
+
+  it("on a levy 409 waits for fresh rows before offering a new correction", async () => {
+    complianceRows = levyRows(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openLevyCorrection();
+
+    // The refetch after the conflict hangs until released.
+    let release: () => void = () => undefined;
+    api.get.mockImplementation((url: string) => {
+      if (url.includes("/compliance")) {
+        return new Promise((resolve) => {
+          release = () => resolve({ data: { data: { obligation: levy, summary: SUMMARY, rows: levyRows(NEWER, { paid: 3000 }) } } });
+        });
+      }
+      return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+    });
+    api.put.mockRejectedValueOnce(httpError(409));
+    fireEvent.change(screen.getByLabelText(/total amount paid/i), { target: { value: "2500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Record changed");
+    expect(within(sheet).getByRole("button", { name: /Reloading…|Reload latest/ })).toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+
+    await act(async () => release());
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Review and correct again" }));
+    expect(await within(sheet).findByLabelText(/total amount paid/i)).toHaveValue("3,000");
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a newer guard when the row refreshes under an open form", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    fireEvent.change(await within(sheet).findByLabelText("Apr"), { target: { value: "500" } });
+
+    // Another tab saves; this tab's cache refreshes in the background.
+    complianceRows = adaPaidToApr(NEWER);
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("blocks corrections without a guard but still records payments", async () => {
+    complianceRows = adaWith(undefined);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+
+    expect(within(sheet).getByText(/refresh the page after the Finance update before correcting/)).toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeDisabled();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Back to record payment" }));
+    fireEvent.click(await screen.findByRole("button", { name: /1 month/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Record/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("on a 428 explains the page needs refreshing, without a toast or success", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    api.put.mockRejectedValueOnce(httpError(428, "Precondition required"));
+    await saveDuesApr();
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent(/older than the latest Finance update/);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // This build is outdated, so the same token must not be sent again.
+    expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeDisabled();
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("on a 422 shows the backend's message and keeps the form open", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    api.put.mockRejectedValueOnce(httpError(422, "Amount exceeds what is owed"));
+    await saveDuesApr();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Amount exceeds what is owed"));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(within(sheet).getByLabelText("Apr")).toHaveValue("500");
+    expect(within(sheet).queryByText("Record changed")).not.toBeInTheDocument();
+  });
+
+  it("drops an open correction when the organisation changes", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    await openCorrection();
+
+    act(() => setOrg("org2", MANAGER));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument());
+    await openCorrection();
+    await saveDuesApr();
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(api.put.mock.calls[0][1]).toMatchObject({ organisationId: "org2", expectedCorrectionGuard: GUARD });
+  });
+
+  it("keeps typed values when a refetch leaves the guard unchanged", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    fireEvent.change(await within(sheet).findByLabelText("Apr"), { target: { value: "500" } });
+
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    expect(within(sheet).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(sheet).getByLabelText("Apr")).toHaveValue("500");
+    expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeEnabled();
+  });
+
+  it("a 503 with FINANCE_TRANSACTIONS_UNAVAILABLE keeps the entries and says nothing was written", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+    api.put.mockRejectedValueOnce(
+      httpError(
+        503,
+        "Payment corrections are temporarily unavailable. No change was made.",
+        "FINANCE_TRANSACTIONS_UNAVAILABLE",
+      ),
+    );
+    await saveDuesApr();
+
+    const alert = await within(sheet).findByRole("alert");
+    expect(alert).toHaveTextContent(/temporarily unavailable/);
+    expect(alert).toHaveTextContent(/Nothing was changed/);
+    // Nothing was written, so the figures and the typed correction stay usable.
+    expect(within(sheet).getByLabelText("Apr")).toHaveValue("500");
+    expect(within(sheet).getByRole("button", { name: "Save correction" })).toBeDisabled();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save correction" }));
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "a 503 with an unknown commit outcome",
+      httpError(
+        503,
+        "We could not confirm whether this correction was saved.",
+        "FINANCE_CORRECTION_OUTCOME_UNKNOWN",
+      ),
+    ],
+    ["a 503 with an unrecognised code", httpError(503, "Something went wrong.", "FINANCE_SOMETHING_ELSE")],
+    [
+      "a 503 with a missing code",
+      httpError(503, "We could not confirm whether this correction was saved."),
+    ],
+    ["a lost response", {}],
+    ["ERR_NETWORK", { code: "ERR_NETWORK" }],
+    ["a timeout", { code: "ECONNABORTED" }],
+    ["a cancelled request", { code: "ERR_CANCELED" }],
+    ["a proxy 502", { response: { status: 502, data: {} } }],
+    ["a proxy 504", { response: { status: 504, data: {} } }],
+    ["a server 500", { response: { status: 500, data: {} } }],
+    ["a server-reported timeout", { response: { status: 408, data: {} } }],
+  ])("a correction with %s is treated as unconfirmed: no resend, reload required", async (_case, error) => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+
+    // The refetch after the ambiguity hangs until released.
+    const hung = hungCompliance(duesNow);
+    api.get.mockImplementation((url: string) =>
+      url.includes("/compliance")
+        ? hung.promise
+        : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+    );
+    api.put.mockRejectedValueOnce(error);
+    await saveDuesApr();
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent("Correction not confirmed");
+    expect(notice).toHaveTextContent(/may already be saved/);
+    // The unknown outcome must never claim that nothing was written.
+    expect(notice).not.toHaveTextContent(/Nothing was changed/);
+    await waitFor(() => expect(notice).toHaveFocus());
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["finance", "org1", "compliance"] });
+    expect(
+      invalidate.mock.calls.every(
+        ([filters]) =>
+          (filters as unknown as { queryKey: readonly unknown[] }).queryKey[1] === "org1",
+      ),
+    ).toBe(true);
+    // Nothing is replayed while the stored state is unknown.
+    expect(api.put).toHaveBeenCalledTimes(1);
+
+    await act(async () => hung.release(adaPaidToApr(NEWER)));
+
+    // Fresh figures are shown, but a new correction is a deliberate step.
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Review latest figures" }));
+    expect(await within(sheet).findByRole("button", { name: /Correct the record/ })).toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(within(sheet).getByRole("button", { name: /Correct the record/ }));
+    fireEvent.change(await within(sheet).findByLabelText("May"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));
+    expect(api.put.mock.calls[1][1]).toMatchObject({ expectedCorrectionGuard: NEWER });
+  });
+
+  it("does not re-enable a stale correction when the reload fails", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    api.get.mockImplementation((url: string) => {
+      if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+      return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+    });
+    api.put.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+    await saveDuesApr();
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent("Correction not confirmed");
+    fireEvent.click(within(notice).getByRole("button", { name: "Reload latest" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(within(sheet).queryByRole("button", { name: "Review latest figures" })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the Record changed notice when the start date is cleared mid-correction", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+
+    const hung = hungCompliance(duesNow);
+    api.get.mockImplementation((url: string) =>
+      url.includes("/compliance")
+        ? hung.promise
+        : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+    );
+    api.put.mockRejectedValueOnce(httpError(409));
+    await saveDuesApr();
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Record changed");
+    await act(async () =>
+      hung.release([{ ...ROWS[0], accountable: false, correctionGuard: NEWER }, ROWS[1], ROWS[2]]),
+    );
+
+    await waitFor(() =>
+      expect(within(sheet).getByRole("alert")).toHaveTextContent(/no longer owe this obligation/),
+    );
+    const notice = within(sheet).getByRole("alert");
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/has no financial start date/)).toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows the notice when a background refetch makes the dues year not liable", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    fireEvent.change(await within(sheet).findByLabelText("Apr"), { target: { value: "500" } });
+
+    complianceRows = [
+      {
+        ...ROWS[0],
+        liable: false,
+        status: "not-due",
+        months: months(Array(12).fill("not-due")),
+        totalExpected: 0,
+        totalPaid: 0,
+        balance: 0,
+        paidUpToMonth: 0,
+        correctionGuard: NEWER,
+      },
+      ROWS[1],
+      ROWS[2],
+    ];
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/after this dues year/)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("keeps the notice when a levy correction conflicts with a later start date", async () => {
+    complianceRows = levyRows(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openLevyCorrection();
+
+    const hung = hungCompliance(levy);
+    api.get.mockImplementation((url: string) =>
+      url.includes("/compliance")
+        ? hung.promise
+        : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+    );
+    api.put.mockRejectedValueOnce(httpError(409));
+    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, update" }));
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Record changed");
+    await act(async () =>
+      hung.release([
+        {
+          memberId: "ada",
+          name: "Ada",
+          accountable: true,
+          liable: false,
+          status: "not-due",
+          expected: 0,
+          paid: 0,
+          balance: 0,
+          correctionGuard: NEWER,
+        } as ComplianceRow,
+      ]),
+    );
+
+    await waitFor(() =>
+      expect(within(sheet).getByRole("alert")).toHaveTextContent(/no longer owe this obligation/),
+    );
+    const notice = within(sheet).getByRole("alert");
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).getByText(/after this levy's date/)).toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains a first-row 400 and offers recording instead of another correction", async () => {
+    const noRow = { paymentRowExists: false, paymentRevision: null, memberFinanceRevision: 2 };
+    complianceRows = adaWith(noRow);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    api.put.mockRejectedValueOnce(httpError(400, "There is no payment record for this obligation yet."));
+    await saveDuesApr();
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent("No payment record to correct");
+    expect(notice).toHaveTextContent(/Record a payment instead/);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(within(sheet).queryByRole("button", { name: "Save correction" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(notice).getByRole("button", { name: "Record a payment instead" }));
+    expect(await within(sheet).findByLabelText("Amount received")).toBeInTheDocument();
+  });
+
+  it("shows the notice when a background refetch clears the start date", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+    fireEvent.change(await within(sheet).findByLabelText("Apr"), { target: { value: "500" } });
+
+    complianceRows = [{ ...ROWS[0], accountable: false, correctionGuard: NEWER }, ROWS[1], ROWS[2]];
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/has no financial start date/)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("keeps the notice when a 409 is followed by a future dues-year start date", async () => {
+    complianceRows = adaWith(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openCorrection();
+
+    const hung = hungCompliance(duesNow);
+    api.get.mockImplementation((url: string) =>
+      url.includes("/compliance")
+        ? hung.promise
+        : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+    );
+    api.put.mockRejectedValueOnce(httpError(409));
+    await saveDuesApr();
+
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("Record changed");
+    await act(async () =>
+      hung.release([
+        {
+          ...ROWS[0],
+          liable: false,
+          status: "not-due",
+          months: months(Array(12).fill("not-due")),
+          totalExpected: 0,
+          totalPaid: 0,
+          balance: 0,
+          paidUpToMonth: 0,
+          correctionGuard: NEWER,
+        },
+        ROWS[1],
+        ROWS[2],
+      ]),
+    );
+
+    await waitFor(() =>
+      expect(within(sheet).getByRole("alert")).toHaveTextContent(/no longer owe this obligation/),
+    );
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(within(sheet).getByText(/after this dues year/)).toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows the notice when a background refetch moves the start date past the levy", async () => {
+    complianceRows = levyRows(GUARD);
+    setOrg("org1", MANAGER);
+    renderFinance();
+    const sheet = await openLevyCorrection();
+
+    complianceRows = [
+      {
+        memberId: "ada",
+        name: "Ada",
+        accountable: true,
+        liable: false,
+        status: "not-due",
+        expected: 0,
+        paid: 0,
+        balance: 0,
+        correctionGuard: NEWER,
+      } as ComplianceRow,
+    ];
+    await act(() => queryClient.invalidateQueries({ queryKey: ["finance", "org1", "compliance"] }));
+
+    const notice = await within(sheet).findByRole("alert");
+    expect(notice).toHaveTextContent(/changed while you were correcting it/);
+    expect(notice).toHaveTextContent(/no longer owe this obligation/);
+    expect(within(sheet).queryByRole("button", { name: "Review and correct again" })).not.toBeInTheDocument();
+    expect(within(sheet).getByText(/after this levy's date/)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  describe("collection transport ambiguity", () => {
+    const openRecord = async (amount = "500") => {
+      fireEvent.click(await memberRow("Ada"));
+      const sheet = await screen.findByRole("dialog");
+      fireEvent.change(await within(sheet).findByLabelText("Amount received"), {
+        target: { value: amount },
+      });
+      return sheet;
+    };
+    const submitRecord = (sheet: HTMLElement) =>
+      fireEvent.click(within(sheet).getByRole("button", { name: /^Record/ }));
+
+    it.each([
+      ["a lost response", {}],
+      ["ERR_NETWORK", { code: "ERR_NETWORK" }],
+      ["a timeout", { code: "ECONNABORTED" }],
+      ["a cancelled request", { code: "ERR_CANCELED" }],
+      ["a proxy 502", { response: { status: 502, data: {} } }],
+      ["a proxy 503", { response: { status: 503, data: {} } }],
+      ["a proxy 504", { response: { status: 504, data: {} } }],
+      ["a server 500", { response: { status: 500, data: {} } }],
+      ["a server-reported timeout", { response: { status: 408, data: {} } }],
+    ])("a collection with %s is unconfirmed: no resend and no stale amount", async (_case, error) => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      const invalidate = jest.spyOn(queryClient, "invalidateQueries");
+      api.post.mockRejectedValueOnce(error);
+      submitRecord(sheet);
+
+      const notice = await within(sheet).findByRole("alert");
+      expect(notice).toHaveTextContent("Payment not confirmed");
+      expect(notice).toHaveTextContent(/may already be on the record/);
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(api.post).toHaveBeenCalledTimes(1);
+      expect(within(sheet).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["finance", "org1", "compliance"] });
+      expect(
+        invalidate.mock.calls.every(
+          ([filters]) =>
+            (filters as unknown as { queryKey: readonly unknown[] }).queryKey[1] === "org1",
+        ),
+      ).toBe(true);
+
+      fireEvent.click(await within(sheet).findByRole("button", { name: "Review latest figures" }));
+      expect(await within(sheet).findByLabelText("Amount received")).toHaveValue("");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the recorded amount after a lost response and requires a deliberate new record", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      // The backend committed before its response was lost.
+      complianceRows = adaPaidToApr(NEWER);
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(await within(sheet).findByRole("button", { name: "Review latest figures" }));
+
+      expect(within(sheet).getByText("₦2,000")).toBeInTheDocument();
+      expect(await within(sheet).findByLabelText("Amount received")).toHaveValue("");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      [422, "Amount exceeds what is owed"],
+      [400, "Duplicate payment record"],
+    ])("a deterministic %s keeps the form and shows the backend message", async (status, message) => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.post.mockRejectedValueOnce(httpError(status, message));
+      submitRecord(sheet);
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(within(sheet).queryByText("Payment not confirmed")).not.toBeInTheDocument();
+      expect(within(sheet).getByLabelText("Amount received")).toHaveValue("500");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-enable recording when the post-error reload fails", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.get.mockImplementation((url: string) => {
+        if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+        return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+      });
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      const notice = await within(sheet).findByRole("alert");
+      expect(notice).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(notice).getByRole("button", { name: "Reload latest" }));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(within(sheet).queryByRole("button", { name: "Review latest figures" })).not.toBeInTheDocument();
+      expect(within(sheet).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the warning after closing and reopening when the reload failed", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.get.mockImplementation((url: string) => {
+        if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+        return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+      });
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the warning across a reopen until a fresh response and explicit review", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+
+      const hung = hungCompliance(duesNow);
+      api.get.mockImplementation((url: string) =>
+        url.includes("/compliance")
+          ? hung.promise
+          : Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } }),
+      );
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+
+      await act(async () => hung.release(adaPaidToApr(NEWER)));
+      expect(
+        await within(reopened).findByRole("button", { name: "Review latest figures" }),
+      ).toBeInTheDocument();
+      // Fresh rows are not enough: the form stays hidden until explicit review.
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+
+      fireEvent.click(within(reopened).getByRole("button", { name: "Review latest figures" }));
+      expect(await within(reopened).findByLabelText("Amount received")).toHaveValue("");
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not bypass a pending warning after switching tabs", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.get.mockImplementation((url: string) => {
+        if (url.includes("/compliance")) return Promise.reject(new Error("offline"));
+        return Promise.resolve({ data: { data: url.includes("/obligations") ? [levy, duesNow] : MEMBERS } });
+      });
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      await openTab("Obligations");
+      await openTab("Collect");
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps Org A's warning after visiting Org B and never shows it in Org B", async () => {
+      complianceRows = adaWith(GUARD);
+      setOrg("org1", MANAGER);
+      renderFinance();
+      const sheet = await openRecord();
+      api.post.mockRejectedValueOnce({ code: "ERR_NETWORK" });
+      submitRecord(sheet);
+
+      expect(await within(sheet).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      act(() => setOrg("org2", MANAGER));
+      fireEvent.click(await memberRow("Ada"));
+      const org2Sheet = await screen.findByRole("dialog");
+      expect(within(org2Sheet).queryByText("Payment not confirmed")).not.toBeInTheDocument();
+      expect(within(org2Sheet).getByLabelText("Amount received")).toBeInTheDocument();
+      fireEvent.click(within(org2Sheet).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      act(() => setOrg("org1", MANAGER));
+      fireEvent.click(await memberRow("Ada"));
+      const reopened = await screen.findByRole("dialog");
+      expect(await within(reopened).findByRole("alert")).toHaveTextContent("Payment not confirmed");
+      expect(within(reopened).queryByLabelText("Amount received")).not.toBeInTheDocument();
+      expect(api.post).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe("<Finance> Books (F1)", () => {
+  const LEDGER_STATUS = {
+    state: "not_active",
+    currency: "NGN",
+    openingBalancesVerified: false,
+    postingEnabled: false,
+  };
+
+  /** Serve the ledger routes, falling through to the current finance fixture. */
+  const serveLedger = () => {
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation((url: string) => {
+      if (url.endsWith("/ledger/status")) {
+        return Promise.resolve({ data: { data: LEDGER_STATUS } });
+      }
+      if (url.endsWith("/ledger/accounts") || url.endsWith("/ledger/journals")) {
+        return Promise.resolve({ data: { data: [] } });
+      }
+      return base(url);
+    });
+  };
+
+  it("shows the gated, read-only Books tab to a viewer", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    serveLedger();
+    renderFinance();
+
+    const booksTab = await screen.findByRole("tab", { name: "Books" });
+    expect(generatedCss(booksTab)).toMatch(/min-height:\s*44px|height:\s*44px/);
+    await openTab("Books");
+
+    expect(
+      await screen.findByText(/Bookkeeping has not been activated for this organisation/),
+    ).toBeInTheDocument();
+    // The setup gate is on: a viewer sees setup progress but cannot start it.
+    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
+    expect(
+      screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/status");
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/accounts");
+    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/journals");
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("reloads Books only for the newly selected organisation", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    serveLedger();
+    renderFinance();
+    await openTab("Books");
+    expect(await screen.findByText(/Bookkeeping has not been activated/)).toBeInTheDocument();
+
+    api.get.mockClear();
+    act(() => setOrg("org2", VIEWER));
+    await openTab("Books");
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith("/finance/org2/ledger/status"),
+    );
+
+    const ledgerCalls = api.get.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.includes("/ledger/"));
+    expect(ledgerCalls.length).toBeGreaterThan(0);
+    expect(ledgerCalls.every((url) => url.includes("/finance/org2/"))).toBe(true);
+  });
 });

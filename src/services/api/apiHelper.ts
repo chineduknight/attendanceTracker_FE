@@ -30,6 +30,31 @@ export const deleteRequest = async ({ url, data }: any) => {
   return response?.data || response;
 };
 
+/**
+ * The default mutation failure: toast the backend's message(s). Exported so a
+ * mutation with its own handling for some statuses can fall back to it.
+ */
+export const showMutationError = (error: unknown) => {
+  const err = error as Record<any, any>;
+  const statusCode = err?.response?.status;
+
+  // 401 errors are already handled by the global axios interceptor.
+  if (statusCode === 401) {
+    return;
+  }
+
+  const message: any = err?.response?.data?.error;
+  if (Array.isArray(message)) {
+    message.map((errorMsg) =>
+      toast.error(`${errorMsg ?? "An error occured"}`, {
+        autoClose: false,
+      }),
+    );
+  } else {
+    toast.error(`${message ?? "An error occured"}`);
+  }
+};
+
 // TODO: write JSDocs for this function
 export const useMutationWrapper = (makeAPICall: any, onSuccess?: any, onError?: any): any => {
   return useMutation(makeAPICall, {
@@ -43,24 +68,7 @@ export const useMutationWrapper = (makeAPICall: any, onSuccess?: any, onError?: 
       if (onError) {
         onError(error);
       } else {
-        const err = error as Record<any, any>;
-        const statusCode = err?.response?.status;
-
-        // 401 errors are already handled by the global axios interceptor.
-        if (statusCode === 401) {
-          return;
-        }
-
-        const message: any = err?.response?.data?.error;
-        if (Array.isArray(message)) {
-          message.map((errorMsg) =>
-            toast.error(`${errorMsg ?? "An error occured"}`, {
-              autoClose: false,
-            }),
-          );
-        } else {
-          toast.error(`${message ?? "An error occured"}`);
-        }
+        showMutationError(error);
       }
     },
   });

@@ -11,7 +11,7 @@ import { FaChevronRight } from "react-icons/fa";
 import { toast } from "react-toastify";
 import {
   formatBusinessDate,
-  REALLOCATION_WARNING,
+  START_DATE_CHANGE_NOTE,
   matchesSearch,
   matchesStartDateFilter,
   START_DATE_FILTER_LABELS,
@@ -278,7 +278,7 @@ const StartDatesTab = ({ organisationId }: { organisationId: string }) => {
           bulkDate
             ? `Set the financial start date to ${formatBusinessDate(bulkDate)} for ${selected.size} selected ${memberWord(selected.size)}? They will be financially accountable from that month onward.${
                 selectedWithDates
-                  ? ` ${selectedWithDates} already ${selectedWithDates === 1 ? "has" : "have"} a start date. ${REALLOCATION_WARNING}`
+                  ? ` ${selectedWithDates} already ${selectedWithDates === 1 ? "has" : "have"} a start date. ${START_DATE_CHANGE_NOTE}`
                   : ""
               }`
             : ""

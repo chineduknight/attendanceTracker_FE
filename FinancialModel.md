@@ -326,7 +326,9 @@ GET /api/finance/:organisationId/obligations/:id/compliance
         "balance": 4800,
         "paidUpToMonth": 1,
         "compliance": 17,
-        "creditMonths": []
+        "recordedTotal": 1200,
+        "appliedTotal": 1200,
+        "unappliedCredit": 0
       },
       { "memberId": "...", "name": "On Probation", "accountable": false }
     ]
@@ -336,7 +338,7 @@ GET /api/finance/:organisationId/obligations/:id/compliance
 
 - Month status values: **`paid` / `partial` / `unpaid` / `not-due`** (use these for cell colours).
 - `accountable: false` rows have no grid — render them as "not accountable" and exclude from compliance math (the API already excludes them from `summary`).
-- `compliance` is a percentage (0–100). `paidUpToMonth` is the last fully-paid consecutive month. `creditMonths` (if present) = months paid that are now `not-due` (a credit/over-pay signal).
+- `compliance` is a percentage (0–100). `paidUpToMonth` is the last fully-paid consecutive month. Paid / balance figures are the value **applied** under the current start date. `recordedTotal` is everything recorded, and `unappliedCredit` is the recorded value that does not apply (retained, not refunded). `creditMonths` was removed in F0b; use `unappliedCredit`. A dues row with no eligible month this year is `liable: false`, `status: "not-due"`, with no `compliance`. The summary's `totalCollected` (= `totalApplied`) is applied value, not cash income. A row with `invalidStoredAmount: true` has an UNKNOWN paid value: `status: "needs-review"`, eligible months `"unknown"`, and paid-dependent figures `null` (never read them as 0). Summary money totals exclude such rows and count them in `invalidPaymentRows`. See the backend `FRONTEND_API.md` §10 for the full contract.
 - **Levy** rows look like: `{ memberId, name, accountable, liable, expected, paid, balance, status }` (single cell, no `months`).
 
 ### Exports
