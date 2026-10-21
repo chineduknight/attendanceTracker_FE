@@ -29,8 +29,8 @@ import {
 } from "test-utils/ledgerF3Fixtures";
 
 describe("F3 gates", () => {
-  it("ship off", () => {
-    expect(LEDGER_F3_RECONCILIATION_UI_ENABLED).toBe(false);
+  it("ship the read-only reconciliation on and allocation posting off", () => {
+    expect(LEDGER_F3_RECONCILIATION_UI_ENABLED).toBe(true);
     expect(LEDGER_F3_ALLOCATION_UI_ENABLED).toBe(false);
   });
 });

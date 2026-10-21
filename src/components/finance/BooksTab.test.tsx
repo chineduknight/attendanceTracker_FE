@@ -14,6 +14,8 @@ import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { LEDGER_F3_SETUP_UI_ENABLED } from "config/ledgerF3Setup";
 import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
 import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
+import useGlobalStore, { EMPTY_ORG } from "zStore";
+import { RECONCILIATION_NOT_LIVE_NOTE } from "components/finance/reconciliation/ReconciliationPanel";
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -317,7 +319,7 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
 });
 
 describe("<BooksTab> release gates", () => {
-  it("keeps every finance gate off", () => {
+  it("ships only the two read-only report gates on", () => {
     expect({
       setup: LEDGER_SETUP_UI_ENABLED,
       openingBalances: LEDGER_OPENING_BALANCES_UI_ENABLED,
@@ -336,22 +338,41 @@ describe("<BooksTab> release gates", () => {
       postings: false,
       memberMoney: false,
       reversals: false,
-      reports: false,
+      reports: true,
       f3Setup: false,
-      f3Reconciliation: false,
+      f3Reconciliation: true,
       f3Allocations: false,
     });
   });
 
-  it("shows no F3 reconciliation or allocation UI, and reads neither, with their gates off", async () => {
-    serveLedger({ ...F2_ACTIVE, allocationsEnabled: true }, ACCOUNTS, JOURNALS);
-    renderBooks();
-    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Member money reconciliation" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Allocate member money" })).not.toBeInTheDocument();
-    const urls = api.get.mock.calls.map(([url]) => String(url));
-    expect(urls.some((url) => /\/reconciliation\/|\/ledger\/allocations|\/member-money/.test(url))).toBe(false);
-    expect(api.post).not.toHaveBeenCalled();
+  it("reads no reconciliation for books that aren't active", async () => {
+    useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1", isOwner: true } });
+    try {
+      serveLedger(NOT_ACTIVE);
+      renderBooks();
+      const region = await screen.findByRole("region", { name: "Member money reconciliation" });
+      expect(region).toHaveTextContent(RECONCILIATION_NOT_LIVE_NOTE);
+      const urls = api.get.mock.calls.map(([url]) => String(url));
+      expect(urls.some((url) => /\/reconciliation\/|\/ledger\/allocations/.test(url))).toBe(false);
+    } finally {
+      useGlobalStore.setState({ organisation: EMPTY_ORG });
+    }
+  });
+
+  it("shows the read-only reconciliation but no allocation posting, and writes nothing", async () => {
+    useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1", isOwner: true } });
+    try {
+      serveLedger({ ...F2_ACTIVE, allocationsEnabled: true }, ACCOUNTS, JOURNALS);
+      renderBooks();
+      expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Member money reconciliation" })).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Allocate member money" })).not.toBeInTheDocument();
+      for (const method of ["post", "put", "patch", "delete"] as const) {
+        expect(api[method]).not.toHaveBeenCalled();
+      }
+    } finally {
+      useGlobalStore.setState({ organisation: EMPTY_ORG });
+    }
   });
 
   it("shows no F3A allocation setup, and writes nothing, with its gate off", async () => {

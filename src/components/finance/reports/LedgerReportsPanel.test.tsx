@@ -584,7 +584,7 @@ describe("<LedgerReportsPanel> freshness, isolation and permissions", () => {
   it("renders nothing while its gate is off", () => {
     const { container } = render(
       <QueryClientProvider client={queryClient}>
-        <LedgerReportsPanel organisationId="org1" accounts={ACCOUNTS} />
+        <LedgerReportsPanel organisationId="org1" accounts={ACCOUNTS} enabled={false} />
       </QueryClientProvider>,
     );
     expect(container).toBeEmptyDOMElement();

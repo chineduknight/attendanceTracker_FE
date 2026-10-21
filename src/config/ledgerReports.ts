@@ -15,4 +15,4 @@
  *
  * While false, Books renders exactly what the F2B-3 release shipped.
  */
-export const LEDGER_REPORTS_UI_ENABLED: boolean = false;
+export const LEDGER_REPORTS_UI_ENABLED: boolean = true;
