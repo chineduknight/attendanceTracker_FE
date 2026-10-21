@@ -302,8 +302,9 @@ describe("<LedgerReportsPanel> cashbook", () => {
     await screen.findByText("E-000001");
     await selectTab(screen.getByRole("tab", { name: "Summary" }));
     await screen.findByText("1 Sep 2026 – 30 Sep 2026");
-    // Only the open report is mounted.
-    expect(screen.queryByText("E-000001")).not.toBeInTheDocument();
+    // Only the open report is mounted. The closed tab unmounts after its exit
+    // transition, which jsdom finishes asynchronously.
+    await waitFor(() => expect(screen.queryByText("E-000001")).not.toBeInTheDocument());
 
     await selectTab(screen.getByRole("tab", { name: "Cashbook" }));
     expect(await screen.findByText("E-000001")).toBeInTheDocument();
