@@ -3,8 +3,19 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { installPostingLockManager, removePostingLockManager } from "test-utils/postingLocks";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
+
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
+
+/** Where Books opens; a test points it at the screen it covers. */
+let booksUrl = "/finance?tab=books";
+const openBooksAt = (books: string, org = "org1") => {
+  booksUrl = `/finance?tab=books&books=${books}&org=${org}`;
+};
+beforeEach(() => {
+  booksUrl = "/finance?tab=books";
+});
 
 // Wiring only: the real gate stays off (BooksTab.test.tsx asserts it).
 jest.mock("config/ledgerReversals", () => ({ LEDGER_REVERSALS_UI_ENABLED: true }));
@@ -59,7 +70,11 @@ beforeEach(() => {
       });
     }
     if (url.endsWith("/ledger/accounts")) return Promise.resolve({ data: { data: [] } });
-    if (url.endsWith("/ledger/journals")) return Promise.resolve({ data: { data: [JOURNAL] } });
+    if (url.includes("/ledger/journals?")) {
+      return Promise.resolve({
+        data: { data: { items: [{ ...JOURNAL, totalKobo: 125000, entry: null }], nextCursor: null } },
+      });
+    }
     if (url.includes("/ledger/attempts")) return Promise.resolve({ data: { data: { items: [], nextCursor: null } } });
     if (url.endsWith(`/ledger/journals/${JOURNAL_ID}`)) {
       return Promise.resolve({
@@ -84,9 +99,10 @@ afterEach(() => {
 });
 
 it("opens a journal's details from the list and keeps attempts resolvable while suspended", async () => {
+  openBooksAt("manage-attempts");
   render(
     <QueryClientProvider client={queryClient}>
-      <BooksTab organisationId="org1" />
+      <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId="org1" /></MemoryRouter>
     </QueryClientProvider>,
   );
   // Resolving does not depend on posting readiness: the list is read even
@@ -94,8 +110,11 @@ it("opens a journal's details from the list and keeps attempts resolvable while 
   const attempts = await screen.findByRole("region", { name: "Unconfirmed attempts" });
   expect(await within(attempts).findByText("No unconfirmed attempts")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: /Details of the 12 Oct 2026 entry RCPT-001/ }));
-  const reversals = screen.getByRole("region", { name: "Reversals" });
+  fireEvent.click(screen.getByRole("button", { name: "Manage Books" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Books" }));
+  fireEvent.click(await screen.findByRole("button", { name: "See all" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Money in: .*12 Oct 2026/ }));
+  const reversals = await screen.findByRole("region", { name: "Reversals" });
   expect(await within(reversals).findByText("Money in R-000001")).toBeInTheDocument();
   expect(within(reversals).getByRole("heading", { name: "Entry details" })).toHaveFocus();
   expect(within(reversals).getByText(/Bookkeeping is suspended/)).toBeInTheDocument();

@@ -1,0 +1,274 @@
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { render } from "test-utils/render";
+import { installPostingLockManager, removePostingLockManager } from "test-utils/postingLocks";
+import { queryClient } from "services/api/apiHelper";
+import BooksTab from "components/finance/BooksTab";
+import { beginLedgerPostingIntent, markLedgerPostingIntentUnresolved } from "helpers/ledgerPostingIntent";
+import { todayInLagos } from "helpers/openingBalances";
+import { PermissionKey } from "rbac/permissions";
+import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
+
+/** The Books screen stack: navigation, permissions, organisation safety. */
+
+jest.mock("react-toastify", () => ({ toast: { error: jest.fn(), success: jest.fn(), info: jest.fn() } }));
+jest.mock("services/api", () => ({
+  __esModule: true,
+  ...jest.requireActual("services/api/request"),
+  default: { get: jest.fn(), post: jest.fn(), put: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const api = require("services/api").default as Record<"get" | "post" | "put" | "patch" | "delete", jest.Mock>;
+
+const TODAY = todayInLagos();
+
+const statusOf = (overrides: Record<string, unknown> = {}) => ({
+  state: "active",
+  currency: "NGN",
+  openingBalancesVerified: true,
+  postingEnabled: true,
+  blockers: [],
+  openingDate: "2026-09-01",
+  lockedThrough: null,
+  memberReceiptsEnabled: false,
+  allocationsEnabled: false,
+  revision: 4,
+  pendingProposal: null,
+  activatedAt: "2026-09-01T10:00:00.000Z",
+  gapWindowAttestedAt: null,
+  unconfirmedAttempts: 0,
+  contractVersion: "f2-0.3",
+  ...overrides,
+});
+
+const account = (id: string, name: string, cls: string, subtype: string | null) => ({
+  id,
+  name,
+  class: cls,
+  subtype,
+  currency: "NGN",
+  active: true,
+  revision: 0,
+  openingVerified: cls === "asset" ? true : null,
+  bankName: null,
+  accountNumberLast4: null,
+});
+
+const ACCOUNTS = [
+  account("cash", "Cash in hand", "asset", "cash"),
+  account("bank", "Main bank", "asset", "bank"),
+  account("equity", "Opening balance equity", "equity", "opening_balance_equity"),
+  account("donations", "Donations", "income", null),
+  account("ops", "Operating expenses", "expense", null),
+];
+
+let status = statusOf();
+
+const serve = (org = "org1") =>
+  api.get.mockImplementation((url: string) => {
+    if (!url.includes(`/finance/${org}/`)) return Promise.resolve({ data: { data: null } });
+    if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: status } });
+    if (url.endsWith("/ledger/accounts")) return Promise.resolve({ data: { data: ACCOUNTS } });
+    if (url.includes("/ledger/balances")) {
+      return Promise.resolve({
+        data: {
+          data: {
+            asOf: TODAY,
+            accounts: [
+              { accountId: "cash", balanceState: "known", balanceKobo: 7300000 },
+              { accountId: "bank", balanceState: "known", balanceKobo: 9500000 },
+            ],
+            moneyTotalKobo: 16800000,
+          },
+        },
+      });
+    }
+    if (url.includes("/ledger/journals?")) {
+      return Promise.resolve({ data: { data: { items: [], nextCursor: null } } });
+    }
+    return Promise.resolve({ data: { data: [] } });
+  });
+
+const setSession = (permissions: PermissionKey[] | "owner", org = "org1") =>
+  useGlobalStore.setState({
+    user: { ...EMPTY_USER, id: "officer-1" },
+    organisation: {
+      ...EMPTY_ORG,
+      id: org,
+      isOwner: permissions === "owner",
+      permissions: permissions === "owner" ? [] : permissions,
+    },
+  });
+
+const seen = { search: "" };
+const Spy = () => {
+  seen.search = useLocation().search;
+  return null;
+};
+
+const renderBooks = (entry = "/finance?tab=books", organisationId = "org1") =>
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[entry]}>
+        <BooksTab organisationId={organisationId} />
+        <Spy />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+const MANAGER: PermissionKey[] = ["finance.view", "finance.manage"];
+const VIEWER: PermissionKey[] = ["finance.view"];
+
+beforeEach(() => {
+  queryClient.clear();
+  window.localStorage.clear();
+  Object.values(api).forEach((mock) => mock.mockReset());
+  installPostingLockManager();
+  status = statusOf();
+});
+
+afterEach(() => {
+  removePostingLockManager();
+  useGlobalStore.setState({ user: EMPTY_USER, organisation: EMPTY_ORG });
+});
+
+describe("Books Overview", () => {
+  it("shows cash and bank first, then Money in, Money out and Transfer to a manager", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    expect(await screen.findByRole("group", { name: "Cash in hand" })).toHaveTextContent("₦73,000");
+    expect(screen.getByRole("group", { name: "Main bank" })).toHaveTextContent("₦95,000");
+    expect(screen.getByText("₦168,000")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Money in/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Money out/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Transfer between accounts/ })).toBeEnabled();
+  });
+
+  it("gives a viewer the figures but no way to record", async () => {
+    setSession(VIEWER);
+    serve();
+    renderBooks();
+    expect(await screen.findByRole("group", { name: "Cash in hand" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money out/ })).not.toBeInTheDocument();
+  });
+
+  it("opens Money in as a sheet in the URL", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    fireEvent.click(await screen.findByRole("button", { name: /Money in/ }));
+    expect(await screen.findByRole("dialog", { name: "Money in" })).toBeInTheDocument();
+    expect(seen.search).toContain("sheet=money-in");
+  });
+
+  it("says books aren't set up, and offers setup only to a manager", async () => {
+    status = statusOf({ state: "not_active", openingBalancesVerified: false, postingEnabled: false });
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    expect(await screen.findByText("Books aren't set up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set up books" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
+  });
+
+  it("shows no member-money surface while member receipts are off", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    fireEvent.click(await screen.findByRole("button", { name: /Money in/ }));
+    await screen.findByRole("dialog", { name: "Money in" });
+    expect(screen.queryByRole("button", { name: "For a member" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Held for members")).not.toBeInTheDocument();
+  });
+});
+
+describe("Books navigation", () => {
+  it("moves into Manage Books and back", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
+    expect(await screen.findByRole("heading", { name: "Manage Books" })).toBeVisible();
+    expect(seen.search).toContain("books=manage");
+
+    fireEvent.click(screen.getByRole("button", { name: /Setup & accounts/ }));
+    expect(await screen.findByRole("heading", { name: "Setup & accounts" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage Books" }));
+    await waitFor(() => expect(seen.search).not.toContain("manage-setup"));
+    expect(screen.getByRole("heading", { name: "Manage Books" })).toBeVisible();
+  });
+
+  it("sends a viewer who opens a manage-only screen to the Overview", async () => {
+    setSession(VIEWER);
+    serve();
+    renderBooks("/finance?tab=books&books=manage-attempts&org=org1");
+    await waitFor(() => expect(seen.search).not.toContain("manage-attempts"));
+    expect(await screen.findByRole("group", { name: "Cash in hand" })).toBeVisible();
+  });
+
+  it("ignores another organisation's Books URL and never reads its entry", async () => {
+    setSession(MANAGER, "org2");
+    serve("org2");
+    renderBooks("/finance?tab=books&books=entry&journal=j-from-org1&org=org1", "org2");
+    await waitFor(() => expect(seen.search).toBe("?tab=books&org=org2"));
+    expect(api.get.mock.calls.some(([url]) => String(url).includes("j-from-org1"))).toBe(false);
+  });
+});
+
+describe("Books transactions", () => {
+  it("filters on the server and says when the list is complete", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks("/finance?tab=books&books=transactions&org=org1");
+    expect(await screen.findByText("That's everything for these filters")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Money out" }));
+    await waitFor(() =>
+      expect(api.get.mock.calls.some(([url]) => String(url).includes("sourceType=cash_expense"))).toBe(true),
+    );
+  });
+});
+
+describe("Books pending postings", () => {
+  it("offers one retry, reached from Needs attention", async () => {
+    const claim = await beginLedgerPostingIntent({
+      organisationId: "org1",
+      officerId: "officer-1",
+      key: "key-12345678",
+      operation: "receipt",
+      body: {
+        idempotencyKey: "key-12345678",
+        businessDate: TODAY,
+        amountKobo: 500000,
+        toAccountId: "cash",
+        incomeAccountId: "donations",
+        method: "cash",
+      },
+      summary: {
+        operation: "receipt",
+        amountKobo: 500000,
+        businessDate: TODAY,
+        method: "cash",
+        fromAccountName: null,
+        toAccountName: "Cash in hand",
+        categoryName: "Donations",
+      },
+    });
+    if (claim.kind !== "claimed") throw new Error("seed failed");
+    await markLedgerPostingIntentUnresolved(claim.record, { ambiguous: true, message: "Unknown." });
+
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+    fireEvent.click(within(attention).getByRole("button", { name: /wasn't confirmed/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Money in" });
+    expect(within(sheet).getByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Retry this posting", hidden: true })).toHaveLength(1);
+  });
+});

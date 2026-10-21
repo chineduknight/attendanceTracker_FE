@@ -1676,19 +1676,21 @@ describe("<Finance> Books (F1)", () => {
     expect(generatedCss(booksTab)).toMatch(/min-height:\s*44px|height:\s*44px/);
     await openTab("Books");
 
-    expect(
-      await screen.findByText(/Bookkeeping has not been activated for this organisation/),
-    ).toBeInTheDocument();
-    // The setup gate is on: a viewer sees setup progress but cannot start it.
-    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
+    // A viewer is told the books aren't set up, with no way to start them.
+    expect(await screen.findByText("Books aren't set up")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set up books" })).not.toBeInTheDocument();
+
+    // The setup gate is on: Manage Books shows setup progress it can't start.
+    fireEvent.click(screen.getByRole("button", { name: /Manage Books/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Setup & accounts/ }));
+    expect(await screen.findByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
     expect(
       screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
     ).toBeInTheDocument();
-    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(screen.getByText(/Bookkeeping has not been activated for this organisation/)).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/status");
     expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/accounts");
-    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/journals");
     expect(api.post).not.toHaveBeenCalled();
     expect(api.put).not.toHaveBeenCalled();
     expect(api.patch).not.toHaveBeenCalled();

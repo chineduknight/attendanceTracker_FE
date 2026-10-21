@@ -2,9 +2,21 @@ import { screen } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
+
+/** Where Books opens; a test points it at the screen it covers. */
+let booksUrl = "/finance?tab=books";
+const openBooksAt = (books: string, org = "org1") => {
+  booksUrl = `/finance?tab=books&books=${books}&org=${org}`;
+};
+beforeEach(() => {
+  booksUrl = "/finance?tab=books";
+});
+
+beforeEach(() => openBooksAt("reports"));
 
 // Wiring only: BooksTab.test.tsx asserts the shipped gates. The lifecycle
 // and opening panels repeat the state label, so they stay out of this file.
@@ -68,7 +80,7 @@ const setSession = (permissions: PermissionKey[]) =>
 const renderBooks = () =>
   render(
     <QueryClientProvider client={queryClient}>
-      <BooksTab organisationId="org1" />
+      <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId="org1" /></MemoryRouter>
     </QueryClientProvider>,
   );
 
@@ -89,9 +101,9 @@ describe("<BooksTab> with the F2B-4 reports gate on", () => {
 
     expect(await screen.findByRole("region", { name: "Reports" })).toBeInTheDocument();
     expect(await screen.findByText("₦12,000")).toBeInTheDocument();
-    expect(screen.getByText("Suspended")).toBeInTheDocument();
-    // The existing Books sections are still there.
-    expect(screen.getByRole("region", { name: "Journal entries" })).toBeInTheDocument();
+    expect(screen.getAllByText("Suspended").length).toBeGreaterThan(0);
+    // The other Books screens are still there.
+    expect(screen.getByRole("heading", { name: "Transactions", hidden: true })).toBeInTheDocument();
     for (const method of ["post", "put", "patch", "delete"] as const) {
       expect(api[method]).not.toHaveBeenCalled();
     }
@@ -110,7 +122,7 @@ describe("<BooksTab> with the F2B-4 reports gate on", () => {
     serve(status("active"));
     renderBooks();
 
-    expect(await screen.findByRole("region", { name: "Journal entries" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Reports" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Reports" })).not.toBeInTheDocument();
     expect(api.get.mock.calls.some(([url]) => String(url).includes("/cashbook"))).toBe(false);
   });

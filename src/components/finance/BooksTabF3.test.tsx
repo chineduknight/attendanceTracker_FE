@@ -4,7 +4,9 @@ import { format, parseISO, subDays } from "date-fns";
 import { confirmInDialog, render, selectTab } from "test-utils/render";
 import { installPostingLockManager, removePostingLockManager } from "test-utils/postingLocks";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
+
 import { todayInLagos } from "helpers/openingBalances";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 import {
@@ -18,6 +20,15 @@ import {
   sourcesReport,
   summaryReport,
 } from "test-utils/ledgerF3Fixtures";
+
+/** Where Books opens; a test points it at the screen it covers. */
+let booksUrl = "/finance?tab=books";
+const openBooksAt = (books: string, org = "org1") => {
+  booksUrl = `/finance?tab=books&books=${books}&org=${org}`;
+};
+beforeEach(() => {
+  booksUrl = "/finance?tab=books";
+});
 
 /**
  * F3 across Books with the F3 gates (and Reversals) switched on in this file
@@ -197,14 +208,15 @@ afterEach(() => {
 const region = (name: string) => within(screen.getByRole("region", { name }));
 
 it("runs the whole officer workflow across Books", async () => {
+  openBooksAt("manage-reconciliation");
   render(
     <QueryClientProvider client={queryClient}>
-      <BooksTab organisationId="org1" />
+      <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId="org1" /></MemoryRouter>
     </QueryClientProvider>,
   );
 
   // 1. A current suggestion starts the allocation, already pointed at Ada's dues.
-  await screen.findByText("Member money reconciliation");
+  await screen.findByRole("region", { name: "Member money reconciliation" });
   await selectTab(region("Member money reconciliation").getByRole("tab", { name: "Unallocated money" }));
   fireEvent.click(await region("Member money reconciliation").findByRole("button", { name: "Start allocation" }));
   const allocate = () => region("Allocate member money");
@@ -238,6 +250,8 @@ it("runs the whole officer workflow across Books", async () => {
   );
 
   // 5. The ledger refresh shows it reversed in the history; nothing was deleted.
+  // Back from the entry to the reconciliation it was opened from.
+  fireEvent.click(screen.getByRole("button", { name: "Transactions" }));
   expect(await within(await region("Member money reconciliation").findByRole("list", { name: "Allocations" })).findByText("Reversed")).toBeInTheDocument();
   expect(api.post).toHaveBeenCalledTimes(2);
 });
@@ -247,9 +261,10 @@ it("offers no allocation start from the reports to a finance viewer", async () =
     user: { ...EMPTY_USER, id: "officer-2" },
     organisation: { ...EMPTY_ORG, id: "org1", isOwner: false, permissions: ["finance.view"] },
   });
+  openBooksAt("manage-reconciliation");
   render(
     <QueryClientProvider client={queryClient}>
-      <BooksTab organisationId="org1" />
+      <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId="org1" /></MemoryRouter>
     </QueryClientProvider>,
   );
   await screen.findByText("Member money reconciliation");

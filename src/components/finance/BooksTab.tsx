@@ -1,14 +1,15 @@
-import { useId, useState } from "react";
-import { Badge, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
+import { ReactNode, RefObject, useEffect, useId, useRef, useState } from "react";
+import { Badge, Box, Button, Flex, SimpleGrid, Stack, Text } from "@chakra-ui/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { FiArrowDownLeft, FiArrowUpRight, FiRepeat } from "react-icons/fi";
 import { GroupedList, GroupedListItem } from "components/GroupedList";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
 import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePanel";
-import CashbookPostingsPanel from "components/finance/postings/CashbookPostingsPanel";
 import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
-import JournalLines from "components/finance/JournalLines";
+import PostingReceipt from "components/finance/postings/PostingReceipt";
 import ReversalsPanel from "components/finance/reversals/ReversalsPanel";
 import UnconfirmedAttemptsPanel from "components/finance/attempts/UnconfirmedAttemptsPanel";
 import LedgerReportsPanel from "components/finance/reports/LedgerReportsPanel";
@@ -16,6 +17,16 @@ import AllocationPanel from "components/finance/allocations/AllocationPanel";
 import ReconciliationPanel, {
   ReconciliationFocus,
 } from "components/finance/reconciliation/ReconciliationPanel";
+import BackRow from "components/finance/books/BackRow";
+import BalanceTiles from "components/finance/books/BalanceTiles";
+import BooksStateCard from "components/finance/books/BooksStateCard";
+import BooksTransactions from "components/finance/books/BooksTransactions";
+import NavRow, { NavGroup } from "components/finance/books/NavRow";
+import NeedsAttention from "components/finance/books/NeedsAttention";
+import PostingSheet from "components/finance/books/PostingSheet";
+import RecentTransactions from "components/finance/books/RecentTransactions";
+import ThisMonth from "components/finance/books/ThisMonth";
+import ReadOnlyEntry from "components/finance/books/ReadOnlyEntry";
 import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
@@ -27,7 +38,11 @@ import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliati
 import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import { AllocationStart } from "components/finance/ledgerReconciliationTypes";
 import { usePermissions } from "rbac/usePermissions";
+import { queryKeys } from "services/api/queryKeys";
+import useGlobalStore from "zStore";
 import { formatBusinessDate } from "helpers/financeCompliance";
+import { BOOKS_HOME, BooksScreen } from "helpers/booksNavigation";
+import { AttentionItem, attentionItems } from "helpers/booksOverview";
 import {
   isLedgerUnavailable,
   LEDGER_FORBIDDEN_NOTE,
@@ -40,24 +55,27 @@ import {
   ledgerStateKey,
   ledgerStatusNote,
 } from "helpers/ledger";
+import { retrySectionFor, shownPostingSections } from "helpers/ledgerPostings";
 import { ledgerRecheckUsable } from "helpers/ledgerSetup";
-import { useLedgerAccounts, useLedgerJournals, useLedgerStatus } from "hooks/useLedger";
+import { useBooksNav } from "hooks/useBooksNav";
+import { useCashbookPostings } from "hooks/useCashbookPostings";
+import { useLedgerAccounts, useLedgerStatus } from "hooks/useLedger";
 import {
   LedgerAccount,
-  LedgerJournal,
   LedgerKnownState,
   LedgerStatus,
 } from "components/finance/ledgerTypes";
 
 /**
- * The gated ledger shell. It reports only what the backend actually sent:
- * no derived cash balance, opening balance, totals or seeded example rows.
+ * Books: a small stack of screens (Overview, Transactions, Reports, Held for
+ * members, an entry, Manage Books) kept in the URL so Back and Forward move
+ * through them. It reports only what the backend sent: no derived balance,
+ * total or seeded row. Only a recognised `active` state is presented as
+ * ready; posting readiness always comes from the server's status.
  *
- * F1 and the approved F2 read shape share these screens. Only a recognised
- * `active` state is ever presented as ready; every other known lifecycle state
- * and any unrecognised future state is not ready. `postingEnabled` is parsed
- * for information only and never enables a control: this shell stays
- * read-only even when a server claims active/posting-enabled books.
+ * Every screen stays mounted and is hidden when not shown, so each panel's
+ * own state (open forms, pending writes, recovery notices, cross-links)
+ * survives navigation exactly as it did on the single page.
  */
 
 /** Badge colour per state. `unknown` gets the warning colour, not success. */
@@ -243,96 +261,497 @@ const AccountsSection = ({
   </Box>
 );
 
-interface JournalsSectionProps {
-  headingId: string;
-  journals: LedgerJournal[] | null;
-  accounts: LedgerAccount[] | null;
-  isError: boolean;
-  error: unknown;
-  refetch: () => unknown;
-  isFetching: boolean;
-  /** F2B-3: opens one journal's details (and its reversal, where offered). */
-  onOpenJournal?: (journalId: string) => void;
-}
+const TITLES: Record<BooksScreen, string> = {
+  overview: "Books",
+  transactions: "Transactions",
+  reports: "Reports",
+  held: "Held for members",
+  entry: "Entry",
+  manage: "Manage Books",
+  "manage-status": "Books status & history",
+  "manage-setup": "Setup & accounts",
+  "manage-opening": "Opening balances",
+  "manage-reconciliation": "Reconciliation",
+  "manage-attempts": "Unconfirmed saves",
+};
 
-const JournalsSection = ({
-  headingId,
-  journals,
-  accounts,
-  isError,
-  error,
-  refetch,
-  isFetching,
-  onOpenJournal,
-}: JournalsSectionProps) => {
+const backLabel = (screen: BooksScreen) =>
+  screen.startsWith("manage-") ? "Manage Books" : screen === "entry" ? "Transactions" : "Books";
+
+/** One Books screen: always mounted, hidden unless it is the current one. */
+const Screen = ({
+  screen,
+  current,
+  onBack,
+  children,
+}: {
+  screen: BooksScreen;
+  current: BooksScreen;
+  onBack: () => void;
+  children: ReactNode;
+}) => {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const shown = screen === current;
   return (
-    <Box as="section" aria-labelledby={headingId}>
-      <SectionHeading id={headingId}>Journal entries</SectionHeading>
-      {isError && journals === null ? (
-        isLedgerUnavailable(error) ? (
-          <Unavailable forbidden={ledgerHttpStatus(error) === 403} />
-        ) : (
-          <ErrorState
-            title="Couldn't load journal entries"
-            description={errorMessage(error)}
-            onRetry={() => refetch()}
-            retrying={isFetching}
+    <Stack gap={4} hidden={!shown}>
+      {screen !== "overview" && (
+        <BackRow
+          label={backLabel(screen)}
+          title={TITLES[screen]}
+          onBack={onBack}
+          shown={shown}
+          headingRef={headingRef as RefObject<HTMLHeadingElement>}
+        />
+      )}
+      {children}
+    </Stack>
+  );
+};
+
+const BooksScreens = ({
+  organisationId,
+  status,
+  accountsQuery,
+  statusQuery,
+}: {
+  organisationId: string;
+  status: LedgerStatus;
+  accountsQuery: ReturnType<typeof useLedgerAccounts>;
+  statusQuery: ReturnType<typeof useLedgerStatus>;
+}) => {
+  const queryClient = useQueryClient();
+  const nav = useBooksNav(organisationId);
+  const { screen, sheet, journalId } = nav.location;
+  const canManage = usePermissions().has("finance.manage");
+  const isOwner = useGlobalStore((store) => store.organisation.isOwner === true);
+  const stateKey = ledgerStateKey(status);
+  const live = stateKey === "active" || stateKey === "suspended";
+  const memberReceiptsOn = status.memberReceiptsEnabled === true;
+  const accounts = accountsQuery.accounts;
+  const accountsHeadingId = useId();
+  // F3: a request to show the reconciliation's allocation history, and a
+  // request (e.g. a chosen suggestion) to start an allocation.
+  const [reconciliationFocus, setReconciliationFocus] = useState<ReconciliationFocus | null>(null);
+  const [allocationStart, setAllocationStart] = useState<AllocationStart | null>(null);
+  // "For a member" on Money in: asks Held for members to open its form.
+  const [startReceipt, setStartReceipt] = useState(0);
+
+  const isRechecking = statusQuery.isFetching || accountsQuery.isFetching;
+  const recheckPostings = () => {
+    statusQuery.refetch();
+    accountsQuery.refetch();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.finance.ledger.journals(organisationId) });
+  };
+
+  const cashbook = useCashbookPostings({
+    organisationId,
+    status,
+    accounts,
+    onRecheckLedger: recheckPostings,
+  });
+  // Held for members (member money and allocations) exists only while member
+  // receipts are on; the sections it hosts count as shown only then.
+  const heldShown = LEDGER_MEMBER_MONEY_UI_ENABLED && memberReceiptsOn;
+  const shownSections = shownPostingSections({
+    cashbook: LEDGER_POSTINGS_UI_ENABLED,
+    memberMoney: heldShown,
+    reversals: LEDGER_REVERSALS_UI_ENABLED,
+    allocations: LEDGER_F3_ALLOCATION_UI_ENABLED && heldShown,
+  });
+
+  const available = (target: BooksScreen): boolean => {
+    switch (target) {
+      case "reports":
+        return LEDGER_REPORTS_UI_ENABLED;
+      case "held":
+        return heldShown;
+      case "manage-status":
+        return true;
+      case "manage-opening":
+        return LEDGER_OPENING_BALANCES_UI_ENABLED;
+      case "manage-reconciliation":
+        return LEDGER_F3_RECONCILIATION_UI_ENABLED;
+      case "manage-attempts":
+        return LEDGER_REVERSALS_UI_ENABLED && canManage;
+      default:
+        return true;
+    }
+  };
+  const sheetAllowed = LEDGER_POSTINGS_UI_ENABLED && canManage;
+
+  // A screen this officer or build can't show (a gate off, a viewer at a
+  // manage-only URL): land on the Overview without adding a history entry.
+  useEffect(() => {
+    if (!available(screen) || (sheet && !sheetAllowed)) nav.replace(BOOKS_HOME);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, sheet, sheetAllowed]);
+
+  const intentRead = cashbook.intentRead;
+  const pending = intentRead.kind === "pending" ? intentRead.intents[0] ?? null : null;
+  const attention = attentionItems({
+    pending,
+    pendingSection: pending ? retrySectionFor(pending.operation, shownSections) : null,
+    unconfirmedAttempts: canManage && LEDGER_REVERSALS_UI_ENABLED ? status.unconfirmedAttempts : null,
+    hasPendingProposal: LEDGER_OPENING_BALANCES_UI_ENABLED ? status.hasPendingProposal : null,
+    blockers: canManage && live ? status.blockers ?? [] : [],
+  });
+  const openAttention = (target: AttentionItem["target"]) => {
+    if (target.kind === "sheet") nav.openSheet(target.sheet);
+    else if (target.screen === "entry") {
+      const reversed = pending?.reversalTarget?.journalId;
+      if (reversed) nav.go("entry", reversed);
+      else nav.go("transactions");
+    } else nav.go(target.screen);
+  };
+
+  const openEntry = (id: string) => nav.go("entry", id);
+  const { success } = cashbook.workflow;
+  const { receiptReadiness, expenseReadiness, transferReadiness, readiness } = cashbook;
+  const readinessNotes = [
+    !readiness.ready ? readiness.reason : null,
+    readiness.ready && !receiptReadiness.ready ? `Money in: ${receiptReadiness.reason}` : null,
+    readiness.ready && !expenseReadiness.ready ? `Money out: ${expenseReadiness.reason}` : null,
+    readiness.ready && !transferReadiness.ready ? `Transfer: ${transferReadiness.reason}` : null,
+  ].filter(Boolean) as string[];
+
+  const screenProps = { current: screen, onBack: nav.close };
+
+  return (
+    <Box>
+      <Screen screen="overview" {...screenProps}>
+        <Flex align="center" gap={2} wrap="wrap">
+          <Text as="h2" fontSize="xl" fontWeight="semibold">
+            Books
+          </Text>
+          {stateKey !== "active" && (
+            <Badge colorPalette={STATE_SCHEMES[stateKey]} variant="subtle">
+              {LEDGER_STATE_LABELS[stateKey]}
+            </Badge>
+          )}
+        </Flex>
+
+        {success && sheet === null && (
+          <PostingReceipt
+            result={success.result}
+            summary={success.summary}
+            onAnother={cashbook.workflow.dismissSuccess}
           />
-        )
-      ) : journals === null ? (
-        <Unavailable />
-      ) : journals.length === 0 ? (
-        <EmptyState title="No journal entries yet" />
-      ) : (
-        <GroupedList aria-label="Journal entries">
-          {journals.map((journal) => (
-            <GroupedListItem key={journal.id}>
-              <Stack gap={2}>
-                <Flex justify="space-between" align="baseline" gap={2} wrap="wrap">
-                  <Text fontWeight="semibold">
-                    {journal.reference || "No reference"}
-                  </Text>
-                  <Text fontSize="sm" color="fg.muted">
-                    {journal.businessDate
-                      ? formatBusinessDate(journal.businessDate)
-                      : "Date unavailable"}
-                  </Text>
-                </Flex>
-                {journal.note && (
-                  <Text fontSize="sm" color="fg.muted">
-                    {journal.note}
-                  </Text>
-                )}
-                {journal.sourceType && (
-                  <Text fontSize="xs" color="fg.muted">
-                    {`Source: ${journal.sourceType}`}
-                  </Text>
-                )}
-                <JournalLines
-                  journalId={journal.id}
-                  lines={journal.lines}
-                  accounts={accounts}
-                />
-                {onOpenJournal && (
-                  <Flex>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label={`Details of the ${
-                        journal.businessDate
-                          ? formatBusinessDate(journal.businessDate)
-                          : "undated"
-                      } entry ${journal.reference || journal.id}`}
-                      onClick={() => onOpenJournal(journal.id)}
-                    >
-                      Details
-                    </Button>
-                  </Flex>
-                )}
-              </Stack>
-            </GroupedListItem>
-          ))}
-        </GroupedList>
+        )}
+
+        <BooksStateCard
+          status={status}
+          canManage={canManage}
+          isOwner={isOwner}
+          onGo={(target) => nav.go(target)}
+        />
+
+        {live && LEDGER_REPORTS_UI_ENABLED && (
+          <BalanceTiles
+            organisationId={organisationId}
+            accounts={accounts ?? []}
+            enabled
+            memberReceiptsOn={memberReceiptsOn && available("held")}
+            onOpenHeld={() => nav.go("held")}
+          />
+        )}
+
+        {live && sheetAllowed && (
+          <Stack gap={2}>
+            <SimpleGrid columns={2} gap={3}>
+              <Button
+                variant="outline"
+                minH="56px"
+                fontSize="md"
+                disabled={!readiness.ready || !receiptReadiness.ready}
+                onClick={() => nav.openSheet("money-in")}
+              >
+                <Box as={FiArrowDownLeft} aria-hidden color="green.fg" />
+                Money in
+              </Button>
+              <Button
+                variant="outline"
+                minH="56px"
+                fontSize="md"
+                disabled={!readiness.ready || !expenseReadiness.ready}
+                onClick={() => nav.openSheet("money-out")}
+              >
+                <Box as={FiArrowUpRight} aria-hidden color="red.fg" />
+                Money out
+              </Button>
+            </SimpleGrid>
+            <Button
+              variant="ghost"
+              minH="44px"
+              disabled={!readiness.ready || !transferReadiness.ready}
+              onClick={() => nav.openSheet("transfer")}
+            >
+              <FiRepeat aria-hidden />
+              Transfer between accounts
+            </Button>
+            {readinessNotes.map((note) => (
+              <Text key={note} fontSize="sm" color="fg.muted">
+                {note}
+              </Text>
+            ))}
+          </Stack>
+        )}
+
+        <NeedsAttention items={attention} onOpen={openAttention} />
+
+        {live && LEDGER_REPORTS_UI_ENABLED && (
+          <ThisMonth organisationId={organisationId} enabled onOpen={() => nav.go("reports")} />
+        )}
+
+        {live && (
+          <RecentTransactions
+            organisationId={organisationId}
+            accounts={accounts ?? []}
+            enabled
+            onSeeAll={() => nav.go("transactions")}
+            onOpen={openEntry}
+          />
+        )}
+
+        <NavGroup>
+          {!live && <NavRow label="Transactions" onClick={() => nav.go("transactions")} />}
+          {available("reports") && (
+            <NavRow label="Reports" caption="Summary, balances, cashbook" onClick={() => nav.go("reports")} />
+          )}
+          <NavRow
+            label="Manage Books"
+            caption="Status, setup, accounts, opening balances"
+            onClick={() => nav.go("manage")}
+          />
+        </NavGroup>
+      </Screen>
+
+      <Screen screen="transactions" {...screenProps}>
+        <BooksTransactions
+          organisationId={organisationId}
+          accounts={accounts ?? []}
+          enabled={screen === "transactions"}
+          memberReceipts={memberReceiptsOn && LEDGER_MEMBER_MONEY_UI_ENABLED}
+          allocations={status.allocationsEnabled === true && LEDGER_F3_ALLOCATION_UI_ENABLED}
+          onOpen={openEntry}
+        />
+      </Screen>
+
+      {available("reports") && (
+        <Screen screen="reports" {...screenProps}>
+          <LedgerReportsPanel organisationId={organisationId} accounts={accounts} />
+        </Screen>
+      )}
+
+      {heldShown && (
+        <Screen screen="held" {...screenProps}>
+          <MemberMoneyPanel
+            organisationId={organisationId}
+            status={status}
+            accounts={accounts}
+            isRechecking={isRechecking}
+            onRecheckLedger={recheckPostings}
+            startReceipt={startReceipt}
+          />
+          {LEDGER_F3_ALLOCATION_UI_ENABLED && (
+            <AllocationPanel
+              organisationId={organisationId}
+              status={status}
+              accounts={accounts}
+              start={allocationStart}
+              isRechecking={isRechecking}
+              onRecheckLedger={recheckPostings}
+              onViewHistory={
+                LEDGER_F3_RECONCILIATION_UI_ENABLED
+                  ? (historyJournalId, sourceId, sourceNumber) => {
+                      setReconciliationFocus({
+                        tab: "allocations",
+                        history: {
+                          sourceId: sourceId ?? "",
+                          sourceNumber: sourceNumber ?? "",
+                          highlightJournalId: historyJournalId,
+                        },
+                        nonce: Date.now(),
+                      });
+                      nav.go("manage-reconciliation");
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </Screen>
+      )}
+
+      <Screen screen="entry" {...screenProps}>
+        {LEDGER_REVERSALS_UI_ENABLED ? (
+          <ReversalsPanel
+            organisationId={organisationId}
+            status={status}
+            accounts={accounts}
+            openJournalId={screen === "entry" ? journalId : null}
+            onOpenJournal={(id) => nav.go("entry", id)}
+            onCloseJournal={nav.close}
+            isRechecking={isRechecking}
+            onRecheckLedger={recheckPostings}
+          />
+        ) : (
+          <ReadOnlyEntry
+            organisationId={organisationId}
+            journalId={screen === "entry" ? journalId : null}
+            accounts={accounts}
+            onOpenJournal={openEntry}
+          />
+        )}
+      </Screen>
+
+      <Screen screen="manage" {...screenProps}>
+        <NavGroup label="Manage Books">
+          <NavRow
+            label="Books status & history"
+            caption={LEDGER_STATE_LABELS[stateKey]}
+            onClick={() => nav.go("manage-status")}
+          />
+          <NavRow
+            label="Setup & accounts"
+            caption={
+              stateKey === "not_active" || stateKey === "setup"
+                ? "Setup in progress"
+                : accounts
+                  ? `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`
+                  : undefined
+            }
+            onClick={() => nav.go("manage-setup")}
+          />
+          {available("manage-opening") && (
+            <NavRow
+              label="Opening balances"
+              caption={status.hasPendingProposal === true ? "Awaiting verification" : undefined}
+              onClick={() => nav.go("manage-opening")}
+            />
+          )}
+          {available("manage-reconciliation") && (
+            <NavRow label="Reconciliation" onClick={() => nav.go("manage-reconciliation")} />
+          )}
+          {available("manage-attempts") && (
+            <NavRow
+              label="Unconfirmed saves"
+              caption={status.unconfirmedAttempts ? `${status.unconfirmedAttempts} to check` : "None"}
+              onClick={() => nav.go("manage-attempts")}
+            />
+          )}
+        </NavGroup>
+      </Screen>
+
+      <Screen screen="manage-status" {...screenProps}>
+        <StatusHeader status={status} />
+        {LEDGER_LIFECYCLE_UI_ENABLED && (
+          <LedgerLifecyclePanel
+            organisationId={organisationId}
+            status={status}
+            onRecheckLedger={recheckPostings}
+          />
+        )}
+      </Screen>
+
+      <Screen screen="manage-setup" {...screenProps}>
+        {/* Setup, member-money settings and the chart of accounts stay one
+            panel: they share recheck and unresolved-write recovery. */}
+        {LEDGER_SETUP_UI_ENABLED ? (
+          <LedgerSetupPanel
+            organisationId={organisationId}
+            status={status}
+            accounts={accountsQuery.accounts}
+            accountsError={accountsQuery.isError ? accountsQuery.error : null}
+            accountsUnreadable={accountsQuery.hasData && !accountsQuery.isError}
+            onRetryAccounts={accountsQuery.refetch}
+            isRetryingAccounts={accountsQuery.isFetching}
+            isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
+            onRecheckLedger={async ({ requireAllocations, allowInitialSetup }) => {
+              // Reconciliation after an unresolved write needs both the status
+              // and the account list. Only a clean, usable reload of both counts.
+              const [statusResult, accountsResult] = await Promise.all([
+                statusQuery.refetch(),
+                accountsQuery.refetch(),
+              ]);
+              return (
+                !statusResult.isError &&
+                !accountsResult.isError &&
+                ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data, {
+                  requireAllocations,
+                  allowInitialSetup,
+                })
+              );
+            }}
+          />
+        ) : (
+          <AccountsSection
+            headingId={accountsHeadingId}
+            accounts={accountsQuery.accounts}
+            isError={accountsQuery.isError}
+            error={accountsQuery.error}
+            refetch={accountsQuery.refetch}
+            isFetching={accountsQuery.isFetching}
+          />
+        )}
+      </Screen>
+
+      {available("manage-opening") && (
+        <Screen screen="manage-opening" {...screenProps}>
+          <OpeningBalancesPanel
+            organisationId={organisationId}
+            status={status}
+            accounts={accounts}
+            onRecheckLedger={() => {
+              statusQuery.refetch();
+              accountsQuery.refetch();
+            }}
+          />
+        </Screen>
+      )}
+
+      {available("manage-reconciliation") && (
+        <Screen screen="manage-reconciliation" {...screenProps}>
+          <ReconciliationPanel
+            organisationId={organisationId}
+            booksLive={live}
+            focus={reconciliationFocus}
+            onOpenJournal={openEntry}
+            onAllocate={
+              LEDGER_F3_ALLOCATION_UI_ENABLED && canManage
+                ? (start) => {
+                    setAllocationStart({ ...start, nonce: Date.now() });
+                    nav.go("held");
+                  }
+                : undefined
+            }
+          />
+        </Screen>
+      )}
+
+      {LEDGER_REVERSALS_UI_ENABLED && (
+        <Screen screen="manage-attempts" {...screenProps}>
+          <UnconfirmedAttemptsPanel
+            organisationId={organisationId}
+            onOpenJournal={(id) => nav.go("entry", id)}
+          />
+        </Screen>
+      )}
+
+      {sheetAllowed && (
+        <PostingSheet
+          sheet={sheet}
+          postings={cashbook}
+          shownSections={shownSections}
+          isRechecking={isRechecking}
+          onClose={nav.close}
+          onForMember={
+            available("held")
+              ? () => {
+                  nav.go("held");
+                  setStartReceipt((nonce) => nonce + 1);
+                }
+              : undefined
+          }
+        />
       )}
     </Box>
   );
@@ -343,23 +762,10 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
   const status = statusQuery.status;
   const stateKey = status ? ledgerStateKey(status) : null;
   // Lists start only after a valid, recognised status, so an old backend gets
-  // one neutral 404 rather than three. A `not_active` status still reads the
-  // (empty) lists, so a real account can never hide behind the gated
-  // explanation. An unrecognised state may have different list semantics, so
-  // this build neither reads nor renders lists against it.
-  const listsEnabled =
-    status !== null && ledgerReadiness(status) !== "unknown";
+  // one neutral 404 rather than several. An unrecognised state may have
+  // different list semantics, so this build neither reads nor renders them.
+  const listsEnabled = status !== null && ledgerReadiness(status) !== "unknown";
   const accountsQuery = useLedgerAccounts(organisationId, listsEnabled);
-  const journalsQuery = useLedgerJournals(organisationId, listsEnabled);
-  const accountsHeadingId = useId();
-  const journalsHeadingId = useId();
-  // F2B-3: the journal whose details (and reversal) are open.
-  const [openJournalId, setOpenJournalId] = useState<string | null>(null);
-  // F3: a request to show the reconciliation panel's allocation history, and
-  // a request (e.g. a chosen suggestion) to start an allocation.
-  const [reconciliationFocus, setReconciliationFocus] = useState<ReconciliationFocus | null>(null);
-  const [allocationStart, setAllocationStart] = useState<AllocationStart | null>(null);
-  const canManageFinance = usePermissions().has("finance.manage");
 
   if (statusQuery.isLoading) {
     return <PageLoader h="30vh" label="Loading books..." />;
@@ -393,218 +799,19 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
     );
   }
 
-  // Wait for both lists to settle (success or failure) before painting the
-  // shell, so a transient null can never look like "no accounts configured".
-  const listsPending =
-    listsEnabled &&
-    ((!accountsQuery.hasData && !accountsQuery.isError) ||
-      (!journalsQuery.hasData && !journalsQuery.isError));
-  if (listsPending) {
+  // Wait for the account list to settle (success or failure) before painting
+  // the screens, so a transient null can never look like "no accounts".
+  if (listsEnabled && !accountsQuery.hasData && !accountsQuery.isError) {
     return <PageLoader h="30vh" label="Loading books..." />;
   }
 
-  // Both posting sections recheck the same reads: status, accounts, journals.
-  const isRecheckingPostings =
-    statusQuery.isFetching || accountsQuery.isFetching || journalsQuery.isFetching;
-  const recheckPostings = () => {
-    statusQuery.refetch();
-    accountsQuery.refetch();
-    journalsQuery.refetch();
-  };
-
   return (
-    <Stack gap={5}>
-      <StatusHeader status={status} />
-
-      {/* F2A-2 setup and chart-of-accounts controls are fully built but off
-          until the backend routes and the F2 read shape are live. With the
-          gate closed the Books tab is exactly what #131 shipped. */}
-      {LEDGER_SETUP_UI_ENABLED && (
-        <LedgerSetupPanel
-          organisationId={organisationId}
-          status={status}
-          accounts={accountsQuery.accounts}
-          accountsError={accountsQuery.isError ? accountsQuery.error : null}
-          accountsUnreadable={accountsQuery.hasData && !accountsQuery.isError}
-          onRetryAccounts={accountsQuery.refetch}
-          isRetryingAccounts={accountsQuery.isFetching}
-          isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
-          onRecheckLedger={async ({ requireAllocations, allowInitialSetup }) => {
-            // Reconciliation after an unresolved write needs both the status
-            // and the account list, not just the list that failed. Only a
-            // clean, usable reload of both counts as a recheck.
-            const [statusResult, accountsResult] = await Promise.all([
-              statusQuery.refetch(),
-              accountsQuery.refetch(),
-            ]);
-            // A 200 with a body this build can't read is not a recheck. F2A-2
-            // writes don't require the F3-only allocations field; only an
-            // unresolved initial setup may reconcile without a revision.
-            return (
-              !statusResult.isError &&
-              !accountsResult.isError &&
-              ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data, {
-                requireAllocations,
-                allowInitialSetup,
-              })
-            );
-          }}
-        />
-      )}
-
-      {/* The managed chart of accounts replaces the plain read-only list when
-          the setup panel is on; showing both would duplicate every account. */}
-      {!LEDGER_SETUP_UI_ENABLED && (
-        <AccountsSection
-          headingId={accountsHeadingId}
-          accounts={accountsQuery.accounts}
-          isError={accountsQuery.isError}
-          error={accountsQuery.error}
-          refetch={accountsQuery.refetch}
-          isFetching={accountsQuery.isFetching}
-        />
-      )}
-
-      {/* F2A-3B lifecycle (suspend/resume, period lock, gap-window
-          attestation): its own gate, off until the lifecycle routes, the F2A-4
-          reads and the server write flag are live. */}
-      {LEDGER_LIFECYCLE_UI_ENABLED && (
-        <LedgerLifecyclePanel
-          organisationId={organisationId}
-          status={status}
-          onRecheckLedger={() => {
-            statusQuery.refetch();
-            accountsQuery.refetch();
-            journalsQuery.refetch();
-          }}
-        />
-      )}
-
-      {/* F2A-3A opening balances and verification: its own gate, separate from
-          the setup gate, and off until the corrected backend and F2A-4 ship. */}
-      {LEDGER_OPENING_BALANCES_UI_ENABLED && (
-        <OpeningBalancesPanel
-          organisationId={organisationId}
-          status={status}
-          accounts={accountsQuery.accounts}
-          onRecheckLedger={() => {
-            statusQuery.refetch();
-            accountsQuery.refetch();
-          }}
-        />
-      )}
-
-      {/* F2B-1 receipts, expenses and transfers: a separate gate, default off.
-          The panel itself also refuses every form unless the server reports
-          posting as ready, so a preview build can never post against a
-          half-configured ledger. */}
-      {LEDGER_POSTINGS_UI_ENABLED && (
-        <CashbookPostingsPanel
-          organisationId={organisationId}
-          status={status}
-          accounts={accountsQuery.accounts}
-          isRechecking={isRecheckingPostings}
-          onRecheckLedger={recheckPostings}
-        />
-      )}
-
-      {/* F2B-2 member receipts and refunds: its own gate, default off. It
-          shares the pending posting with "Record money" above. */}
-      {LEDGER_MEMBER_MONEY_UI_ENABLED && (
-        <MemberMoneyPanel
-          organisationId={organisationId}
-          status={status}
-          accounts={accountsQuery.accounts}
-          isRechecking={isRecheckingPostings}
-          onRecheckLedger={recheckPostings}
-        />
-      )}
-
-      {/* F3C allocation posting: its own gate, default off. It shares the one
-          pending posting with every section above. */}
-      {LEDGER_F3_ALLOCATION_UI_ENABLED && (
-        <AllocationPanel
-          organisationId={organisationId}
-          status={status}
-          accounts={accountsQuery.accounts}
-          start={allocationStart}
-          isRechecking={isRecheckingPostings}
-          onRecheckLedger={recheckPostings}
-          onViewHistory={
-            LEDGER_F3_RECONCILIATION_UI_ENABLED
-              ? (journalId, sourceId, sourceNumber) =>
-                  setReconciliationFocus({
-                    tab: "allocations",
-                    history: {
-                      sourceId: sourceId ?? "",
-                      sourceNumber: sourceNumber ?? "",
-                      highlightJournalId: journalId,
-                    },
-                    nonce: Date.now(),
-                  })
-              : undefined
-          }
-        />
-      )}
-
-      {/* F2B-3 unconfirmed attempts and reversals: one gate, default off.
-          Resolving needs no posting readiness (it works while suspended or
-          with writes off); a reversal is a posting and needs all of it. */}
-      {LEDGER_REVERSALS_UI_ENABLED && (
-        <UnconfirmedAttemptsPanel
-          organisationId={organisationId}
-          onOpenJournal={setOpenJournalId}
-        />
-      )}
-
-      {LEDGER_REVERSALS_UI_ENABLED && (
-        <ReversalsPanel
-          organisationId={organisationId}
-          status={status}
-          accounts={accountsQuery.accounts}
-          openJournalId={openJournalId}
-          onOpenJournal={setOpenJournalId}
-          onCloseJournal={() => setOpenJournalId(null)}
-          isRechecking={isRecheckingPostings}
-          onRecheckLedger={recheckPostings}
-        />
-      )}
-
-      {/* F2B-4 cashbook, balances and summary: read-only, finance.view, its
-          own gate (default off). Shown whatever the ledger state: the server
-          answers unknown balances as unknown, and suspension never hides
-          history. */}
-      {LEDGER_REPORTS_UI_ENABLED && (
-        <LedgerReportsPanel organisationId={organisationId} accounts={accountsQuery.accounts} />
-      )}
-
-      {/* F3B member-money reconciliation: read-only, finance.view, its own
-          gate (default off), independent of the allocation posting gate. */}
-      {LEDGER_F3_RECONCILIATION_UI_ENABLED && (
-        <ReconciliationPanel
-          organisationId={organisationId}
-          booksLive={stateKey === "active" || stateKey === "suspended"}
-          focus={reconciliationFocus}
-          onOpenJournal={LEDGER_REVERSALS_UI_ENABLED ? setOpenJournalId : undefined}
-          onAllocate={
-            LEDGER_F3_ALLOCATION_UI_ENABLED && canManageFinance
-              ? (start) => setAllocationStart({ ...start, nonce: Date.now() })
-              : undefined
-          }
-        />
-      )}
-
-      <JournalsSection
-        headingId={journalsHeadingId}
-        journals={journalsQuery.journals}
-        accounts={accountsQuery.accounts}
-        isError={journalsQuery.isError}
-        error={journalsQuery.error}
-        refetch={journalsQuery.refetch}
-        isFetching={journalsQuery.isFetching}
-        onOpenJournal={LEDGER_REVERSALS_UI_ENABLED ? setOpenJournalId : undefined}
-      />
-    </Stack>
+    <BooksScreens
+      organisationId={organisationId}
+      status={status}
+      accountsQuery={accountsQuery}
+      statusQuery={statusQuery}
+    />
   );
 };
 
