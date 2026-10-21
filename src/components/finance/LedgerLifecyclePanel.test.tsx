@@ -1003,3 +1003,48 @@ describe("<LedgerLifecyclePanel> organisation isolation", () => {
     expect(screen.getByRole("button", { name: "Set period lock" })).toBeDisabled();
   });
 });
+
+describe("<LedgerLifecyclePanel> a write that outlives the screen", () => {
+  it("shows a running write as sending, survives a remount and settles without the screen", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    let resolve: (value: unknown) => void = () => undefined;
+    api.post.mockReturnValue(new Promise((res) => (resolve = res)));
+    const { unmount } = renderPanel();
+
+    await submitSuspend("Treasurer handover");
+    expect(await screen.findByText("Sending a ledger change")).toBeInTheDocument();
+    // Nothing to reconcile while the request runs, so no acknowledgement.
+    expect(screen.queryByRole("button", { name: "I've checked the ledger" })).not.toBeInTheDocument();
+    expect(screen.queryByText("We couldn't confirm the last ledger change")).not.toBeInTheDocument();
+
+    // Leaving Books (or switching organisation) unmounts the form mid-flight.
+    unmount();
+    renderPanel();
+    expect(await screen.findByText("Sending a ledger change")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suspend ledger" })).toBeDisabled();
+
+    resolve({ data: { data: wireStatus({ state: "suspended" }) } });
+    await waitFor(() => expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Sending a ledger change")).not.toBeInTheDocument(),
+    );
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps another organisation's controls free while Org 1's write runs", async () => {
+    serveAudit();
+    setSession({ isOwner: true });
+    api.post.mockReturnValue(new Promise(() => undefined));
+    const { unmount } = renderPanel();
+
+    await submitSuspend("Treasurer handover");
+    expect(await screen.findByText("Sending a ledger change")).toBeInTheDocument();
+    unmount();
+
+    renderPanel({ organisationId: "org2" });
+    expect(await screen.findByRole("button", { name: "Suspend ledger" })).toBeEnabled();
+    expect(screen.queryByText("Sending a ledger change")).not.toBeInTheDocument();
+    expect(readLedgerWriteIntent("org2")).toEqual({ kind: "none" });
+  });
+});

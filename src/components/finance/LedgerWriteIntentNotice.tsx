@@ -14,7 +14,8 @@ import { LEDGER_WRITE_UNCERTAIN_NOTE } from "helpers/ledgerWriteUncertainty";
  * organisation-scoped intent slot. It appears on mount from persisted state,
  * so a reload cannot re-enable a write whose request may already have been
  * sent. Only an explicit reconciliation clears it; a later 409 is never
- * treated as proof either way.
+ * treated as proof either way. While the request is still running in this
+ * page there is nothing to reconcile yet, so no acknowledgement is offered.
  */
 const LedgerWriteIntentNotice = ({
   read,
@@ -43,6 +44,28 @@ const LedgerWriteIntentNotice = ({
     });
     if (confirmed) onAcknowledge();
   };
+
+  if (read.kind === "pending" && read.inFlight) {
+    return (
+      <Box
+        role="status"
+        borderWidth="1px"
+        borderColor="border"
+        borderRadius="md"
+        p={3}
+        bg="bg.panel"
+      >
+        <Stack gap={1}>
+          <Text fontSize="sm" fontWeight="semibold">
+            Sending a ledger change
+          </Text>
+          <Text fontSize="sm" color="fg.muted">
+            Its result isn't known yet. Other ledger changes are blocked until it finishes.
+          </Text>
+        </Stack>
+      </Box>
+    );
+  }
 
   const storageUnavailable = read.kind === "storage-unavailable";
   const body = storageUnavailable

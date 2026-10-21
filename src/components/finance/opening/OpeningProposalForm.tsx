@@ -28,9 +28,8 @@ import {
   parseNairaToKobo,
   todayInLagos,
 } from "helpers/openingBalances";
-import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";
 import { useOpeningBalanceWrites } from "hooks/useOpeningBalances";
-import { useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
+import { classifyIntentWriteFailure, useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
 import { MemberMoneyDraft } from "helpers/openingBalances";
 
 const STEPS = ["Date and evidence", "Counted amounts", "Member money", "Review"];
@@ -154,16 +153,8 @@ const OpeningProposalForm = ({
     });
     if (!confirmed) return;
 
-    // The safety record is persisted before dispatch. Without it the request
-    // must not be sent: a reload could otherwise permit a blind retry.
-    const record = intent.begin("submit-opening", { kind: "initial" });
-    if (!record) {
-      setError(
-        "This browser can't store the safety record required before submitting. Allow site storage and try again.",
-      );
-      return;
-    }
-
+    // The durable write persists the safety record before dispatch and sends
+    // nothing without it, so a reload cannot permit a blind retry.
     writes.submitOpening(
       buildInitialOpeningInput({
         asOfDate,
@@ -173,20 +164,12 @@ const OpeningProposalForm = ({
         memberMoneyItems: itemInputs.inputs,
       }),
       {
-        onSuccess: () => {
-          intent.clear(record);
-          onSubmitted();
-        },
+        onSuccess: onSubmitted,
         onError: (failure) => {
-          const parsed = ledgerApiFailure(failure);
-          if (ledgerWriteOutcomeUnknown(parsed)) {
-            // May have been saved: keep the persisted intent and stop.
-            intent.markUnresolved(record);
-            setError(null);
-            return;
-          }
-          intent.clear(record);
-          setError(parsed.message ?? "The proposal wasn't submitted. Try again.");
+          const outcome = classifyIntentWriteFailure(failure);
+          // May have been saved: the intent notice says so; stop here.
+          if (outcome.kind === "unknown") setError(null);
+          else setError(outcome.message ?? "The proposal wasn't submitted. Try again.");
         },
       },
     );

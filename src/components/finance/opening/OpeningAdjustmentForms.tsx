@@ -32,47 +32,32 @@ import {
 } from "helpers/openingBalances";
 import { isMoneyRole, toAccountRole } from "helpers/ledgerSetup";
 import { ledgerStateKey } from "helpers/ledger";
-import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";
 import { useOpeningBalanceWrites } from "hooks/useOpeningBalances";
-import { useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
+import { classifyIntentWriteFailure, useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
 
 type Writes = ReturnType<typeof useOpeningBalanceWrites>;
 type Intent = ReturnType<typeof useLedgerWriteIntent>;
 
-const useGuardedSubmit = ({
+/** The intent is persisted and settled by the durable write, not here. */
+const useOpeningSubmit = ({
   writes,
-  intent,
   onSubmitted,
 }: {
   writes: Writes;
-  intent: Intent;
   onSubmitted: () => void;
 }) => {
   const [error, setError] = useState<string | null>(null);
 
   const submit = (payload: SubmitOpeningInput) => {
-    const record = intent.begin("submit-opening", { kind: payload.kind });
-    if (!record) {
-      setError(
-        "This browser can't store the safety record required before submitting. Allow site storage and try again.",
-      );
-      return;
-    }
     writes.submitOpening(payload, {
       onSuccess: () => {
-        intent.clear(record);
         setError(null);
         onSubmitted();
       },
       onError: (failure) => {
-        const parsed = ledgerApiFailure(failure);
-        if (ledgerWriteOutcomeUnknown(parsed)) {
-          intent.markUnresolved(record);
-          setError(null);
-          return;
-        }
-        intent.clear(record);
-        setError(parsed.message ?? "The proposal wasn't submitted. Try again.");
+        const outcome = classifyIntentWriteFailure(failure);
+        if (outcome.kind === "unknown") setError(null);
+        else setError(outcome.message ?? "The proposal wasn't submitted. Try again.");
       },
     });
   };
@@ -111,7 +96,7 @@ export const SupplementaryOpeningForm = ({
     ledgerStateKey(status) === "unknown" ||
     activeMoneyAccounts(accounts).some((account) => account.openingVerified === null);
   const { confirm, confirmDialog } = useConfirm();
-  const { submit, error, setError } = useGuardedSubmit({ writes, intent, onSubmitted });
+  const { submit, error, setError } = useOpeningSubmit({ writes, onSubmitted });
 
   const [asOfDate, setAsOfDate] = useState(status.openingDate ?? today);
   const [evidence, setEvidence] = useState("");
@@ -266,7 +251,7 @@ export const CorrectionOpeningForm = ({
   onSubmitted: () => void;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
-  const { submit, error, setError } = useGuardedSubmit({ writes, intent, onSubmitted });
+  const { submit, error, setError } = useOpeningSubmit({ writes, onSubmitted });
 
   const moneyAccountIds = new Set(
     accounts

@@ -6,6 +6,9 @@ import {
   ledgerWriteIntentKey,
   markLedgerWriteIntentUnresolved,
   readLedgerWriteIntent,
+  settleLedgerWriteIntent,
+  startLedgerWriteIntent,
+  subscribeLedgerWriteIntent,
 } from "helpers/ledgerWriteIntent";
 
 const AT = new Date("2026-10-18T10:00:00.000Z");
@@ -32,6 +35,8 @@ describe("opening write intent", () => {
         proposalId: "p1",
         state: "dispatching",
       }),
+      // No request of this page sent it, so it needs reconciliation.
+      inFlight: false,
     });
     expect(ledgerWriteIntentKey("org1")).toContain(LEDGER_WRITE_INTENT_PREFIX);
   });
@@ -103,5 +108,64 @@ describe("opening write intent", () => {
     expect(ledgerWriteIntentGuidance("verify-opening", null)).toMatch(/activated/);
     expect(ledgerWriteIntentGuidance("reject-opening", null)).toMatch(/rejected/);
     expect(ledgerWriteIntentGuidance("withdraw-opening", null)).toMatch(/withdrawn/);
+  });
+});
+
+describe("request-owned intent lifecycle", () => {
+  it("reads a started intent as in flight until it settles", () => {
+    const intent = startLedgerWriteIntent("org1", "suspend-ledger");
+    expect(readLedgerWriteIntent("org1")).toMatchObject({ kind: "pending", inFlight: true });
+    settleLedgerWriteIntent(intent!, "unknown");
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      inFlight: false,
+      intent: { state: "unresolved", intentId: intent!.intentId },
+    });
+  });
+
+  it.each(["confirmed", "refused"] as const)("clears its own intent when %s", (outcome) => {
+    const intent = startLedgerWriteIntent("org1", "set-period-lock");
+    settleLedgerWriteIntent(intent!, outcome);
+    expect(readLedgerWriteIntent("org1")).toEqual({ kind: "none" });
+  });
+
+  it("latches an unknown outcome even when the marker was cleared mid-flight", () => {
+    const intent = startLedgerWriteIntent("org1", "verify-opening");
+    window.localStorage.removeItem(ledgerWriteIntentKey("org1"));
+    settleLedgerWriteIntent(intent!, "unknown");
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { state: "unresolved", action: "verify-opening" },
+    });
+  });
+
+  it("never clears or overwrites another intent or an unreadable marker", () => {
+    const intent = startLedgerWriteIntent("org1", "submit-opening");
+    window.localStorage.removeItem(ledgerWriteIntentKey("org1"));
+    const other = beginLedgerWriteIntent("org1", "reject-opening");
+    settleLedgerWriteIntent(intent!, "confirmed");
+    settleLedgerWriteIntent(intent!, "unknown");
+    expect(readLedgerWriteIntent("org1")).toMatchObject({
+      kind: "pending",
+      intent: { intentId: other!.intentId, state: "dispatching" },
+    });
+
+    window.localStorage.setItem(ledgerWriteIntentKey("org2"), "{not json");
+    const lost = { ...intent!, organisationId: "org2" };
+    settleLedgerWriteIntent(lost, "unknown");
+    expect(readLedgerWriteIntent("org2")).toEqual({ kind: "unknown" });
+  });
+
+  it("settles only the organisation that sent it and notifies listeners", () => {
+    const changed: string[] = [];
+    const unsubscribe = subscribeLedgerWriteIntent((org) => changed.push(org));
+    const a = startLedgerWriteIntent("orgA", "attest-gap-window");
+    const b = startLedgerWriteIntent("orgB", "attest-gap-window");
+    settleLedgerWriteIntent(a!, "confirmed");
+    expect(readLedgerWriteIntent("orgA")).toEqual({ kind: "none" });
+    expect(readLedgerWriteIntent("orgB")).toMatchObject({ kind: "pending", inFlight: true });
+    settleLedgerWriteIntent(b!, "unknown");
+    unsubscribe();
+    expect(changed).toEqual(["orgA", "orgB", "orgA", "orgB"]);
   });
 });

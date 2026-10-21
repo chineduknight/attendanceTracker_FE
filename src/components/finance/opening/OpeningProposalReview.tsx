@@ -21,9 +21,8 @@ import {
   openingProposalStatusLabels,
   openingStatusKey,
 } from "helpers/openingBalances";
-import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";
 import { useOpeningBalanceWrites } from "hooks/useOpeningBalances";
-import { useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
+import { classifyIntentWriteFailure, useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
 
 const STATUS_SCHEMES: Record<
   ReturnType<typeof openingStatusKey>,
@@ -89,34 +88,19 @@ const OpeningProposalReview = ({
     accounts.find((account) => account.id === accountId)?.name ??
     `Unknown account (${accountId})`;
 
-  const begin = (action: Parameters<typeof intent.begin>[0]) => {
-    if (intent.blocked) {
-      setError("An earlier opening change is unresolved. Recheck the ledger before continuing.");
-      return null;
-    }
-    const record = intent.begin(action, {
-      proposalId: proposal.id,
-      fingerprint: proposal.fingerprint,
-      kind: proposal.kind,
-    });
-    if (!record)
-      setError(
-        "This browser can't store the safety record required before this change. Allow site storage and try again.",
-      );
-    return record;
+  /** True when a decision can be sent; the durable write re-checks the slot. */
+  const canSend = () => {
+    if (!intent.blocked) return true;
+    setError("An earlier opening change is unresolved. Recheck the ledger before continuing.");
+    return false;
   };
 
-  const handleFailure = (record: NonNullable<ReturnType<typeof begin>>, failure: unknown) => {
-    const parsed = ledgerApiFailure(failure);
-    if (ledgerWriteOutcomeUnknown(parsed)) {
-      // The decision may have been recorded. Keep the persisted intent and
-      // never present a 409/timeout as confirmation either way.
-      intent.markUnresolved(record);
-      setError(null);
-      return;
-    }
-    intent.clear(record);
-    setError(parsed.message ?? "The proposal wasn't changed. Try again.");
+  const handleFailure = (failure: unknown) => {
+    const outcome = classifyIntentWriteFailure(failure);
+    // An unknown outcome may have recorded the decision: the intent notice
+    // says so, and a 409/timeout is never presented as either result.
+    if (outcome.kind === "unknown") setError(null);
+    else setError(outcome.message ?? "The proposal wasn't changed. Try again.");
   };
 
   const verify = async () => {
@@ -136,10 +120,9 @@ const OpeningProposalReview = ({
       confirmLabel: "Verify opening balances",
     });
     if (!confirmed) return;
-    const record = begin("verify-opening");
-    if (!record) return;
+    if (!canSend()) return;
     writes.verifyOpening(
-      proposal.id,
+      proposal,
       {
         expectedFingerprint: proposal.fingerprint,
         expectedLedgerRevision: status.revision,
@@ -147,7 +130,6 @@ const OpeningProposalReview = ({
       },
       {
         onSuccess: (result) => {
-          intent.clear(record);
           setError(null);
           setOutcome({
             replayed: result.replayed,
@@ -156,7 +138,7 @@ const OpeningProposalReview = ({
           });
           onDecided();
         },
-        onError: (failure) => handleFailure(record, failure),
+        onError: handleFailure,
       },
     );
   };
@@ -173,16 +155,14 @@ const OpeningProposalReview = ({
       destructive: true,
     });
     if (!confirmed) return;
-    const record = begin("reject-opening");
-    if (!record) return;
-    writes.rejectOpening(proposal.id, reason.trim(), {
+    if (!canSend()) return;
+    writes.rejectOpening(proposal, reason.trim(), {
       onSuccess: () => {
-        intent.clear(record);
         setError(null);
         setRejecting(false);
         onDecided();
       },
-      onError: (failure) => handleFailure(record, failure),
+      onError: handleFailure,
     });
   };
 
@@ -193,15 +173,13 @@ const OpeningProposalReview = ({
       confirmLabel: "Withdraw proposal",
     });
     if (!confirmed) return;
-    const record = begin("withdraw-opening");
-    if (!record) return;
-    writes.withdrawOpening(proposal.id, {
+    if (!canSend()) return;
+    writes.withdrawOpening(proposal, {
       onSuccess: () => {
-        intent.clear(record);
         setError(null);
         onDecided();
       },
-      onError: (failure) => handleFailure(record, failure),
+      onError: handleFailure,
     });
   };
 

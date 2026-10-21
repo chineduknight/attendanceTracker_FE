@@ -15,7 +15,17 @@
  * store cannot be read), no write is dispatched. One slot per organisation;
  * opening-balance actions are serialised by the backend's single-open-proposal
  * rule anyway.
+ *
+ * A write goes through `startLedgerWriteIntent` and `settleLedgerWriteIntent`
+ * from the request promise itself, never from a component callback, so leaving
+ * the screen or switching organisation cannot leave the marker undecided
+ * while the page is still open. A dispatching intent whose request is running
+ * in this page reads as `inFlight` and cannot be acknowledged: its outcome is
+ * not known yet. After a reload nothing is in flight, so it needs the usual
+ * reconciliation.
  */
+
+import type { LedgerWriteOutcome } from "helpers/ledgerWriteUncertainty";
 
 export type OpeningWriteAction =
   | "submit-opening"
@@ -63,7 +73,12 @@ export interface LedgerWriteIntent {
 
 export type LedgerIntentRead =
   | { kind: "none" }
-  | { kind: "pending"; intent: LedgerWriteIntent }
+  | {
+      kind: "pending";
+      intent: LedgerWriteIntent;
+      /** True only while this intent's own request is running in this page. */
+      inFlight: boolean;
+    }
   | { kind: "unknown" }
   | { kind: "storage-unavailable" };
 
@@ -71,6 +86,31 @@ export const LEDGER_WRITE_INTENT_PREFIX = "presence-pro:ledger-write-intent:";
 
 export const ledgerWriteIntentKey = (organisationId: string) =>
   `${LEDGER_WRITE_INTENT_PREFIX}${organisationId}`;
+
+/**
+ * Intent ids whose request is running in this page. Module memory on purpose:
+ * a reload empties it, which turns a surviving dispatching intent into one
+ * that needs reconciliation.
+ */
+const inFlight = new Set<string>();
+
+type Listener = (organisationId: string) => void;
+const listeners = new Set<Listener>();
+
+/**
+ * Called with the organisation whose intent changed in this page. Lifecycle
+ * and opening-balance panels each read the same slot, and a settled request
+ * may outlive the screen that sent it.
+ */
+export const subscribeLedgerWriteIntent = (listener: Listener) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const notify = (organisationId: string) =>
+  listeners.forEach((listener) => listener(organisationId));
 
 const isAction = (value: unknown): value is LedgerWriteAction =>
   typeof value === "string" && (ACTIONS as readonly string[]).includes(value);
@@ -158,7 +198,13 @@ export const readLedgerWriteIntent = (
   if (!stored.ok) return { kind: "storage-unavailable" };
   if (stored.value === null) return { kind: "none" };
   const intent = parseIntent(organisationId, stored.value);
-  return intent ? { kind: "pending", intent } : { kind: "unknown" };
+  return intent
+    ? {
+        kind: "pending",
+        intent,
+        inFlight: intent.state === "dispatching" && inFlight.has(intent.intentId),
+      }
+    : { kind: "unknown" };
 };
 
 /**
@@ -188,6 +234,48 @@ export const beginLedgerWriteIntent = (
     : null;
 };
 
+/**
+ * Persist an intent and record its request as running in this page. Returns
+ * null, sending nothing, under the same rules as `beginLedgerWriteIntent`.
+ */
+export const startLedgerWriteIntent = (
+  organisationId: string,
+  action: LedgerWriteAction,
+  refs: LedgerWriteIntentRefs = {},
+): LedgerWriteIntent | null => {
+  const intent = beginLedgerWriteIntent(organisationId, action, refs);
+  if (intent) {
+    inFlight.add(intent.intentId);
+    notify(organisationId);
+  }
+  return intent;
+};
+
+/**
+ * Decide the intent `startLedgerWriteIntent` stored, using the organisation it
+ * was sent for (never the one on screen now). A definitive outcome clears only
+ * this exact intent. An unknown outcome latches it as unresolved, also when
+ * the marker is already gone (another tab acknowledged mid-flight), but never
+ * overwrites a different intent or an unreadable marker.
+ */
+export const settleLedgerWriteIntent = (
+  intent: LedgerWriteIntent,
+  outcome: LedgerWriteOutcome,
+) => {
+  inFlight.delete(intent.intentId);
+  const key = ledgerWriteIntentKey(intent.organisationId);
+  const raw = readRaw(key);
+  const ours = raw !== null && parseIntent(intent.organisationId, raw)?.intentId === intent.intentId;
+  if (outcome === "unknown") {
+    if (raw === null || ours) {
+      writeRaw(key, JSON.stringify({ ...intent, state: "unresolved" }));
+    }
+  } else if (ours) {
+    removeRaw(key);
+  }
+  notify(intent.organisationId);
+};
+
 /** Mark this exact intent as an unknown outcome. Never touches another intent. */
 export const markLedgerWriteIntentUnresolved = (
   intent: LedgerWriteIntent,
@@ -197,7 +285,9 @@ export const markLedgerWriteIntentUnresolved = (
   if (!raw) return false;
   const stored = parseIntent(intent.organisationId, raw);
   if (!stored || stored.intentId !== intent.intentId) return false;
-  return writeRaw(key, JSON.stringify({ ...stored, state: "unresolved" }));
+  const written = writeRaw(key, JSON.stringify({ ...stored, state: "unresolved" }));
+  notify(intent.organisationId);
+  return written;
 };
 
 /** Clear only this exact intent. */
@@ -211,7 +301,9 @@ export const clearLedgerWriteIntent = (
   const stored = parseIntent(organisationId, raw);
   if (!stored) return removeRaw(key);
   if (stored.intentId !== intentId) return false;
-  return removeRaw(key);
+  const removed = removeRaw(key);
+  notify(organisationId);
+  return removed;
 };
 
 /**
@@ -221,7 +313,9 @@ export const clearLedgerWriteIntent = (
  */
 export const clearLedgerWriteIntentMarker = (organisationId: string): boolean => {
   if (!organisationId) return true;
-  return removeRaw(ledgerWriteIntentKey(organisationId));
+  const removed = removeRaw(ledgerWriteIntentKey(organisationId));
+  notify(organisationId);
+  return removed;
 };
 
 /** What an officer should compare before allowing another ledger write. */
