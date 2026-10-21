@@ -11,6 +11,7 @@ import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePa
 import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
 import PostingReceipt from "components/finance/postings/PostingReceipt";
 import ReversalsPanel from "components/finance/reversals/ReversalsPanel";
+import ReversalReceipt from "components/finance/reversals/ReversalReceipt";
 import UnconfirmedAttemptsPanel from "components/finance/attempts/UnconfirmedAttemptsPanel";
 import LedgerReportsPanel from "components/finance/reports/LedgerReportsPanel";
 import AllocationPanel from "components/finance/allocations/AllocationPanel";
@@ -42,7 +43,7 @@ import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore from "zStore";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { BOOKS_HOME, BooksScreen } from "helpers/booksNavigation";
-import { AttentionTarget, attentionItems } from "helpers/booksOverview";
+import { AttentionTarget, attentionItems, cashbookSheetFor } from "helpers/booksOverview";
 import {
   isLedgerUnavailable,
   LEDGER_FORBIDDEN_NOTE,
@@ -59,6 +60,7 @@ import { retrySectionFor, shownPostingSections } from "helpers/ledgerPostings";
 import { ledgerRecheckUsable } from "helpers/ledgerSetup";
 import { useBooksNav } from "hooks/useBooksNav";
 import { useCashbookPostings } from "hooks/useCashbookPostings";
+import { ConfirmedPosting } from "hooks/usePostingWorkflow";
 import { useLedgerAccounts, useLedgerStatus } from "hooks/useLedger";
 import {
   LedgerAccount,
@@ -335,6 +337,14 @@ const BooksScreens = ({
   const [allocationStart, setAllocationStart] = useState<AllocationStart | null>(null);
   // "For a member" on Money in: asks Held for members to open its form.
   const [startReceipt, setStartReceipt] = useState(0);
+  // A reversal confirmed after the officer left its entry (Back mid-save, or
+  // another Finance tab): its receipt follows them to the screen they are on.
+  const shownScreen = useRef<BooksScreen | null>(screen);
+  shownScreen.current = nav.onBooks ? screen : null;
+  const [awayReversal, setAwayReversal] = useState<ConfirmedPosting | null>(null);
+  useEffect(() => {
+    if (screen === "entry") setAwayReversal(null);
+  }, [screen]);
 
   const isRechecking = statusQuery.isFetching || accountsQuery.isFetching;
   const recheckPostings = () => {
@@ -382,9 +392,10 @@ const BooksScreens = ({
   // A screen this officer or build can't show (a gate off, a viewer at a
   // manage-only URL): land on the Overview without adding a history entry.
   useEffect(() => {
+    if (!nav.onBooks) return;
     if (!available(screen) || (sheet && !sheetAllowed)) nav.replace(BOOKS_HOME);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, sheet, sheetAllowed]);
+  }, [nav.onBooks, screen, sheet, sheetAllowed]);
 
   const intentRead = cashbook.intentRead;
   const attention = attentionItems({
@@ -417,11 +428,31 @@ const BooksScreens = ({
 
   const screenProps = { current: screen, onBack: nav.close };
 
+  // Coming back to the Overview from another screen: focus its heading, as
+  // the other screens' back rows do, so the move is announced. Not on first
+  // paint, which would steal focus from the Finance tabs.
+  const overviewHeading = useRef<HTMLHeadingElement>(null);
+  const previousScreen = useRef(screen);
+  useEffect(() => {
+    if (screen === "overview" && previousScreen.current !== "overview") overviewHeading.current?.focus();
+    previousScreen.current = screen;
+  }, [screen]);
+
   return (
     <Box>
+      {awayReversal && screen !== "entry" && (
+        <Box mb={4}>
+          <ReversalReceipt
+            result={awayReversal.result}
+            summary={awayReversal.summary}
+            onDone={() => setAwayReversal(null)}
+            onOpenJournal={openEntry}
+          />
+        </Box>
+      )}
       <Screen screen="overview" {...screenProps}>
         <Flex align="center" gap={2} wrap="wrap">
-          <Text as="h2" fontSize="xl" fontWeight="semibold">
+          <Text as="h2" ref={overviewHeading} tabIndex={-1} outline="none" fontSize="xl" fontWeight="semibold">
             Books
           </Text>
           {stateKey !== "active" && (
@@ -435,7 +466,13 @@ const BooksScreens = ({
           <PostingReceipt
             result={success.result}
             summary={success.summary}
-            onAnother={cashbook.workflow.dismissSuccess}
+            onAnother={() => {
+              // A fresh form for the same kind of money; a posting no sheet
+              // records (one retried here for another section) just closes.
+              const next = cashbookSheetFor(success.summary.operation);
+              cashbook.workflow.dismissSuccess();
+              if (next) nav.openSheet(next);
+            }}
           />
         )}
 
@@ -595,6 +632,9 @@ const BooksScreens = ({
             onCloseJournal={nav.close}
             isRechecking={isRechecking}
             onRecheckLedger={recheckPostings}
+            onConfirmed={(confirmed) => {
+              if (shownScreen.current !== "entry") setAwayReversal(confirmed);
+            }}
           />
         ) : (
           <ReadOnlyEntry

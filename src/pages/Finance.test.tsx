@@ -707,7 +707,9 @@ describe("<Finance> obligations load failure across tabs", () => {
     await openTab("Obligations");
     // The Collect panel animates out; wait until only the Obligations one is left.
     await waitFor(() => expect(screen.getAllByText("Couldn't load obligations")).toHaveLength(1));
-    expect(within(screen.getByRole("tabpanel")).getByText("Finance service down")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Obligations" })).getByText("Finance service down"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("No obligations yet")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New obligation" })).not.toBeInTheDocument();
 

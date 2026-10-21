@@ -109,6 +109,19 @@ const BooksTransactions = ({
         />
       )}
 
+      {/* A page after the first failed: the rows already shown stay, and Load
+          more retries it. */}
+      {pages.items && pages.isError && (
+        <Stack role="alert" gap={0.5} borderWidth="1px" borderColor="border.error" borderRadius="md" p={3}>
+          <Text fontSize="sm" fontWeight="semibold">
+            Couldn't load more transactions
+          </Text>
+          <Text fontSize="sm" color="fg.muted">
+            {errorMessage(pages.error)}
+          </Text>
+        </Stack>
+      )}
+
       {pages.items && (
         pages.hasMore ? (
           <Button variant="outline" minH="44px" loading={pages.isLoadingMore} onClick={pages.loadMore}>

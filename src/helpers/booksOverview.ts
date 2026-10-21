@@ -98,6 +98,10 @@ const CASHBOOK_SHEETS: Partial<Record<PostingOperation, BooksSheet>> = {
   transfer: "transfer",
 };
 
+/** The sheet that records this kind of money, if Books has one. */
+export const cashbookSheetFor = (operation: PostingOperation): BooksSheet | null =>
+  CASHBOOK_SHEETS[operation] ?? null;
+
 const NO_MANAGE_NOTE = "Only an officer who can manage finance can retry it.";
 const UNSUPPORTED_NOTE = "Books can't retry it here. Don't enter it again; contact support.";
 

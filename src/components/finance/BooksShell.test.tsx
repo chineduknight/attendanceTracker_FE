@@ -1,11 +1,16 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { render } from "test-utils/render";
+import { chooseOption, confirmInDialog, render } from "test-utils/render";
 import { installPostingLockManager, removePostingLockManager } from "test-utils/postingLocks";
 import { queryClient } from "services/api/apiHelper";
 import BooksTab from "components/finance/BooksTab";
-import { beginLedgerPostingIntent, markLedgerPostingIntentUnresolved } from "helpers/ledgerPostingIntent";
+import Finance from "pages/Finance";
+import {
+  beginLedgerPostingIntent,
+  ledgerPostingIntentKey,
+  markLedgerPostingIntentUnresolved,
+} from "helpers/ledgerPostingIntent";
 import { todayInLagos } from "helpers/openingBalances";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
@@ -349,5 +354,172 @@ describe("Books pending postings", () => {
     expect(within(attention).getByText(/wasn't confirmed/)).toBeInTheDocument();
     expect(within(attention).getByText("Only an officer who can manage finance can retry it.")).toBeInTheDocument();
     expect(within(attention).queryByRole("button", { name: /wasn't confirmed/ })).not.toBeInTheDocument();
+  });
+});
+
+const RECEIPT_ID = "a".repeat(24);
+const REVERSAL_ID = "b".repeat(24);
+
+const journalOf = (id: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  businessDate: TODAY,
+  reference: null,
+  note: null,
+  sourceType: "cash_receipt",
+  lines: [
+    { accountId: "cash", side: "debit", amountKobo: 500000 },
+    { accountId: "donations", side: "credit", amountKobo: 500000 },
+  ],
+  totalKobo: 500000,
+  postedAt: `${TODAY}T10:00:00.000Z`,
+  postedBy: { id: "officer-1", name: "treasurer" },
+  sourceId: null,
+  reversesJournalId: null,
+  reversedByJournalId: null,
+  entry: { number: "R-000012", method: "cash", counterpartyName: null },
+  ...overrides,
+});
+
+/** One receipt in the books, readable in the list and on its own. */
+const serveOneReceipt = () => {
+  serve();
+  const base = api.get.getMockImplementation()!;
+  api.get.mockImplementation((url: string) => {
+    if (url === `/finance/org1/ledger/journals/${RECEIPT_ID}`) {
+      return Promise.resolve({ data: { data: journalOf(RECEIPT_ID) } });
+    }
+    if (url.includes("/ledger/journals?")) {
+      return Promise.resolve({ data: { data: { items: [journalOf(RECEIPT_ID)], nextCursor: null } } });
+    }
+    return base(url);
+  });
+};
+
+const deferredPost = () => {
+  let resolve: (value: unknown) => void = () => undefined;
+  api.post.mockImplementation(() => new Promise((done) => (resolve = done)));
+  return (value: unknown) => resolve(value);
+};
+
+describe("Books saves the officer walks away from", () => {
+  it("keeps a save in flight when the officer switches Finance tab, and shows its receipt on return", async () => {
+    const settle = deferredPost();
+    setSession(MANAGER);
+    serve();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/finance?tab=books"]}>
+          <Finance />
+          <Spy />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Money in/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Money in" });
+    fireEvent.change(within(sheet).getByLabelText("Amount"), { target: { value: "5000" } });
+    fireEvent.click(within(within(sheet).getByRole("radiogroup", { name: "Into" })).getByRole("radio", { name: /Cash in hand/ }));
+    await chooseOption(within(sheet).getByLabelText("Category"), "Donations");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Record money in" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("tab", { name: "Collect" }));
+    await waitFor(() => expect(seen.search).toBe("?tab=collect"));
+    // Let Collect's panel settle, so a Books that unmounts has unmounted.
+    await screen.findByText("Nothing to collect yet");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+    settle({
+      status: 201,
+      data: { data: { replayed: false, journal: journalOf("c".repeat(24), { entry: { number: "R-000013", method: "cash", counterpartyName: null } }) } },
+    });
+    await waitFor(() => expect(window.localStorage.getItem(ledgerPostingIntentKey("org1"))).toBeNull());
+
+    fireEvent.click(screen.getByRole("tab", { name: "Books" }));
+    await waitFor(() => expect(screen.getByText(/R-000013/)).toBeVisible());
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    // "Record another posting" opens a fresh form for the same kind of money.
+    fireEvent.click(screen.getByRole("button", { name: "Record another posting" }));
+    const again = await screen.findByRole("dialog", { name: "Money in" });
+    expect(within(again).getByLabelText("Amount")).toHaveValue("");
+  });
+
+  it("shows a reversal's confirmation after the officer goes Back while it saves", async () => {
+    const settle = deferredPost();
+    setSession(MANAGER);
+    serveOneReceipt();
+    renderBooks("/finance?tab=books&books=transactions&org=org1");
+
+    fireEvent.click(await screen.findByRole("button", { name: /R-000012|Money in/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverse this entry" }));
+    fireEvent.change(screen.getByLabelText("Reason (required)"), { target: { value: "Posted twice" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review reversal" }));
+    await confirmInDialog("Reverse entry");
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Transactions" }));
+    await waitFor(() => expect(seen.search).not.toContain("books=entry"));
+
+    settle({
+      status: 201,
+      data: {
+        data: {
+          replayed: false,
+          journal: journalOf(REVERSAL_ID, {
+            sourceType: "reversal",
+            note: "Posted twice",
+            sourceId: RECEIPT_ID,
+            reversesJournalId: RECEIPT_ID,
+            entry: null,
+            lines: [
+              { accountId: "donations", side: "debit", amountKobo: 500000 },
+              { accountId: "cash", side: "credit", amountKobo: 500000 },
+            ],
+          }),
+        },
+      },
+    });
+    // Role queries see only what is shown: the receipt on Transactions, not
+    // the copy left on the hidden entry screen.
+    await waitFor(() =>
+      expect(screen.getAllByRole("status").some((el) => el.textContent?.includes("Reversed"))).toBe(true),
+    );
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Books small affordances", () => {
+  it("says when more transactions couldn't load, and keeps the ones shown", async () => {
+    setSession(MANAGER);
+    serve();
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation((url: string) => {
+      if (url.includes("/ledger/journals?") && url.includes("cursor=page2")) {
+        return Promise.reject({ response: { status: 500, data: { error: "Journals are down" } } });
+      }
+      if (url.includes("/ledger/journals?")) {
+        return Promise.resolve({ data: { data: { items: [journalOf(RECEIPT_ID)], nextCursor: "page2" } } });
+      }
+      return base(url);
+    });
+    renderBooks("/finance?tab=books&books=transactions&org=org1");
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Couldn't load more transactions")).toBeVisible();
+    expect(screen.getByText("Journals are down")).toBeVisible();
+    expect(screen.getByRole("button", { name: /R-000012|Money in/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Load more" })).toBeEnabled();
+  });
+
+  it("puts focus on the Books heading when the officer comes back to the Overview", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
+    expect(await screen.findByRole("heading", { name: "Manage Books" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Books" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Books", level: 2 })).toHaveFocus());
   });
 });

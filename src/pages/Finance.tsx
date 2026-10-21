@@ -49,6 +49,11 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
     }
     setSearchParams(writeFinanceTab(searchParams, next), { replace: true });
   };
+  // Books stays mounted once opened (hidden on other tabs): a save in flight
+  // keeps its workflow, so its receipt is still there when the officer comes
+  // back. The other tabs mount when shown and unmount when left, as before.
+  const booksOpened = useRef(tab === "books");
+  if (tab === "books") booksOpened.current = true;
   useEffect(() => {
     const next = leavingBooksFor.current;
     if (next === null || booksDepthOf(location.state) > 0) return;
@@ -115,16 +120,14 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
 
   return (
     <PageContainer width="content">
-        {/* lazyMount + unmountOnExit = v2's isLazy: a tab mounts when opened and
-            unmounts when left, so its local state resets as before. */}
+        {/* Collect, Obligations and Start dates mount when opened and unmount
+            when left (v2's isLazy), so their local state resets as before. */}
         <Tabs.Root
           value={tab}
           onValueChange={({ value }) => setTab(value as FinanceTab)}
           variant="subtle"
           colorPalette="teal"
           fitted
-          lazyMount
-          unmountOnExit
         >
           <Tabs.List bg="bg.panel" borderWidth="1px" borderColor="border" borderRadius="full" p={1} mb={4}>
             {FINANCE_TABS.map((value) => (
@@ -145,10 +148,10 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
             ))}
           </Tabs.List>
           <Tabs.Content value="collect" p={0}>
-            {collect()}
+            {tab === "collect" && collect()}
           </Tabs.Content>
           <Tabs.Content value="obligations" p={0}>
-            {obligationsGate() ?? (
+            {tab === "obligations" && (obligationsGate() ?? (
               <ObligationsTab
                 organisationId={organisationId}
                 obligations={obligations}
@@ -157,13 +160,13 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
                   setTab("collect");
                 }}
               />
-            )}
+            ))}
           </Tabs.Content>
           <Tabs.Content value="start-dates" p={0}>
-            <StartDatesTab organisationId={organisationId} />
+            {tab === "start-dates" && <StartDatesTab organisationId={organisationId} />}
           </Tabs.Content>
           <Tabs.Content value="books" p={0}>
-            <BooksTab organisationId={organisationId} />
+            {booksOpened.current && <BooksTab organisationId={organisationId} />}
           </Tabs.Content>
         </Tabs.Root>
     </PageContainer>
