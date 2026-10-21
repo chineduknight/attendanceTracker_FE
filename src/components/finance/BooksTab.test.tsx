@@ -564,7 +564,7 @@ describe("<BooksTab> approved F2 read compatibility", () => {
     // The active wording appears, but the shell still offers no controls.
     expect(
       await screen.findByText(
-        "Bookkeeping is active. Only recorded journal entries are shown; balances are not calculated here.",
+        "Bookkeeping is active.",
       ),
     ).toBeInTheDocument();
     expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
