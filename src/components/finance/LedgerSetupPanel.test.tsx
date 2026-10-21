@@ -318,6 +318,81 @@ describe("<LedgerSetupPanel> member receipts setting", () => {
     );
   });
 
+  it("offers the same action on an active ledger, and says the server takes the dues snapshot", async () => {
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }),
+    });
+    expect(screen.queryByText(/after activation/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/read-only snapshot of the current dues and levy payment records/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no turn-off operation once it is on/)).toBeInTheDocument();
+    await confirmInDialog("Turn on");
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/settings", {
+        expectedLedgerRevision: 8,
+        memberReceiptsEnabled: true,
+      }),
+    );
+    // The organisation's ledger reloads, so every screen reads the new setting.
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") }),
+    );
+  });
+
+  it("does not mention the snapshot before activation", async () => {
+    renderPanel({ status: statusOf("pending_verification", { memberReceiptsEnabled: false, revision: 4 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).queryByText(/snapshot/)).not.toBeInTheDocument();
+  });
+
+  it("shows the server's refusal on an active ledger instead of claiming success", async () => {
+    api.patch.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: { error: "An F0 snapshot has already been taken for this organisation.", code: "LEDGER_ALREADY_EXISTS" },
+      },
+    });
+    renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+    expect(await screen.findByText("An F0 snapshot has already been taken for this organisation.")).toBeInTheDocument();
+    expect(screen.getByText("That change wasn't saved")).toBeInTheDocument();
+  });
+
+  it("latches an unconfirmed outcome on an active ledger and blocks a second attempt", async () => {
+    api.patch.mockRejectedValueOnce({ message: "Network Error", code: "ERR_NETWORK", request: {} });
+    renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+
+    expect(await screen.findByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.getByText("Check whether member receipts are now on before trying again.")).toBeInTheDocument();
+    expect(readLedgerWriteUncertainty(ORGANISATION_ID)).toMatchObject({ action: "member-receipts" });
+    expect(screen.getByRole("button", { name: "Turn on member receipts" })).toBeDisabled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(api.patch).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing while suspended, and says why", () => {
+    renderPanel({ status: statusOf("suspended", { memberReceiptsEnabled: false, revision: 8 }) });
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+    expect(screen.getByText("Member receipts can't be turned on while the books are suspended.")).toBeInTheDocument();
+  });
+
+  it("offers nothing once receipts are on, or to a viewer", () => {
+    const { unmount } = renderPanel({ status: statusOf("active", { memberReceiptsEnabled: true, revision: 8 }) });
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+    unmount();
+
+    setPermissions(["finance.view"]);
+    renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }) });
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+  });
+
   it("offers no setting change when the read shape has no revision", () => {
     renderPanel({
       status: statusOf("setup", { memberReceiptsEnabled: false, revision: null }),

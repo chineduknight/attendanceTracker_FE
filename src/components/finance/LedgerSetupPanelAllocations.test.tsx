@@ -890,3 +890,28 @@ describe("F3A durable write lifecycle", () => {
     expect(readLedgerWriteUncertainty("org1")?.action).toBe("update-account");
   });
 });
+
+describe("F3A after member receipts are turned on for an active ledger", () => {
+  it("updates the readiness list and lets allocations be turned on", async () => {
+    const READY = [...BASE_CHART, DUES, LEVY];
+    const view = renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 9 }), accounts: READY });
+    expect(within(readinessRow("Member receipts are on")).getByText("Missing")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn on allocations" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+    await waitFor(() => expect(settingsPatches()).toHaveLength(1));
+    expect(settingsPatches()[0][1]).toEqual({ expectedLedgerRevision: 9, memberReceiptsEnabled: true });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+
+    // The reloaded status the server now reports.
+    view.rerender(panel({ status: statusOf("active", { memberReceiptsEnabled: true, revision: 10 }), accounts: READY }));
+    expect(within(readinessRow("Member receipts are on")).getByText("Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Turn on allocations" }));
+    await confirmInDialog("Turn on allocations");
+    await waitFor(() => expect(settingsPatches()).toHaveLength(2));
+    expect(settingsPatches()[1][1]).toEqual({ expectedLedgerRevision: 10, memberAllocationsEnabled: true });
+  });
+});

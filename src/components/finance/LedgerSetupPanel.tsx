@@ -329,7 +329,11 @@ const LedgerSetupPanel = ({
     if (writeBlocked || status.revision === null) return;
     const confirmed = await confirm({
       title: "Turn on member receipts",
-      body: "Turn on member receipts for this ledger? Money received for a member will be held as a liability until it is allocated. There is no turn-off operation once it is on.",
+      body: `Turn on member receipts for this ledger? Money received for a member will be held as a liability until it is allocated.${
+        state === "active"
+          ? " Because the books are already active, the server also takes a read-only snapshot of the current dues and levy payment records at the same moment; those records are not changed."
+          : ""
+      } There is no turn-off operation once it is on.`,
       confirmLabel: "Turn on",
     });
     if (!confirmed) return;
@@ -461,7 +465,7 @@ const LedgerSetupPanel = ({
                 {status.memberReceiptsEnabled === true
                   ? "Money received for a member is held as a liability until it is allocated."
                   : status.memberReceiptsEnabled === false
-                    ? "Member money is not tracked as a liability. It can be turned on before the ledger is activated; there is no turn-off operation once it is on."
+                    ? "Member money is not tracked as a liability. It can be turned on at any time while the books aren't suspended; there is no turn-off operation once it is on."
                     : "This server did not report the member-receipts setting."}
               </Text>
 
@@ -480,7 +484,7 @@ const LedgerSetupPanel = ({
               {canManage &&
                 status.memberReceiptsEnabled === false &&
                 status.revision === null &&
-                (state === "setup" || state === "pending_verification") && (
+                (state === "setup" || state === "pending_verification" || state === "active") && (
                   <Text fontSize="xs" color="fg.muted">
                     This server doesn't send the ledger revision yet, so this setting can't
                     be changed from here.
@@ -489,9 +493,9 @@ const LedgerSetupPanel = ({
 
               {canManage &&
                 status.memberReceiptsEnabled === false &&
-                state === "active" && (
+                state === "suspended" && (
                   <Text fontSize="xs" color="fg.muted">
-                    Member receipts can't be turned on from this release after activation.
+                    Member receipts can't be turned on while the books are suspended.
                   </Text>
                 )}
 

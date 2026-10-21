@@ -387,51 +387,29 @@ describe("setup capabilities", () => {
     expect(canStartLedgerSetup(statusOf("setup"), true)).toBe(false);
   });
 
-  it("turns member receipts on only before activation and only upwards", () => {
-    expect(
-      canEnableMemberReceipts(
-        statusOf("setup", { memberReceiptsEnabled: false, revision: 3 }),
-        true,
-      ),
-    ).toBe(true);
-    expect(
-      canEnableMemberReceipts(
-        statusOf("pending_verification", { memberReceiptsEnabled: false, revision: 3 }),
-        true,
-      ),
-    ).toBe(true);
+  it("turns member receipts on in setup, pending verification and active, only upwards", () => {
+    const off = { memberReceiptsEnabled: false, revision: 3 };
+    // The backend enables receipts in every started, unsuspended state; on an
+    // active ledger it takes the F0 snapshot in the same transaction.
+    expect(canEnableMemberReceipts(statusOf("setup", off), true)).toBe(true);
+    expect(canEnableMemberReceipts(statusOf("pending_verification", off), true)).toBe(true);
+    expect(canEnableMemberReceipts(statusOf("active", off), true)).toBe(true);
 
+    // Refused by the backend: suspended, not started, already on.
+    expect(canEnableMemberReceipts(statusOf("suspended", off), true)).toBe(false);
+    expect(canEnableMemberReceipts(statusOf("not_active", off), true)).toBe(false);
     expect(
-      canEnableMemberReceipts(
-        statusOf("setup", { memberReceiptsEnabled: true, revision: 3 }),
-        true,
-      ),
+      canEnableMemberReceipts(statusOf("active", { memberReceiptsEnabled: true, revision: 3 }), true),
     ).toBe(false);
+    // Unknown setting: nothing is assumed.
     expect(
-      canEnableMemberReceipts(
-        statusOf("active", { memberReceiptsEnabled: false, revision: 3 }),
-        true,
-      ),
-    ).toBe(false);
-    expect(
-      canEnableMemberReceipts(
-        statusOf("suspended", { memberReceiptsEnabled: false, revision: 3 }),
-        true,
-      ),
+      canEnableMemberReceipts(statusOf("active", { memberReceiptsEnabled: null, revision: 3 }), true),
     ).toBe(false);
     // The PATCH needs expectedLedgerRevision; an F1 status has none.
     expect(
-      canEnableMemberReceipts(
-        statusOf("setup", { memberReceiptsEnabled: false, revision: null }),
-        true,
-      ),
+      canEnableMemberReceipts(statusOf("active", { memberReceiptsEnabled: false, revision: null }), true),
     ).toBe(false);
-    expect(
-      canEnableMemberReceipts(
-        statusOf("setup", { memberReceiptsEnabled: false, revision: 3 }),
-        false,
-      ),
-    ).toBe(false);
+    expect(canEnableMemberReceipts(statusOf("active", off), false)).toBe(false);
   });
 
   it("creates accounts only in setup-capable states with manage permission", () => {

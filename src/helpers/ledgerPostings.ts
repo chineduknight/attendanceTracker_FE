@@ -955,7 +955,7 @@ export const memberMoneyReadiness = ({
       ready: false,
       reason:
         status.memberReceiptsEnabled === false
-          ? "Member receipts are turned off for this ledger. An officer can turn them on in Bookkeeping setup before activation."
+          ? "Member receipts are turned off for this ledger. An officer who can manage finance can turn them on in Bookkeeping setup."
           : "The server didn't report whether member receipts are on, so member money can't be recorded.",
     };
   }

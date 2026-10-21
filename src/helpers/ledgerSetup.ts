@@ -586,9 +586,11 @@ export const canStartLedgerSetup = (status: LedgerStatus, canManage: boolean) =>
   canManage && ledgerStateKey(status) === "not_active";
 
 /**
- * Member receipts can only be switched on, and only before activation.
- * `expectedLedgerRevision` is required, so an F1 status without a revision
- * cannot offer the action.
+ * Member receipts can only be switched on, never off. The backend allows it
+ * in every started state except suspended; on an active ledger it takes the
+ * F0 snapshot in the same transaction (before activation, the activating
+ * verification takes it). `expectedLedgerRevision` is required, so an F1
+ * status without a revision cannot offer the action.
  */
 export const canEnableMemberReceipts = (
   status: LedgerStatus,
@@ -597,7 +599,7 @@ export const canEnableMemberReceipts = (
   if (!canManage) return false;
   const state = ledgerStateKey(status);
   return (
-    (state === "setup" || state === "pending_verification") &&
+    (state === "setup" || state === "pending_verification" || state === "active") &&
     status.memberReceiptsEnabled === false &&
     status.revision !== null
   );
