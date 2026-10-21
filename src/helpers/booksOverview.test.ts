@@ -1,5 +1,6 @@
 import { LedgerAccount } from "components/finance/ledgerTypes";
 import { BalancesReport } from "components/finance/ledgerReportTypes";
+import { PostingSection } from "components/finance/ledgerPostingTypes";
 import { LedgerPostingIntentRecord } from "helpers/ledgerPostingIntent";
 import { attentionItems, balanceTiles, monthToDate } from "helpers/booksOverview";
 
@@ -87,9 +88,15 @@ describe("balanceTiles", () => {
   });
 });
 
-const pending = (operation: LedgerPostingIntentRecord["operation"]) =>
+const pending = (
+  operation: LedgerPostingIntentRecord["operation"],
+  extra: Partial<LedgerPostingIntentRecord> = {},
+) =>
   ({
+    key: `key-${operation}`,
     operation,
+    retryMode: "retry",
+    reversalTarget: null,
     summary: {
       operation,
       amountKobo: 500000,
@@ -99,36 +106,95 @@ const pending = (operation: LedgerPostingIntentRecord["operation"]) =>
       toAccountName: "Cash in hand",
       categoryName: "Donations",
     },
+    ...extra,
   }) as unknown as LedgerPostingIntentRecord;
 
 describe("attentionItems", () => {
-  const none = { pending: null, pendingSection: null, unconfirmedAttempts: 0, hasPendingProposal: false, blockers: [] };
+  const reach = { canManage: true, sheets: true, held: true, attempts: true };
+  const none = {
+    pending: [],
+    sectionFor: () => null,
+    reach,
+    unconfirmedAttempts: 0,
+    hasPendingProposal: false,
+    blockers: [],
+  };
+  const one = (
+    record: LedgerPostingIntentRecord,
+    section: PostingSection | null,
+    overrides: Partial<typeof reach> = {},
+  ) =>
+    attentionItems({
+      ...none,
+      pending: [record],
+      sectionFor: () => section,
+      reach: { ...reach, ...overrides },
+    })[0];
 
   it("is empty when nothing needs attention", () => {
     expect(attentionItems(none)).toEqual([]);
   });
 
   it("sends an unconfirmed cashbook posting to its sheet", () => {
-    const [item] = attentionItems({ ...none, pending: pending("expense"), pendingSection: "cashbook" });
+    const item = one(pending("expense"), "cashbook");
     expect(item.text).toMatch(/wasn't confirmed$/);
     expect(item.target).toEqual({ kind: "sheet", sheet: "money-out" });
-    expect(attentionItems({ ...none, pending: pending("receipt"), pendingSection: "cashbook" })[0].target).toEqual({
-      kind: "sheet",
-      sheet: "money-in",
+    expect(one(pending("receipt"), "cashbook").target).toEqual({ kind: "sheet", sheet: "money-in" });
+  });
+
+  it("sends any posting the cashbook retries to a sheet, not the Overview", () => {
+    // Member receipts off: a member receipt falls back to the cashbook, whose
+    // sheets all show the retry.
+    expect(one(pending("member_receipt"), "cashbook").target).toEqual({ kind: "sheet", sheet: "money-in" });
+  });
+
+  it("sends member-money postings to Held for members and a reversal to its entry", () => {
+    expect(one(pending("member_receipt"), "memberMoney").target).toEqual({ kind: "screen", screen: "held" });
+    expect(one(pending("allocation"), "allocations").target).toEqual({ kind: "screen", screen: "held" });
+    expect(
+      one(pending("reversal", { reversalTarget: { journalId: "j-9" } as never }), "reversals").target,
+    ).toEqual({ kind: "screen", screen: "entry", journalId: "j-9" });
+  });
+
+  it("sends a posting the Reversals section retries without an entry to Transactions, and says why", () => {
+    const item = one(pending("receipt"), "reversals");
+    expect(item.target).toEqual({ kind: "screen", screen: "transactions" });
+    expect(item.note).toBe("Open any entry to retry it.");
+  });
+
+  it("sends a posting only an owner can resolve to Unconfirmed saves", () => {
+    const item = one(pending("expense", { retryMode: "owner" }), "cashbook");
+    expect(item.target).toEqual({ kind: "screen", screen: "manage-attempts" });
+    expect(item.note).toBe("Resend can't fix it. Resolve it in Unconfirmed saves.");
+  });
+
+  it("explains instead of linking when nothing here can recover it", () => {
+    const unsupported = "Books can't retry it here. Don't enter it again; contact support.";
+    expect(one(pending("receipt"), null)).toMatchObject({ target: null, note: unsupported });
+    expect(one(pending("expense", { retryMode: "owner" }), "cashbook", { attempts: false })).toMatchObject({
+      target: null,
+      note: unsupported,
+    });
+    expect(one(pending("receipt"), "cashbook", { sheets: false })).toMatchObject({
+      target: null,
+      note: unsupported,
     });
   });
 
-  it("sends member-money and reversal postings to the screen that retries them", () => {
-    expect(
-      attentionItems({ ...none, pending: pending("member_receipt"), pendingSection: "memberMoney" })[0].target,
-    ).toEqual({ kind: "screen", screen: "held" });
-    expect(
-      attentionItems({ ...none, pending: pending("allocation"), pendingSection: "allocations" })[0].target,
-    ).toEqual({ kind: "screen", screen: "held" });
-    expect(attentionItems({ ...none, pending: pending("reversal"), pendingSection: "reversals" })[0].target).toEqual({
-      kind: "screen",
-      screen: "entry",
+  it("tells an officer who can't manage finance who can retry it", () => {
+    expect(one(pending("receipt"), "cashbook", { canManage: false, sheets: false })).toMatchObject({
+      target: null,
+      note: "Only an officer who can manage finance can retry it.",
     });
+  });
+
+  it("lists every unconfirmed posting", () => {
+    const items = attentionItems({
+      ...none,
+      pending: [pending("receipt"), pending("expense")],
+      sectionFor: () => "cashbook",
+    });
+    expect(items.map((item) => item.id)).toEqual(["pending-key-receipt", "pending-key-expense"]);
   });
 
   it("names unconfirmed attempts, a pending opening and blockers", () => {

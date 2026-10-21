@@ -42,7 +42,7 @@ import { queryKeys } from "services/api/queryKeys";
 import useGlobalStore from "zStore";
 import { formatBusinessDate } from "helpers/financeCompliance";
 import { BOOKS_HOME, BooksScreen } from "helpers/booksNavigation";
-import { AttentionItem, attentionItems } from "helpers/booksOverview";
+import { AttentionTarget, attentionItems } from "helpers/booksOverview";
 import {
   isLedgerUnavailable,
   LEDGER_FORBIDDEN_NOTE,
@@ -387,21 +387,22 @@ const BooksScreens = ({
   }, [screen, sheet, sheetAllowed]);
 
   const intentRead = cashbook.intentRead;
-  const pending = intentRead.kind === "pending" ? intentRead.intents[0] ?? null : null;
   const attention = attentionItems({
-    pending,
-    pendingSection: pending ? retrySectionFor(pending.operation, shownSections) : null,
+    pending: intentRead.kind === "pending" ? intentRead.intents : [],
+    sectionFor: (record) => retrySectionFor(record.operation, shownSections),
+    reach: {
+      canManage,
+      sheets: sheetAllowed,
+      held: available("held"),
+      attempts: available("manage-attempts"),
+    },
     unconfirmedAttempts: canManage && LEDGER_REVERSALS_UI_ENABLED ? status.unconfirmedAttempts : null,
     hasPendingProposal: LEDGER_OPENING_BALANCES_UI_ENABLED ? status.hasPendingProposal : null,
     blockers: canManage && live ? status.blockers ?? [] : [],
   });
-  const openAttention = (target: AttentionItem["target"]) => {
+  const openAttention = (target: AttentionTarget) => {
     if (target.kind === "sheet") nav.openSheet(target.sheet);
-    else if (target.screen === "entry") {
-      const reversed = pending?.reversalTarget?.journalId;
-      if (reversed) nav.go("entry", reversed);
-      else nav.go("transactions");
-    } else nav.go(target.screen);
+    else nav.go(target.screen, target.journalId);
   };
 
   const openEntry = (id: string) => nav.go("entry", id);

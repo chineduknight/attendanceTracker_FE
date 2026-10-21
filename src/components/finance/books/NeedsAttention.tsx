@@ -1,14 +1,17 @@
-import { Stack, Text } from "@chakra-ui/react";
+import { Box, Stack, Text } from "@chakra-ui/react";
 import NavRow, { NavGroup } from "components/finance/books/NavRow";
-import { AttentionItem } from "helpers/booksOverview";
+import { AttentionItem, AttentionTarget } from "helpers/booksOverview";
 
-/** Only what needs doing now; renders nothing when all is well. */
+/**
+ * Only what needs doing now; renders nothing when all is well. An item with
+ * no target is not a link: its note says why nothing here can recover it.
+ */
 const NeedsAttention = ({
   items,
   onOpen,
 }: {
   items: AttentionItem[];
-  onOpen: (target: AttentionItem["target"]) => void;
+  onOpen: (target: AttentionTarget) => void;
 }) => {
   if (!items.length) return null;
   return (
@@ -17,9 +20,20 @@ const NeedsAttention = ({
         Needs attention
       </Text>
       <NavGroup>
-        {items.map((item) => (
-          <NavRow key={item.id} label={item.text} onClick={() => onOpen(item.target)} />
-        ))}
+        {items.map(({ id, text, note, target }) =>
+          target ? (
+            <NavRow key={id} label={text} caption={note} onClick={() => onOpen(target)} />
+          ) : (
+            <Box key={id} px={4} py={3} bg="bg.panel">
+              <Text fontWeight="medium">{text}</Text>
+              {note && (
+                <Text fontSize="sm" color="fg.muted">
+                  {note}
+                </Text>
+              )}
+            </Box>
+          ),
+        )}
       </NavGroup>
     </Stack>
   );

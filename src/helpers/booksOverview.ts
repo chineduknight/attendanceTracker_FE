@@ -68,10 +68,28 @@ export const balanceTiles = (
   };
 };
 
+export type AttentionTarget =
+  | { kind: "sheet"; sheet: BooksSheet }
+  | { kind: "screen"; screen: BooksScreen; journalId?: string };
+
 export interface AttentionItem {
   id: string;
   text: string;
-  target: { kind: "sheet"; sheet: BooksSheet } | { kind: "screen"; screen: BooksScreen };
+  /** Why there is no link, or what to do once there. */
+  note?: string;
+  /** null: nothing in Books can recover it, and `note` says so. */
+  target: AttentionTarget | null;
+}
+
+/** Which places Books can open for this officer and build. */
+export interface PendingReach {
+  canManage: boolean;
+  /** Money in, Money out and Transfer can open (their retry lives there). */
+  sheets: boolean;
+  /** Held for members is shown. */
+  held: boolean;
+  /** Unconfirmed saves is shown. */
+  attempts: boolean;
 }
 
 const CASHBOOK_SHEETS: Partial<Record<PostingOperation, BooksSheet>> = {
@@ -80,39 +98,72 @@ const CASHBOOK_SHEETS: Partial<Record<PostingOperation, BooksSheet>> = {
   transfer: "transfer",
 };
 
+const NO_MANAGE_NOTE = "Only an officer who can manage finance can retry it.";
+const UNSUPPORTED_NOTE = "Books can't retry it here. Don't enter it again; contact support.";
+
+/**
+ * Where an unconfirmed posting can be recovered. Every link lands on the
+ * screen that offers its retry (or its owner resolution); when none can be
+ * reached, the item explains instead of linking to a dead end.
+ */
 const pendingTarget = (
   record: LedgerPostingIntentRecord,
   section: PostingSection | null,
-): AttentionItem["target"] => {
-  const sheet = CASHBOOK_SHEETS[record.operation];
-  if (section === "cashbook" && sheet) return { kind: "sheet", sheet };
-  if (section === "reversals") return { kind: "screen", screen: "entry" };
-  if (section === "memberMoney" || section === "allocations") return { kind: "screen", screen: "held" };
-  return { kind: "screen", screen: "overview" };
+  reach: PendingReach,
+): Pick<AttentionItem, "target" | "note"> => {
+  if (!reach.canManage) return { target: null, note: NO_MANAGE_NOTE };
+  if (record.retryMode === "owner") {
+    return reach.attempts
+      ? {
+          target: { kind: "screen", screen: "manage-attempts" },
+          note: "Resend can't fix it. Resolve it in Unconfirmed saves.",
+        }
+      : { target: null, note: UNSUPPORTED_NOTE };
+  }
+  switch (section) {
+    case "cashbook":
+      // Every cashbook sheet shows the retry, whatever the operation.
+      return reach.sheets
+        ? { target: { kind: "sheet", sheet: CASHBOOK_SHEETS[record.operation] ?? "money-in" } }
+        : { target: null, note: UNSUPPORTED_NOTE };
+    case "memberMoney":
+    case "allocations":
+      return reach.held
+        ? { target: { kind: "screen", screen: "held" } }
+        : { target: null, note: UNSUPPORTED_NOTE };
+    case "reversals": {
+      const journalId = record.reversalTarget?.journalId;
+      // The Reversals section shows its retry on any open entry.
+      return journalId
+        ? { target: { kind: "screen", screen: "entry", journalId } }
+        : { target: { kind: "screen", screen: "transactions" }, note: "Open any entry to retry it." };
+    }
+    default:
+      return { target: null, note: UNSUPPORTED_NOTE };
+  }
 };
 
 export const attentionItems = ({
   pending,
-  pendingSection,
+  sectionFor,
+  reach,
   unconfirmedAttempts,
   hasPendingProposal,
   blockers,
 }: {
-  pending: LedgerPostingIntentRecord | null;
-  /** The section that offers the pending posting's retry (`retrySectionFor`). */
-  pendingSection: PostingSection | null;
+  pending: readonly LedgerPostingIntentRecord[];
+  /** The section that offers a pending posting's retry (`retrySectionFor`). */
+  sectionFor: (record: LedgerPostingIntentRecord) => PostingSection | null;
+  reach: PendingReach;
   unconfirmedAttempts: number | null;
   hasPendingProposal: boolean | null;
   blockers: readonly string[];
 }): AttentionItem[] => {
-  const items: AttentionItem[] = [];
-  if (pending) {
-    items.push({
-      id: "pending",
-      text: `${postingSummaryText(pending.summary)} wasn't confirmed`,
-      target: pendingTarget(pending, pendingSection),
-    });
-  }
+  const items: AttentionItem[] = pending.map((record) => ({
+    id: `pending-${record.key}`,
+    text: `${postingSummaryText(record.summary)} wasn't confirmed`,
+    ...pendingTarget(record, sectionFor(record), reach),
+  }));
   if (unconfirmedAttempts) {
     items.push({
       id: "attempts",

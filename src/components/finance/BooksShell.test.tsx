@@ -234,41 +234,120 @@ describe("Books transactions", () => {
   });
 });
 
+type Seed = Parameters<typeof beginLedgerPostingIntent>[0];
+
+const seedPending = async (
+  key: string,
+  operation: Seed["operation"],
+  body: Record<string, unknown>,
+  extra: Partial<Seed> = {},
+  retryMode: "retry" | "owner" = "retry",
+) => {
+  const claim = await beginLedgerPostingIntent({
+    organisationId: "org1",
+    officerId: "officer-1",
+    key,
+    operation,
+    body: { idempotencyKey: key, businessDate: TODAY, ...body } as Seed["body"],
+    summary: {
+      operation,
+      amountKobo: 500000,
+      businessDate: TODAY,
+      method: operation === "reversal" ? null : "cash",
+      fromAccountName: null,
+      toAccountName: "Cash in hand",
+      categoryName: "Donations",
+    } as Seed["summary"],
+    ...extra,
+  });
+  if (claim.kind !== "claimed") throw new Error(`seed failed: ${claim.reason}`);
+  await markLedgerPostingIntentUnresolved(claim.record, {
+    ambiguous: true,
+    retryMode,
+    message: "Unknown.",
+  });
+};
+
+const RECEIPT_BODY = { amountKobo: 500000, toAccountId: "cash", incomeAccountId: "donations", method: "cash" };
+
+const openAttentionItem = async (name: RegExp) => {
+  const attention = await screen.findByRole("region", { name: "Needs attention" });
+  fireEvent.click(within(attention).getByRole("button", { name }));
+};
+
 describe("Books pending postings", () => {
   it("offers one retry, reached from Needs attention", async () => {
-    const claim = await beginLedgerPostingIntent({
-      organisationId: "org1",
-      officerId: "officer-1",
-      key: "key-12345678",
-      operation: "receipt",
-      body: {
-        idempotencyKey: "key-12345678",
-        businessDate: TODAY,
-        amountKobo: 500000,
-        toAccountId: "cash",
-        incomeAccountId: "donations",
-        method: "cash",
-      },
-      summary: {
-        operation: "receipt",
-        amountKobo: 500000,
-        businessDate: TODAY,
-        method: "cash",
-        fromAccountName: null,
-        toAccountName: "Cash in hand",
-        categoryName: "Donations",
-      },
-    });
-    if (claim.kind !== "claimed") throw new Error("seed failed");
-    await markLedgerPostingIntentUnresolved(claim.record, { ambiguous: true, message: "Unknown." });
+    await seedPending("key-12345678", "receipt", RECEIPT_BODY);
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    await openAttentionItem(/wasn't confirmed/);
+    const sheet = await screen.findByRole("dialog", { name: "Money in" });
+    expect(within(sheet).getByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Retry this posting", hidden: true })).toHaveLength(1);
+  });
 
+  it("reaches the retry of a member receipt while member receipts are off", async () => {
+    await seedPending("key-member01", "member_receipt", {
+      amountKobo: 500000,
+      toAccountId: "cash",
+      method: "cash",
+      counterpartyName: "Ada Obi",
+      purpose: "dues",
+      receivedAfterOpeningCount: true,
+    });
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    await openAttentionItem(/wasn't confirmed/);
+    const sheet = await screen.findByRole("dialog", { name: "Money in" });
+    expect(within(sheet).getByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Retry this posting", hidden: true })).toHaveLength(1);
+  });
+
+  it("opens the reversed entry for an unconfirmed reversal, where its retry is", async () => {
+    await seedPending(
+      "key-reversal1",
+      "reversal",
+      { reason: "Posted twice" },
+      {
+        reversalTarget: {
+          journalId: "a".repeat(24),
+          sourceType: "cash_receipt",
+          number: "R-000012",
+          businessDate: TODAY,
+          totalKobo: 500000,
+        },
+      },
+    );
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+    await openAttentionItem(/wasn't confirmed/);
+    await waitFor(() => expect(seen.search).toContain(`journal=${"a".repeat(24)}`));
+    expect(await screen.findByRole("button", { name: "Retry this posting" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Retry this posting", hidden: true })).toHaveLength(1);
+  });
+
+  it("sends a posting only an owner can resolve to Unconfirmed saves", async () => {
+    await seedPending("key-owner001", "receipt", RECEIPT_BODY, {}, "owner");
     setSession(MANAGER);
     serve();
     renderBooks();
     const attention = await screen.findByRole("region", { name: "Needs attention" });
-    fireEvent.click(within(attention).getByRole("button", { name: /wasn't confirmed/ }));
-    const sheet = await screen.findByRole("dialog", { name: "Money in" });
-    expect(within(sheet).getByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Retry this posting", hidden: true })).toHaveLength(1);
+    expect(within(attention).getByText("Resend can't fix it. Resolve it in Unconfirmed saves.")).toBeInTheDocument();
+    await openAttentionItem(/wasn't confirmed/);
+    expect(await screen.findByRole("heading", { name: "Unconfirmed saves" })).toBeVisible();
+  });
+
+  it("tells a viewer who can retry instead of linking to a dead end", async () => {
+    await seedPending("key-viewer01", "receipt", RECEIPT_BODY);
+    setSession(VIEWER);
+    serve();
+    renderBooks();
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+    expect(within(attention).getByText(/wasn't confirmed/)).toBeInTheDocument();
+    expect(within(attention).getByText("Only an officer who can manage finance can retry it.")).toBeInTheDocument();
+    expect(within(attention).queryByRole("button", { name: /wasn't confirmed/ })).not.toBeInTheDocument();
   });
 });
