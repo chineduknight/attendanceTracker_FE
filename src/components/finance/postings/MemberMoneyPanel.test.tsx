@@ -299,8 +299,8 @@ afterEach(() => {
 });
 
 describe("gate and readiness", () => {
-  it("defaults the release gate to off and renders nothing then", () => {
-    expect(LEDGER_MEMBER_MONEY_UI_ENABLED).toBe(false);
+  it("ships the release gate on and renders nothing while it is off", () => {
+    expect(LEDGER_MEMBER_MONEY_UI_ENABLED).toBe(true);
     renderPanel({ enabled: false });
     expect(screen.queryByRole("region", { name: "Member money" })).not.toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalled();

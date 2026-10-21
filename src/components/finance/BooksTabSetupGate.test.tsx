@@ -163,7 +163,11 @@ describe("<BooksTab> setup gates on", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(await screen.findByText("Main account")).toBeInTheDocument();
-    expect(api.get.mock.calls.map(([url]) => url)).toEqual(["/finance/org1/ledger/accounts"]);
+    // Only the accounts are fetched again. The opening-balance reads wait for
+    // the account list, so they load here for the first time.
+    const urls = api.get.mock.calls.map(([url]) => String(url));
+    expect(urls.filter((url) => url === "/finance/org1/ledger/accounts")).toHaveLength(1);
+    expect(urls.filter((url) => /\/ledger\/(status|journals)/.test(url))).toEqual([]);
   });
 
   it("shows only the new organisation's chart after a switch", async () => {

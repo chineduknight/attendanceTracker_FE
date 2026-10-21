@@ -316,8 +316,8 @@ afterEach(() => {
 });
 
 describe("feature gate and readiness", () => {
-  it("defaults the release gate to off", () => {
-    expect(LEDGER_POSTINGS_UI_ENABLED).toBe(false);
+  it("ships the release gate on", () => {
+    expect(LEDGER_POSTINGS_UI_ENABLED).toBe(true);
   });
 
   it("renders nothing while its gate is off", () => {

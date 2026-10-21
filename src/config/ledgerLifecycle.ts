@@ -7,7 +7,8 @@
  * depend on backend routes and reads that shipped later than the two earlier
  * gates, and they are the highest-impact ledger controls.
  *
- * OFF until all of these are true:
+ * ON from the stage 3 release (backend 80f0ac4); false is the kill switch.
+ * Activation depends on:
  *
  * 1. Backend F2A-3 lifecycle routes are merged and deployed: `POST suspend`,
  *    `POST resume`, `PUT period-lock`, `POST gap-window/attest`.
@@ -21,4 +22,4 @@
  *
  * While false, Books renders exactly what the merged F2A-3A PR shipped.
  */
-export const LEDGER_LIFECYCLE_UI_ENABLED: boolean = false;
+export const LEDGER_LIFECYCLE_UI_ENABLED: boolean = true;

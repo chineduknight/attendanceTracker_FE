@@ -4,7 +4,8 @@
  * Separate from `LEDGER_SETUP_UI_ENABLED` on purpose: the F2A-2 setup screens
  * and the opening-balance screens have different prerequisites.
  *
- * OFF until all of these are true:
+ * ON from the stage 3 release (backend 80f0ac4); false is the kill switch.
+ * Activation depends on:
  *
  * 1. Backend F2A-3 (draft PR #40) is corrected, reviewed and merged. Its
  *    current routes/response fields are provisional.
@@ -18,4 +19,4 @@
  *
  * While false, Books renders exactly what #132 shipped.
  */
-export const LEDGER_OPENING_BALANCES_UI_ENABLED: boolean = false;
+export const LEDGER_OPENING_BALANCES_UI_ENABLED: boolean = true;

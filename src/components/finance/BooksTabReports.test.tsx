@@ -6,8 +6,11 @@ import BooksTab from "components/finance/BooksTab";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 
-// Wiring only: the real gate stays off (BooksTab.test.tsx asserts it).
+// Wiring only: BooksTab.test.tsx asserts the shipped gates. The lifecycle
+// and opening panels repeat the state label, so they stay out of this file.
 jest.mock("config/ledgerReports", () => ({ LEDGER_REPORTS_UI_ENABLED: true }));
+jest.mock("config/ledgerLifecycle", () => ({ LEDGER_LIFECYCLE_UI_ENABLED: false }));
+jest.mock("config/ledgerOpeningBalances", () => ({ LEDGER_OPENING_BALANCES_UI_ENABLED: false }));
 
 jest.mock("services/api", () => ({
   __esModule: true,
