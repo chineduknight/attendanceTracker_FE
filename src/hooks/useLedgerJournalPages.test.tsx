@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
@@ -82,7 +82,7 @@ it("says there is no more only when the server's cursor is null", async () => {
   api.get.mockImplementationOnce(() => page(["a"], null));
   renderProbe(EMPTY_JOURNAL_FILTERS);
   expect(await screen.findByText("rows:1")).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByText("end")).toBeInTheDocument());
+  expect(await screen.findByText("end")).toBeInTheDocument();
 });
 
 it("keys each organisation and filter set apart", () => {

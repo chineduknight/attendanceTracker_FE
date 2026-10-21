@@ -172,13 +172,13 @@ const openTransfer = () => {
 
 const fillReceipt = async (amount = "25000") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
-  pickAccount(screen, "Into", "Cash in hand");
+  pickAccount("Into", "Cash in hand");
   await chooseOption(screen.getByLabelText("Category"), "Donations");
 };
 
 const fillExpense = async (amount = "7500") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
-  pickAccount(screen, "Paid from", "Main bank");
+  pickAccount("Paid from", "Main bank");
   await chooseOption(screen.getByLabelText("Category"), "Venue hire");
   fireEvent.change(screen.getByLabelText("Paid to (required)"), {
     target: { value: "Venue Ltd" },
@@ -187,8 +187,8 @@ const fillExpense = async (amount = "7500") => {
 
 const fillTransfer = async (amount = "20000") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
-  pickAccount(screen, "From", "Cash in hand");
-  pickAccount(screen, "To", "Main bank");
+  pickAccount("From", "Cash in hand");
+  pickAccount("To", "Main bank");
 };
 
 const submit = async (label: string) => {
@@ -283,7 +283,7 @@ const fillReceiptIn = async (panel: HTMLElement, amount = "25000", { open = true
   const tab = within(panel);
   if (open) fireEvent.click(tab.getByRole("button", { name: /Money in/ }));
   fireEvent.change(tab.getByLabelText("Amount"), { target: { value: amount } });
-  pickAccount(tab, "Into", "Cash in hand");
+  pickAccount("Into", "Cash in hand", panel);
   await chooseOption(tab.getByLabelText("Category"), "Donations");
 };
 
@@ -304,12 +304,13 @@ const expectLocked = (panel: HTMLElement, amountShown = "25,000") => {
   expect(tab.queryByText("Already posted")).not.toBeInTheDocument();
 };
 
-/** Taps one of the account cards in the named group. */
-const pickAccount = (
-  scope: Pick<typeof screen, "getByRole">,
-  group: string,
-  name: string,
-) => fireEvent.click(within(scope.getByRole("radiogroup", { name: group })).getByRole("radio", { name: new RegExp(name) }));
+/** Taps one of the account cards in the named group, inside `container` when given. */
+const pickAccount = (group: string, name: string, container?: HTMLElement) => {
+  const cards = container
+    ? within(container).getByRole("radiogroup", { name: group })
+    : screen.getByRole("radiogroup", { name: group });
+  fireEvent.click(within(cards).getByRole("radio", { name: new RegExp(name) }));
+};
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -637,14 +638,14 @@ describe("cross-tab coordination", () => {
     fireEvent.change(first.getByLabelText("Amount"), {
       target: { value: "25000" },
     });
-    pickAccount(first, "Into", "Cash in hand");
+    pickAccount("Into", "Cash in hand", panels[0]);
     await chooseOption(first.getByLabelText("Category"), "Donations");
 
     fireEvent.click(second.getByRole("button", { name: /Money in/ }));
     fireEvent.change(second.getByLabelText("Amount"), {
       target: { value: "25000" },
     });
-    pickAccount(second, "Into", "Cash in hand");
+    pickAccount("Into", "Cash in hand", panels[1]);
     await chooseOption(second.getByLabelText("Category"), "Donations");
 
     const submitButtons = screen.getAllByRole("button", { name: "Record money in" });
@@ -695,7 +696,7 @@ describe("validation and eligibility", () => {
     renderPanel();
     openExpense();
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7500" } });
-    pickAccount(screen, "Paid from", "Main bank");
+    pickAccount("Paid from", "Main bank");
     await chooseOption(screen.getByLabelText("Category"), "Venue hire");
     fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
 
@@ -707,13 +708,11 @@ describe("validation and eligibility", () => {
     renderPanel();
     await openReceipt();
 
-    const accounts = within(screen.getByRole("radiogroup", { name: "Into" }))
-      .getAllByRole("radio")
-      .map((card) => card.querySelector("p")?.textContent);
-    expect(accounts).toEqual(["Cash in hand", "Main bank"]);
-    expect(accounts).not.toContain("Old cash");
-    expect(accounts).not.toContain("New bank");
-    expect(accounts).not.toContain("Member money held");
+    const into = within(screen.getByRole("radiogroup", { name: "Into" }));
+    expect(into.getAllByRole("radio")).toHaveLength(2);
+    expect(into.getByRole("radio", { name: /Cash in hand/ })).toBeInTheDocument();
+    expect(into.getByRole("radio", { name: /Main bank/ })).toBeInTheDocument();
+    expect(into.queryByRole("radio", { name: /Old cash|New bank|Member money held/ })).not.toBeInTheDocument();
 
     const categories = await optionLabels(screen.getByLabelText("Category"));
     expect(categories).toEqual(["Donations"]);
@@ -737,12 +736,11 @@ describe("validation and eligibility", () => {
   it("does not offer the sending account as the transfer destination", async () => {
     renderPanel();
     openTransfer();
-    pickAccount(screen, "From", "Cash in hand");
+    pickAccount("From", "Cash in hand");
 
-    const destinations = within(screen.getByRole("radiogroup", { name: "To" }))
-      .getAllByRole("radio")
-      .map((card) => card.querySelector("p")?.textContent);
-    expect(destinations).toEqual(["Main bank"]);
+    const destinations = within(screen.getByRole("radiogroup", { name: "To" }));
+    expect(destinations.getAllByRole("radio")).toHaveLength(1);
+    expect(destinations.getByRole("radio", { name: /Main bank/ })).toBeInTheDocument();
   });
 
   it("refuses a second click while the first posting is in flight", async () => {
