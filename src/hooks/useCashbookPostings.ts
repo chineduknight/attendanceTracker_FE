@@ -44,6 +44,7 @@ export const useCashbookPostings = ({
     transferReadiness: transferOperationReadiness(accounts),
     formProps: {
       accounts: accounts ?? [],
+      organisationId,
       context: {
         today: todayInLagos(),
         openingDate: status.openingDate,

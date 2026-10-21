@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { format, parseISO, subDays } from "date-fns";
 import { chooseOption, render } from "test-utils/render";
 import { installPostingLockManager, removePostingLockManager } from "test-utils/postingLocks";
@@ -103,6 +103,13 @@ const Harness = ({ initial }: { initial: BooksSheet | null }) => {
   );
 };
 
+/** Taps one of the account cards in the named group. */
+const pickAccount = (
+  scope: Pick<typeof screen, "getByRole">,
+  group: string,
+  name: string,
+) => fireEvent.click(within(scope.getByRole("radiogroup", { name: group })).getByRole("radio", { name: new RegExp(name) }));
+
 beforeEach(() => {
   window.localStorage.clear();
   jest.clearAllMocks();
@@ -131,9 +138,9 @@ it("keeps a save that is in flight when the sheet closes, and reports its receip
   await screen.findByRole("dialog", { name: "Money in" });
 
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
-  await chooseOption(screen.getByLabelText("Money received into"), "Cash in hand");
-  await chooseOption(screen.getByLabelText("Income category"), "Donations");
-  fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+  pickAccount(screen, "Into", "Cash in hand");
+  await chooseOption(screen.getByLabelText("Category"), "Donations");
+  fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
 
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
