@@ -5,7 +5,8 @@
  * `LEDGER_MEMBER_MONEY_UI_ENABLED` (F2B-2) on purpose: a reversal undoes a
  * posted journal, and resolving an attempt can permanently void a request key.
  *
- * OFF until all of these are true:
+ * ON from the stage 3 release (backend 80f0ac4); false is the kill switch.
+ * Activation depends on:
  *
  * 1. Backend F2B-3 routes are deployed:
  *    `POST /ledger/journals/:journalId/reversal`, `GET /ledger/attempts` and

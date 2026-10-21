@@ -6,7 +6,8 @@
  * ledger UI that creates financial entries, and it depends on a later backend
  * rollout than the setup/lifecycle screens.
  *
- * OFF until all of these are true:
+ * ON from the stage 3 release (backend 80f0ac4); false is the kill switch.
+ * Activation depends on:
  *
  * 1. Backend F2B-1 routes are merged and deployed:
  *    `POST /ledger/receipts`, `/ledger/expenses` and `/ledger/transfers`.

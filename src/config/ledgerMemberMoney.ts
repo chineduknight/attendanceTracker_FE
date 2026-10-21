@@ -5,7 +5,8 @@
  * is a liability held for members, never income, and it depends on an
  * organisation having member receipts on and a holding account set up.
  *
- * OFF until all of these are true:
+ * ON from the stage 3 release (backend 80f0ac4); false is the kill switch.
+ * Activation depends on:
  *
  * 1. Backend F2B-2 routes are deployed: `POST /ledger/member-receipts`,
  *    `POST /ledger/member-money/:sourceId/refunds` and
