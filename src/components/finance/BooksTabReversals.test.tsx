@@ -122,5 +122,7 @@ it("opens a journal's details from the list and keeps attempts resolvable while 
 
   fireEvent.click(within(reversals).getByRole("button", { name: "Close details" }));
   expect(within(reversals).queryByText("Money in R-000001")).not.toBeInTheDocument();
+  // Nothing points at the old Journal entries section any more.
+  expect(screen.queryByText(/Journal entries/)).not.toBeInTheDocument();
   expect(api.post).not.toHaveBeenCalled();
 });

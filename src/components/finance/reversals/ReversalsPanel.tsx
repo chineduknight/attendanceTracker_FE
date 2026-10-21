@@ -242,8 +242,8 @@ const ReversalsPanel = ({
       </Text>
       <Text fontSize="sm" color="fg.muted" mb={3}>
         Undo a posted entry with a new reversal journal linked to it. The original entry
-        is never edited or deleted. Choose Details on an entry in Journal entries to see
-        it and, where allowed, reverse it.
+        is never edited or deleted. Open an entry from Transactions to see it and, where
+        allowed, undo it.
       </Text>
 
       <Stack gap={4}>

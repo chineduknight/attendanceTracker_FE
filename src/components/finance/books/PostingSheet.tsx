@@ -48,12 +48,20 @@ const PostingSheet = ({
   const isPosting = workflow.postings.isPosting;
   const wanted = sheet ? SHEET_VIEW[sheet] : null;
 
-  // Opening a sheet starts its form, unless a save is in flight or a pending
-  // posting blocks new ones (the notice then owns the sheet).
+  // Opening a sheet starts its form, unless a save is in flight, a pending
+  // posting blocks new ones (the notice then owns the sheet) or a receipt is
+  // showing. A pending posting that clears while the sheet is open lets the
+  // form start. A sheet closed by the URL (Back, "For a member") leaves the
+  // form like Cancel does, so a later change elsewhere can't lock a form that
+  // is no longer on screen; a save in flight keeps running.
   useEffect(() => {
-    if (wanted && view !== wanted && !isPosting && !hasIntent) workflow.open(wanted);
+    if (!wanted) {
+      if (!isPosting && view !== "overview") workflow.back();
+      return;
+    }
+    if (view !== wanted && !isPosting && !hasIntent && !success) workflow.open(wanted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted]);
+  }, [wanted, hasIntent]);
 
   const close = () => {
     if (!isPosting) {
@@ -82,10 +90,18 @@ const PostingSheet = ({
       <Stack gap={4}>
         {sheet === "money-in" && onForMember && (
           <Flex role="group" aria-label="Who the money is for" gap={1} p={1} borderWidth="1px" borderColor="border" borderRadius="full">
-            <Button flex="1" minH="40px" borderRadius="full" aria-pressed="true" colorPalette="teal">
+            <Button
+              flex="1"
+              minH="44px"
+              borderRadius="full"
+              aria-pressed="true"
+              bg="teal.solid"
+              color="teal.contrast"
+              _hover={{ bg: "teal.solid" }}
+            >
               Income
             </Button>
-            <Button flex="1" minH="40px" borderRadius="full" variant="ghost" aria-pressed="false" onClick={onForMember}>
+            <Button flex="1" minH="44px" borderRadius="full" variant="ghost" aria-pressed="false" onClick={onForMember}>
               For a member
             </Button>
           </Flex>

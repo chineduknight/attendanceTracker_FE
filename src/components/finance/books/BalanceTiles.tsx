@@ -6,6 +6,7 @@ import { LedgerAccount } from "components/finance/ledgerTypes";
 import NavRow, { NavGroup } from "components/finance/books/NavRow";
 import { BalanceTile, balanceTiles } from "helpers/booksOverview";
 import { formatReportKobo } from "helpers/ledgerReports";
+import { isLedgerUnavailable } from "helpers/ledger";
 import { todayInLagos } from "helpers/openingBalances";
 import { useLedgerBalances } from "hooks/useLedgerReports";
 
@@ -46,12 +47,17 @@ const Tile = ({ tile }: { tile: BalanceTile }) => (
 const BalanceTiles = ({
   organisationId,
   accounts,
+  accountsError = null,
+  onRetryAccounts,
   enabled,
   memberReceiptsOn,
   onOpenHeld,
 }: {
   organisationId: string;
-  accounts: readonly LedgerAccount[];
+  /** null when the account list couldn't be read: never "no accounts". */
+  accounts: readonly LedgerAccount[] | null;
+  accountsError?: unknown;
+  onRetryAccounts?: () => unknown;
   enabled: boolean;
   memberReceiptsOn: boolean;
   onOpenHeld: () => void;
@@ -59,6 +65,17 @@ const BalanceTiles = ({
   const [showInactive, setShowInactive] = useState(false);
   const query = useLedgerBalances(organisationId, todayInLagos(), enabled);
 
+  if (accounts === null) {
+    return isLedgerUnavailable(accountsError) ? (
+      <EmptyState title="Accounts aren't available yet" />
+    ) : (
+      <ErrorState
+        title="Couldn't load accounts"
+        description={errorMessage(accountsError)}
+        onRetry={onRetryAccounts ? () => onRetryAccounts() : undefined}
+      />
+    );
+  }
   if (query.isLoading) return <PageLoader h="120px" label="Loading balances..." />;
   if (query.isError && !query.report) {
     return (

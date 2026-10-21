@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { format, parseISO, subDays } from "date-fns";
-import { chooseOption, render } from "test-utils/render";
+import { chooseOption, generatedCss, render } from "test-utils/render";
 import { installPostingLockManager, removePostingLockManager } from "test-utils/postingLocks";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import PostingSheet from "components/finance/books/PostingSheet";
 import { BooksSheet } from "helpers/booksNavigation";
-import { beginLedgerPostingIntent, markLedgerPostingIntentUnresolved } from "helpers/ledgerPostingIntent";
+import {
+  beginLedgerPostingIntent,
+  clearLedgerPostingIntent,
+  ledgerPostingIntentKey,
+  markLedgerPostingIntentUnresolved,
+} from "helpers/ledgerPostingIntent";
 import { todayInLagos } from "helpers/openingBalances";
 import { useCashbookPostings } from "hooks/useCashbookPostings";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
@@ -86,7 +91,7 @@ const success = {
 };
 
 /** Books' shell in miniature: it owns the workflow, the sheet comes and goes. */
-const Harness = ({ initial }: { initial: BooksSheet | null }) => {
+const Harness = ({ initial, onForMember }: { initial: BooksSheet | null; onForMember?: () => void }) => {
   const [sheet, setSheet] = useState<BooksSheet | null>(initial);
   const postings = useCashbookPostings({ organisationId: "org1", status: STATUS, accounts: ACCOUNTS });
   return (
@@ -97,7 +102,11 @@ const Harness = ({ initial }: { initial: BooksSheet | null }) => {
         shownSections={["cashbook"]}
         isRechecking={false}
         onClose={() => setSheet(null)}
+        onForMember={onForMember}
       />
+      {/* The browser's Back: the URL drops the sheet without the sheet's own Close. */}
+      <button onClick={() => setSheet(null)}>browser back</button>
+      <button onClick={() => setSheet("money-in")}>reopen money in</button>
       <p>{postings.workflow.success ? `recorded ${postings.workflow.success.result.journal.number}` : "nothing recorded"}</p>
     </>
   );
@@ -183,4 +192,65 @@ it("shows the pending posting's retry instead of a new form", async () => {
   await screen.findByRole("dialog", { name: "Money in" });
   expect(await screen.findByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
   expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
+});
+
+/** Another tab or section changed this organisation's posting record. */
+const externalPostingChange = () =>
+  window.dispatchEvent(new StorageEvent("storage", { key: ledgerPostingIntentKey("org1") }));
+
+const seedUnresolved = async () => {
+  const claim = await beginLedgerPostingIntent({
+    organisationId: "org1",
+    officerId: "officer-1",
+    key: "key-87654321",
+    operation: "receipt",
+    body: {
+      idempotencyKey: "key-87654321",
+      businessDate: TODAY,
+      amountKobo: 2500000,
+      toAccountId: "cash",
+      incomeAccountId: "income",
+      method: "cash",
+    },
+    summary: {
+      operation: "receipt",
+      amountKobo: 2500000,
+      businessDate: TODAY,
+      method: "cash",
+      fromAccountName: null,
+      toAccountName: "Cash in hand",
+      categoryName: "Donations",
+    },
+  });
+  if (claim.kind !== "claimed") throw new Error("seed failed");
+  await markLedgerPostingIntentUnresolved(claim.record, { ambiguous: true, message: "Unknown." });
+};
+
+it("starts a fresh form after Back, even when another posting changed meanwhile", async () => {
+  render(<Harness initial="money-in" />);
+  await screen.findByRole("dialog", { name: "Money in" });
+  fireEvent.click(screen.getByRole("button", { name: "browser back", hidden: true }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+  externalPostingChange();
+  fireEvent.click(screen.getByRole("button", { name: "reopen money in" }));
+  await screen.findByRole("dialog", { name: "Money in" });
+  expect(screen.getByLabelText("Amount")).toBeEnabled();
+  expect(screen.queryByRole("button", { name: /Start a new posting/ })).not.toBeInTheDocument();
+});
+
+it("opens the form once a pending posting clears while the sheet is open", async () => {
+  await seedUnresolved();
+  render(<Harness initial="money-in" />);
+  expect(await screen.findByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
+
+  await clearLedgerPostingIntent("org1", "key-87654321");
+  externalPostingChange();
+  expect(await screen.findByLabelText("Amount")).toBeEnabled();
+});
+
+it("gives the Income / For a member switch phone-sized targets", async () => {
+  render(<Harness initial="money-in" onForMember={() => undefined} />);
+  const forMember = await screen.findByRole("button", { name: "For a member" });
+  expect(generatedCss(forMember)).toMatch(/min-height:\s*44px/);
 });

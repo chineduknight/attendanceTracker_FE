@@ -448,7 +448,9 @@ const BooksScreens = ({
         {live && LEDGER_REPORTS_UI_ENABLED && (
           <BalanceTiles
             organisationId={organisationId}
-            accounts={accounts ?? []}
+            accounts={accounts}
+            accountsError={accountsQuery.isError ? accountsQuery.error : null}
+            onRetryAccounts={accountsQuery.refetch}
             enabled
             memberReceiptsOn={memberReceiptsOn && available("held")}
             onOpenHeld={() => nav.go("held")}
