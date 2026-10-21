@@ -1,17 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "services/api";
-import {
-  postRequest,
-  queryClient,
-  useMutationWrapper,
-  useQueryWrapper,
-} from "services/api/apiHelper";
+import { useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
 import { financeRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toLedgerStatus } from "helpers/ledger";
-import { toEffectiveOpenings, toOpeningProposal, toOpeningProposalPage } from "helpers/openingBalances";
+import {
+  openingWriteConfirmed,
+  toEffectiveOpenings,
+  toOpeningProposal,
+  toOpeningProposalPage,
+} from "helpers/openingBalances";
 import { LedgerStatus } from "components/finance/ledgerTypes";
+import { LedgerWriteIntentRefs } from "helpers/ledgerWriteIntent";
+import { savingFor } from "hooks/useLedgerSetup";
+import { DurableIntentWrite, sendDurableIntentWrite } from "hooks/useLedgerWriteIntent";
 import {
   EffectiveOpeningsView,
   OpeningProposal,
@@ -25,7 +28,7 @@ import {
  * Every key is organisation-scoped and every invalidation uses the ledger
  * prefix for that organisation only. Mutations never post, activate or derive
  * a figure client-side: the backend owns fingerprints, totals, deltas and
- * activation outcomes.
+ * activation outcomes. Writes go through `sendDurableIntentWrite`.
  *
  * `useMutationWrapper`'s hook-level error handler runs even when a per-call
  * handler exists, so a no-op is passed to keep the generic toast out of the
@@ -133,16 +136,31 @@ export const useEffectiveOpenings = (organisationId: string, enabled: boolean) =
   };
 };
 
-export const useOpeningBalanceWrites = (organisationId: string) => {
-  const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.finance.ledger.root(organisationId),
-    });
+/** The proposal a decision is about, stored with the intent for guidance. */
+export type OpeningProposalRef = Pick<OpeningProposal, "id" | "fingerprint" | "kind">;
 
-  const submitMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
-  const verifyMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
-  const rejectMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
-  const withdrawMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
+const proposalRefs = (proposal: OpeningProposalRef): LedgerWriteIntentRefs => ({
+  proposalId: proposal.id,
+  fingerprint: proposal.fingerprint,
+  kind: proposal.kind,
+});
+
+/** `{ data: { proposal, status } }`; malformed parts read as null. */
+const toDecideResult = (response: { data?: unknown }): DecideOpeningResult => {
+  const body = asRecord(response?.data);
+  return {
+    proposal: toOpeningProposal(body?.proposal),
+    status: toLedgerStatus(body?.status),
+  };
+};
+
+export const useOpeningBalanceWrites = (organisationId: string) => {
+  // Separate instances keep each control's loading state independent. The
+  // intent and the cache reload are owned by the request promise.
+  const submitMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
+  const verifyMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
+  const rejectMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
+  const withdrawMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
 
   const baseUrl = convertParamsToString(financeRequest.LEDGER_OPENING_BALANCES, {
     organisationId,
@@ -150,95 +168,105 @@ export const useOpeningBalanceWrites = (organisationId: string) => {
   const proposalUrl = (template: string, proposalId: string) =>
     convertParamsToString(template, { organisationId, proposalId });
 
-  const submitOpening = (
-    input: SubmitOpeningInput,
-    { onSuccess, onError }: MutationCallbacks<DecideOpeningResult> = {},
+  const run = <T,>(
+    mutation: typeof submitMutation,
+    write: Omit<DurableIntentWrite, "organisationId" | "method">,
+    toResult: (response: { data?: unknown }) => T,
+    { onSuccess, onError }: MutationCallbacks<T>,
   ) =>
-    submitMutation.mutate(
-      { url: baseUrl, data: input },
+    mutation.mutate(
+      // The organisation is captured here, when the officer confirms.
+      { organisationId, method: "post", ...write },
       {
-        onSettled: invalidate,
-        onSuccess: (response: { data?: unknown }) => {
-          const body = asRecord(response?.data);
-          onSuccess?.({
-            proposal: toOpeningProposal(body?.proposal),
-            status: toLedgerStatus(body?.status),
-          });
-        },
+        // Screen updates only; the durable write settles without them.
+        onSuccess: (response: { data?: unknown }) => onSuccess?.(toResult(response)),
         onError: onError ?? suppressGenericError,
       },
+    );
+
+  const submitOpening = (
+    input: SubmitOpeningInput,
+    callbacks: MutationCallbacks<DecideOpeningResult> = {},
+  ) =>
+    run(
+      submitMutation,
+      {
+        action: "submit-opening",
+        refs: { kind: input.kind },
+        url: baseUrl,
+        data: input,
+        confirms: (response) =>
+          openingWriteConfirmed({ action: "submit-opening", kind: input.kind }, response),
+      },
+      toDecideResult,
+      callbacks,
     );
 
   const verifyOpening = (
-    proposalId: string,
+    proposal: OpeningProposalRef,
     input: VerifyOpeningInput,
-    { onSuccess, onError }: MutationCallbacks<VerifyOpeningResult> = {},
+    callbacks: MutationCallbacks<VerifyOpeningResult> = {},
   ) =>
-    verifyMutation.mutate(
+    run(
+      verifyMutation,
       {
-        url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_VERIFY, proposalId),
+        action: "verify-opening",
+        refs: proposalRefs(proposal),
+        url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_VERIFY, proposal.id),
         data: input,
+        // The fingerprint that must come back is the one the verifier sent.
+        confirms: (response) =>
+          openingWriteConfirmed(
+            { action: "verify-opening", proposalId: proposal.id, fingerprint: input.expectedFingerprint },
+            response,
+          ),
       },
-      {
-        onSettled: invalidate,
-        onSuccess: (response: { data?: unknown }) => {
-          const body = asRecord(response?.data);
-          onSuccess?.({
-            proposal: toOpeningProposal(body?.proposal),
-            status: toLedgerStatus(body?.status),
-            journalPresent:
-              body && "journal" in body ? body.journal !== null : null,
-            replayed:
-              typeof body?.replayed === "boolean" ? body.replayed : null,
-          });
-        },
-        onError: onError ?? suppressGenericError,
+      (response) => {
+        const body = asRecord(response?.data);
+        return {
+          ...toDecideResult(response),
+          journalPresent: body && "journal" in body ? body.journal !== null : null,
+          replayed: typeof body?.replayed === "boolean" ? body.replayed : null,
+        };
       },
+      callbacks,
     );
 
   const rejectOpening = (
-    proposalId: string,
+    proposal: OpeningProposalRef,
     reason: string,
-    { onSuccess, onError }: MutationCallbacks<DecideOpeningResult> = {},
+    callbacks: MutationCallbacks<DecideOpeningResult> = {},
   ) =>
-    rejectMutation.mutate(
+    run(
+      rejectMutation,
       {
-        url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_REJECT, proposalId),
+        action: "reject-opening",
+        refs: proposalRefs(proposal),
+        url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_REJECT, proposal.id),
         data: { reason },
+        confirms: (response) =>
+          openingWriteConfirmed({ action: "reject-opening", proposalId: proposal.id }, response),
       },
-      {
-        onSettled: invalidate,
-        onSuccess: (response: { data?: unknown }) => {
-          const body = asRecord(response?.data);
-          onSuccess?.({
-            proposal: toOpeningProposal(body?.proposal),
-            status: toLedgerStatus(body?.status),
-          });
-        },
-        onError: onError ?? suppressGenericError,
-      },
+      toDecideResult,
+      callbacks,
     );
 
   const withdrawOpening = (
-    proposalId: string,
-    { onSuccess, onError }: MutationCallbacks<DecideOpeningResult> = {},
+    proposal: OpeningProposalRef,
+    callbacks: MutationCallbacks<DecideOpeningResult> = {},
   ) =>
-    withdrawMutation.mutate(
+    run(
+      withdrawMutation,
       {
-        url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_WITHDRAW, proposalId),
+        action: "withdraw-opening",
+        refs: proposalRefs(proposal),
+        url: proposalUrl(financeRequest.LEDGER_OPENING_BALANCE_WITHDRAW, proposal.id),
         data: {},
+        confirms: (response) =>
+          openingWriteConfirmed({ action: "withdraw-opening", proposalId: proposal.id }, response),
       },
-      {
-        onSettled: invalidate,
-        onSuccess: (response: { data?: unknown }) => {
-          const body = asRecord(response?.data);
-          onSuccess?.({
-            proposal: toOpeningProposal(body?.proposal),
-            status: toLedgerStatus(body?.status),
-          });
-        },
-        onError: onError ?? suppressGenericError,
-      },
+      toDecideResult,
+      callbacks,
     );
 
   return {
@@ -246,9 +274,9 @@ export const useOpeningBalanceWrites = (organisationId: string) => {
     verifyOpening,
     rejectOpening,
     withdrawOpening,
-    isSubmitting: Boolean(submitMutation.isLoading),
-    isVerifying: Boolean(verifyMutation.isLoading),
-    isRejecting: Boolean(rejectMutation.isLoading),
-    isWithdrawing: Boolean(withdrawMutation.isLoading),
+    isSubmitting: savingFor(organisationId, submitMutation),
+    isVerifying: savingFor(organisationId, verifyMutation),
+    isRejecting: savingFor(organisationId, rejectMutation),
+    isWithdrawing: savingFor(organisationId, withdrawMutation),
   };
 };

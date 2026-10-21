@@ -5,13 +5,10 @@ import { useConfirm } from "components/ui/confirm-dialog";
 import { LedgerStatus } from "components/finance/ledgerTypes";
 import { LifecycleWriteResult } from "components/finance/lifecycleTypes";
 import { formatBusinessDate } from "helpers/financeCompliance";
-import { ledgerApiFailure, ledgerWriteOutcomeUnknown } from "helpers/ledgerSetup";
 import {
-  LifecycleAction,
   MAX_LIFECYCLE_REASON,
   gapWindow,
   gapWindowProblem,
-  lifecycleConfirmation,
   lifecycleReasonIssue,
   periodLockChange,
   periodLockIssue,
@@ -19,89 +16,56 @@ import {
   periodLockNeedsReason,
 } from "helpers/ledgerLifecycle";
 import { formatLagosTimestamp } from "helpers/openingBalances";
-import { useLedgerLifecycleWrites } from "hooks/useLedgerLifecycle";
-import { useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
+import { LifecycleCallbacks, useLedgerLifecycleWrites } from "hooks/useLedgerLifecycle";
+import { classifyIntentWriteFailure, useLedgerWriteIntent } from "hooks/useLedgerWriteIntent";
 
 type Writes = ReturnType<typeof useLedgerLifecycleWrites>;
 type Intent = ReturnType<typeof useLedgerWriteIntent>;
 
-/** `null` means the outcome could not be established; claim nothing. */
-type Done = (result: LifecycleWriteResult | null, lockedThrough?: string | null) => void;
+/**
+ * How a sent lifecycle write ended for the screen. `unconfirmed` is an
+ * unknown outcome: `result` is what a 2xx reported (unreadable or
+ * contradicting the request), or null when no usable answer arrived.
+ */
+export type LifecycleDone =
+  | { kind: "confirmed"; result: LifecycleWriteResult; lockedThrough?: string | null }
+  | { kind: "unconfirmed"; result: LifecycleWriteResult | null; lockedThrough?: string | null };
 
-const STORAGE_MESSAGE =
-  "This browser can't store the safety record required before a ledger change. Allow site storage and try again.";
-
-type LifecycleIntentAction =
-  | "suspend-ledger"
-  | "resume-ledger"
-  | "set-period-lock"
-  | "attest-gap-window";
-
-const CONFIRMATION_ACTION: Record<LifecycleIntentAction, LifecycleAction> = {
-  "suspend-ledger": "suspend",
-  "resume-ledger": "resume",
-  "set-period-lock": "period-lock",
-  "attest-gap-window": "attest-gap-window",
-};
+type Done = (outcome: LifecycleDone) => void;
 
 /**
- * Persist the intent before dispatching, clear it only on a provable refusal
- * or after a response, and mark it unresolved when the outcome is ambiguous.
- * Shared by every lifecycle write so none of them can skip the latch.
+ * Screen handling shared by every lifecycle write. The write intent itself is
+ * persisted, settled and reloaded by `sendDurableIntentWrite`, so it does not
+ * depend on this form staying mounted.
  */
-const useGuardedLifecycleSubmit = ({
-  intent,
-  action,
-  onDone,
-}: {
-  intent: Intent;
-  action: LifecycleIntentAction;
-  onDone: Done;
-}) => {
+const useLifecycleSubmit = (onDone: Done) => {
   const [error, setError] = useState<string | null>(null);
 
   const submit = (
-    send: (callbacks: {
-      onSuccess: (result: LifecycleWriteResult) => void;
-      onError: (error: unknown) => void;
-    }) => void,
+    send: (callbacks: Required<LifecycleCallbacks>) => void,
     lockedThrough?: string | null,
   ) => {
-    const record = intent.begin(action);
-    if (!record) {
-      setError(STORAGE_MESSAGE);
-      return;
-    }
     send({
+      // Only a status that shows the requested change arrives here.
       onSuccess: (result) => {
-        const confirmation = lifecycleConfirmation({
-          action: CONFIRMATION_ACTION[action],
-          result,
-          lockedThrough,
-        });
-        if (confirmation === "confirmed") {
-          intent.clear(record);
-        } else {
-          // A 2xx is not proof: an unreadable status, or one that contradicts
-          // the requested change, keeps the persisted marker so a reload
-          // cannot permit a blind retry.
-          intent.markUnresolved(record);
-        }
         setError(null);
-        onDone(result, lockedThrough);
+        onDone({ kind: "confirmed", result, lockedThrough });
+      },
+      // A 2xx that doesn't prove the change: unknown, intent kept.
+      onUnconfirmed: (result) => {
+        setError(null);
+        onDone({ kind: "unconfirmed", result, lockedThrough });
       },
       onError: (failure) => {
-        const parsed = ledgerApiFailure(failure);
-        if (ledgerWriteOutcomeUnknown(parsed)) {
-          // The request may have committed; keep the latch and make the
+        const outcome = classifyIntentWriteFailure(failure);
+        if (outcome.kind === "unknown") {
+          // The request may have committed; the intent notice makes the
           // officer reconcile before any further ledger write.
-          intent.markUnresolved(record);
           setError(null);
-          onDone(null);
+          onDone({ kind: "unconfirmed", result: null, lockedThrough });
           return;
         }
-        intent.clear(record);
-        setError(parsed.message ?? "The change wasn't saved. Try again.");
+        setError(outcome.message ?? "The change wasn't saved. Try again.");
       },
     });
   };
@@ -166,11 +130,7 @@ export const SuspendLedgerForm = ({
   onDone: Done;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
-  const { submit, error, setError } = useGuardedLifecycleSubmit({
-    intent,
-    action: "suspend-ledger",
-    onDone,
-  });
+  const { submit, error, setError } = useLifecycleSubmit(onDone);
   const [reason, setReason] = useState("");
 
   const problem =
@@ -251,11 +211,7 @@ export const ResumeLedgerForm = ({
   onDone: Done;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
-  const { submit, error, setError } = useGuardedLifecycleSubmit({
-    intent,
-    action: "resume-ledger",
-    onDone,
-  });
+  const { submit, error, setError } = useLifecycleSubmit(onDone);
   const [reason, setReason] = useState("");
 
   const problem =
@@ -343,11 +299,7 @@ export const PeriodLockForm = ({
   onDone: Done;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
-  const { submit, error, setError } = useGuardedLifecycleSubmit({
-    intent,
-    action: "set-period-lock",
-    onDone,
-  });
+  const { submit, error, setError } = useLifecycleSubmit(onDone);
   const liveStateKnown = status.lockedThroughState !== "unknown";
   const current = status.lockedThroughState === "set" ? status.lockedThrough : null;
   const [date, setDate] = useState(current ?? "");
@@ -489,11 +441,7 @@ export const GapWindowAttestationForm = ({
   onDone: Done;
 }) => {
   const { confirm, confirmDialog } = useConfirm();
-  const { submit, error, setError } = useGuardedLifecycleSubmit({
-    intent,
-    action: "attest-gap-window",
-    onDone,
-  });
+  const { submit, error, setError } = useLifecycleSubmit(onDone);
   const window = gapWindow(status);
 
   const problem =

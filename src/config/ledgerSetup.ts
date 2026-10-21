@@ -20,4 +20,4 @@
  * Flip only with an explicit product decision, after the dependencies above
  * are verified in the target environment.
  */
-export const LEDGER_SETUP_UI_ENABLED: boolean = false;
+export const LEDGER_SETUP_UI_ENABLED: boolean = true;

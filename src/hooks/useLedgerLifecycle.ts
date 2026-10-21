@@ -1,15 +1,19 @@
-import {
-  postRequest,
-  putRequest,
-  queryClient,
-  useMutationWrapper,
-  useQueryWrapper,
-} from "services/api/apiHelper";
+import { useMutationWrapper, useQueryWrapper } from "services/api/apiHelper";
 import { financeRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
 import { toLedgerStatus } from "helpers/ledger";
-import { toLedgerAuditPage } from "helpers/ledgerLifecycle";
+import {
+  LifecycleAction,
+  lifecycleConfirmation,
+  toLedgerAuditPage,
+} from "helpers/ledgerLifecycle";
+import { savingFor } from "hooks/useLedgerSetup";
+import {
+  DurableIntentWrite,
+  LedgerWriteUnconfirmedError,
+  sendDurableIntentWrite,
+} from "hooks/useLedgerWriteIntent";
 import {
   GapWindowAttestInput,
   LifecycleWriteResult,
@@ -23,9 +27,9 @@ import {
  * Every key is organisation-scoped and every invalidation uses the ledger
  * prefix for that organisation only. The client sends only the contract
  * fields: the tenant comes from the route and the actor from the token. A
- * 2xx whose body is not a usable status is reported as an unknown result, so
- * no screen claims a suspension, a lock move or an attestation the server
- * did not confirm.
+ * 2xx whose status does not show the requested change keeps the write intent
+ * unresolved, so no screen claims a suspension, a lock move or an attestation
+ * the server did not confirm. Writes go through `sendDurableIntentWrite`.
  *
  * `useMutationWrapper`'s hook-level error handler runs even when a per-call
  * handler exists, so a no-op is passed to keep the generic toast out of the
@@ -49,7 +53,14 @@ const toWriteResult = (response: unknown): LifecycleWriteResult => {
 };
 
 export interface LifecycleCallbacks {
+  /** Only a confirmed change: the returned status shows what was requested. */
   onSuccess?: (result: LifecycleWriteResult) => void;
+  /**
+   * A 2xx whose status is unreadable or contradicts the request. The outcome
+   * is unknown and the intent stays unresolved; `result` is only what the
+   * server reported, for explaining that, never for claiming the change.
+   */
+  onUnconfirmed?: (result: LifecycleWriteResult) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -84,60 +95,92 @@ export const useLedgerAudit = (organisationId: string, enabled: boolean) => {
 };
 
 export const useLedgerLifecycleWrites = (organisationId: string) => {
-  const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.finance.ledger.root(organisationId),
-    });
+  // Separate instances keep each control's loading state independent. The
+  // intent and the cache reload are owned by the request promise.
+  const suspendMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
+  const resumeMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
+  const lockMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
+  const attestMutation = useMutationWrapper(sendDurableIntentWrite, undefined, suppressGenericError);
 
-  const suspendMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
-  const resumeMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
-  const lockMutation = useMutationWrapper(putRequest, undefined, suppressGenericError);
-  const attestMutation = useMutationWrapper(postRequest, undefined, suppressGenericError);
+  const urlFor = (template: string) => convertParamsToString(template, { organisationId });
 
-  const suspendUrl = convertParamsToString(financeRequest.LEDGER_SUSPEND, {
-    organisationId,
-  });
-  const resumeUrl = convertParamsToString(financeRequest.LEDGER_RESUME, {
-    organisationId,
-  });
-  const lockUrl = convertParamsToString(financeRequest.LEDGER_PERIOD_LOCK, {
-    organisationId,
-  });
-  const attestUrl = convertParamsToString(financeRequest.LEDGER_GAP_WINDOW_ATTEST, {
-    organisationId,
-  });
+  /** Only a status that shows the requested change proves it. */
+  const confirmsChange =
+    (action: LifecycleAction, lockedThrough?: string | null) => (response: unknown) =>
+      lifecycleConfirmation({ action, result: toWriteResult(response), lockedThrough }) ===
+      "confirmed";
 
   const run = (
     mutation: typeof suspendMutation,
-    url: string,
-    data: SuspendResumeInput | PeriodLockInput | GapWindowAttestInput,
-    { onSuccess, onError }: LifecycleCallbacks,
+    write: Omit<DurableIntentWrite, "organisationId">,
+    { onSuccess, onUnconfirmed, onError }: LifecycleCallbacks,
   ) =>
     mutation.mutate(
-      { url, data },
+      // The organisation is captured here, when the officer confirms.
+      { organisationId, ...write },
       {
-        onSettled: invalidate,
+        // Screen updates only; the durable write settles without them.
         onSuccess: (response: unknown) => onSuccess?.(toWriteResult(response)),
-        onError: onError ?? suppressGenericError,
+        onError: (error: unknown) => {
+          if (error instanceof LedgerWriteUnconfirmedError && onUnconfirmed)
+            onUnconfirmed(toWriteResult(error.response));
+          else (onError ?? suppressGenericError)(error);
+        },
       },
     );
 
   return {
-    suspendLedger: (
-      input: SuspendResumeInput,
-      callbacks: LifecycleCallbacks = {},
-    ) => run(suspendMutation, suspendUrl, input, callbacks),
+    suspendLedger: (input: SuspendResumeInput, callbacks: LifecycleCallbacks = {}) =>
+      run(
+        suspendMutation,
+        {
+          action: "suspend-ledger",
+          method: "post",
+          url: urlFor(financeRequest.LEDGER_SUSPEND),
+          data: input,
+          confirms: confirmsChange("suspend"),
+        },
+        callbacks,
+      ),
     resumeLedger: (input: SuspendResumeInput, callbacks: LifecycleCallbacks = {}) =>
-      run(resumeMutation, resumeUrl, input, callbacks),
+      run(
+        resumeMutation,
+        {
+          action: "resume-ledger",
+          method: "post",
+          url: urlFor(financeRequest.LEDGER_RESUME),
+          data: input,
+          confirms: confirmsChange("resume"),
+        },
+        callbacks,
+      ),
     setPeriodLock: (input: PeriodLockInput, callbacks: LifecycleCallbacks = {}) =>
-      run(lockMutation, lockUrl, input, callbacks),
-    attestGapWindow: (
-      input: GapWindowAttestInput,
-      callbacks: LifecycleCallbacks = {},
-    ) => run(attestMutation, attestUrl, input, callbacks),
-    isSuspending: suspendMutation.isLoading,
-    isResuming: resumeMutation.isLoading,
-    isSettingLock: lockMutation.isLoading,
-    isAttesting: attestMutation.isLoading,
+      run(
+        lockMutation,
+        {
+          action: "set-period-lock",
+          method: "put",
+          url: urlFor(financeRequest.LEDGER_PERIOD_LOCK),
+          data: input,
+          confirms: confirmsChange("period-lock", input.lockedThrough),
+        },
+        callbacks,
+      ),
+    attestGapWindow: (input: GapWindowAttestInput, callbacks: LifecycleCallbacks = {}) =>
+      run(
+        attestMutation,
+        {
+          action: "attest-gap-window",
+          method: "post",
+          url: urlFor(financeRequest.LEDGER_GAP_WINDOW_ATTEST),
+          data: input,
+          confirms: confirmsChange("attest-gap-window"),
+        },
+        callbacks,
+      ),
+    isSuspending: savingFor(organisationId, suspendMutation),
+    isResuming: savingFor(organisationId, resumeMutation),
+    isSettingLock: savingFor(organisationId, lockMutation),
+    isAttesting: savingFor(organisationId, attestMutation),
   };
 };

@@ -197,6 +197,11 @@ interface LedgerSetupPanelProps {
   status: LedgerStatus;
   accounts: LedgerAccount[] | null;
   accountsError: unknown;
+  /**
+   * A response arrived but its body wasn't a readable account list. With
+   * `accounts` null this is "not available yet", not still loading.
+   */
+  accountsUnreadable?: boolean;
   onRetryAccounts: () => void;
   /**
    * Refetches status and accounts after an unresolved write; resolves `true`
@@ -225,6 +230,7 @@ const LedgerSetupPanel = ({
   status: statusProp,
   accounts,
   accountsError,
+  accountsUnreadable = false,
   onRetryAccounts,
   onRecheckLedger,
   isRetryingAccounts,
@@ -515,6 +521,7 @@ const LedgerSetupPanel = ({
             status={status}
             accounts={accounts}
             accountsError={accountsError}
+            accountsUnreadable={accountsUnreadable}
             onRetryAccounts={onRetryAccounts}
             isRetryingAccounts={isRetryingAccounts}
             canManage={canManage}

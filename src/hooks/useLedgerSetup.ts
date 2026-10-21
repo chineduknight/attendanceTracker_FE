@@ -110,6 +110,18 @@ export const sendDurableLedgerWrite = async ({
   }
 };
 
+interface SendingMutation {
+  isLoading?: boolean;
+  variables?: { organisationId: string };
+}
+
+/**
+ * A durable write keeps running after an organisation switch; it is only
+ * "saving" for the organisation that sent it.
+ */
+export const savingFor = (organisationId: string, mutation: SendingMutation) =>
+  Boolean(mutation.isLoading) && mutation.variables?.organisationId === organisationId;
+
 export interface UpdateAccountChange {
   /** The account's `revision` from the read shape; required by the backend. */
   expectedRevision: number;
@@ -249,10 +261,7 @@ export const useLedgerSetup = (organisationId: string) => {
       { onSuccess: () => onSuccess?.(), onError: onError ?? suppressGenericError },
     );
 
-  // A durable write keeps running after an organisation switch; it is only
-  // "saving" for the organisation that sent it.
-  const savingHere = (mutation: { isLoading?: boolean; variables?: DurableLedgerWrite }) =>
-    Boolean(mutation.isLoading) && mutation.variables?.organisationId === organisationId;
+  const savingHere = (mutation: SendingMutation) => savingFor(organisationId, mutation);
 
   const createAccounts = (
     accounts: CreateAccountPayload[],

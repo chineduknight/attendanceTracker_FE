@@ -1665,7 +1665,11 @@ describe("<Finance> Books (F1)", () => {
     expect(
       await screen.findByText(/Bookkeeping has not been activated for this organisation/),
     ).toBeInTheDocument();
-    expect(screen.getByText("No finance accounts configured")).toBeInTheDocument();
+    // The setup gate is on: a viewer sees setup progress but cannot start it.
+    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
+    expect(
+      screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
+    ).toBeInTheDocument();
     expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/status");

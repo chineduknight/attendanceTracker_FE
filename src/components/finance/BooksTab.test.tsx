@@ -4,18 +4,24 @@ import { generatedCss, render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
 import BooksTab from "components/finance/BooksTab";
 import { LEDGER_NOT_ACTIVE_NOTE } from "helpers/ledger";
-import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { LEDGER_OPENING_BALANCES_UI_ENABLED } from "config/ledgerOpeningBalances";
 import { LEDGER_LIFECYCLE_UI_ENABLED } from "config/ledgerLifecycle";
 import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_MEMBER_MONEY_UI_ENABLED } from "config/ledgerMemberMoney";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
-import { LEDGER_F3_SETUP_UI_ENABLED } from "config/ledgerF3Setup";
 import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
 import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { RECONCILIATION_NOT_LIVE_NOTE } from "components/finance/reconciliation/ReconciliationPanel";
+
+// This file specifies Books with the setup gates off: the read-only account
+// list the kill switch falls back to. BooksTabSetupGate.test covers them on.
+jest.mock("config/ledgerSetup", () => ({ LEDGER_SETUP_UI_ENABLED: false }));
+jest.mock("config/ledgerF3Setup", () => ({ LEDGER_F3_SETUP_UI_ENABLED: false }));
+
+/** The shipped value, not this file's fallback mock. */
+const shipped = (path: string, name: string): boolean => jest.requireActual(path)[name];
 
 jest.mock("services/api", () => ({
   __esModule: true,
@@ -319,27 +325,27 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
 });
 
 describe("<BooksTab> release gates", () => {
-  it("ships only the two read-only report gates on", () => {
+  it("ships the read-only report gates and the two setup gates on", () => {
     expect({
-      setup: LEDGER_SETUP_UI_ENABLED,
+      setup: shipped("config/ledgerSetup", "LEDGER_SETUP_UI_ENABLED"),
       openingBalances: LEDGER_OPENING_BALANCES_UI_ENABLED,
       lifecycle: LEDGER_LIFECYCLE_UI_ENABLED,
       postings: LEDGER_POSTINGS_UI_ENABLED,
       memberMoney: LEDGER_MEMBER_MONEY_UI_ENABLED,
       reversals: LEDGER_REVERSALS_UI_ENABLED,
       reports: LEDGER_REPORTS_UI_ENABLED,
-      f3Setup: LEDGER_F3_SETUP_UI_ENABLED,
+      f3Setup: shipped("config/ledgerF3Setup", "LEDGER_F3_SETUP_UI_ENABLED"),
       f3Reconciliation: LEDGER_F3_RECONCILIATION_UI_ENABLED,
       f3Allocations: LEDGER_F3_ALLOCATION_UI_ENABLED,
     }).toEqual({
-      setup: false,
+      setup: true,
       openingBalances: false,
       lifecycle: false,
       postings: false,
       memberMoney: false,
       reversals: false,
       reports: true,
-      f3Setup: false,
+      f3Setup: true,
       f3Reconciliation: true,
       f3Allocations: false,
     });
