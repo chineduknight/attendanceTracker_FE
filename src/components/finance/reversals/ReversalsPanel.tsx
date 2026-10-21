@@ -14,7 +14,7 @@ import { ledgerWriteReadiness, shownPostingSections } from "helpers/ledgerPostin
 import { reversalCaution, reversalEligibility } from "helpers/ledgerReversals";
 import { todayInLagos } from "helpers/openingBalances";
 import { useLedgerJournal } from "hooks/useLedgerJournal";
-import { usePostingWorkflow } from "hooks/usePostingWorkflow";
+import { ConfirmedPosting, usePostingWorkflow } from "hooks/usePostingWorkflow";
 import { usePermissions } from "rbac/usePermissions";
 import PostingIntentNotice from "components/finance/postings/PostingIntentNotice";
 import PostingSupersededNotice from "components/finance/postings/PostingSupersededNotice";
@@ -58,6 +58,7 @@ const ReversalsPanel = ({
   cashbookEnabled = LEDGER_POSTINGS_UI_ENABLED,
   memberMoneyEnabled = LEDGER_MEMBER_MONEY_UI_ENABLED,
   allocationsEnabled = LEDGER_F3_ALLOCATION_UI_ENABLED,
+  onConfirmed,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -77,6 +78,11 @@ const ReversalsPanel = ({
    * "Allocate member money" is shown (it owns retries of allocations).
    */
   allocationsEnabled?: boolean;
+  /**
+   * A reversal (or its retry) was confirmed. Books uses it to show the
+   * receipt when the officer has already left the entry.
+   */
+  onConfirmed?: (confirmed: ConfirmedPosting) => void;
 }) => {
   const headingId = useId();
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -94,6 +100,11 @@ const ReversalsPanel = ({
   });
   const { postings, view, formError, panelError, success, superseded, formInstance, recheck } =
     workflow;
+  const onConfirmedRef = useRef(onConfirmed);
+  onConfirmedRef.current = onConfirmed;
+  useEffect(() => {
+    if (success) onConfirmedRef.current?.(success);
+  }, [success]);
   // The journal the open form reverses; the form never follows another one.
   const [formTarget, setFormTarget] = useState<ReversalTarget | null>(null);
 
@@ -242,8 +253,8 @@ const ReversalsPanel = ({
       </Text>
       <Text fontSize="sm" color="fg.muted" mb={3}>
         Undo a posted entry with a new reversal journal linked to it. The original entry
-        is never edited or deleted. Choose Details on an entry in Journal entries to see
-        it and, where allowed, reverse it.
+        is never edited or deleted. Open an entry from Transactions to see it and, where
+        allowed, undo it.
       </Text>
 
       <Stack gap={4}>

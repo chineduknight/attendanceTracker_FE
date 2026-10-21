@@ -2,10 +2,21 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
+
 import { LEDGER_UNAVAILABLE_TITLE } from "helpers/ledger";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
+
+/** Where Books opens; a test points it at the screen it covers. */
+let booksUrl = "/finance?tab=books";
+const openBooksAt = (books: string, org = "org1") => {
+  booksUrl = `/finance?tab=books&books=${books}&org=${org}`;
+};
+beforeEach(() => {
+  booksUrl = "/finance?tab=books";
+});
 
 /**
  * Books with the shipped setup gates on (`LEDGER_SETUP_UI_ENABLED`,
@@ -77,7 +88,7 @@ const setSession = (permissions: PermissionKey[] = ["finance.manage"], org = "or
 
 const books = (organisationId = "org1") => (
   <QueryClientProvider client={queryClient}>
-    <BooksTab organisationId={organisationId} />
+    <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId={organisationId} /></MemoryRouter>
   </QueryClientProvider>
 );
 
@@ -93,6 +104,7 @@ beforeEach(() => {
   window.localStorage.clear();
   jest.clearAllMocks();
   setSession();
+  openBooksAt("manage-setup");
 });
 
 afterAll(() => useGlobalStore.setState({ user: EMPTY_USER, organisation: EMPTY_ORG }));

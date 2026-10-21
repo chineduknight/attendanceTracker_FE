@@ -28,6 +28,8 @@ export const LEDGER_AUDIT_ACTIONS = [
   "period_locked",
   "period_unlocked",
   "attempt_voided",
+  "member_allocations_enabled",
+  "member_allocations_disabled",
 ] as const;
 
 export type LedgerAuditActionKey = (typeof LEDGER_AUDIT_ACTIONS)[number];

@@ -2,9 +2,21 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
 import { markLedgerWriteUncertain } from "helpers/ledgerWriteUncertainty";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
+
+/** Where Books opens; a test points it at the screen it covers. */
+let booksUrl = "/finance?tab=books";
+const openBooksAt = (books: string, org = "org1") => {
+  booksUrl = `/finance?tab=books&books=${books}&org=${org}`;
+};
+beforeEach(() => {
+  booksUrl = "/finance?tab=books";
+});
+
+beforeEach(() => openBooksAt("manage-setup"));
 
 /**
  * Review of FE #140: "I've checked the ledger" after an unresolved F3A write
@@ -55,7 +67,7 @@ const serve = (status: unknown, accounts: unknown) =>
 const renderBooks = () =>
   render(
     <QueryClientProvider client={queryClient}>
-      <BooksTab organisationId="org1" />
+      <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId="org1" /></MemoryRouter>
     </QueryClientProvider>,
   );
 

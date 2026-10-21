@@ -280,13 +280,13 @@ export const LEDGER_NOT_ACTIVE_NOTE =
   "Bookkeeping has not been activated for this organisation. Existing dues/levy compliance figures are recorded amounts, not verified cash receipts, ledger cash, opening balances or income.";
 
 export const LEDGER_SETUP_NOTE =
-  "Bookkeeping setup has started for this organisation, but the books are not active yet. No postings can be made; only recorded journal entries are shown, and balances are not calculated here.";
+  "Bookkeeping setup has started for this organisation, but the books are not active yet. Nothing can be recorded until setup is finished and opening balances are verified.";
 
 export const LEDGER_PENDING_VERIFICATION_NOTE =
-  "Opening balances have been proposed and are awaiting independent verification. The books are not active yet, so no postings can be made and balances are not calculated here.";
+  "Opening balances have been proposed and are awaiting independent verification. The books are not active yet, so nothing can be recorded.";
 
 export const LEDGER_SUSPENDED_NOTE =
-  "Bookkeeping is suspended for this organisation. No postings can be made until an owner resumes it, and balances are not calculated here.";
+  "Bookkeeping is suspended for this organisation. Nothing can be recorded until an owner resumes it.";
 
 /**
  * An unrecognised state string is deliberately reported as unknown rather
@@ -306,9 +306,9 @@ export const LEDGER_STATE_LABELS: Record<LedgerKnownState | "unknown", string> =
 };
 
 const LEDGER_ACTIVE_VERIFIED_NOTE =
-  "Bookkeeping is active. Only recorded journal entries are shown; balances are not calculated here.";
+  "Bookkeeping is active.";
 const LEDGER_ACTIVE_UNVERIFIED_NOTE =
-  "Bookkeeping is active, but opening balances have not been verified. Only recorded journal entries are shown; balances are not calculated here.";
+  "Bookkeeping is active, but opening balances have not been verified.";
 
 /**
  * The explanation shown under the state badge. `active` alone selects the

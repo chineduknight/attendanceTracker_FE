@@ -2,12 +2,22 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { generatedCss, render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
+
 import { LEDGER_NOT_ACTIVE_NOTE } from "helpers/ledger";
-import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { LEDGER_F3_RECONCILIATION_UI_ENABLED } from "config/ledgerF3Reconciliation";
 import useGlobalStore, { EMPTY_ORG } from "zStore";
 import { RECONCILIATION_NOT_LIVE_NOTE } from "components/finance/reconciliation/ReconciliationPanel";
+
+/** Where Books opens; a test points it at the screen it covers. */
+let booksUrl = "/finance?tab=books";
+const openBooksAt = (books: string, org = "org1") => {
+  booksUrl = `/finance?tab=books&books=${books}&org=${org}`;
+};
+beforeEach(() => {
+  booksUrl = "/finance?tab=books";
+});
 
 // This file specifies Books with the write gates off: the read-only account
 // list the kill switch falls back to. BooksTabSetupGate.test and the panel
@@ -20,6 +30,7 @@ jest.mock("config/ledgerPostings", () => ({ LEDGER_POSTINGS_UI_ENABLED: false })
 jest.mock("config/ledgerReversals", () => ({ LEDGER_REVERSALS_UI_ENABLED: false }));
 jest.mock("config/ledgerMemberMoney", () => ({ LEDGER_MEMBER_MONEY_UI_ENABLED: false }));
 jest.mock("config/ledgerF3Allocations", () => ({ LEDGER_F3_ALLOCATION_UI_ENABLED: false }));
+jest.mock("config/ledgerReports", () => ({ LEDGER_REPORTS_UI_ENABLED: false }));
 
 /** The shipped value, not this file's fallback mock. */
 const shipped = (path: string, name: string): boolean => jest.requireActual(path)[name];
@@ -80,6 +91,14 @@ const JOURNALS = [
       { accountId: "cash", side: "debit", amountKobo: 125050 },
       { accountId: "dues", side: "credit", amountKobo: 600000 },
     ],
+    // The paged item fields every F2 journal read carries.
+    totalKobo: 600000,
+    postedAt: "2026-10-12T10:00:00.000Z",
+    postedBy: null,
+    sourceId: null,
+    reversesJournalId: null,
+    reversedByJournalId: null,
+    entry: null,
   },
 ];
 
@@ -92,6 +111,17 @@ const serveLedger = (
     if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: status } });
     if (url.endsWith("/ledger/accounts")) return Promise.resolve({ data: { data: accounts } });
     if (url.endsWith("/ledger/journals")) return Promise.resolve({ data: { data: journals } });
+    // Books reads the paged list (and one entry at a time on its entry screen).
+    if (url.includes("/ledger/journals?")) {
+      return Promise.resolve({
+        data: { data: Array.isArray(journals) ? { items: journals, nextCursor: null } : journals },
+      });
+    }
+    const one = url.match(/\/ledger\/journals\/([^/?]+)$/);
+    if (one && Array.isArray(journals)) {
+      const found = journals.find((journal: { id?: string }) => journal?.id === one[1]);
+      return found ? Promise.resolve({ data: { data: found } }) : Promise.reject({ response: { status: 404 } });
+    }
     return Promise.resolve({ data: { data: [] } });
   });
 };
@@ -99,7 +129,7 @@ const serveLedger = (
 const renderBooks = (organisationId = "org1") =>
   render(
     <QueryClientProvider client={queryClient}>
-      <BooksTab organisationId={organisationId} />
+      <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId={organisationId} /></MemoryRouter>
     </QueryClientProvider>,
   );
 
@@ -116,9 +146,9 @@ describe("<BooksTab> gated foundation", () => {
     expect(
       await screen.findByText(/Bookkeeping has not been activated for this organisation/),
     ).toBeInTheDocument();
-    expect(screen.getByText("Not active")).toBeInTheDocument();
+    expect(screen.getAllByText("Not active").length).toBeGreaterThan(0);
     expect(screen.getByText("No finance accounts configured")).toBeInTheDocument();
-    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(screen.getByText("Books aren't set up")).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
     expect(screen.queryByText(/cash on hand|bank balance|0 collected/i)).not.toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
@@ -127,29 +157,36 @@ describe("<BooksTab> gated foundation", () => {
     expect(api.delete).not.toHaveBeenCalled();
   });
 
-  it("renders supplied accounts and journal lines without deriving a balance", async () => {
+  it("renders supplied accounts as the server sent them", async () => {
+    openBooksAt("manage-setup");
     serveLedger(ACTIVE, ACCOUNTS, JOURNALS);
     renderBooks();
 
     const accountsList = await screen.findByRole("list", { name: "Finance accounts" });
     expect(within(accountsList).getByText("Cash at bank")).toBeInTheDocument();
     expect(within(accountsList).getByText("Dues income")).toBeInTheDocument();
-    expect(screen.getByText("RCPT-001")).toBeInTheDocument();
-    expect(screen.getByText("12 Oct 2026")).toBeInTheDocument();
-    expect(screen.getByText("October dues")).toBeInTheDocument();
-    expect(screen.getByText("Source: receipt")).toBeInTheDocument();
-    expect(screen.getByText(/1,250\.50$/)).toBeInTheDocument();
-    expect(screen.getByText(/6,000$/)).toBeInTheDocument();
+  });
+
+  it("renders a journal's lines on its entry screen without deriving a balance", async () => {
+    openBooksAt("entry&journal=j1");
+    serveLedger(ACTIVE, ACCOUNTS, JOURNALS);
+    renderBooks();
+
+    expect(await screen.findByText(/1,250\.50$/)).toBeInTheDocument();
+    expect(screen.getAllByText(/6,000$/).length).toBeGreaterThan(0);
     expect(screen.getByText("Debit")).toBeInTheDocument();
     expect(screen.getByText("Credit")).toBeInTheDocument();
     // The two line amounts are never summed into a balance.
     expect(screen.queryByText(/7,250\.50|7,251\.50/)).not.toBeInTheDocument();
-    // Read-only: no post/correct/reverse/transfer control and no writable form.
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    // Read-only: only the way back, no undo control and no writable form.
+    expect(screen.getAllByRole("button").map((button) => button.textContent?.trim())).toEqual([
+      "Transactions",
+    ]);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("never formats an amount that was not supplied as integer kobo", async () => {
+    openBooksAt("entry&journal=j1");
     serveLedger(ACTIVE, ACCOUNTS, [
       {
         ...JOURNALS[0],
@@ -157,6 +194,7 @@ describe("<BooksTab> gated foundation", () => {
           { accountId: "cash", side: "debit", amountKobo: 1250.5 },
           { accountId: "dues", side: "credit", amountKobo: "600000" },
         ],
+        totalKobo: null,
       },
     ]);
     renderBooks();
@@ -169,11 +207,12 @@ describe("<BooksTab> gated foundation", () => {
     const original = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
     try {
+      openBooksAt("manage-setup");
       serveLedger(ACTIVE, ACCOUNTS, JOURNALS);
       renderBooks();
       const accountsList = await screen.findByRole("list", { name: "Finance accounts" });
       expect(generatedCss(accountsList)).toMatch(/bg-panel/);
-      expect(screen.getByText("RCPT-001")).toBeInTheDocument();
+      expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
     } finally {
       Object.defineProperty(window, "innerWidth", { configurable: true, value: original });
     }
@@ -215,7 +254,7 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     renderBooks();
 
     expect(await screen.findByText("No finance accounts configured")).toBeInTheDocument();
-    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(await screen.findByText("No transactions yet")).toBeInTheDocument();
     expect(screen.queryByText("Books aren't available yet")).not.toBeInTheDocument();
   });
 
@@ -235,14 +274,15 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     expect(screen.queryByText("Cash at bank")).not.toBeInTheDocument();
   });
 
-  it("treats a malformed nonempty journal list as unavailable, not empty", async () => {
+  it("treats a malformed nonempty journal page as unreadable, not empty", async () => {
     serveLedger(ACTIVE, ACCOUNTS, [
       { businessDate: "2026-10-12", reference: "RCPT-001", lines: [] },
     ]);
     renderBooks();
 
-    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
-    expect(screen.queryByText("No journal entries yet")).not.toBeInTheDocument();
+    // An unreadable page is an error, never "no transactions".
+    expect(await screen.findByText("Couldn't load transactions")).toBeInTheDocument();
+    expect(screen.queryByText("No transactions yet")).not.toBeInTheDocument();
     expect(screen.queryByText("RCPT-001")).not.toBeInTheDocument();
   });
 
@@ -252,7 +292,7 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     ]);
     renderBooks();
 
-    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load transactions")).toBeInTheDocument();
     expect(screen.queryByText("RCPT-001")).not.toBeInTheDocument();
     expect(screen.queryByText(/1,250\.50$/)).not.toBeInTheDocument();
   });
@@ -273,18 +313,19 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
   });
 
   it("keeps journals visible when accounts fail and retries only accounts", async () => {
+    openBooksAt("manage-setup");
     api.get.mockImplementation((url: string) => {
       if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: ACTIVE } });
       if (url.endsWith("/ledger/accounts")) {
         return Promise.reject({ response: { status: 500, data: { error: "Accounts down" } } });
       }
-      return Promise.resolve({ data: { data: JOURNALS } });
+      return Promise.resolve({ data: { data: { items: JOURNALS, nextCursor: null } } });
     });
     renderBooks();
 
     expect(await screen.findByText("Couldn't load accounts")).toBeInTheDocument();
     expect(screen.getByText("Accounts down")).toBeInTheDocument();
-    expect(screen.getByText("RCPT-001")).toBeInTheDocument();
+    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
 
     const before = api.get.mock.calls.length;
     const base = api.get.getMockImplementation()!;
@@ -314,7 +355,7 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     ]);
     view.rerender(
       <QueryClientProvider client={queryClient}>
-        <BooksTab organisationId="org2" />
+        <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId="org2" /></MemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -334,7 +375,7 @@ describe("<BooksTab> release gates", () => {
       postings: shipped("config/ledgerPostings", "LEDGER_POSTINGS_UI_ENABLED"),
       memberMoney: shipped("config/ledgerMemberMoney", "LEDGER_MEMBER_MONEY_UI_ENABLED"),
       reversals: shipped("config/ledgerReversals", "LEDGER_REVERSALS_UI_ENABLED"),
-      reports: LEDGER_REPORTS_UI_ENABLED,
+      reports: shipped("config/ledgerReports", "LEDGER_REPORTS_UI_ENABLED"),
       f3Setup: shipped("config/ledgerF3Setup", "LEDGER_F3_SETUP_UI_ENABLED"),
       f3Reconciliation: LEDGER_F3_RECONCILIATION_UI_ENABLED,
       f3Allocations: shipped("config/ledgerF3Allocations", "LEDGER_F3_ALLOCATION_UI_ENABLED"),
@@ -355,6 +396,7 @@ describe("<BooksTab> release gates", () => {
   it("reads no reconciliation for books that aren't active", async () => {
     useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1", isOwner: true } });
     try {
+      openBooksAt("manage-reconciliation");
       serveLedger(NOT_ACTIVE);
       renderBooks();
       const region = await screen.findByRole("region", { name: "Member money reconciliation" });
@@ -369,6 +411,7 @@ describe("<BooksTab> release gates", () => {
   it("shows the read-only reconciliation but no allocation posting, and writes nothing", async () => {
     useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1", isOwner: true } });
     try {
+      openBooksAt("manage-reconciliation");
       serveLedger({ ...F2_ACTIVE, allocationsEnabled: true }, ACCOUNTS, JOURNALS);
       renderBooks();
       expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
@@ -438,13 +481,12 @@ describe("<BooksTab> approved F2 read compatibility", () => {
       );
       renderBooks();
 
-      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect((await screen.findAllByText(label)).length).toBeGreaterThan(0);
       expect(screen.getByText(note)).toBeInTheDocument();
       expect(screen.queryByText("Active")).not.toBeInTheDocument();
       expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
       // Reads still happen, but nothing is invented from them.
       expect(screen.getByText("No finance accounts configured")).toBeInTheDocument();
-      expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
       expect(api.post).not.toHaveBeenCalled();
       expect(api.put).not.toHaveBeenCalled();
       expect(api.patch).not.toHaveBeenCalled();
@@ -506,7 +548,7 @@ describe("<BooksTab> approved F2 read compatibility", () => {
     renderBooks();
 
     expect(await screen.findByText(LEDGER_NOT_ACTIVE_NOTE)).toBeInTheDocument();
-    expect(screen.getByText("Not active")).toBeInTheDocument();
+    expect(screen.getAllByText("Not active").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Opening date:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Period locked through:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Member receipts/)).not.toBeInTheDocument();
@@ -522,19 +564,22 @@ describe("<BooksTab> approved F2 read compatibility", () => {
     // The active wording appears, but the shell still offers no controls.
     expect(
       await screen.findByText(
-        "Bookkeeping is active. Only recorded journal entries are shown; balances are not calculated here.",
+        "Bookkeeping is active.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("RCPT-001")).toBeInTheDocument();
+    expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
     expect(screen.queryByText("Not active")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    // Navigation only: nothing records, moves or undoes money.
+    expect(
+      screen.queryByRole("button", { name: /Money in|Money out|Transfer|Record|Post|Reverse|Undo/, hidden: true }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { hidden: true })).not.toBeInTheDocument();
 
     // Status plus the two F1 arrays only: no legacy payment read, no write.
     const urls = api.get.mock.calls.map(([url]) => String(url)).sort();
     expect(urls).toEqual([
       "/finance/org1/ledger/accounts",
-      "/finance/org1/ledger/journals",
+      "/finance/org1/ledger/journals?pagination=cursor&limit=5",
       "/finance/org1/ledger/status",
     ]);
     expect(api.post).not.toHaveBeenCalled();

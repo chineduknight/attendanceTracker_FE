@@ -5,17 +5,8 @@ import { LEDGER_POSTINGS_UI_ENABLED } from "config/ledgerPostings";
 import { LEDGER_REVERSALS_UI_ENABLED } from "config/ledgerReversals";
 import { LEDGER_F3_ALLOCATION_UI_ENABLED } from "config/ledgerF3Allocations";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
-import { hasPendingLedgerPosting } from "helpers/ledgerPostingIntent";
-import {
-  expenseOperationReadiness,
-  postingReadiness,
-  receiptOperationReadiness,
-  shownPostingSections,
-  transferOperationReadiness,
-} from "helpers/ledgerPostings";
-import { todayInLagos } from "helpers/openingBalances";
-import { usePostingWorkflow } from "hooks/usePostingWorkflow";
-import { usePermissions } from "rbac/usePermissions";
+import { shownPostingSections } from "helpers/ledgerPostings";
+import { useCashbookPostings } from "hooks/useCashbookPostings";
 import PostingIntentNotice from "components/finance/postings/PostingIntentNotice";
 import PostingReceipt from "components/finance/postings/PostingReceipt";
 import PostingSupersededNotice from "components/finance/postings/PostingSupersededNotice";
@@ -24,8 +15,6 @@ import {
   ReceiptForm,
   TransferForm,
 } from "components/finance/postings/PostingForms";
-
-type View = "overview" | "receipt" | "expense" | "transfer";
 
 /**
  * F2B-1 cashbook posting UI (RFC v0.3 §5.1–§5.5, §8.2).
@@ -62,38 +51,21 @@ const CashbookPostingsPanel = ({
   allocationsEnabled?: boolean;
 }) => {
   const headingId = useId();
-  const { has } = usePermissions();
-  const canManage = has("finance.manage");
-  const workflow = usePostingWorkflow<Exclude<View, "overview">>({
-    organisationId,
-    onRecheckLedger,
-  });
-  const { postings, view, formError, panelError, success, superseded, formInstance, recheck } =
-    workflow;
+  const cashbook = useCashbookPostings({ organisationId, status, accounts, onRecheckLedger });
+  const {
+    workflow,
+    canManage,
+    intentRead,
+    hasIntent,
+    readiness,
+    receiptReadiness,
+    expenseReadiness,
+    transferReadiness,
+    formProps,
+  } = cashbook;
+  const { postings, view, panelError, success, superseded, formInstance, recheck } = workflow;
 
   if (!enabled) return null;
-
-  const intentRead = postings.intent.read;
-  const hasIntent = hasPendingLedgerPosting(intentRead);
-  const readiness = postingReadiness({ status, canManage, accounts });
-  const receiptReadiness = receiptOperationReadiness(accounts);
-  const expenseReadiness = expenseOperationReadiness(accounts);
-  const transferReadiness = transferOperationReadiness(accounts);
-
-  const formProps = {
-    accounts: accounts ?? [],
-    context: {
-      today: todayInLagos(),
-      openingDate: status.openingDate,
-      lockedThrough: status.lockedThrough,
-      lockedThroughState: status.lockedThroughState,
-    },
-    isPosting: postings.isPosting,
-    error: formError,
-    locked: superseded,
-    onCancel: workflow.back,
-    onSubmit: workflow.submit,
-  };
 
   const form = (() => {
     switch (view) {

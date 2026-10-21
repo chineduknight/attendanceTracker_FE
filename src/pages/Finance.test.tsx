@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "react-toastify";
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { system } from "styles/theme";
 import { generatedCss, toggle, chooseOption, shownValue } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
@@ -95,11 +96,35 @@ const setOrg = (id: string, permissions: PermissionKey[] | "owner") =>
     },
   });
 
-const renderFinance = () =>
+/** The last location and how it was reached, for URL assertions. */
+const routerSeen: { pathname: string; search: string; type: string } = {
+  pathname: "",
+  search: "",
+  type: "",
+};
+const RouterSpy = () => {
+  const location = useLocation();
+  const type = useNavigationType();
+  const navigate = useNavigate();
+  routerSeen.pathname = location.pathname;
+  routerSeen.search = location.search;
+  routerSeen.type = type;
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Browser back
+    </button>
+  );
+};
+
+/** `before`: history entries under Finance, e.g. the page the officer came from. */
+const renderFinance = (entry = "/finance", before: string[] = []) =>
   render(
     <ChakraProvider value={system}>
       <QueryClientProvider client={queryClient}>
-        <Finance />
+        <MemoryRouter initialEntries={[...before, entry]} initialIndex={before.length}>
+          <Finance />
+          <RouterSpy />
+        </MemoryRouter>
       </QueryClientProvider>
     </ChakraProvider>,
   );
@@ -682,7 +707,9 @@ describe("<Finance> obligations load failure across tabs", () => {
     await openTab("Obligations");
     // The Collect panel animates out; wait until only the Obligations one is left.
     await waitFor(() => expect(screen.getAllByText("Couldn't load obligations")).toHaveLength(1));
-    expect(within(screen.getByRole("tabpanel")).getByText("Finance service down")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Obligations" })).getByText("Finance service down"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("No obligations yet")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New obligation" })).not.toBeInTheDocument();
 
@@ -1662,23 +1689,42 @@ describe("<Finance> Books (F1)", () => {
     expect(generatedCss(booksTab)).toMatch(/min-height:\s*44px|height:\s*44px/);
     await openTab("Books");
 
-    expect(
-      await screen.findByText(/Bookkeeping has not been activated for this organisation/),
-    ).toBeInTheDocument();
-    // The setup gate is on: a viewer sees setup progress but cannot start it.
-    expect(screen.getByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
+    // A viewer is told the books aren't set up, with no way to start them.
+    expect(await screen.findByText("Books aren't set up")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set up books" })).not.toBeInTheDocument();
+
+    // The setup gate is on: Manage Books shows setup progress it can't start.
+    fireEvent.click(screen.getByRole("button", { name: /Manage Books/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Setup & accounts/ }));
+    expect(await screen.findByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
     expect(
       screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
     ).toBeInTheDocument();
-    expect(screen.getByText("No journal entries yet")).toBeInTheDocument();
+    expect(screen.getByText(/Bookkeeping has not been activated for this organisation/)).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/status");
     expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/accounts");
-    expect(api.get).toHaveBeenCalledWith("/finance/org1/ledger/journals");
     expect(api.post).not.toHaveBeenCalled();
     expect(api.put).not.toHaveBeenCalled();
     expect(api.patch).not.toHaveBeenCalled();
     expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("unwinds the Books screens when the officer switches tab, so Back leaves Finance", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    serveLedger();
+    renderFinance("/finance?tab=books", ["/dashboard"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Setup & accounts/ }));
+    await waitFor(() => expect(routerSeen.search).toContain("books=manage-setup"));
+
+    await openTab("Collect");
+    await waitFor(() => expect(routerSeen.search).toBe("?tab=collect"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Browser back" }));
+    await waitFor(() => expect(routerSeen.pathname).toBe("/dashboard"));
   });
 
   it("reloads Books only for the newly selected organisation", async () => {
@@ -1701,5 +1747,37 @@ describe("<Finance> Books (F1)", () => {
       .filter((url) => url.includes("/ledger/"));
     expect(ledgerCalls.length).toBeGreaterThan(0);
     expect(ledgerCalls.every((url) => url.includes("/finance/org2/"))).toBe(true);
+  });
+});
+
+describe("<Finance> tab in the URL", () => {
+  it("opens Collect when the URL names no tab", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    renderFinance();
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Collect" })).toHaveAttribute("aria-selected", "true"),
+    );
+  });
+
+  it("opens the tab the URL names", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    renderFinance("/finance?tab=obligations");
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Obligations" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
+  });
+
+  it("switches tabs by replacing the entry, so Back still leaves Finance", async () => {
+    setOrg("org1", VIEWER);
+    serve([duesNow]);
+    renderFinance();
+    await openTab("Start dates");
+    expect(routerSeen.search).toBe("?tab=start-dates");
+    expect(routerSeen.type).toBe("REPLACE");
   });
 });

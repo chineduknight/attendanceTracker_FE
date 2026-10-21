@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, useEffect, useRef } from "react";
 import { Badge, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
@@ -164,6 +164,7 @@ const MemberMoneyPanel = ({
   cashbookEnabled = LEDGER_POSTINGS_UI_ENABLED,
   reversalsEnabled = LEDGER_REVERSALS_UI_ENABLED,
   allocationsEnabled = LEDGER_F3_ALLOCATION_UI_ENABLED,
+  startReceipt,
 }: {
   organisationId: string;
   status: LedgerStatus;
@@ -178,8 +179,14 @@ const MemberMoneyPanel = ({
   reversalsEnabled?: boolean;
   /** Whether "Allocate member money" is shown; it owns retries of allocations. */
   allocationsEnabled?: boolean;
+  /**
+   * A request (a changing nonce) to open the member-receipt form, e.g. from
+   * Money in's "For a member". Ignored when a new posting can't start.
+   */
+  startReceipt?: number;
 }) => {
   const headingId = useId();
+  const canStartRef = useRef(false);
   const { has } = usePermissions();
   const canManage = has("finance.manage");
   const canReadMembers = has("members.view");
@@ -205,6 +212,11 @@ const MemberMoneyPanel = ({
   const membersQuery = useMembers(organisationId, { enabled: hintsNeeded && canReadMembers });
   const obligationsQuery = useObligations(organisationId, { enabled: hintsNeeded });
 
+  useEffect(() => {
+    if (startReceipt && canStartRef.current) workflow.open("member_receipt");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startReceipt]);
+
   if (!enabled) return null;
 
   const intentRead = postings.intent.read;
@@ -213,6 +225,7 @@ const MemberMoneyPanel = ({
   const memberMoney = memberMoneyReadiness({ status, accounts });
   const readiness = posting.ready ? memberMoney : posting;
   const canStart = readiness.ready && !hasIntent && !success && view === "overview";
+  canStartRef.current = canStart;
   const rechecking = isRechecking || (sourcesQuery.isFetching && !sourcesQuery.isLoading);
 
   const refund = refundSourceId
