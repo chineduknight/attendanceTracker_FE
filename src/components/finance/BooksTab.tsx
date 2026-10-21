@@ -425,6 +425,7 @@ const BooksTab = ({ organisationId }: { organisationId: string }) => {
           status={status}
           accounts={accountsQuery.accounts}
           accountsError={accountsQuery.isError ? accountsQuery.error : null}
+          accountsUnreadable={accountsQuery.hasData && !accountsQuery.isError}
           onRetryAccounts={accountsQuery.refetch}
           isRetryingAccounts={accountsQuery.isFetching}
           isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}

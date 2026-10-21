@@ -12,7 +12,7 @@ import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
  * HTTP 200 carrying a body this build cannot read is not a recheck.
  */
 
-// Wiring only: the real gates stay off (BooksTab.test.tsx asserts them).
+// Pinned on so this file doesn't depend on the shipped values (BooksTab.test.tsx asserts them).
 jest.mock("config/ledgerSetup", () => ({ LEDGER_SETUP_UI_ENABLED: true }));
 jest.mock("config/ledgerF3Setup", () => ({ LEDGER_F3_SETUP_UI_ENABLED: true }));
 

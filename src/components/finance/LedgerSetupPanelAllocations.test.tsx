@@ -156,9 +156,9 @@ afterEach(() => {
 });
 
 describe("F3A gate", () => {
-  it("ships with the F3A gate and the setup gate off", () => {
-    expect(LEDGER_F3_SETUP_UI_ENABLED).toBe(false);
-    expect(LEDGER_SETUP_UI_ENABLED).toBe(false);
+  it("ships with the F3A gate and the setup gate on", () => {
+    expect(LEDGER_F3_SETUP_UI_ENABLED).toBe(true);
+    expect(LEDGER_SETUP_UI_ENABLED).toBe(true);
   });
 
   it("renders no allocation controls while the F3A gate is off", () => {

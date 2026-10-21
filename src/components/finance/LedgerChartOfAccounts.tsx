@@ -44,7 +44,7 @@ import {
   toAccountRole,
   validateAccountBatch,
 } from "helpers/ledgerSetup";
-import { ledgerStateKey } from "helpers/ledger";
+import { LEDGER_UNAVAILABLE_NOTE, LEDGER_UNAVAILABLE_TITLE, ledgerStateKey } from "helpers/ledger";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import { LedgerWriteNotSentError, useLedgerSetup } from "hooks/useLedgerSetup";
 
@@ -528,6 +528,11 @@ interface LedgerChartOfAccountsProps {
   status: LedgerStatus;
   accounts: LedgerAccount[] | null;
   accountsError: unknown;
+  /**
+   * A response arrived but its body wasn't a readable account list. With
+   * `accounts` null this is "not available yet", not still loading.
+   */
+  accountsUnreadable?: boolean;
   onRetryAccounts: () => void;
   isRetryingAccounts: boolean;
   canManage: boolean;
@@ -540,6 +545,7 @@ const LedgerChartOfAccounts = ({
   status,
   accounts,
   accountsError,
+  accountsUnreadable = false,
   onRetryAccounts,
   isRetryingAccounts,
   canManage,
@@ -684,6 +690,8 @@ const LedgerChartOfAccounts = ({
               onRetry={onRetryAccounts}
               retrying={isRetryingAccounts}
             />
+          ) : accountsUnreadable ? (
+            <EmptyState title={LEDGER_UNAVAILABLE_TITLE} description={LEDGER_UNAVAILABLE_NOTE} />
           ) : (
             <PageLoader h="20vh" label="Loading accounts..." />
           )

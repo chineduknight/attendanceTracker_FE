@@ -25,4 +25,4 @@
  * no control in this release. While false, Books renders exactly what the
  * F2B-4 release shipped.
  */
-export const LEDGER_F3_SETUP_UI_ENABLED: boolean = false;
+export const LEDGER_F3_SETUP_UI_ENABLED: boolean = true;

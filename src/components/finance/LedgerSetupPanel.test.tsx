@@ -215,7 +215,9 @@ describe("<LedgerSetupPanel> permissions", () => {
     });
 
     expect(screen.getByText("Bookkeeping setup")).toBeInTheDocument();
-    expect(screen.getByText(/needs the finance manage permission/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
+    ).toBeInTheDocument();
     // The progress list names the step; the start button is not offered.
     expect(
       screen.queryByRole("button", { name: "Start bookkeeping setup" }),
