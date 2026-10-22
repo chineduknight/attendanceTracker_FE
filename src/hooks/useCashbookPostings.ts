@@ -1,5 +1,7 @@
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
+import { LEDGER_SETUP_UI_ENABLED } from "config/ledgerSetup";
 import { hasPendingLedgerPosting } from "helpers/ledgerPostingIntent";
+import { canCreateAccounts } from "helpers/ledgerSetup";
 import {
   expenseOperationReadiness,
   postingReadiness,
@@ -54,6 +56,9 @@ export const useCashbookPostings = ({
       isPosting: workflow.postings.isPosting,
       error: workflow.formError,
       locked: workflow.superseded,
+      // A manager may add a category from inside Money in/out, even when the
+      // kind currently has none. Posting still waits for a valid category.
+      canAddCategory: LEDGER_SETUP_UI_ENABLED && canCreateAccounts(status, canManage),
       onCancel: workflow.back,
       onSubmit: workflow.submit,
     },

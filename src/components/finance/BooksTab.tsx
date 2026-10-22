@@ -530,7 +530,7 @@ const BooksScreens = ({
                 variant="outline"
                 minH="56px"
                 fontSize="md"
-                disabled={!readiness.ready || !receiptReadiness.ready}
+                disabled={!readiness.ready}
                 onClick={() => nav.openSheet("money-in")}
               >
                 <Box as={FiArrowDownLeft} aria-hidden color="green.fg" />
@@ -540,7 +540,7 @@ const BooksScreens = ({
                 variant="outline"
                 minH="56px"
                 fontSize="md"
-                disabled={!readiness.ready || !expenseReadiness.ready}
+                disabled={!readiness.ready}
                 onClick={() => nav.openSheet("money-out")}
               >
                 <Box as={FiArrowUpRight} aria-hidden color="red.fg" />

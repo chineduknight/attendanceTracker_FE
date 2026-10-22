@@ -152,6 +152,27 @@ describe("Books Overview", () => {
     expect(screen.getByRole("button", { name: /Transfer between accounts/ })).toBeEnabled();
   });
 
+  it("opens Money out for a manager even with no expense category", async () => {
+    setSession(MANAGER);
+    serve();
+    const withoutExpense = ACCOUNTS.filter((entry) => entry.class !== "expense");
+    api.get.mockImplementation((url: string) => {
+      if (!url.includes("/finance/org1/")) return Promise.resolve({ data: { data: null } });
+      if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: status } });
+      if (url.endsWith("/ledger/accounts")) return Promise.resolve({ data: { data: withoutExpense } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    renderBooks();
+
+    const button = await screen.findByRole("button", { name: /Money out/ });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+
+    await screen.findByRole("dialog", { name: "Money out" });
+    // No expense category exists, but the form offers to add one.
+    expect(await screen.findByRole("button", { name: "+ New category" })).toBeInTheDocument();
+  });
+
   it("gives a viewer the figures but no way to record", async () => {
     setSession(VIEWER);
     serve();
