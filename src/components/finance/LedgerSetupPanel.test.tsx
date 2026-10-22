@@ -8,12 +8,7 @@ import { queryKeys } from "services/api/queryKeys";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import { LedgerAccount, LedgerKnownState, LedgerStatus } from "components/finance/ledgerTypes";
 import {
-  ACCOUNT_CHANGE_UNAVAILABLE_NOTE,
-  OPENING_PENDING_ACCOUNTS_NOTE,
   OPENING_PENDING_CREATE_NOTE,
-  SUGGESTION_FROZEN_NOTE,
-  SUSPENDED_ACCOUNTS_NOTE,
-  SUSPENDED_CREATE_NOTE,
   ledgerRecheckUsable,
 } from "helpers/ledgerSetup";
 import {
@@ -425,13 +420,6 @@ describe("<LedgerSetupPanel> bookkeeping accounts after setup", () => {
     class: "equity",
     subtype: "opening_balance_equity",
   });
-  const holding = account({
-    id: "holding",
-    name: "Member money – unallocated",
-    class: "liability",
-    subtype: "member_receipts_unallocated",
-  });
-
   const startSetup = async () => {
     fireEvent.click(screen.getByRole("button", { name: "Start bookkeeping setup" }));
     await confirmInDialog("Start setup");

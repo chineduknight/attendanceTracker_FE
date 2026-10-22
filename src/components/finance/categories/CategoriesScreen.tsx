@@ -199,14 +199,19 @@ const BookkeepingSection = ({ accounts }: { accounts: readonly LedgerAccount[] }
         variant="ghost"
         width="100%"
         minH="44px"
+        py={2}
+        gap={2}
         justifyContent="space-between"
+        whiteSpace="normal"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <Text fontWeight="semibold" fontSize="sm">
-          Bookkeeping accounts (managed for you)
-        </Text>
-        <Box as={FiChevronDown} aria-hidden color="fg.muted" />
+        <Box flex="1" minW={0} textAlign="left">
+          <Text fontWeight="semibold" fontSize="sm">
+            Bookkeeping accounts (managed for you)
+          </Text>
+        </Box>
+        <Box as={FiChevronDown} aria-hidden color="fg.muted" flexShrink={0} />
       </Button>
       <Collapsible.Root open={open} lazyMount unmountOnExit>
         <Collapsible.Content>
@@ -385,9 +390,11 @@ const CategoriesScreen = ({
         )}
 
         <Tabs.Root value={tab} onValueChange={(details) => setTab(details.value as TabKey)}>
-          <Tabs.List>
+          {/* Three labels plus counts do not fit a 320px phone; the strip
+              scrolls instead of widening the page. */}
+          <Tabs.List maxW="100%" overflowX="auto" css={{ scrollbarWidth: "none" }}>
             {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => (
-              <Tabs.Trigger key={key} value={key} minH="44px">
+              <Tabs.Trigger key={key} value={key} minH="44px" flexShrink={0}>
                 {TAB_LABELS[key]}
                 <Badge ml={1} colorPalette="gray" variant="subtle">
                   {counts[key]}

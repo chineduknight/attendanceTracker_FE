@@ -7,7 +7,6 @@ import { queryClient } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import { LedgerAccount, LedgerKnownState, LedgerStatus } from "components/finance/ledgerTypes";
-import { MEMBER_INCOME_IN_USE_NOTE } from "helpers/ledgerSetup";
 import {
   ledgerWriteUncertaintyKey,
   markLedgerWriteUncertain,

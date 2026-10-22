@@ -127,10 +127,9 @@ const openRow = (name: string | RegExp) =>
  * panel asserts what the officer actually sees.
  */
 const openPanel = () => {
-  const panels = Array.from(
-    document.querySelectorAll<HTMLElement>('[data-part="content"]'),
-  );
-  const open = panels.find((panel) => panel.getAttribute("data-state") === "open");
+  const open = screen
+    .getAllByRole("tabpanel", { hidden: true })
+    .find((panel) => panel.getAttribute("data-state") === "open");
   if (!open) throw new Error("openPanel(): no open tab panel");
   return open;
 };
