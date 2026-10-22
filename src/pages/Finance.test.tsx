@@ -1695,7 +1695,7 @@ describe("<Finance> Books (F1)", () => {
 
     // The setup gate is on: Manage Books shows setup progress it can't start.
     fireEvent.click(screen.getByRole("button", { name: /Manage Books/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Setup & accounts/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Setup\b/ }));
     expect(await screen.findByRole("button", { name: "Start bookkeeping setup" })).toBeDisabled();
     expect(
       screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
@@ -1717,7 +1717,7 @@ describe("<Finance> Books (F1)", () => {
     renderFinance("/finance?tab=books", ["/dashboard"]);
 
     fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Setup & accounts/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Setup\b/ }));
     await waitFor(() => expect(routerSeen.search).toContain("books=manage-setup"));
 
     await openTab("Collect");

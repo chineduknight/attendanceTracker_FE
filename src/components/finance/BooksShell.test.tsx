@@ -200,11 +200,36 @@ describe("Books navigation", () => {
     expect(await screen.findByRole("heading", { name: "Manage Books" })).toBeVisible();
     expect(seen.search).toContain("books=manage");
 
-    fireEvent.click(screen.getByRole("button", { name: /Setup & accounts/ }));
-    expect(await screen.findByRole("heading", { name: "Setup & accounts" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Setup\b/ }));
+    expect(await screen.findByRole("heading", { name: "Setup" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Manage Books" }));
     await waitFor(() => expect(seen.search).not.toContain("manage-setup"));
+    expect(screen.getByRole("heading", { name: "Manage Books" })).toBeVisible();
+  });
+
+  it("opens Categories & Accounts first in Manage Books, and Back returns to Manage Books", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
+    expect(await screen.findByRole("heading", { name: "Manage Books" })).toBeVisible();
+
+    const manage = screen.getByRole("group", { name: "Manage Books" });
+    const rows = within(manage).getAllByRole("button");
+    expect(rows[0]).toHaveTextContent("Categories & Accounts");
+
+    fireEvent.click(rows[0]);
+    expect(
+      await screen.findByRole("heading", { name: "Categories & Accounts" }),
+    ).toBeVisible();
+    expect(seen.search).toContain("books=manage-categories");
+    // The same account list every Books screen reads, grouped into a category.
+    expect((await screen.findAllByText("Operating expenses")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage Books" }));
+    await waitFor(() => expect(seen.search).not.toContain("manage-categories"));
     expect(screen.getByRole("heading", { name: "Manage Books" })).toBeVisible();
   });
 

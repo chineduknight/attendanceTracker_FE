@@ -6,6 +6,7 @@ import { GroupedList, GroupedListItem } from "components/GroupedList";
 import PageLoader from "components/PageLoader";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
+import CategoriesScreen from "components/finance/categories/CategoriesScreen";
 import OpeningBalancesPanel from "components/finance/OpeningBalancesPanel";
 import LedgerLifecyclePanel from "components/finance/lifecycle/LedgerLifecyclePanel";
 import MemberMoneyPanel from "components/finance/postings/MemberMoneyPanel";
@@ -270,8 +271,9 @@ const TITLES: Record<BooksScreen, string> = {
   held: "Held for members",
   entry: "Entry",
   manage: "Manage Books",
+  "manage-categories": "Categories & Accounts",
   "manage-status": "Books status & history",
-  "manage-setup": "Setup & accounts",
+  "manage-setup": "Setup",
   "manage-opening": "Opening balances",
   "manage-reconciliation": "Reconciliation",
   "manage-attempts": "Unconfirmed saves",
@@ -352,6 +354,29 @@ const BooksScreens = ({
     accountsQuery.refetch();
     void queryClient.invalidateQueries({ queryKey: queryKeys.finance.ledger.journals(organisationId) });
   };
+  // Reconciliation after an unresolved write needs both the status and the
+  // account list. Only a clean, usable reload of both counts. Shared by Setup
+  // and Categories & Accounts so the latch reads the same on either screen.
+  const recheckLedger = async ({
+    requireAllocations,
+    allowInitialSetup,
+  }: {
+    requireAllocations: boolean;
+    allowInitialSetup: boolean;
+  }) => {
+    const [statusResult, accountsResult] = await Promise.all([
+      statusQuery.refetch(),
+      accountsQuery.refetch(),
+    ]);
+    return (
+      !statusResult.isError &&
+      !accountsResult.isError &&
+      ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data, {
+        requireAllocations,
+        allowInitialSetup,
+      })
+    );
+  };
 
   const cashbook = useCashbookPostings({
     organisationId,
@@ -377,6 +402,8 @@ const BooksScreens = ({
         return heldShown;
       case "manage-status":
         return true;
+      case "manage-categories":
+        return LEDGER_SETUP_UI_ENABLED;
       case "manage-opening":
         return LEDGER_OPENING_BALANCES_UI_ENABLED;
       case "manage-reconciliation":
@@ -559,7 +586,7 @@ const BooksScreens = ({
           )}
           <NavRow
             label="Manage Books"
-            caption="Status, setup, accounts, opening balances"
+            caption="Status, categories, setup, opening balances"
             onClick={() => nav.go("manage")}
           />
         </NavGroup>
@@ -648,19 +675,24 @@ const BooksScreens = ({
 
       <Screen screen="manage" {...screenProps}>
         <NavGroup label="Manage Books">
+          {available("manage-categories") && (
+            <NavRow
+              label="Categories & Accounts"
+              caption="Income, expenses, cash & bank"
+              onClick={() => nav.go("manage-categories")}
+            />
+          )}
           <NavRow
             label="Books status & history"
             caption={LEDGER_STATE_LABELS[stateKey]}
             onClick={() => nav.go("manage-status")}
           />
           <NavRow
-            label="Setup & accounts"
+            label="Setup"
             caption={
               stateKey === "not_active" || stateKey === "setup"
                 ? "Setup in progress"
-                : accounts
-                  ? `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`
-                  : undefined
+                : "Steps, member receipts, allocations"
             }
             onClick={() => nav.go("manage-setup")}
           />
@@ -695,9 +727,25 @@ const BooksScreens = ({
         )}
       </Screen>
 
+      <Screen screen="manage-categories" {...screenProps}>
+        <CategoriesScreen
+          // Tenant-local UI state (open sheet, tab) never follows an
+          // organisation switch.
+          key={organisationId}
+          organisationId={organisationId}
+          status={status}
+          accounts={accountsQuery.accounts}
+          accountsError={accountsQuery.isError ? accountsQuery.error : null}
+          accountsUnreadable={accountsQuery.hasData && !accountsQuery.isError}
+          onRetryAccounts={accountsQuery.refetch}
+          isRetryingAccounts={accountsQuery.isFetching}
+          onRecheckLedger={recheckLedger}
+        />
+      </Screen>
+
       <Screen screen="manage-setup" {...screenProps}>
-        {/* Setup, member-money settings and the chart of accounts stay one
-            panel: they share recheck and unresolved-write recovery. */}
+        {/* Setup, member-money settings and the F3 allocations checklist stay
+            one panel: they share recheck and unresolved-write recovery. */}
         {LEDGER_SETUP_UI_ENABLED ? (
           <LedgerSetupPanel
             organisationId={organisationId}
@@ -708,22 +756,7 @@ const BooksScreens = ({
             onRetryAccounts={accountsQuery.refetch}
             isRetryingAccounts={accountsQuery.isFetching}
             isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
-            onRecheckLedger={async ({ requireAllocations, allowInitialSetup }) => {
-              // Reconciliation after an unresolved write needs both the status
-              // and the account list. Only a clean, usable reload of both counts.
-              const [statusResult, accountsResult] = await Promise.all([
-                statusQuery.refetch(),
-                accountsQuery.refetch(),
-              ]);
-              return (
-                !statusResult.isError &&
-                !accountsResult.isError &&
-                ledgerRecheckUsable(statusResult.data?.data, accountsResult.data?.data, {
-                  requireAllocations,
-                  allowInitialSetup,
-                })
-              );
-            }}
+            onRecheckLedger={recheckLedger}
           />
         ) : (
           <AccountsSection

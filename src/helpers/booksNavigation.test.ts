@@ -49,6 +49,13 @@ describe("readBooksLocation", () => {
     });
   });
 
+  it("reads Categories & Accounts for its organisation", () => {
+    expect(readBooksLocation(p("books=manage-categories&org=o1"), "o1")).toEqual({
+      location: { screen: "manage-categories", sheet: null, journalId: null },
+      valid: true,
+    });
+  });
+
   it("treats no Books params as the Overview", () => {
     expect(readBooksLocation(p("tab=books"), "o1")).toEqual({ location: BOOKS_HOME, valid: true });
   });
@@ -69,6 +76,7 @@ describe("writeBooksLocation", () => {
         "reports",
         "held",
         "manage",
+        "manage-categories",
         "manage-status",
         "manage-setup",
         "manage-opening",
@@ -97,6 +105,9 @@ describe("writeBooksLocation", () => {
 describe("parentOf", () => {
   it("steps back one level", () => {
     expect(parentOf({ screen: "manage-setup", sheet: null, journalId: null }).screen).toBe("manage");
+    expect(parentOf({ screen: "manage-categories", sheet: null, journalId: null }).screen).toBe(
+      "manage",
+    );
     expect(parentOf({ screen: "entry", sheet: null, journalId: "j1" })).toEqual({
       screen: "transactions",
       sheet: null,
