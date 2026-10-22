@@ -182,86 +182,6 @@ export const accountNameKey = (name: string) =>
   name.trim().replace(/\s+/g, " ").toLowerCase();
 
 /* ------------------------------------------------------------------ */
-/* Starter chart (D6): suggestions only, never created automatically.  */
-/* ------------------------------------------------------------------ */
-
-export interface StarterAccount {
-  /** Stable local key for checkboxes; never sent to the API. */
-  key: string;
-  name: string;
-  class: AccountClass;
-  subtype: AccountSubtype | null;
-  purpose: string;
-  /** Only offered when the organisation enabled member receipts (D1). */
-  requiresMemberReceipts?: boolean;
-}
-
-export const STARTER_ACCOUNTS: readonly StarterAccount[] = [
-  {
-    key: "cash-in-hand",
-    name: "Cash in hand",
-    class: "asset",
-    subtype: "cash",
-    purpose: "Notes and coins the organisation holds.",
-  },
-  {
-    key: "main-bank",
-    name: "Main bank account",
-    class: "asset",
-    subtype: "bank",
-    purpose: "The organisation's main bank account.",
-  },
-  {
-    key: "opening-equity",
-    name: "Opening balance equity",
-    class: "equity",
-    subtype: "opening_balance_equity",
-    purpose: "Required. The counter-side of the opening balances verified at activation.",
-  },
-  {
-    key: "member-money",
-    name: "Member money – unallocated",
-    class: "liability",
-    subtype: "member_receipts_unallocated",
-    purpose: "Money held for a member that is not yet allocated to dues or a levy.",
-    requiresMemberReceipts: true,
-  },
-  {
-    key: "donations",
-    name: "Donations",
-    class: "income",
-    subtype: null,
-    purpose: "Income category for donations.",
-  },
-  {
-    key: "other-income",
-    name: "Other income",
-    class: "income",
-    subtype: null,
-    purpose: "Any income that is not a donation.",
-  },
-  {
-    key: "operating-expenses",
-    name: "Operating expenses",
-    class: "expense",
-    subtype: null,
-    purpose: "Day-to-day running costs.",
-  },
-  {
-    key: "event-expenses",
-    name: "Event expenses",
-    class: "expense",
-    subtype: null,
-    purpose: "Costs of events and programmes.",
-  },
-];
-
-export const starterAccountsFor = (memberReceiptsEnabled: boolean) =>
-  STARTER_ACCOUNTS.filter(
-    (account) => !account.requiresMemberReceipts || memberReceiptsEnabled,
-  );
-
-/* ------------------------------------------------------------------ */
 /* Drafts, payloads and convenience validation                        */
 /* ------------------------------------------------------------------ */
 
@@ -285,14 +205,6 @@ export const emptyAccountDraft = (): AccountDraft => ({
   name: "",
   class: "asset",
   subtype: "cash",
-  bankName: "",
-  accountNumberLast4: "",
-});
-
-export const draftFromStarter = (starter: StarterAccount): AccountDraft => ({
-  name: starter.name,
-  class: starter.class,
-  subtype: starter.subtype,
   bankName: "",
   accountNumberLast4: "",
 });
@@ -624,7 +536,7 @@ export const moneyAccountsFrozen = (status: LedgerStatus) =>
 /* Setup progress                                                     */
 /* ------------------------------------------------------------------ */
 
-export type SetupStepStatus = "done" | "current" | "todo" | "later";
+export type SetupStepStatus = "done" | "current" | "todo" | "later" | "optional";
 
 export interface SetupStep {
   key: string;
@@ -691,15 +603,30 @@ export const ledgerSetupSteps = (
 ): SetupStep[] => {
   const state = ledgerStateKey(status);
   const started = state !== "not_active" && state !== "unknown";
+  const known = accounts !== null;
 
   const activeRoles = (accounts ?? [])
     .filter((account) => account.active === true)
     .map((account) => toAccountRole(account))
     .filter((role): role is AccountRole => role !== null);
 
-  const hasOpeningEquity = activeRoles.some(isOpeningEquityRole);
-  const hasMoneyAccount = activeRoles.some(isMoneyRole);
-  const accountsKnown = accounts !== null;
+  const hasCash = activeRoles.some(
+    (role) => isMoneyRole(role) && role.subtype === "cash",
+  );
+  const hasBank = activeRoles.some(
+    (role) => isMoneyRole(role) && role.subtype === "bank",
+  );
+  const hasEquity = activeRoles.some(isOpeningEquityRole);
+  const hasHolding = activeRoles.some(isMemberHoldingRole);
+  const hasCategories = activeRoles.some(
+    (role) =>
+      (role.class === "income" || role.class === "expense") && role.subtype === null,
+  );
+  // The accounts setup must create for every started ledger. Cash is listed
+  // with them because the backend also needs opening balance equity (and the
+  // holding account with receipts on) before opening balances can be verified.
+  const bookkeepingMissing =
+    !hasCash || !hasEquity || (status.memberReceiptsEnabled === true && !hasHolding);
 
   const steps: SetupStep[] = [
     {
@@ -707,38 +634,38 @@ export const ledgerSetupSteps = (
       title: "Start bookkeeping setup",
       detail: started
         ? "Setup has started for this organisation."
-        : "Creates this organisation's ledger. Existing dues/levy records are not copied into it.",
+        : "Creates this organisation's ledger and the accounts it needs. Existing dues/levy records are not copied into it.",
       status: started ? "done" : "todo",
     },
     {
-      key: "member-receipts",
-      title: "Choose member receipts",
-      detail:
-        started && status.memberReceiptsEnabled !== null
-          ? status.memberReceiptsEnabled
-            ? "Member receipts are on."
-            : "Member receipts are off."
-          : "Decide whether the organisation will hold money for members.",
-      status:
-        started && status.memberReceiptsEnabled !== null ? "done" : "todo",
+      key: "cash",
+      title: "Cash in hand",
+      detail: !known
+        ? "Waiting for the current account list."
+        : bookkeepingMissing
+          ? "Some bookkeeping accounts are missing."
+          : "Cash in hand and the other accounts the books need are ready.",
+      status: !known || bookkeepingMissing ? "todo" : "done",
     },
     {
-      key: "opening-equity",
-      title: "Add the opening balance equity account",
-      detail: hasOpeningEquity
-        ? "Opening balance equity account added."
-        : "Required before opening balances can be verified.",
-      status: hasOpeningEquity ? "done" : "todo",
+      key: "bank",
+      title: "Bank accounts",
+      detail: !known
+        ? "Waiting for the current account list."
+        : hasBank
+          ? "At least one bank account added."
+          : "Optional. Add one now, or later in Categories & Accounts.",
+      status: hasBank ? "done" : "optional",
     },
     {
-      key: "money-account",
-      title: "Add a cash or bank account",
-      detail: hasMoneyAccount
-        ? "At least one money account added."
-        : accountsKnown
-          ? "Money moves into and out of these accounts."
-          : "Waiting for the current account list.",
-      status: hasMoneyAccount ? "done" : "todo",
+      key: "categories",
+      title: "Income and expense categories",
+      detail: !known
+        ? "Waiting for the current account list."
+        : hasCategories
+          ? "Income and expense categories are set up."
+          : "Optional. Pick a few below, or add them later in Categories & Accounts.",
+      status: hasCategories ? "done" : "optional",
     },
     activationStep(state, openingBalancesAvailable),
   ];

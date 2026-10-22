@@ -56,6 +56,7 @@ import {
   ledgerReadiness,
   ledgerStateKey,
   ledgerStatusNote,
+  toLedgerAccounts,
 } from "helpers/ledger";
 import { retrySectionFor, shownPostingSections } from "helpers/ledgerPostings";
 import { ledgerRecheckUsable } from "helpers/ledgerSetup";
@@ -751,12 +752,13 @@ const BooksScreens = ({
             organisationId={organisationId}
             status={status}
             accounts={accountsQuery.accounts}
-            accountsError={accountsQuery.isError ? accountsQuery.error : null}
-            accountsUnreadable={accountsQuery.hasData && !accountsQuery.isError}
             onRetryAccounts={accountsQuery.refetch}
             isRetryingAccounts={accountsQuery.isFetching}
             isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
             onRecheckLedger={recheckLedger}
+            reloadAccounts={async () =>
+              toLedgerAccounts((await accountsQuery.refetch()).data?.data)
+            }
           />
         ) : (
           <AccountsSection

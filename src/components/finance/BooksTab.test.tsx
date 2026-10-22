@@ -244,7 +244,9 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     serveLedger([]);
     renderBooks();
 
-    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Books aren't available yet")).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("No finance accounts configured")).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledTimes(1);
   });
@@ -269,7 +271,9 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     );
     renderBooks();
 
-    expect(await screen.findByText("Books aren't available yet")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Books aren't available yet")).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("No finance accounts configured")).not.toBeInTheDocument();
     expect(screen.queryByText("Cash at bank")).not.toBeInTheDocument();
   });
@@ -323,8 +327,10 @@ describe("<BooksTab> unavailable and failed endpoints", () => {
     });
     renderBooks();
 
-    expect(await screen.findByText("Couldn't load accounts")).toBeInTheDocument();
-    expect(screen.getByText("Accounts down")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Couldn't load accounts")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Accounts down").length).toBeGreaterThan(0);
     expect(await screen.findByText("RCPT-001")).toBeInTheDocument();
 
     const before = api.get.mock.calls.length;

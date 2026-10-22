@@ -5,7 +5,6 @@ import { queryClient } from "services/api/apiHelper";
 import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
 
-import { LEDGER_UNAVAILABLE_TITLE } from "helpers/ledger";
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
 
@@ -20,8 +19,9 @@ beforeEach(() => {
 
 /**
  * Books with the shipped setup gates on (`LEDGER_SETUP_UI_ENABLED`,
- * `LEDGER_F3_SETUP_UI_ENABLED`): the managed chart replaces the plain account
- * list, and rendering it never writes. BooksTab.test.tsx covers the gates off.
+ * `LEDGER_F3_SETUP_UI_ENABLED`): Setup is the plain starting point and
+ * Categories & Accounts is the account list, and rendering either never
+ * writes. BooksTab.test.tsx covers the gates off.
  */
 
 jest.mock("services/api", () => ({
@@ -71,6 +71,8 @@ const account = (id: string, name: string, extra: Record<string, unknown> = {}) 
   openingVerified: true,
   ...extra,
 });
+const expense = (id: string, name: string) =>
+  account(id, name, { class: "expense", subtype: null, openingVerified: null });
 
 const serve = (status: unknown, accounts: unknown, org = "org1") =>
   api.get.mockImplementation((url: string) => {
@@ -109,13 +111,16 @@ beforeEach(() => {
 
 afterAll(() => useGlobalStore.setState({ user: EMPTY_USER, organisation: EMPTY_ORG }));
 
-describe("<BooksTab> setup gates on", () => {
+describe("<BooksTab> Setup", () => {
   it("offers a manager the setup start and writes nothing until it is confirmed", async () => {
     serve(NO_LEDGER, []);
     render(books());
 
     expect(await screen.findByRole("button", { name: "Start bookkeeping setup" })).toBeEnabled();
-    expect(screen.queryByText("Chart of accounts")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add bank account" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Add selected categories/ }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Member money allocations")).not.toBeInTheDocument();
     expectNoWrites();
   });
@@ -125,42 +130,53 @@ describe("<BooksTab> setup gates on", () => {
     serve(ACTIVE, [account("bank", "Main account")]);
     render(books());
 
-    const chart = await screen.findByRole("list", { name: "Chart of accounts" });
-    expect(within(chart).getByText("Main account")).toBeInTheDocument();
     expect(
-      screen.getByText(/Starting it or changing accounts needs the finance manage permission/),
+      await screen.findByText(/Starting it or changing accounts needs the finance manage permission/),
     ).toBeInTheDocument();
     expect(screen.getByText("Member money allocations")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /dues income account|allocations/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add bank account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create them" })).not.toBeInTheDocument();
     expectNoWrites();
   });
 
-  it("replaces the plain account list with the managed chart", async () => {
+  it("offers the starting bank and category points after setup, still writing nothing", async () => {
     serve(ACTIVE, [account("bank", "Main account")]);
     render(books());
 
-    expect(await screen.findByRole("list", { name: "Chart of accounts" })).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Finance accounts" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Add bank account" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add selected categories" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Select Donations" })).not.toBeChecked();
     expect(screen.getByText("Member money allocations")).toBeInTheDocument();
     expectNoWrites();
   });
 
-  it("keeps an empty account list an empty state", async () => {
-    serve(ACTIVE, []);
+  it("keeps a missing bookkeeping account recoverable without writing on load", async () => {
+    serve(ACTIVE, [account("bank", "Main account")]);
     render(books());
-    expect(await screen.findByText("No accounts yet")).toBeInTheDocument();
+
+    expect(
+      await screen.findByText("Finish setup: some bookkeeping accounts are missing"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create them" })).toBeInTheDocument();
+    expectNoWrites();
   });
 
-  it("shows an unreadable account list as not available, never as still loading", async () => {
+  it("waits for a readable account list instead of claiming the accounts are ready", async () => {
     serve(ACTIVE, { accounts: "not a list" });
     render(books());
 
-    expect(await screen.findByText(LEDGER_UNAVAILABLE_TITLE)).toBeInTheDocument();
-    expect(screen.queryByText("Loading accounts...")).not.toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/Waiting for the current account list/)).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Add bank account" })).not.toBeInTheDocument();
+    expectNoWrites();
   });
+});
 
-  it("retries only the accounts after they fail to load", async () => {
+describe("<BooksTab> Categories & Accounts", () => {
+  beforeEach(() => openBooksAt("manage-categories"));
+
+  it("lists the organisation's categories and offers a retry after a failed load", async () => {
     api.get.mockImplementation((url: string) => {
       if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: ACTIVE } });
       if (url.endsWith("/ledger/accounts"))
@@ -169,31 +185,29 @@ describe("<BooksTab> setup gates on", () => {
     });
     render(books());
 
-    expect(await screen.findByText("Couldn't load the chart of accounts")).toBeInTheDocument();
-    serve(ACTIVE, [account("bank", "Main account")]);
-    api.get.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(
+      (await screen.findAllByText("Couldn't load accounts")).length,
+    ).toBeGreaterThan(0);
+    serve(ACTIVE, [expense("fuel", "Fuel")]);
 
-    expect(await screen.findByText("Main account")).toBeInTheDocument();
-    // Only the accounts are fetched again. The opening-balance reads wait for
-    // the account list, so they load here for the first time.
-    const urls = api.get.mock.calls.map(([url]) => String(url));
-    expect(urls.filter((url) => url === "/finance/org1/ledger/accounts")).toHaveLength(1);
-    expect(urls.filter((url) => /\/ledger\/(status|journals)/.test(url))).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+
+    expect(await screen.findByText("Fuel")).toBeInTheDocument();
+    expectNoWrites();
   });
 
-  it("shows only the new organisation's chart after a switch", async () => {
-    serve(ACTIVE, [account("a", "Org A bank")], "org1");
+  it("shows only the new organisation's categories after a switch", async () => {
+    serve(ACTIVE, [expense("a", "Org A fuel")], "org1");
     const view = render(books("org1"));
-    expect(await screen.findByText("Org A bank")).toBeInTheDocument();
+    expect(await screen.findByText("Org A fuel")).toBeInTheDocument();
 
     api.get.mockClear();
     setSession(["finance.manage"], "org2");
-    serve(ACTIVE, [account("b", "Org B bank")], "org2");
+    serve(ACTIVE, [expense("b", "Org B fuel")], "org2");
     view.rerender(books("org2"));
 
-    expect(await screen.findByText("Org B bank")).toBeInTheDocument();
-    expect(screen.queryByText("Org A bank")).not.toBeInTheDocument();
+    expect(await screen.findByText("Org B fuel")).toBeInTheDocument();
+    expect(screen.queryByText("Org A fuel")).not.toBeInTheDocument();
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(api.get.mock.calls.every(([url]) => String(url).includes("/finance/org2/"))).toBe(true);
     expectNoWrites();

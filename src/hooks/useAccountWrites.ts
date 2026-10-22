@@ -5,6 +5,7 @@ import {
   ledgerApiFailure,
   ledgerWriteOutcomeUnknown,
 } from "helpers/ledgerSetup";
+import { readLedgerWriteUncertainty } from "helpers/ledgerWriteUncertainty";
 import { LedgerWriteNotSentError, useLedgerSetup } from "hooks/useLedgerSetup";
 import { useLedgerWriteUncertainty } from "hooks/useLedgerWriteUncertainty";
 
@@ -47,6 +48,10 @@ export const useAccountWrites = (organisationId: string): AccountWrites => {
   const [error, setError] = useState<string | null>(null);
 
   const blocked = uncertainty !== null;
+  // The render-time flag can lag a write that settled in the same tick (the
+  // setup screen creates accounts right after its setup write confirms). The
+  // storage read is the authority, and the durable write checks it again.
+  const blockedNow = () => readLedgerWriteUncertainty(organisationId) !== null;
 
   const handleFailure = (cause: unknown) => {
     if (cause instanceof LedgerWriteNotSentError) {
@@ -65,7 +70,7 @@ export const useAccountWrites = (organisationId: string): AccountWrites => {
   };
 
   const create: AccountWrites["create"] = (payloads, onDone) => {
-    if (blocked) {
+    if (blockedNow()) {
       setError(WRITE_BLOCKED_NOTE);
       return;
     }
@@ -84,7 +89,7 @@ export const useAccountWrites = (organisationId: string): AccountWrites => {
     fields: { name?: string; active?: boolean },
     onDone?: () => void,
   ) => {
-    if (blocked) {
+    if (blockedNow()) {
       setError(WRITE_BLOCKED_NOTE);
       return;
     }

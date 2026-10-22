@@ -113,9 +113,9 @@ const panel = (props: Partial<ComponentProps<typeof LedgerSetupPanel>> = {}) => 
       organisationId="org1"
       status={statusOf("active")}
       accounts={BASE_CHART}
-      accountsError={null}
       onRetryAccounts={() => undefined}
       isRetryingAccounts={false}
+      reloadAccounts={async () => BASE_CHART}
       enabled
       f3SetupEnabled
       {...props}
@@ -172,8 +172,6 @@ describe("F3A gate", () => {
     expect(screen.queryByText("Member money allocations")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /allocations/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /dues income account/i })).not.toBeInTheDocument();
-    // The chart still labels the accounts the server sent.
-    expect(screen.getAllByText("Income · Member dues income")).toHaveLength(1);
   });
 
   it("requires a fresh recheck for an F2 write even while the F3A gate is off", async () => {
@@ -336,14 +334,6 @@ describe("F3A member income accounts", () => {
     );
   });
 
-  it("does not offer reactivation in the chart when the role is already taken", () => {
-    renderPanel({
-      accounts: [...BASE_CHART, DUES, { ...DUES, id: "old-dues", name: "Old dues income", active: false }],
-    });
-    expect(screen.getByText(/already has an active member dues income account, so this one can't be reactivated/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reactivate" })).not.toBeInTheDocument();
-  });
-
   it("explains a singleton conflict from the server without claiming success", async () => {
     api.post.mockRejectedValue({
       response: {
@@ -372,29 +362,6 @@ describe("F3A member income accounts", () => {
     await confirmInDialog("Add account");
 
     expect(await screen.findByText(/doesn't accept that account type yet/)).toBeInTheDocument();
-  });
-});
-
-describe("F3A deactivation rules in the chart", () => {
-  it("blocks deactivating a member income account while allocations are on", () => {
-    renderPanel({
-      status: statusOf("active", { allocationsEnabled: true }),
-      accounts: [DUES, LEVY],
-    });
-    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
-    expect(screen.getAllByText(MEMBER_INCOME_IN_USE_NOTE)).toHaveLength(2);
-  });
-
-  it("allows it once allocations are off, after confirmation", async () => {
-    renderPanel({ accounts: [DUES] });
-    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
-    await confirmInDialog("Deactivate");
-    await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/dues", {
-        expectedRevision: 2,
-        active: false,
-      }),
-    );
   });
 });
 
@@ -861,34 +828,6 @@ describe("F3A durable write lifecycle", () => {
     expect(readLedgerWriteUncertainty("org1")?.action).toBe("update-account");
   });
 
-  it("protects a specialised F3 income account through the generic account update route", async () => {
-    const request = holdRequest(api.patch);
-    const view = renderPanel({ accounts: [...BASE_CHART, DUES, LEVY] });
-    const chart = screen.getByRole("list", { name: "Chart of accounts" });
-    const row = within(chart)
-      .getAllByRole("listitem")
-      .find((item) => within(item).queryByText(DUES.name));
-    if (!row) throw new Error("member dues income row missing");
-    fireEvent.click(within(row).getByRole("button", { name: "Rename" }));
-    fireEvent.change(within(row).getByLabelText("Account name"), {
-      target: { value: "Dues income renamed" },
-    });
-    fireEvent.click(within(row).getByRole("button", { name: "Save name" }));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
-
-    expect(request.markerAtDispatch).toEqual([
-      expect.objectContaining({ action: "update-account", pending: true }),
-    ]);
-    expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/dues", {
-      expectedRevision: 2,
-      name: "Dues income renamed",
-    });
-
-    view.unmount();
-    request.reject({ response: { status: 503, data: { error: "Service unavailable" } } });
-    await waitFor(() => expect(storedPhase("org1")).toBe("uncertain"));
-    expect(readLedgerWriteUncertainty("org1")?.action).toBe("update-account");
-  });
 });
 
 describe("F3A after member receipts are turned on for an active ledger", () => {
