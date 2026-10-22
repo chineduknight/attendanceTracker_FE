@@ -110,7 +110,7 @@ Failure cases:
 Steps, top to bottom:
 
 1. **Start bookkeeping**: the member-receipts switch and the Start button, as today.
-2. **Cash in hand**, created for you.
+2. **Bookkeeping accounts**: Cash in hand, opening balance equity and (with receipts on) the member money account, created for you at first-time setup.
 3. **Bank accounts**: optional. "Add bank account", or carry on without.
 4. **Categories**: suggested categories, none ticked; the treasurer ticks the ones they want, then "Add selected". Optional.
    - Income: Donations, Offerings, Other income.
@@ -124,14 +124,14 @@ Member receipts and allocations stay below the steps, unchanged.
 **Automatic bookkeeping accounts** (works with today's backend):
 
 - After setup starts, and after member receipts are turned on, Books **reloads the account list first**, then creates only what is still missing, in **one** request:
-  - Cash in hand;
+  - Cash in hand, **at first-time setup only**;
   - Opening balance equity;
   - the member money holding account, when member receipts are on.
+- **Required** means opening balance equity, plus the holding account while member receipts are on. Cash in hand is optional: the backend lets a zero-balance cash account be retired, and a bank-only organisation is complete. Turning on member receipts or using **Create them** never recreates a retired cash account; Categories & Accounts still offers **Add Cash in hand** when none is active.
 - Reloading first is what makes this compatible with a backend that creates these accounts inside `POST /ledger/setup` or `PATCH /ledger/settings` (backend note changes 2 and 3): the fresh list already contains them, so the frontend sends nothing and can never duplicate them.
 - If such a request fails or can't be confirmed, step 2 reads "Finish setup: some bookkeeping accounts are missing", with a **Create them** button. The usual unconfirmed-change lock applies. This is also the recovery path for an older or incomplete setup where the accounts were never made.
-- If the reload itself fails, nothing is created (a partial list would invite duplicates); the recovery step offers the button again after a retry.
+- If the reload itself fails, nothing is created (a partial list would invite duplicates), even though React Query still holds the earlier list: only a fresh successful read decides. The recovery step offers the button again after a retry.
 - Once backend changes 2–3 ship, nothing is missing and no request is sent.
-- Cash can't be created while opening balances await verification. In that state the step explains this instead of offering a button.
 - Names: "Cash in hand", "Opening balance equity", "Member money – unallocated". If the name is taken by an active account of another kind, add " (Books)"; if that is taken too, keep adding a number.
 
 **Removed from Setup:** the generic "New account" form (Type + Subtype), the long mixed account list, and the "Add the opening balance equity account" step. Categories and money accounts now live in Categories & Accounts. Dues and levy income accounts are still created from the allocations checklist, as today (F3 unchanged).

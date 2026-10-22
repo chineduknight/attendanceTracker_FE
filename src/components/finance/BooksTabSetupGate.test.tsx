@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { queryKeys } from "services/api/queryKeys";
 import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
 
@@ -170,6 +171,83 @@ describe("<BooksTab> Setup", () => {
     ).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Add bank account" })).not.toBeInTheDocument();
     expectNoWrites();
+  });
+
+  it("does not mark a bank-only ledger incomplete because Cash in hand was retired", async () => {
+    serve(ACTIVE, [
+      account("cash", "Cash in hand", { subtype: "cash", active: false }),
+      account("bank", "Main account"),
+      account("eq", "Opening balance equity", { class: "equity", subtype: "opening_balance_equity" }),
+      account("hold", "Member money – unallocated", {
+        class: "liability",
+        subtype: "member_receipts_unallocated",
+      }),
+    ]);
+    render(books());
+
+    expect(await screen.findByText("The accounts the books need are ready.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Finish setup: some bookkeeping accounts are missing"),
+    ).not.toBeInTheDocument();
+    expectNoWrites();
+  });
+
+  describe("reloading before Create them", () => {
+    const BANK_AND_EQUITY = [
+      account("bank", "Main account"),
+      account("eq", "Opening balance equity", { class: "equity", subtype: "opening_balance_equity" }),
+    ];
+    const accountReads = () =>
+      api.get.mock.calls.filter(([url]) => String(url).endsWith("/ledger/accounts")).length;
+
+    it("creates nothing when the refetch fails, even with the earlier list still cached", async () => {
+      serve(ACTIVE, BANK_AND_EQUITY);
+      render(books());
+      const create = await screen.findByRole("button", { name: "Create them" });
+      const readsBefore = accountReads();
+
+      api.get.mockImplementation((url: string) => {
+        if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: ACTIVE } });
+        if (url.endsWith("/ledger/accounts"))
+          return Promise.reject({ response: { status: 500, data: { error: "Accounts are down" } } });
+        return Promise.resolve({ data: { data: [] } });
+      });
+      fireEvent.click(create);
+
+      await waitFor(() => expect(accountReads()).toBeGreaterThan(readsBefore));
+      // React Query keeps the earlier list in `data` after the failed refetch;
+      // that cached list must not be read as a fresh answer.
+      await waitFor(() =>
+        expect(queryClient.getQueryState(queryKeys.finance.ledger.accounts("org1"))).toMatchObject({
+          status: "error",
+          fetchStatus: "idle",
+          data: expect.anything(),
+        }),
+      );
+      // Let the reload's continuation run before checking nothing was sent.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(screen.getByText("Finish setup: some bookkeeping accounts are missing")).toBeInTheDocument();
+      expectNoWrites();
+    });
+
+    it("creates only what a fresh successful read says is missing", async () => {
+      serve(ACTIVE, BANK_AND_EQUITY);
+      api.post.mockResolvedValue({ data: { data: {} } });
+      render(books());
+      fireEvent.click(await screen.findByRole("button", { name: "Create them" }));
+
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+          accounts: [
+            {
+              name: "Member money – unallocated",
+              class: "liability",
+              subtype: "member_receipts_unallocated",
+            },
+          ],
+        }),
+      );
+    });
   });
 });
 

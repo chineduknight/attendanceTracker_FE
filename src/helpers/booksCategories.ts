@@ -203,9 +203,16 @@ export const freeName = (base: string, accounts: readonly LedgerAccount[]): stri
 /* ------------------------------------------------------------------ */
 
 /**
- * The bookkeeping accounts every started ledger needs, as create payloads in
- * the order they are made: cash, opening balance equity, then the member-money
- * holding account when member receipts are on.
+ * The bookkeeping accounts a started ledger is missing, as create payloads in
+ * the order they are made: (cash,) opening balance equity, then the
+ * member-money holding account when member receipts are on.
+ *
+ * Only opening balance equity and the enabled holding account are required.
+ * Cash in hand is optional: the backend lets a zero-balance cash account be
+ * retired and an organisation may run on bank accounts alone. It is added only
+ * when `provideCash` is set, which the first-time setup does so a new ledger
+ * has somewhere to hold money. Recovery and turning on member receipts never
+ * recreate a retired cash account.
  *
  * Call this with a *freshly reloaded* list. A backend that creates these inside
  * `POST /ledger/setup` or `PATCH /ledger/settings` returns them in that reload,
@@ -215,6 +222,7 @@ export const freeName = (base: string, accounts: readonly LedgerAccount[]): stri
 export const missingBookkeepingAccounts = (
   status: LedgerStatus,
   accounts: readonly LedgerAccount[],
+  { provideCash = false }: { provideCash?: boolean } = {},
 ): CreateAccountPayload[] => {
   const taken = new Set(
     accounts.filter(isActive).map((account) => accountNameKey(account.name)),
@@ -236,7 +244,7 @@ export const missingBookkeepingAccounts = (
     );
 
   const missing: CreateAccountPayload[] = [];
-  if (!hasActive("asset", "cash"))
+  if (provideCash && !hasActive("asset", "cash"))
     missing.push({ name: pickName("Cash in hand"), class: "asset", subtype: "cash" });
   if (!hasActive("equity", "opening_balance_equity"))
     missing.push({

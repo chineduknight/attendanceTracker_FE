@@ -158,7 +158,6 @@ const LedgerSetupPanel = ({
   });
   const memberReceiptsKnown = status.memberReceiptsEnabled !== null;
   const missing = accounts ? missingBookkeepingAccounts(status, accounts) : [];
-  const missingMoney = missing.some((payload) => payload.class === "asset");
   const createAllowed = canManage && canCreateAccounts(status, canManage) && !writeBlocked;
   const suggestions = accounts ? suggestedCategoryStates(accounts) : [];
   const creatableSuggestions = suggestions.filter(
@@ -192,7 +191,10 @@ const LedgerSetupPanel = ({
    * the automatic step after setup/receipts and the recovery button, so an
    * older setup and a backend that auto-creates are handled the same way.
    */
-  const ensureBookkeepingAccounts = async (target: LedgerStatus) => {
+  const ensureBookkeepingAccounts = async (
+    target: LedgerStatus,
+    { provideCash = false }: { provideCash?: boolean } = {},
+  ) => {
     if (autoCreating.current || !canManage) return;
     autoCreating.current = true;
     try {
@@ -200,7 +202,7 @@ const LedgerSetupPanel = ({
       // An unreadable list is not an empty one: creating from it could
       // duplicate every account the backend already made.
       if (fresh === null) return;
-      const stillMissing = missingBookkeepingAccounts(target, fresh);
+      const stillMissing = missingBookkeepingAccounts(target, fresh, { provideCash });
       if (stillMissing.length === 0) return;
       writes.create(stillMissing);
     } finally {
@@ -223,8 +225,9 @@ const LedgerSetupPanel = ({
         setLocalStatus(next);
         setActionError(null);
         // The backend may have made these accounts itself; reload before
-        // deciding, so nothing is duplicated.
-        if (next) void ensureBookkeepingAccounts(next);
+        // deciding, so nothing is duplicated. Only the first-time setup
+        // provides Cash in hand: later it is optional and may be retired.
+        if (next) void ensureBookkeepingAccounts(next, { provideCash: true });
       },
       onError: (error) => {
         const failure = ledgerApiFailure(error);
@@ -259,7 +262,8 @@ const LedgerSetupPanel = ({
         setLocalStatus(next);
         setActionError(null);
         // The holding account may have been created inside the settings
-        // change; reload first so it is never posted twice.
+        // change; reload first so it is never posted twice. A retired Cash in
+        // hand stays retired: a bank-only ledger is complete.
         if (next) void ensureBookkeepingAccounts(next);
       },
       onError: (error) => handleFailure(error),
@@ -329,24 +333,18 @@ const LedgerSetupPanel = ({
                 Finish setup: some bookkeeping accounts are missing
               </Text>
               <Text fontSize="sm" color="fg.muted">
-                The books need Cash in hand, opening balance equity and, with member receipts
-                on, the member money account. They are created together in one request.
+                The books need opening balance equity and, with member receipts on, the
+                member money account. They are created together in one request.
               </Text>
-              {frozen && missingMoney ? (
-                <Text fontSize="sm" color="fg.muted">
-                  {OPENING_PENDING_CREATE_NOTE}
-                </Text>
-              ) : (
-                <Button
-                  alignSelf="flex-start"
-                  colorPalette="teal"
-                  loading={writes.isSaving}
-                  disabled={writeBlocked}
-                  onClick={() => void ensureBookkeepingAccounts(status)}
-                >
-                  Create them
-                </Button>
-              )}
+              <Button
+                alignSelf="flex-start"
+                colorPalette="teal"
+                loading={writes.isSaving}
+                disabled={writeBlocked}
+                onClick={() => void ensureBookkeepingAccounts(status)}
+              >
+                Create them
+              </Button>
             </Stack>
           </Box>
         )}

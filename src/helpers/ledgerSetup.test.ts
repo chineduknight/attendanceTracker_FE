@@ -406,7 +406,7 @@ describe("setup progress", () => {
     ]);
     const byKey = Object.fromEntries(steps.map((step) => [step.key, step]));
     expect(byKey.started.status).toBe("done");
-    expect(byKey.cash.status).toBe("done");
+    expect(byKey.accounts.status).toBe("done");
     expect(byKey.bank.status).toBe("optional");
     expect(byKey.categories.status).toBe("optional");
     expect(byKey.activation.status).toBe("later");
@@ -416,7 +416,7 @@ describe("setup progress", () => {
     const steps = ledgerSetupSteps(statusOf("not_active", { memberReceiptsEnabled: null }), []);
     expect(steps.map((step) => step.key)).toEqual([
       "started",
-      "cash",
+      "accounts",
       "bank",
       "categories",
       "activation",
@@ -427,11 +427,47 @@ describe("setup progress", () => {
     const steps = ledgerSetupSteps(statusOf("setup", { memberReceiptsEnabled: false }), [
       account({ name: "Cash in hand" }),
     ]);
-    const cash = steps.find((step) => step.key === "cash");
-    expect(cash).toMatchObject({
+    const accounts = steps.find((step) => step.key === "accounts");
+    expect(accounts).toMatchObject({
       status: "current",
       detail: "Some bookkeeping accounts are missing.",
     });
+  });
+
+  it("counts a bank-only ledger with retired cash as complete", () => {
+    const steps = ledgerSetupSteps(statusOf("active", { memberReceiptsEnabled: true }), [
+      account({ name: "Cash in hand", active: false }),
+      account({ id: "b1", name: "Main account", subtype: "bank" }),
+      account({
+        id: "a2",
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+      }),
+      account({
+        id: "a3",
+        name: "Member money – unallocated",
+        class: "liability",
+        subtype: "member_receipts_unallocated",
+      }),
+    ]);
+    expect(steps.find((step) => step.key === "accounts")).toMatchObject({
+      status: "done",
+      detail: "The accounts the books need are ready.",
+    });
+  });
+
+  it("still needs the holding account when receipts are on", () => {
+    const steps = ledgerSetupSteps(statusOf("active", { memberReceiptsEnabled: true }), [
+      account({ id: "b1", name: "Main account", subtype: "bank" }),
+      account({
+        id: "a2",
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+      }),
+    ]);
+    expect(steps.find((step) => step.key === "accounts")?.status).toBe("current");
   });
 
   it("stays done when the holding account exists with receipts on", () => {
@@ -450,7 +486,7 @@ describe("setup progress", () => {
         subtype: "member_receipts_unallocated",
       }),
     ]);
-    expect(steps.find((step) => step.key === "cash")?.status).toBe("done");
+    expect(steps.find((step) => step.key === "accounts")?.status).toBe("done");
   });
 
   describe("activation step", () => {
@@ -507,16 +543,21 @@ describe("setup progress", () => {
 
   it("does not claim an account step without a known account list", () => {
     const steps = ledgerSetupSteps(statusOf("setup"), null);
-    const cash = steps.find((step) => step.key === "cash");
-    expect(cash?.status).not.toBe("done");
-    expect(cash?.detail).toMatch(/Waiting for the current account list/);
+    const accounts = steps.find((step) => step.key === "accounts");
+    expect(accounts?.status).not.toBe("done");
+    expect(accounts?.detail).toMatch(/Waiting for the current account list/);
   });
 
   it("does not treat an inactive account as added", () => {
-    const steps = ledgerSetupSteps(statusOf("setup"), [
-      account({ name: "Cash in hand", active: false }),
+    const steps = ledgerSetupSteps(statusOf("setup", { memberReceiptsEnabled: false }), [
+      account({
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+        active: false,
+      }),
     ]);
-    expect(steps.find((step) => step.key === "cash")?.status).not.toBe("done");
+    expect(steps.find((step) => step.key === "accounts")?.status).not.toBe("done");
   });
 });
 

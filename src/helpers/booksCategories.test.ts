@@ -191,8 +191,8 @@ describe("missingBookkeepingAccounts", () => {
     ).toEqual([]);
   });
 
-  it("returns cash and equity for an empty ledger with receipts off", () => {
-    expect(missingBookkeepingAccounts(status(), [])).toEqual([
+  it("returns cash and equity for an empty ledger when setup provides cash", () => {
+    expect(missingBookkeepingAccounts(status(), [], { provideCash: true })).toEqual([
       { name: "Cash in hand", class: "asset", subtype: "cash" },
       {
         name: "Opening balance equity",
@@ -203,7 +203,11 @@ describe("missingBookkeepingAccounts", () => {
   });
 
   it("returns the holding account only while member receipts are on", () => {
-    expect(missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [])).toEqual([
+    expect(
+      missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [], {
+        provideCash: true,
+      }),
+    ).toEqual([
       { name: "Cash in hand", class: "asset", subtype: "cash" },
       {
         name: "Opening balance equity",
@@ -218,21 +222,70 @@ describe("missingBookkeepingAccounts", () => {
     ]);
   });
 
-  it("skips an inactive role so a fresh account is created", () => {
-    const missing = missingBookkeepingAccounts(status(), [
-      account({ ...cash, active: false }),
-      equity,
+  it("never requires cash unless setup asks for it", () => {
+    expect(missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [])).toEqual([
+      {
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+      },
+      {
+        name: "Member money – unallocated",
+        class: "liability",
+        subtype: "member_receipts_unallocated",
+      },
     ]);
+  });
+
+  it("treats a bank-only ledger with retired cash as complete", () => {
+    const bank = account({ id: "b1", name: "Main account", class: "asset", subtype: "bank" });
+    expect(
+      missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [
+        account({ ...cash, active: false }),
+        bank,
+        equity,
+        holding,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("adds only the holding account when receipts turn on for a bank-only ledger", () => {
+    const bank = account({ id: "b1", name: "Main account", class: "asset", subtype: "bank" });
+    expect(
+      missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [
+        account({ ...cash, active: false }),
+        bank,
+        equity,
+      ]),
+    ).toEqual([
+      {
+        name: "Member money – unallocated",
+        class: "liability",
+        subtype: "member_receipts_unallocated",
+      },
+    ]);
+  });
+
+  it("provides a fresh cash account at setup when only a retired one exists", () => {
+    const missing = missingBookkeepingAccounts(
+      status(),
+      [account({ ...cash, active: false }), equity],
+      { provideCash: true },
+    );
     expect(missing).toEqual([
       { name: "Cash in hand", class: "asset", subtype: "cash" },
     ]);
   });
 
   it("renames around an active account of another kind, never duplicating it", () => {
-    const missing = missingBookkeepingAccounts(status(), [
-      account({ id: "x1", name: "Cash in hand", class: "expense" }),
-      account({ id: "x2", name: "Cash In Hand (Books)", class: "income" }),
-    ]);
+    const missing = missingBookkeepingAccounts(
+      status(),
+      [
+        account({ id: "x1", name: "Cash in hand", class: "expense" }),
+        account({ id: "x2", name: "Cash In Hand (Books)", class: "income" }),
+      ],
+      { provideCash: true },
+    );
     expect(missing[0]).toEqual({
       name: "Cash in hand (Books 2)",
       class: "asset",
@@ -241,7 +294,9 @@ describe("missingBookkeepingAccounts", () => {
   });
 
   it("builds payloads without bank fields", () => {
-    for (const payload of missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [])) {
+    for (const payload of missingBookkeepingAccounts(status({ memberReceiptsEnabled: true }), [], {
+      provideCash: true,
+    })) {
       expect(Object.keys(payload).sort()).toEqual(["class", "name", "subtype"]);
     }
   });

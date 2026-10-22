@@ -610,9 +610,6 @@ export const ledgerSetupSteps = (
     .map((account) => toAccountRole(account))
     .filter((role): role is AccountRole => role !== null);
 
-  const hasCash = activeRoles.some(
-    (role) => isMoneyRole(role) && role.subtype === "cash",
-  );
   const hasBank = activeRoles.some(
     (role) => isMoneyRole(role) && role.subtype === "bank",
   );
@@ -622,11 +619,13 @@ export const ledgerSetupSteps = (
     (role) =>
       (role.class === "income" || role.class === "expense") && role.subtype === null,
   );
-  // The accounts setup must create for every started ledger. Cash is listed
-  // with them because the backend also needs opening balance equity (and the
-  // holding account with receipts on) before opening balances can be verified.
+  // The accounts every started ledger needs, matching
+  // `missingBookkeepingAccounts`. Cash in hand is not one of them: a
+  // zero-balance cash account may be retired and a bank-only organisation is
+  // complete. The backend needs opening balance equity (and the holding
+  // account with receipts on) before opening balances can be verified.
   const bookkeepingMissing =
-    !hasCash || !hasEquity || (status.memberReceiptsEnabled === true && !hasHolding);
+    !hasEquity || (status.memberReceiptsEnabled === true && !hasHolding);
 
   const steps: SetupStep[] = [
     {
@@ -638,13 +637,13 @@ export const ledgerSetupSteps = (
       status: started ? "done" : "todo",
     },
     {
-      key: "cash",
-      title: "Cash in hand",
+      key: "accounts",
+      title: "Bookkeeping accounts",
       detail: !known
         ? "Waiting for the current account list."
         : bookkeepingMissing
           ? "Some bookkeeping accounts are missing."
-          : "Cash in hand and the other accounts the books need are ready.",
+          : "The accounts the books need are ready.",
       status: !known || bookkeepingMissing ? "todo" : "done",
     },
     {

@@ -556,17 +556,106 @@ describe("<LedgerSetupPanel> bookkeeping accounts after setup", () => {
     );
   });
 
-  it("explains instead of creating cash while opening balances are pending", () => {
+  it("offers only equity in recovery, never Cash in hand", async () => {
+    const reloadAccounts = jest.fn(async () => [] as LedgerAccount[]);
     renderPanel({
       status: statusOf("pending_verification", { memberReceiptsEnabled: false }),
       accounts: [],
+      reloadAccounts,
+    });
+    // Money accounts stay frozen while the proposal is pending.
+    expect(screen.getAllByText(OPENING_PENDING_CREATE_NOTE).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create them" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          {
+            name: "Opening balance equity",
+            class: "equity",
+            subtype: "opening_balance_equity",
+          },
+        ],
+      }),
+    );
+  });
+});
+
+describe("<LedgerSetupPanel> bank-only ledger", () => {
+  const retiredCash = account({ id: "cash", name: "Cash in hand", active: false });
+  const bank = account({ id: "bank", name: "Main account", subtype: "bank" });
+  const equity = account({
+    id: "equity",
+    name: "Opening balance equity",
+    class: "equity",
+    subtype: "opening_balance_equity",
+  });
+  const holding = account({
+    id: "holding",
+    name: "Member money – unallocated",
+    class: "liability",
+    subtype: "member_receipts_unallocated",
+  });
+
+  it("is not incomplete because Cash in hand was retired", () => {
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: true }),
+      accounts: [retiredCash, bank, equity, holding],
     });
 
     expect(
-      screen.getByText("Finish setup: some bookkeeping accounts are missing"),
-    ).toBeInTheDocument();
+      screen.queryByText("Finish setup: some bookkeeping accounts are missing"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create them" })).not.toBeInTheDocument();
-    expect(screen.getAllByText(OPENING_PENDING_CREATE_NOTE).length).toBeGreaterThan(0);
+    expect(screen.getByText("The accounts the books need are ready.")).toBeInTheDocument();
+  });
+
+  it("turns on member receipts without recreating cash", async () => {
+    api.patch.mockResolvedValueOnce({
+      data: { data: wireStatusOf("active", { memberReceiptsEnabled: true, revision: 9 }) },
+    });
+    const reloadAccounts = jest.fn(async () => [retiredCash, bank, equity]);
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }),
+      accounts: [retiredCash, bank, equity],
+      reloadAccounts,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          {
+            name: "Member money – unallocated",
+            class: "liability",
+            subtype: "member_receipts_unallocated",
+          },
+        ],
+      }),
+    );
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing when the backend made the holding account with the setting", async () => {
+    api.patch.mockResolvedValueOnce({
+      data: { data: wireStatusOf("active", { memberReceiptsEnabled: true, revision: 9 }) },
+    });
+    const reloadAccounts = jest.fn(async () => [retiredCash, bank, equity, holding]);
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }),
+      accounts: [retiredCash, bank, equity],
+      reloadAccounts,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+    expect(api.post).not.toHaveBeenCalled();
   });
 });
 
@@ -803,7 +892,6 @@ describe("<LedgerSetupPanel> organisation scope", () => {
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith("/finance/org2/ledger/accounts", {
         accounts: [
-          { name: "Cash in hand", class: "asset", subtype: "cash" },
           {
             name: "Opening balance equity",
             class: "equity",

@@ -756,9 +756,12 @@ const BooksScreens = ({
             isRetryingAccounts={accountsQuery.isFetching}
             isRefreshingLedger={statusQuery.isFetching || accountsQuery.isFetching}
             onRecheckLedger={recheckLedger}
-            reloadAccounts={async () =>
-              toLedgerAccounts((await accountsQuery.refetch()).data?.data)
-            }
+            reloadAccounts={async () => {
+              const result = await accountsQuery.refetch();
+              // A failed refetch keeps the previously cached list in `data`.
+              // Only a fresh successful read may decide what to create.
+              return result.isSuccess ? toLedgerAccounts(result.data?.data) : null;
+            }}
           />
         ) : (
           <AccountsSection
