@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useContext, useState } from "react";
+import { ReactNode, createContext, useContext, useMemo, useState } from "react";
 import {
   Button,
   Field,
@@ -26,6 +26,7 @@ import {
 import { LedgerAccount } from "components/finance/ledgerTypes";
 import AccountChoice from "components/finance/postings/AccountChoice";
 import MethodChips from "components/finance/postings/MethodChips";
+import NewCategoryInline from "components/finance/postings/NewCategoryInline";
 import { defaultMethodFor, initialAccountId, writeLastAccount } from "helpers/booksLastAccount";
 import {
   POSTING_TEXT_LIMITS,
@@ -52,6 +53,11 @@ export interface PostingFormProps {
    * after another tab changed the organisation's posting record.
    */
   locked?: boolean;
+  /**
+   * Managers may add a category from inside the form. Creating one never
+   * posts money; the form still refuses to submit without a valid category.
+   */
+  canAddCategory?: boolean;
   onCancel: () => void;
   onSubmit: (draft: PostingDraft, summary: PostingSummary) => void;
 }
@@ -386,6 +392,7 @@ export const ReceiptForm = ({
   isPosting,
   error,
   locked = false,
+  canAddCategory = false,
   onCancel,
   onSubmit,
 }: PostingFormProps) => {
@@ -394,6 +401,13 @@ export const ReceiptForm = ({
   const [businessDate, setBusinessDate] = useState(context.today);
   const [amountRaw, setAmountRaw] = useState("");
   const [incomeAccountId, setIncomeAccountId] = useState("");
+  // A category created in this form is selectable before the query reloads.
+  const [addedCategories, setAddedCategories] = useState<LedgerAccount[]>([]);
+  const categoryAccounts = useMemo(() => {
+    const known = new Set(accounts.map((account) => account.id));
+    return [...accounts, ...addedCategories.filter((account) => !known.has(account.id))];
+  }, [accounts, addedCategories]);
+  const incomeOptions = categoryOptions(categoryAccounts, "income");
   const [counterpartyName, setCounterpartyName] = useState("");
   const [externalReference, setExternalReference] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
@@ -415,7 +429,9 @@ export const ReceiptForm = ({
     note,
   };
   const issue =
-    (amountKobo === null ? null : receiptDraftIssue(draft, { ...context, accounts })) ??
+    (amountKobo === null
+      ? null
+      : receiptDraftIssue(draft, { ...context, accounts: categoryAccounts })) ??
     postingAmountIssue(amountRaw);
 
   const submit = () => {
@@ -431,7 +447,7 @@ export const ReceiptForm = ({
         method: into.method,
         fromAccountName: null,
         toAccountName: nameOf(accounts, into.accountId),
-        categoryName: nameOf(accounts, incomeAccountId),
+        categoryName: nameOf(categoryAccounts, incomeAccountId),
       },
     );
   };
@@ -448,10 +464,23 @@ export const ReceiptForm = ({
         <SelectField
           label="Category"
           value={incomeAccountId}
-          options={categoryOptions(accounts, "income")}
+          options={incomeOptions}
           onChange={setIncomeAccountId}
           placeholder="Choose an income category"
+          searchable={incomeOptions.length > 8}
         />
+        {canAddCategory && organisationId && (
+          <NewCategoryInline
+            organisationId={organisationId}
+            kind="income"
+            accounts={categoryAccounts}
+            disabled={locked}
+            onCreated={(account) => {
+              setAddedCategories((current) => [...current, account]);
+              setIncomeAccountId(account.id);
+            }}
+          />
+        )}
         <MethodChips value={into.method} onChange={into.setMethod} hint={into.hint} />
         <PostingDateField context={context} value={businessDate} onChange={setBusinessDate} />
         <TextField
@@ -512,6 +541,7 @@ export const ExpenseForm = ({
   isPosting,
   error,
   locked = false,
+  canAddCategory = false,
   onCancel,
   onSubmit,
 }: PostingFormProps) => {
@@ -520,6 +550,13 @@ export const ExpenseForm = ({
   const [businessDate, setBusinessDate] = useState(context.today);
   const [amountRaw, setAmountRaw] = useState("");
   const [expenseAccountId, setExpenseAccountId] = useState("");
+  // A category created in this form is selectable before the query reloads.
+  const [addedCategories, setAddedCategories] = useState<LedgerAccount[]>([]);
+  const categoryAccounts = useMemo(() => {
+    const known = new Set(accounts.map((account) => account.id));
+    return [...accounts, ...addedCategories.filter((account) => !known.has(account.id))];
+  }, [accounts, addedCategories]);
+  const expenseOptions = categoryOptions(categoryAccounts, "expense");
   const [counterpartyName, setCounterpartyName] = useState("");
   const [externalReference, setExternalReference] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
@@ -541,7 +578,9 @@ export const ExpenseForm = ({
     note,
   };
   const issue =
-    (amountKobo === null ? null : expenseDraftIssue(draft, { ...context, accounts })) ??
+    (amountKobo === null
+      ? null
+      : expenseDraftIssue(draft, { ...context, accounts: categoryAccounts })) ??
     postingAmountIssue(amountRaw);
 
   const submit = () => {
@@ -557,7 +596,7 @@ export const ExpenseForm = ({
         method: from.method,
         fromAccountName: nameOf(accounts, from.accountId),
         toAccountName: null,
-        categoryName: nameOf(accounts, expenseAccountId),
+        categoryName: nameOf(categoryAccounts, expenseAccountId),
       },
     );
   };
@@ -571,10 +610,23 @@ export const ExpenseForm = ({
         <SelectField
           label="Category"
           value={expenseAccountId}
-          options={categoryOptions(accounts, "expense")}
+          options={expenseOptions}
           onChange={setExpenseAccountId}
           placeholder="Choose an expense category"
+          searchable={expenseOptions.length > 8}
         />
+        {canAddCategory && organisationId && (
+          <NewCategoryInline
+            organisationId={organisationId}
+            kind="expense"
+            accounts={categoryAccounts}
+            disabled={locked}
+            onCreated={(account) => {
+              setAddedCategories((current) => [...current, account]);
+              setExpenseAccountId(account.id);
+            }}
+          />
+        )}
         <TextField
           label="Paid to"
           value={counterpartyName}

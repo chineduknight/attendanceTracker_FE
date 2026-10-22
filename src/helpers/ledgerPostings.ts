@@ -914,7 +914,7 @@ export const receiptOperationReadiness = (
     ? { ready: true, reason: null }
     : {
         ready: false,
-        reason: "No active income category is configured. Add one before recording money in.",
+        reason: "No income category is set up yet. Add one while recording money in.",
       };
 
 export const expenseOperationReadiness = (
@@ -924,7 +924,7 @@ export const expenseOperationReadiness = (
     ? { ready: true, reason: null }
     : {
         ready: false,
-        reason: "No active expense category is configured. Add one before recording money out.",
+        reason: "No expense category is set up yet. Add one while recording money out.",
       };
 
 export const transferOperationReadiness = (

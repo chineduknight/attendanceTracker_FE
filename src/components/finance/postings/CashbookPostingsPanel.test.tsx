@@ -1,6 +1,9 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ReactNode } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { format, parseISO, subDays } from "date-fns";
-import { chooseOption, optionLabels, render } from "test-utils/render";
+import { chooseOption, optionLabels, render, shownValue } from "test-utils/render";
+import { queryClient } from "services/api/apiHelper";
 import {
   installPostingLockManager,
   removePostingLockManager,
@@ -151,13 +154,15 @@ const renderPanel = ({
   enabled?: boolean;
 } = {}) =>
   render(
-    <CashbookPostingsPanel
-      organisationId={organisationId}
-      status={status}
-      accounts={accounts}
-      enabled={enabled}
-      onRecheckLedger={jest.fn()}
-    />,
+    <QueryClientProvider client={queryClient}>
+      <CashbookPostingsPanel
+        organisationId={organisationId}
+        status={status}
+        accounts={accounts}
+        enabled={enabled}
+        onRecheckLedger={jest.fn()}
+      />
+    </QueryClientProvider>,
   );
 
 const openReceipt = async () => {
@@ -243,6 +248,10 @@ const seedIntent = async (organisationId = "org1", key = "key-12345678") => {
  * it; the writing tab has either left its form or has its own request in
  * flight, and the hook ignores the event in both cases.
  */
+const withQuery = (node: ReactNode) => (
+  <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
+);
+
 const deliverStorageEvent = (organisationId = "org1") => {
   const event = new Event("storage") as StorageEvent;
   Object.defineProperty(event, "key", { value: ledgerPostingIntentKey(organisationId) });
@@ -255,18 +264,20 @@ const deliverStorageEvent = (organisationId = "org1") => {
 const renderTwoTabs = () => {
   const recheck = [jest.fn(), jest.fn()] as const;
   render(
-    <>
-      {recheck.map((onRecheckLedger, index) => (
-        <CashbookPostingsPanel
-          key={index}
-          organisationId="org1"
-          status={statusOf()}
-          accounts={ACCOUNTS}
-          enabled
-          onRecheckLedger={onRecheckLedger}
-        />
-      ))}
-    </>,
+    withQuery(
+      <>
+        {recheck.map((onRecheckLedger, index) => (
+          <CashbookPostingsPanel
+            key={index}
+            organisationId="org1"
+            status={statusOf()}
+            accounts={ACCOUNTS}
+            enabled
+            onRecheckLedger={onRecheckLedger}
+          />
+        ))}
+      </>,
+    ),
   );
   const [firstPanel, secondPanel] = screen.getAllByRole("region");
   expect(screen.getAllByRole("region")).toHaveLength(2);
@@ -613,20 +624,22 @@ describe("cross-tab coordination", () => {
       }),
     );
     render(
-      <>
-        <CashbookPostingsPanel
-          organisationId="org1"
-          status={statusOf()}
-          accounts={ACCOUNTS}
-          enabled
-        />
-        <CashbookPostingsPanel
-          organisationId="org1"
-          status={statusOf()}
-          accounts={ACCOUNTS}
-          enabled
-        />
-      </>,
+      withQuery(
+        <>
+          <CashbookPostingsPanel
+            organisationId="org1"
+            status={statusOf()}
+            accounts={ACCOUNTS}
+            enabled
+          />
+          <CashbookPostingsPanel
+            organisationId="org1"
+            status={statusOf()}
+            accounts={ACCOUNTS}
+            enabled
+          />
+        </>,
+      ),
     );
     const panels = screen.getAllByRole("region");
     expect(panels).toHaveLength(2);
@@ -827,12 +840,14 @@ describe("unknown outcomes and durable retry", () => {
     // Switching back re-reads Organisation A's stored intent: it was never
     // cleared by Organisation B's screen.
     view.rerender(
-      <CashbookPostingsPanel
-        organisationId="org1"
-        status={statusOf()}
-        accounts={ACCOUNTS}
-        enabled
-      />,
+      withQuery(
+        <CashbookPostingsPanel
+          organisationId="org1"
+          status={statusOf()}
+          accounts={ACCOUNTS}
+          enabled
+        />,
+      ),
     );
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
@@ -1284,5 +1299,70 @@ describe("shorter forms", () => {
     await openReceipt();
     expect(screen.getByRole("radio", { name: /Main bank/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Bank transfer" })).toBeChecked();
+  });
+});
+
+describe("<CashbookPostingsPanel> with no category of that kind", () => {
+  it("still opens Money in for a manager, refusing to post until a category is chosen", async () => {
+    renderPanel({ accounts: ACCOUNTS.filter((entry) => entry.class !== "income") });
+
+    expect(screen.getByRole("button", { name: /Money in/ })).toBeEnabled();
+    await openReceipt();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
+    pickAccount("Into", "Cash in hand");
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
+
+    expect(await screen.findByText("Choose an active income category.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("opens Money out and adds a category from inside the form", async () => {
+    renderPanel({ accounts: ACCOUNTS.filter((entry) => entry.class !== "expense") });
+    openExpense();
+
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7500" } });
+    pickAccount("Paid from", "Main bank");
+    fireEvent.change(screen.getByLabelText("Paid to (required)"), {
+      target: { value: "Generator Ltd" },
+    });
+
+    api.post.mockResolvedValueOnce({
+      data: {
+        data: {
+          accounts: [
+            {
+              id: "new-exp",
+              name: "Generator fuel",
+              class: "expense",
+              subtype: null,
+              active: true,
+              revision: 0,
+            },
+          ],
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ New category" }));
+    fireEvent.change(screen.getByLabelText("New category name"), {
+      target: { value: "Generator fuel" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [{ name: "Generator fuel", class: "expense", subtype: null }],
+      }),
+    );
+    await waitFor(() =>
+      expect(shownValue(screen.getByLabelText("Category"))).toContain("Generator fuel"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+    expect(api.post.mock.calls[1][0]).toBe("/finance/org1/ledger/expenses");
+    expect(api.post.mock.calls[1][1]).toMatchObject({
+      expenseAccountId: "new-exp",
+      counterpartyName: "Generator Ltd",
+    });
   });
 });

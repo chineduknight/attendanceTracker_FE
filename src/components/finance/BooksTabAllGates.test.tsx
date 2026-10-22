@@ -115,7 +115,7 @@ describe("<BooksTab> with every finance gate on", () => {
     const controls = enabledWriteControls();
     expect(controls.some((name) => name?.startsWith("Money in"))).toBe(true);
     expect(controls.some((name) => name?.startsWith("Member money in"))).toBe(true);
-    expect(controls).toContain("New account");
+    expect(controls).toContain("Add expense category");
     // Give every section's reads time to settle; none of them may write.
     await waitFor(() => expect(api.get.mock.calls.length).toBeGreaterThan(5));
     expect(writeCalls()).toEqual([]);

@@ -8,7 +8,6 @@ import {
   MEMBER_RECEIPTS_REQUIRED_NOTE,
   OPENING_PENDING_ACCOUNTS_NOTE,
   SINGLETON_ACCOUNTS_NOTE,
-  STARTER_ACCOUNTS,
   SUSPENDED_ACCOUNTS_NOTE,
   accountActions,
   accountNameKey,
@@ -22,7 +21,6 @@ import {
   canCreateAccounts,
   canEnableMemberReceipts,
   canStartLedgerSetup,
-  draftFromStarter,
   emptyAccountDraft,
   ledgerApiFailure,
   ledgerSetupRefusalMessage,
@@ -31,7 +29,6 @@ import {
   memberIncomeAccountStates,
   moneyAccountsFrozen,
   singletonTakenNote,
-  starterAccountsFor,
   toAccountRole,
   validateAccountBatch,
   validateAccountDraft,
@@ -108,33 +105,6 @@ describe("ledger setup account roles", () => {
   });
 });
 
-describe("starter chart (D6)", () => {
-  it("omits the member-money account unless member receipts are on", () => {
-    expect(starterAccountsFor(false).map((account) => account.key)).not.toContain(
-      "member-money",
-    );
-    expect(starterAccountsFor(true).map((account) => account.key)).toContain(
-      "member-money",
-    );
-  });
-
-  it("offers only suggestions the backend would accept", () => {
-    for (const suggestion of STARTER_ACCOUNTS) {
-      expect(toAccountRole(suggestion)).not.toBeNull();
-    }
-  });
-
-  it("includes the required opening balance equity account", () => {
-    expect(STARTER_ACCOUNTS).toContainEqual(
-      expect.objectContaining({
-        name: "Opening balance equity",
-        class: "equity",
-        subtype: "opening_balance_equity",
-      }),
-    );
-  });
-});
-
 describe("account drafts and payloads", () => {
   it("builds a trimmed payload and normalises category subtypes to null", () => {
     expect(
@@ -168,17 +138,6 @@ describe("account drafts and payloads", () => {
         draft({ name: "Expenses", class: "expense", subtype: null, bankName: "GTB" }),
       ),
     ).toEqual({ name: "Expenses", class: "expense", subtype: null });
-  });
-
-  it("turns starter suggestions into drafts without creating anything", () => {
-    const starter = STARTER_ACCOUNTS[0];
-    expect(draftFromStarter(starter)).toEqual({
-      name: starter.name,
-      class: starter.class,
-      subtype: starter.subtype,
-      bankName: "",
-      accountNumberLast4: "",
-    });
   });
 
   it("validates one draft like the backend's strict validator", () => {
@@ -447,10 +406,87 @@ describe("setup progress", () => {
     ]);
     const byKey = Object.fromEntries(steps.map((step) => [step.key, step]));
     expect(byKey.started.status).toBe("done");
-    expect(byKey["member-receipts"].status).toBe("done");
-    expect(byKey["opening-equity"].status).toBe("done");
-    expect(byKey["money-account"].status).toBe("done");
+    expect(byKey.accounts.status).toBe("done");
+    expect(byKey.bank.status).toBe("optional");
+    expect(byKey.categories.status).toBe("optional");
     expect(byKey.activation.status).toBe("later");
+  });
+
+  it("lists exactly the five setup steps", () => {
+    const steps = ledgerSetupSteps(statusOf("not_active", { memberReceiptsEnabled: null }), []);
+    expect(steps.map((step) => step.key)).toEqual([
+      "started",
+      "accounts",
+      "bank",
+      "categories",
+      "activation",
+    ]);
+  });
+
+  it("says when a required bookkeeping account is missing", () => {
+    const steps = ledgerSetupSteps(statusOf("setup", { memberReceiptsEnabled: false }), [
+      account({ name: "Cash in hand" }),
+    ]);
+    const accounts = steps.find((step) => step.key === "accounts");
+    expect(accounts).toMatchObject({
+      status: "current",
+      detail: "Some bookkeeping accounts are missing.",
+    });
+  });
+
+  it("counts a bank-only ledger with retired cash as complete", () => {
+    const steps = ledgerSetupSteps(statusOf("active", { memberReceiptsEnabled: true }), [
+      account({ name: "Cash in hand", active: false }),
+      account({ id: "b1", name: "Main account", subtype: "bank" }),
+      account({
+        id: "a2",
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+      }),
+      account({
+        id: "a3",
+        name: "Member money – unallocated",
+        class: "liability",
+        subtype: "member_receipts_unallocated",
+      }),
+    ]);
+    expect(steps.find((step) => step.key === "accounts")).toMatchObject({
+      status: "done",
+      detail: "The accounts the books need are ready.",
+    });
+  });
+
+  it("still needs the holding account when receipts are on", () => {
+    const steps = ledgerSetupSteps(statusOf("active", { memberReceiptsEnabled: true }), [
+      account({ id: "b1", name: "Main account", subtype: "bank" }),
+      account({
+        id: "a2",
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+      }),
+    ]);
+    expect(steps.find((step) => step.key === "accounts")?.status).toBe("current");
+  });
+
+  it("stays done when the holding account exists with receipts on", () => {
+    const steps = ledgerSetupSteps(statusOf("setup", { memberReceiptsEnabled: true }), [
+      account({ name: "Cash in hand" }),
+      account({
+        id: "a2",
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+      }),
+      account({
+        id: "a3",
+        name: "Member money – unallocated",
+        class: "liability",
+        subtype: "member_receipts_unallocated",
+      }),
+    ]);
+    expect(steps.find((step) => step.key === "accounts")?.status).toBe("done");
   });
 
   describe("activation step", () => {
@@ -507,16 +543,21 @@ describe("setup progress", () => {
 
   it("does not claim an account step without a known account list", () => {
     const steps = ledgerSetupSteps(statusOf("setup"), null);
-    const money = steps.find((step) => step.key === "money-account");
-    expect(money?.status).not.toBe("done");
-    expect(money?.detail).toMatch(/Waiting for the current account list/);
+    const accounts = steps.find((step) => step.key === "accounts");
+    expect(accounts?.status).not.toBe("done");
+    expect(accounts?.detail).toMatch(/Waiting for the current account list/);
   });
 
   it("does not treat an inactive account as added", () => {
-    const steps = ledgerSetupSteps(statusOf("setup"), [
-      account({ name: "Cash in hand", active: false }),
+    const steps = ledgerSetupSteps(statusOf("setup", { memberReceiptsEnabled: false }), [
+      account({
+        name: "Opening balance equity",
+        class: "equity",
+        subtype: "opening_balance_equity",
+        active: false,
+      }),
     ]);
-    expect(steps.find((step) => step.key === "money-account")?.status).not.toBe("done");
+    expect(steps.find((step) => step.key === "accounts")?.status).not.toBe("done");
   });
 });
 
@@ -666,8 +707,6 @@ describe("F3 member income roles", () => {
     const forced = draft({ name: "Dues", class: "income", subtype: "member_dues_income" });
     expect(buildAccountPayload(forced)).toEqual({ name: "Dues", class: "income", subtype: null });
     expect(buildCreateAccountsPayload([forced]).accounts[0].subtype).toBeNull();
-    expect(STARTER_ACCOUNTS.some((starter) => starter.subtype === "member_dues_income")).toBe(false);
-    expect(STARTER_ACCOUNTS.some((starter) => starter.subtype === "member_levy_income")).toBe(false);
   });
 
   it("builds the exact specialised account payload with a trimmed name", () => {

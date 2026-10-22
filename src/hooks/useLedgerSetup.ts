@@ -7,7 +7,7 @@ import {
 import { financeRequest } from "services/api/request";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
-import { toLedgerStatus } from "helpers/ledger";
+import { toLedgerAccounts, toLedgerStatus } from "helpers/ledger";
 import { LedgerAccount, LedgerStatus } from "components/finance/ledgerTypes";
 import {
   CreateAccountPayload,
@@ -265,12 +265,20 @@ export const useLedgerSetup = (organisationId: string) => {
 
   const createAccounts = (
     accounts: CreateAccountPayload[],
-    { onSuccess, onError }: MutationCallbacks<void> = {},
+    { onSuccess, onError }: MutationCallbacks<LedgerAccount[] | null> = {},
   ) =>
     createAccountsMutation.mutate(
       durableWrite("create-accounts", "post", accountsUrl, { accounts }),
       {
-        onSuccess: () => onSuccess?.(),
+        // The response's `accounts` is what the server actually created. A
+        // caller that must select a new category uses it, and `null` means the
+        // names are not readable here (never a made-up list).
+        onSuccess: (response: { data?: unknown }) =>
+          onSuccess?.(
+            toLedgerAccounts(
+              (response?.data as { accounts?: unknown } | undefined)?.accounts,
+            ),
+          ),
         onError: onError ?? suppressGenericError,
       },
     );

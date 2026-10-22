@@ -17,6 +17,7 @@ export const BOOKS_SCREENS = [
   "held",
   "entry",
   "manage",
+  "manage-categories",
   "manage-status",
   "manage-setup",
   "manage-opening",

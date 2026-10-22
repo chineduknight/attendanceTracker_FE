@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { ReactElement, useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "services/api/apiHelper";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { format, parseISO, subDays } from "date-fns";
 import { chooseOption, generatedCss, render } from "test-utils/render";
@@ -112,6 +114,9 @@ const Harness = ({ initial, onForMember }: { initial: BooksSheet | null; onForMe
   );
 };
 
+const renderSheet = (ui: ReactElement) =>
+  render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+
 /** Taps one of the account cards in the named group, inside `container` when given. */
 const pickAccount = (group: string, name: string, container?: HTMLElement) => {
   const cards = container
@@ -136,7 +141,7 @@ afterEach(() => {
 });
 
 it("opens Money in on the receipt form", async () => {
-  render(<Harness initial="money-in" />);
+  renderSheet(<Harness initial="money-in" />);
   expect(await screen.findByRole("dialog", { name: "Money in" })).toBeInTheDocument();
   expect(screen.getByLabelText("Amount")).toBeInTheDocument();
 });
@@ -144,7 +149,7 @@ it("opens Money in on the receipt form", async () => {
 it("keeps a save that is in flight when the sheet closes, and reports its receipt", async () => {
   let resolve: (value: unknown) => void = () => {};
   api.post.mockImplementation(() => new Promise((done) => (resolve = done)));
-  render(<Harness initial="money-in" />);
+  renderSheet(<Harness initial="money-in" />);
   await screen.findByRole("dialog", { name: "Money in" });
 
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
@@ -188,7 +193,7 @@ it("shows the pending posting's retry instead of a new form", async () => {
   if (claim.kind !== "claimed") throw new Error("seed failed");
   await markLedgerPostingIntentUnresolved(claim.record, { ambiguous: true, message: "Unknown." });
 
-  render(<Harness initial="money-in" />);
+  renderSheet(<Harness initial="money-in" />);
   await screen.findByRole("dialog", { name: "Money in" });
   expect(await screen.findByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
   expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
@@ -227,7 +232,7 @@ const seedUnresolved = async () => {
 };
 
 it("starts a fresh form after Back, even when another posting changed meanwhile", async () => {
-  render(<Harness initial="money-in" />);
+  renderSheet(<Harness initial="money-in" />);
   await screen.findByRole("dialog", { name: "Money in" });
   fireEvent.click(screen.getByRole("button", { name: "browser back", hidden: true }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -241,7 +246,7 @@ it("starts a fresh form after Back, even when another posting changed meanwhile"
 
 it("opens the form once a pending posting clears while the sheet is open", async () => {
   await seedUnresolved();
-  render(<Harness initial="money-in" />);
+  renderSheet(<Harness initial="money-in" />);
   expect(await screen.findByRole("button", { name: "Retry this posting" })).toBeInTheDocument();
 
   await clearLedgerPostingIntent("org1", "key-87654321");
@@ -250,7 +255,7 @@ it("opens the form once a pending posting clears while the sheet is open", async
 });
 
 it("gives the Income / For a member switch phone-sized targets", async () => {
-  render(<Harness initial="money-in" onForMember={() => undefined} />);
+  renderSheet(<Harness initial="money-in" onForMember={() => undefined} />);
   const forMember = await screen.findByRole("button", { name: "For a member" });
   expect(generatedCss(forMember)).toMatch(/min-height:\s*44px/);
 });

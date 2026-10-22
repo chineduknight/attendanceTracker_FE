@@ -152,6 +152,27 @@ describe("Books Overview", () => {
     expect(screen.getByRole("button", { name: /Transfer between accounts/ })).toBeEnabled();
   });
 
+  it("opens Money out for a manager even with no expense category", async () => {
+    setSession(MANAGER);
+    serve();
+    const withoutExpense = ACCOUNTS.filter((entry) => entry.class !== "expense");
+    api.get.mockImplementation((url: string) => {
+      if (!url.includes("/finance/org1/")) return Promise.resolve({ data: { data: null } });
+      if (url.endsWith("/ledger/status")) return Promise.resolve({ data: { data: status } });
+      if (url.endsWith("/ledger/accounts")) return Promise.resolve({ data: { data: withoutExpense } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    renderBooks();
+
+    const button = await screen.findByRole("button", { name: /Money out/ });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+
+    await screen.findByRole("dialog", { name: "Money out" });
+    // No expense category exists, but the form offers to add one.
+    expect(await screen.findByRole("button", { name: "+ New category" })).toBeInTheDocument();
+  });
+
   it("gives a viewer the figures but no way to record", async () => {
     setSession(VIEWER);
     serve();
@@ -200,11 +221,36 @@ describe("Books navigation", () => {
     expect(await screen.findByRole("heading", { name: "Manage Books" })).toBeVisible();
     expect(seen.search).toContain("books=manage");
 
-    fireEvent.click(screen.getByRole("button", { name: /Setup & accounts/ }));
-    expect(await screen.findByRole("heading", { name: "Setup & accounts" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Setup\b/ }));
+    expect(await screen.findByRole("heading", { name: "Setup" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Manage Books" }));
     await waitFor(() => expect(seen.search).not.toContain("manage-setup"));
+    expect(screen.getByRole("heading", { name: "Manage Books" })).toBeVisible();
+  });
+
+  it("opens Categories & Accounts first in Manage Books, and Back returns to Manage Books", async () => {
+    setSession(MANAGER);
+    serve();
+    renderBooks();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Manage Books/ }));
+    expect(await screen.findByRole("heading", { name: "Manage Books" })).toBeVisible();
+
+    const manage = screen.getByRole("group", { name: "Manage Books" });
+    const rows = within(manage).getAllByRole("button");
+    expect(rows[0]).toHaveTextContent("Categories & Accounts");
+
+    fireEvent.click(rows[0]);
+    expect(
+      await screen.findByRole("heading", { name: "Categories & Accounts" }),
+    ).toBeVisible();
+    expect(seen.search).toContain("books=manage-categories");
+    // The same account list every Books screen reads, grouped into a category.
+    expect((await screen.findAllByText("Operating expenses")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage Books" }));
+    await waitFor(() => expect(seen.search).not.toContain("manage-categories"));
     expect(screen.getByRole("heading", { name: "Manage Books" })).toBeVisible();
   });
 

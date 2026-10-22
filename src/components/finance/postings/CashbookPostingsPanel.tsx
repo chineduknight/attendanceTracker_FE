@@ -150,7 +150,7 @@ const CashbookPostingsPanel = ({
                 size="lg"
                 variant="outline"
                 minH="64px"
-                disabled={!receiptReadiness.ready}
+                disabled={!readiness.ready}
                 onClick={() => workflow.open("receipt")}
               >
                 <Stack gap={0}>
@@ -164,7 +164,7 @@ const CashbookPostingsPanel = ({
                 size="lg"
                 variant="outline"
                 minH="64px"
-                disabled={!expenseReadiness.ready}
+                disabled={!readiness.ready}
                 onClick={() => workflow.open("expense")}
               >
                 <Stack gap={0}>
