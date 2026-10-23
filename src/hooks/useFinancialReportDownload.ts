@@ -10,6 +10,7 @@ import {
   FinancialReportFailure,
   financialReportFileName,
   FinancialReportFormat,
+  FinancialReportLayout,
   FinancialReportPeriod,
   isFormatContentType,
   readFinancialReportErrorBody,
@@ -25,6 +26,8 @@ export const FINANCIAL_REPORT_EXPORT_TIMEOUT_MS = 120_000;
 
 export type FinancialReportDownloadFailure = FinancialReportFailure & {
   format: FinancialReportFormat;
+  /** The chosen PDF layout, so Try again asks for the same document. */
+  layout: FinancialReportLayout | null;
 };
 
 /**
@@ -55,7 +58,7 @@ export const useFinancialReportDownload = (
   const { from, to } = period;
 
   const download = useCallback(
-    async (format: FinancialReportFormat) => {
+    async (format: FinancialReportFormat, layout?: FinancialReportLayout) => {
       if (inFlight.current) return;
       inFlight.current = true;
       const abort = new AbortController();
@@ -63,10 +66,12 @@ export const useFinancialReportDownload = (
       setActive(format);
       setFailure(null);
       setSavedFileName(null);
+      // Only the PDF takes a layout; a stray one never reaches the workbook.
+      const pdfLayout = format === "pdf" ? layout ?? "transactions" : null;
       const { contentType, label } = FINANCIAL_REPORT_FORMATS[format];
       const url =
         convertParamsToString(financeRequest.LEDGER_FINANCIAL_REPORT_EXPORT, { organisationId }) +
-        reportQuery({ from, to, format });
+        reportQuery({ from, to, format, layout: pdfLayout ?? undefined });
       try {
         const response = await axiosInstance.get(url, {
           responseType: "blob",
@@ -83,6 +88,7 @@ export const useFinancialReportDownload = (
         ) {
           setFailure({
             format,
+            layout: pdfLayout,
             code: null,
             retryable: true,
             message: `The server didn't send ${format === "xlsx" ? "an" : "a"} ${label} file, so nothing was saved.`,
@@ -91,7 +97,7 @@ export const useFinancialReportDownload = (
         }
         const fileName =
           attachmentFileName(response.headers?.["content-disposition"], format) ??
-          financialReportFileName({ from, to }, format);
+          financialReportFileName({ from, to }, format, pdfLayout ?? undefined);
         saveBlob(blob, fileName);
         setSavedFileName(fileName);
       } catch (error) {
@@ -102,7 +108,7 @@ export const useFinancialReportDownload = (
         if (abort.signal.aborted) return;
         const failed = financialReportFailure(error, body);
         if (failed?.code === "REPORT_PDF_DISABLED") setPdfRefused(true);
-        if (failed) setFailure({ ...failed, format });
+        if (failed) setFailure({ ...failed, format, layout: pdfLayout });
       } finally {
         inFlight.current = false;
         if (!abort.signal.aborted) setActive(null);

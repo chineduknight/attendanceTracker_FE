@@ -1,16 +1,59 @@
 /**
- * Financial Report v1 downloads (backend BE-1 preview, BE-2 Excel, BE-3 PDF).
+ * Financial Report v1 (backend BE-1 preview, BE-2 Excel, BE-3 PDF).
  *
- * Pure helpers. The frontend never builds or recomputes the report: it only
- * decides which period to ask for, whether the server says the report can be
- * downloaded, what to call the file and how to word a refusal. Anything this
- * build cannot read fails closed (no download offered).
+ * Pure helpers. The Summary renders from the same preview the downloads use,
+ * and the frontend never builds or recomputes the report: it decides which
+ * period to ask for, checks that the figures it shows are the server's, says
+ * whether the report can be downloaded, what to call the file and how to word
+ * a refusal. Anything this build cannot read fails closed (no figures, no
+ * download).
  */
 
+import {
+  FinancialReportAccountRow,
+  FinancialReportAccountState,
+  FinancialReportCategoryTotal,
+  FinancialReportExcludedAccount,
+  FinancialReportMoneyGroup,
+  FinancialReportStatement,
+} from "components/finance/ledgerReportTypes";
+import { formatBusinessDate } from "helpers/financeCompliance";
 import { ledgerHttpStatus } from "helpers/ledger";
+import { reportRangeIssue } from "helpers/ledgerReports";
 import { isBusinessDate } from "helpers/openingBalances";
 
 export type FinancialReportFormat = "xlsx" | "pdf";
+
+/**
+ * What a PDF may print: every transaction (the default), one line per
+ * category, or both. Only the PDF takes a layout; the workbook is fixed.
+ */
+export type FinancialReportLayout = "transactions" | "categories" | "both";
+
+export const FINANCIAL_REPORT_LAYOUTS: readonly {
+  value: FinancialReportLayout;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "transactions",
+    label: "Detailed transactions",
+    description: "Every entry in the period.",
+  },
+  {
+    value: "categories",
+    label: "Summary by category",
+    description: "One line per category with its total.",
+  },
+  {
+    value: "both",
+    label: "Both detailed and summary",
+    description: "The transaction detail, then the summary by category.",
+  },
+];
+
+export const isFinancialReportLayout = (value: unknown): value is FinancialReportLayout =>
+  FINANCIAL_REPORT_LAYOUTS.some((layout) => layout.value === value);
 
 export type FinancialReportDataState = "complete" | "incomplete" | "unavailable";
 
@@ -24,7 +67,7 @@ export interface FinancialReportIssue {
   message: string;
 }
 
-/** What the preview says about downloading; its figures are not read. */
+/** The preview's state and download readiness (its figures are read separately). */
 export interface FinancialReportAvailability {
   period: FinancialReportPeriod;
   dataState: FinancialReportDataState;
@@ -57,31 +100,11 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const asText = (value: unknown): string | null =>
   typeof value === "string" && value.trim() ? value.trim() : null;
 
-/* ------------------------------------------------------------------ */
-/* Period                                                             */
-/* ------------------------------------------------------------------ */
+const isKobo = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value);
 
-/**
- * The period the Summary is showing, for its downloads. The Summary accepts
- * a blank From or To and the server fills it in (opening date / today), but
- * the Financial Report needs both, so the dates come from the Summary's own
- * response for the applied range: never a draft, never a browser guess.
- *
- * An applied end that is set must come back exactly; otherwise the response
- * is not for this range and null (no download) is returned. A future `to` is
- * left to the server (422): the device clock is not the server's.
- */
-export const resolveFinancialReportPeriod = (
-  applied: FinancialReportPeriod,
-  shown: FinancialReportPeriod | null,
-): FinancialReportPeriod | null => {
-  if (!shown) return null;
-  if ((applied.from && applied.from !== shown.from) || (applied.to && applied.to !== shown.to)) {
-    return null;
-  }
-  if (!isBusinessDate(shown.from) || !isBusinessDate(shown.to) || shown.from > shown.to) return null;
-  return { from: shown.from, to: shown.to };
-};
+const asBusinessDate = (value: unknown): string | null =>
+  typeof value === "string" && isBusinessDate(value) ? value : null;
 
 /* ------------------------------------------------------------------ */
 /* Preview                                                            */
@@ -121,6 +144,285 @@ export const toFinancialReportAvailability = (
 };
 
 /* ------------------------------------------------------------------ */
+/* Preview figures                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Readiness plus the statement the Financial Report will print. Every figure
+ * is the backend's: the frontend only checks that what arrived is usable, and
+ * never derives a balance, total or closing from another figure.
+ *
+ * `statement` is null only for an `unavailable` report (the server sent no
+ * figures at all). A `complete` or `incomplete` report whose statement cannot
+ * be read fails closed (null), so no partly parsed figures are shown.
+ */
+export interface FinancialReportPreview extends FinancialReportAvailability {
+  openingDate: string | null;
+  lockedThrough: string | null;
+  /** When the server read the books, ISO; shown as "figures as at". */
+  readAt: string | null;
+  statement: FinancialReportStatement | null;
+  /** null only when the report is unavailable. */
+  accounts: FinancialReportAccountRow[] | null;
+  /** Held for members at period end; null without a member-money account. */
+  memberMoneyHeldAtEndKobo: number | null;
+  excludedAccounts: FinancialReportExcludedAccount[];
+}
+
+const ACCOUNT_STATES: readonly FinancialReportAccountState[] = ["in_books", "brought_in", "unknown"];
+
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+/** Integer kobo, or null for a figure the server could not know. */
+const asNullableKobo = (value: unknown): number | null | undefined => {
+  if (value === null) return null;
+  return isKobo(value) ? value : undefined;
+};
+
+const toFinancialReportCategory = (value: unknown): FinancialReportCategoryTotal | null => {
+  const raw = asRecord(value);
+  if (!raw || !isCount(raw.count) || !isKobo(raw.totalKobo)) return null;
+  const accountId = raw.categoryAccountId === null ? null : asText(raw.categoryAccountId);
+  if (raw.categoryAccountId !== null && accountId === null) return null;
+  const name = raw.categoryName === null ? null : asText(raw.categoryName);
+  if (raw.categoryName !== null && name === null) return null;
+  return { accountId, name, count: raw.count, amountKobo: raw.totalKobo };
+};
+
+const toFinancialReportGroup = (value: unknown): FinancialReportMoneyGroup | null => {
+  const raw = asRecord(value);
+  const key = asText(raw?.key);
+  if (!raw || !key || !isCount(raw.count) || !isKobo(raw.totalKobo) || !Array.isArray(raw.categories)) {
+    return null;
+  }
+  const categories: FinancialReportCategoryTotal[] = [];
+  for (const entry of raw.categories) {
+    const category = toFinancialReportCategory(entry);
+    if (!category) return null;
+    categories.push(category);
+  }
+  return {
+    key,
+    label: asText(raw.label) ?? key,
+    count: raw.count,
+    totalKobo: raw.totalKobo,
+    categories,
+  };
+};
+
+const toFinancialReportGroups = (value: unknown): FinancialReportMoneyGroup[] | null => {
+  if (!Array.isArray(value)) return null;
+  const groups: FinancialReportMoneyGroup[] = [];
+  for (const entry of value) {
+    const group = toFinancialReportGroup(entry);
+    if (!group) return null;
+    groups.push(group);
+  }
+  return groups;
+};
+
+const toFinancialReportStatement = (
+  value: unknown,
+  appliedTo: string,
+): FinancialReportStatement | null => {
+  const raw = asRecord(value);
+  const broughtForward = asRecord(raw?.broughtForward);
+  const carriedForward = asRecord(raw?.carriedForward);
+  const received = asRecord(raw?.moneyReceived);
+  const paid = asRecord(raw?.moneyPaid);
+  const broughtIn = asRecord(raw?.broughtIntoBooks);
+  const transfers = asRecord(raw?.transfers);
+  if (!raw || !broughtForward || !carriedForward || !received || !paid || !broughtIn || !transfers) {
+    return null;
+  }
+  const broughtForwardKobo = asNullableKobo(broughtForward.totalKobo);
+  const grossBalanceKobo = asNullableKobo(raw.grossBalanceKobo);
+  const carriedForwardKobo = asNullableKobo(carriedForward.totalKobo);
+  if (
+    broughtForwardKobo === undefined ||
+    grossBalanceKobo === undefined ||
+    carriedForwardKobo === undefined
+  ) {
+    return null;
+  }
+  if (
+    !isKobo(received.totalKobo) ||
+    !isKobo(paid.totalKobo) ||
+    !isKobo(broughtIn.totalKobo) ||
+    !isCount(broughtIn.count) ||
+    !isKobo(transfers.totalMovedKobo) ||
+    !isCount(transfers.count)
+  ) {
+    return null;
+  }
+  const receivedGroups = toFinancialReportGroups(received.groups);
+  const paidGroups = toFinancialReportGroups(paid.groups);
+  if (!receivedGroups || !paidGroups) return null;
+  const basis =
+    broughtForward.basis === "verified_opening" || broughtForward.basis === "balance"
+      ? broughtForward.basis
+      : null;
+  return {
+    broughtForwardKobo,
+    broughtForwardAsOf: asBusinessDate(broughtForward.asOf),
+    broughtForwardBasis: basis,
+    broughtInCount: broughtIn.count,
+    broughtInTotalKobo: broughtIn.totalKobo,
+    receivedGroups,
+    receivedTotalKobo: received.totalKobo,
+    paidGroups,
+    paidTotalKobo: paid.totalKobo,
+    grossBalanceKobo,
+    carriedForwardKobo,
+    // The server echoes the period's end; the applied end is the fallback.
+    carriedForwardAsOf: asBusinessDate(carriedForward.asOf) ?? appliedTo,
+    transfersCount: transfers.count,
+    transfersTotalKobo: transfers.totalMovedKobo,
+  };
+};
+
+const toFinancialReportAccount = (value: unknown): FinancialReportAccountRow | null => {
+  const raw = asRecord(value);
+  if (!raw) return null;
+  const accountId = asText(raw.accountId);
+  const name = asText(raw.name);
+  const kind = raw.kind === "cash" || raw.kind === "bank" ? raw.kind : null;
+  const state = ACCOUNT_STATES.find((known) => known === raw.state);
+  const carriedForwardKobo = asNullableKobo(raw.carriedForwardKobo);
+  if (
+    !accountId ||
+    !name ||
+    !kind ||
+    !state ||
+    typeof raw.active !== "boolean" ||
+    carriedForwardKobo === undefined
+  ) {
+    return null;
+  }
+  const broughtInOn = raw.broughtInOn == null ? null : asBusinessDate(raw.broughtInOn);
+  if (raw.broughtInOn != null && !broughtInOn) return null;
+  return {
+    accountId,
+    name,
+    kind,
+    active: raw.active,
+    state,
+    carriedForwardKobo,
+    broughtInOn,
+    bankName: asText(raw.bankName),
+    accountNumberLast4: asText(raw.accountNumberLast4),
+  };
+};
+
+const toExcludedAccounts = (value: unknown): FinancialReportExcludedAccount[] => {
+  if (!Array.isArray(value)) return [];
+  const excluded: FinancialReportExcludedAccount[] = [];
+  for (const entry of value) {
+    const raw = asRecord(entry);
+    const name = asText(raw?.name);
+    if (!name) continue;
+    const reason =
+      raw?.reason === "never_opened" || raw?.reason === "not_yet_in_books" ? raw.reason : null;
+    excluded.push({ name, reason });
+  }
+  return excluded;
+};
+
+/**
+ * The preview body, or null when it is not a usable answer for this exact
+ * period. Readiness comes first (the same checks as the download gate), then
+ * the statement and account rows. An `unavailable` report legitimately
+ * carries no figures; a `complete` or `incomplete` one must carry all of its
+ * statement and account rows, or the whole preview fails closed.
+ */
+export const toFinancialReportPreview = (
+  value: unknown,
+  requested: FinancialReportPeriod,
+): FinancialReportPreview | null => {
+  const availability = toFinancialReportAvailability(value, requested);
+  if (!availability) return null;
+  const raw = asRecord(value) as Record<string, unknown>;
+  const openingDate = raw.openingDate == null ? null : asBusinessDate(raw.openingDate);
+  const lockedThrough = raw.lockedThrough == null ? null : asBusinessDate(raw.lockedThrough);
+  const readAt = asText(raw.readAt);
+  const excludedAccounts = toExcludedAccounts(raw.excludedAccounts);
+  const header = { ...availability, openingDate, lockedThrough, readAt, excludedAccounts };
+
+  if (availability.dataState === "unavailable") {
+    return {
+      ...header,
+      statement: null,
+      accounts: null,
+      memberMoneyHeldAtEndKobo: null,
+    };
+  }
+
+  const statement = toFinancialReportStatement(raw.statement, requested.to);
+  if (!statement || !Array.isArray(raw.accounts)) return null;
+  const accounts: FinancialReportAccountRow[] = [];
+  for (const entry of raw.accounts) {
+    const account = toFinancialReportAccount(entry);
+    if (!account) return null;
+    accounts.push(account);
+  }
+
+  const reconciliation = asRecord(raw.reconciliation);
+  if (!reconciliation) return null;
+  const memberMoney = reconciliation.memberMoney === null ? null : asRecord(reconciliation.memberMoney);
+  let memberMoneyHeldAtEndKobo: number | null = null;
+  if (memberMoney) {
+    if (!isKobo(memberMoney.heldAtEndKobo)) return null;
+    memberMoneyHeldAtEndKobo = memberMoney.heldAtEndKobo;
+  } else if (reconciliation.memberMoney !== null) {
+    return null;
+  }
+
+  return { ...header, statement, accounts, memberMoneyHeldAtEndKobo };
+};
+
+/* ------------------------------------------------------------------ */
+/* Period                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The Summary's opening period: the first of this calendar month to today,
+ * both in Lagos, but never before the ledger's verified opening date. The
+ * server still refuses a period before its own opening date; this only
+ * keeps the first request inside the books.
+ */
+export const defaultFinancialSummaryPeriod = (
+  today: string,
+  openingDate: string | null,
+): FinancialReportPeriod => {
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const from = openingDate && isBusinessDate(openingDate) && openingDate > monthStart ? openingDate : monthStart;
+  return { from, to: today };
+};
+
+/**
+ * Why a chosen Summary period would be refused, or null. The general range
+ * rules come first, then the books' own opening date: the server is still
+ * authoritative (422).
+ */
+export const summaryPeriodIssue = (
+  from: string,
+  to: string,
+  today: string,
+  openingDate: string | null,
+): string | null => {
+  const range = reportRangeIssue(from, to, today);
+  if (range) return range;
+  if (!openingDate || !isBusinessDate(openingDate)) return null;
+  // From ≤ To is already checked, so this also covers a period entirely
+  // before the books opened.
+  if (from && from < openingDate) {
+    return `The period can't start before the books' opening date (${formatBusinessDate(openingDate)}).`;
+  }
+  return null;
+};
+
+/* ------------------------------------------------------------------ */
 /* Files                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -128,7 +430,12 @@ export const toFinancialReportAvailability = (
 export const financialReportFileName = (
   period: FinancialReportPeriod,
   format: FinancialReportFormat,
-): string => `Financial_Report_${period.from}_to_${period.to}.${format}`;
+  layout?: FinancialReportLayout,
+): string => {
+  // The server suffixes only the category-only PDF; "both" keeps its name.
+  const suffix = format === "pdf" && layout === "categories" ? "_by_category" : "";
+  return `Financial_Report_${period.from}_to_${period.to}${suffix}.${format}`;
+};
 
 const SAFE_FILE_NAME = /^[A-Za-z0-9][\w.-]{0,149}$/;
 

@@ -1,11 +1,13 @@
 import {
   attachmentFileName,
+  defaultFinancialSummaryPeriod,
   financialReportFailure,
   financialReportFileName,
   isFormatContentType,
   readFinancialReportErrorBody,
-  resolveFinancialReportPeriod,
+  summaryPeriodIssue,
   toFinancialReportAvailability,
+  toFinancialReportPreview,
 } from "helpers/financialReport";
 
 const PERIOD = { from: "2026-09-01", to: "2026-09-30" };
@@ -24,28 +26,59 @@ const preview = (extra: Record<string, unknown> = {}) => ({
 
 const httpError = (status: number) => Object.assign(new Error("failed"), { response: { status, data: {} } });
 
-describe("resolveFinancialReportPeriod", () => {
-  it("takes the server's resolved dates when the applied range is blank (server defaults)", () => {
-    expect(resolveFinancialReportPeriod({ from: "", to: "" }, { from: "2026-06-01", to: "2026-10-23" })).toEqual({
-      from: "2026-06-01",
+describe("defaultFinancialSummaryPeriod", () => {
+  it("defaults to the first of this month through today in Lagos", () => {
+    expect(defaultFinancialSummaryPeriod("2026-10-23", "2026-09-01")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-23",
+    });
+    expect(defaultFinancialSummaryPeriod("2026-10-23", null)).toEqual({
+      from: "2026-10-01",
       to: "2026-10-23",
     });
   });
 
-  it("uses an explicit applied range only when the response echoes it", () => {
-    expect(resolveFinancialReportPeriod(PERIOD, PERIOD)).toEqual(PERIOD);
-    expect(resolveFinancialReportPeriod({ from: "2026-09-01", to: "" }, PERIOD)).toEqual(PERIOD);
-    // A response for another period never stands in for this one.
-    expect(resolveFinancialReportPeriod({ from: "2026-08-01", to: "" }, PERIOD)).toBeNull();
-    expect(resolveFinancialReportPeriod({ from: "", to: "2026-09-15" }, PERIOD)).toBeNull();
+  it("never starts before the ledger's verified opening date", () => {
+    expect(defaultFinancialSummaryPeriod("2026-10-23", "2026-10-21")).toEqual({
+      from: "2026-10-21",
+      to: "2026-10-23",
+    });
+    expect(defaultFinancialSummaryPeriod("2026-10-23", "2026-10-01")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-23",
+    });
   });
 
-  it("gives nothing without a loaded period, or for an invalid one", () => {
-    expect(resolveFinancialReportPeriod({ from: "", to: "" }, null)).toBeNull();
-    expect(resolveFinancialReportPeriod({ from: "", to: "" }, { from: "", to: "2026-09-30" })).toBeNull();
-    expect(resolveFinancialReportPeriod({ from: "", to: "" }, { from: "2026-02-30", to: "2026-03-01" })).toBeNull();
-    expect(resolveFinancialReportPeriod({ from: "", to: "" }, { from: "01/09/2026", to: "2026-09-30" })).toBeNull();
-    expect(resolveFinancialReportPeriod({ from: "", to: "" }, { from: "2026-09-30", to: "2026-09-01" })).toBeNull();
+  it("ignores an unusable opening date rather than shifting the period", () => {
+    expect(defaultFinancialSummaryPeriod("2026-10-23", "2026-02-30")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-23",
+    });
+  });
+});
+
+describe("summaryPeriodIssue", () => {
+  it("accepts a period inside the books", () => {
+    expect(summaryPeriodIssue("2026-10-01", "2026-10-23", "2026-10-23", "2026-09-01")).toBeNull();
+    expect(summaryPeriodIssue("2026-09-01", "2026-09-30", "2026-10-23", null)).toBeNull();
+  });
+
+  it("keeps the general range rules", () => {
+    expect(summaryPeriodIssue("2026-10-20", "2026-10-05", "2026-10-23", "2026-09-01")).toBe(
+      "The From date can't be after the To date.",
+    );
+    expect(summaryPeriodIssue("2026-10-01", "2026-10-24", "2026-10-23", "2026-09-01")).toBe(
+      "The To date can't be after today in Lagos.",
+    );
+  });
+
+  it("refuses a period before the ledger's opening date", () => {
+    expect(summaryPeriodIssue("2026-09-15", "2026-10-23", "2026-10-23", "2026-10-01")).toBe(
+      "The period can't start before the books' opening date (1 Oct 2026).",
+    );
+    expect(summaryPeriodIssue("2026-09-01", "2026-09-20", "2026-10-23", "2026-10-01")).toBe(
+      "The period can't start before the books' opening date (1 Oct 2026).",
+    );
   });
 });
 
@@ -108,10 +141,245 @@ describe("toFinancialReportAvailability", () => {
   });
 });
 
+const fullPreview = (extra: Record<string, unknown> = {}) => ({
+  organisation: { id: "org1", name: "Organisation A" },
+  period: PERIOD,
+  openingDate: "2026-06-01",
+  lockedThrough: "2026-09-30",
+  provisional: false,
+  readAt: "2026-10-23T10:00:00.000Z",
+  dataState: "complete",
+  issues: [],
+  excludedAccounts: [{ accountId: "old", name: "Old bank", reason: "never_opened" }],
+  statement: {
+    broughtForward: { asOf: "2026-08-31", basis: "balance", totalKobo: 17_000_000 },
+    moneyReceived: {
+      totalKobo: 500_000,
+      groups: [
+        {
+          key: "receipts",
+          label: "Receipts",
+          count: 2,
+          totalKobo: 500_000,
+          categories: [
+            { categoryAccountId: "donations", categoryName: "Donations", count: 1, totalKobo: 550_000 },
+            { categoryAccountId: "raffle", categoryName: "Old raffle", count: 1, totalKobo: -50_000 },
+            { categoryAccountId: "dues", categoryName: "Dues income", count: 0, totalKobo: 0 },
+          ],
+        },
+        {
+          key: "member_money",
+          label: "Money received for members",
+          count: 1,
+          totalKobo: 300_000,
+          categories: [{ categoryAccountId: null, categoryName: null, count: 1, totalKobo: 300_000 }],
+        },
+      ],
+    },
+    moneyPaid: {
+      totalKobo: 20_000,
+      groups: [
+        {
+          key: "expenses",
+          label: "Expenses",
+          count: 1,
+          totalKobo: 20_000,
+          categories: [{ categoryAccountId: "hall", categoryName: "Hall hire", count: 1, totalKobo: 20_000 }],
+        },
+      ],
+    },
+    broughtIntoBooks: { totalKobo: 0, count: 0, rows: [] },
+    transfers: { totalMovedKobo: 40_000, count: 2, rows: [] },
+    carriedForward: { asOf: PERIOD.to, totalKobo: 17_480_000 },
+    grossBalanceKobo: 17_500_000,
+  },
+  accounts: [
+    {
+      accountId: "bank",
+      name: "Main bank",
+      kind: "bank",
+      active: true,
+      state: "in_books",
+      broughtInOn: null,
+      carriedForwardKobo: 12_000_000,
+      bankName: "GTBank",
+      accountNumberLast4: "0123",
+    },
+    {
+      accountId: "cash",
+      name: "Cash in hand",
+      kind: "cash",
+      active: true,
+      state: "in_books",
+      broughtInOn: null,
+      carriedForwardKobo: 5_480_000,
+      bankName: null,
+      accountNumberLast4: null,
+    },
+    {
+      accountId: "old",
+      name: "Old bank",
+      kind: "bank",
+      active: false,
+      state: "unknown",
+      broughtInOn: null,
+      carriedForwardKobo: null,
+      bankName: null,
+      accountNumberLast4: null,
+    },
+  ],
+  reconciliation: {
+    income: {},
+    expense: {},
+    surplusKobo: 0,
+    bridge: {},
+    allocations: {},
+    memberMoney: { heldAtEndKobo: 300_000 },
+  },
+  downloads: { xlsx: true, pdf: false },
+  ...extra,
+});
+
+describe("toFinancialReportPreview", () => {
+  it("reads the statement, account rows and member money as sent", () => {
+    const report = toFinancialReportPreview(fullPreview(), PERIOD);
+    expect(report?.statement).toEqual({
+      broughtForwardKobo: 17_000_000,
+      broughtForwardAsOf: "2026-08-31",
+      broughtForwardBasis: "balance",
+      broughtInCount: 0,
+      broughtInTotalKobo: 0,
+      receivedGroups: [
+        {
+          key: "receipts",
+          label: "Receipts",
+          count: 2,
+          totalKobo: 500_000,
+          categories: [
+            { accountId: "donations", name: "Donations", count: 1, amountKobo: 550_000 },
+            { accountId: "raffle", name: "Old raffle", count: 1, amountKobo: -50_000 },
+            { accountId: "dues", name: "Dues income", count: 0, amountKobo: 0 },
+          ],
+        },
+        {
+          key: "member_money",
+          label: "Money received for members",
+          count: 1,
+          totalKobo: 300_000,
+          categories: [{ accountId: null, name: null, count: 1, amountKobo: 300_000 }],
+        },
+      ],
+      receivedTotalKobo: 500_000,
+      paidGroups: [
+        {
+          key: "expenses",
+          label: "Expenses",
+          count: 1,
+          totalKobo: 20_000,
+          categories: [{ accountId: "hall", name: "Hall hire", count: 1, amountKobo: 20_000 }],
+        },
+      ],
+      paidTotalKobo: 20_000,
+      grossBalanceKobo: 17_500_000,
+      carriedForwardKobo: 17_480_000,
+      carriedForwardAsOf: PERIOD.to,
+      transfersCount: 2,
+      transfersTotalKobo: 40_000,
+    });
+    expect(report?.accounts?.map((row) => row.name)).toEqual(["Main bank", "Cash in hand", "Old bank"]);
+    expect(report?.accounts?.[2].carriedForwardKobo).toBeNull();
+    expect(report?.memberMoneyHeldAtEndKobo).toBe(300_000);
+    expect(report?.excludedAccounts).toEqual([{ name: "Old bank", reason: "never_opened" }]);
+    expect(report?.readAt).toBe("2026-10-23T10:00:00.000Z");
+  });
+
+  it("keeps an incomplete report's unknown totals as null, never zero", () => {
+    const report = toFinancialReportPreview(
+      fullPreview({
+        dataState: "incomplete",
+        statement: {
+          ...fullPreview().statement,
+          broughtForward: { ...fullPreview().statement.broughtForward, totalKobo: null },
+          grossBalanceKobo: null,
+          carriedForward: { ...fullPreview().statement.carriedForward, totalKobo: null },
+        },
+      }),
+      PERIOD,
+    );
+    expect(report?.statement?.broughtForwardKobo).toBeNull();
+    expect(report?.statement?.grossBalanceKobo).toBeNull();
+    expect(report?.statement?.carriedForwardKobo).toBeNull();
+  });
+
+  it("accepts an unavailable report only with no figures at all", () => {
+    const report = toFinancialReportPreview(
+      fullPreview({
+        dataState: "unavailable",
+        issues: [{ code: "REPORT_BOOKS_NOT_LIVE", message: "The books are not open yet." }],
+        statement: null,
+        accounts: null,
+        reconciliation: null,
+      }),
+      PERIOD,
+    );
+    expect(report?.statement).toBeNull();
+    expect(report?.accounts).toBeNull();
+    expect(report?.memberMoneyHeldAtEndKobo).toBeNull();
+  });
+
+  it.each([
+    ["a missing statement", { statement: undefined }],
+    ["a malformed carried-forward total", { statement: { ...fullPreview().statement, carriedForward: { asOf: PERIOD.to, totalKobo: "1" } } }],
+    ["a malformed account row", { accounts: [{ accountId: "bank" }] }],
+    ["no reconciliation", { reconciliation: undefined }],
+    ["a malformed member-money balance", { reconciliation: { ...fullPreview().reconciliation, memberMoney: { heldAtEndKobo: "3" } } }],
+  ])("fails closed with %s", (_label, change) => {
+    expect(toFinancialReportPreview(fullPreview(change), PERIOD)).toBeNull();
+  });
+
+  it("fails closed on a malformed category rather than dropping it", () => {
+    const statement = fullPreview().statement;
+    const broken = fullPreview({
+      statement: {
+        ...statement,
+        moneyReceived: {
+          ...statement.moneyReceived,
+          groups: [
+            {
+              ...statement.moneyReceived.groups[0],
+              categories: [{ categoryAccountId: "donations", categoryName: "Donations", count: 1 }],
+            },
+          ],
+        },
+      },
+    });
+    expect(toFinancialReportPreview(broken, PERIOD)).toBeNull();
+  });
+
+  it("never accepts another period's answer", () => {
+    expect(toFinancialReportPreview(fullPreview(), { from: "2026-09-01", to: "2026-09-15" })).toBeNull();
+  });
+});
+
 describe("file names and types", () => {
   it("falls back to the documented name", () => {
     expect(financialReportFileName(PERIOD, "xlsx")).toBe("Financial_Report_2026-09-01_to_2026-09-30.xlsx");
     expect(financialReportFileName(PERIOD, "pdf")).toBe("Financial_Report_2026-09-01_to_2026-09-30.pdf");
+  });
+
+  it("suffixes only the category-only PDF, as the server does", () => {
+    expect(financialReportFileName(PERIOD, "pdf", "transactions")).toBe(
+      "Financial_Report_2026-09-01_to_2026-09-30.pdf",
+    );
+    expect(financialReportFileName(PERIOD, "pdf", "categories")).toBe(
+      "Financial_Report_2026-09-01_to_2026-09-30_by_category.pdf",
+    );
+    expect(financialReportFileName(PERIOD, "pdf", "both")).toBe(
+      "Financial_Report_2026-09-01_to_2026-09-30.pdf",
+    );
+    expect(financialReportFileName(PERIOD, "xlsx", "categories")).toBe(
+      "Financial_Report_2026-09-01_to_2026-09-30.xlsx",
+    );
   });
 
   it("uses a safe Content-Disposition name with the right extension", () => {

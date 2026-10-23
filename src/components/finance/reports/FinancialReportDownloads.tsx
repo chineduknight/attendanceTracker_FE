@@ -1,16 +1,31 @@
-import { useId } from "react";
-import { Badge, Box, Button, Flex, Stack, Text } from "@chakra-ui/react";
+import { useId, useState } from "react";
+import {
+  Badge,
+  Box,
+  Button,
+  CloseButton,
+  Dialog,
+  Flex,
+  Portal,
+  RadioGroup,
+  Stack,
+  Text,
+} from "@chakra-ui/react";
 import { FaFileExcel, FaFilePdf } from "react-icons/fa";
 import {
   FINANCIAL_REPORT_FORMAT_ORDER,
   FINANCIAL_REPORT_FORMATS,
+  FINANCIAL_REPORT_LAYOUTS,
   financialReportFailure,
   FinancialReportFormat,
+  FinancialReportLayout,
   FinancialReportPeriod,
+  FinancialReportPreview,
   financialReportErrorBody,
+  isFinancialReportLayout,
 } from "helpers/financialReport";
 import { formatReportPeriod } from "helpers/ledgerReports";
-import { useFinancialReportAvailability } from "hooks/useLedgerReports";
+import { ReportQueryState } from "hooks/useLedgerReports";
 import { useFinancialReportDownload } from "hooks/useFinancialReportDownload";
 import { ReportNotice } from "components/finance/reports/ReportParts";
 
@@ -42,45 +57,121 @@ const Failure = ({ message, onRetry }: { message: string; onRetry?: () => void }
 );
 
 /**
- * Readiness and downloads for one known organisation and period. Mounted
- * per organisation and period (keyed by the parent), so a preview, a
- * refusal or a download in flight never carries over to another.
+ * The PDF layout chooser. Only the PDF takes a layout; the workbook is fixed.
+ * A small, keyboard-operable dialog so the choice is deliberate.
+ */
+const PdfLayoutDialog = ({
+  open,
+  layout,
+  busy,
+  onLayoutChange,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  layout: FinancialReportLayout;
+  busy: boolean;
+  onLayoutChange: (layout: FinancialReportLayout) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) => (
+  <Dialog.Root
+    open={open}
+    placement="center"
+    onOpenChange={(details) => {
+      if (!details.open) onClose();
+    }}
+  >
+    <Portal>
+      <Dialog.Backdrop />
+      <Dialog.Positioner>
+        <Dialog.Content mx={4}>
+          <Dialog.Header>
+            <Dialog.Title>Download PDF</Dialog.Title>
+          </Dialog.Header>
+          <Dialog.CloseTrigger asChild>
+            <CloseButton size="sm" minW="44px" minH="44px" />
+          </Dialog.CloseTrigger>
+          <Dialog.Body>
+            <RadioGroup.Root
+              name="financial-report-pdf-layout"
+              value={layout}
+              onValueChange={({ value }) => {
+                if (isFinancialReportLayout(value)) onLayoutChange(value);
+              }}
+            >
+              <RadioGroup.Label mb={2}>What the PDF should contain</RadioGroup.Label>
+              <Stack gap={2}>
+                {FINANCIAL_REPORT_LAYOUTS.map((option) => (
+                  <RadioGroup.Item
+                    key={option.value}
+                    value={option.value}
+                    alignItems="flex-start"
+                    minH="44px"
+                    borderWidth="1px"
+                    borderColor="border"
+                    rounded="md"
+                    p={3}
+                  >
+                    <RadioGroup.ItemHiddenInput />
+                    <RadioGroup.ItemIndicator mt="0.5" />
+                    <RadioGroup.ItemText>
+                      <Text as="span" display="block" fontWeight="medium">
+                        {option.label}
+                      </Text>
+                      <Text as="span" display="block" fontSize="sm" color="fg.muted">
+                        {option.description}
+                      </Text>
+                    </RadioGroup.ItemText>
+                  </RadioGroup.Item>
+                ))}
+              </Stack>
+            </RadioGroup.Root>
+          </Dialog.Body>
+          <Dialog.Footer gap={3}>
+            <Button variant="outline" colorPalette="gray" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button variant="solid" colorPalette="red" onClick={onConfirm} disabled={busy}>
+              <FaFilePdf aria-hidden />
+              Download PDF
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Positioner>
+    </Portal>
+  </Dialog.Root>
+);
+
+/**
+ * Downloads for one known organisation and period. Mounted per organisation
+ * and period (keyed by the parent), so a refusal or a download in flight
+ * never carries over to another. The preview (and so the readiness shown
+ * here) is the Summary's own query: one request answers both.
  */
 const PeriodDownloads = ({
   organisationId,
   period,
+  report,
 }: {
   organisationId: string;
   period: FinancialReportPeriod;
+  report: FinancialReportPreview;
 }) => {
-  const availability = useFinancialReportAvailability(organisationId, period);
   const { download, active, failure, savedFileName, pdfRefused } = useFinancialReportDownload(
     organisationId,
     period,
   );
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfLayout, setPdfLayout] = useState<FinancialReportLayout>("transactions");
+
+  const closePdfDialog = () => setPdfDialogOpen(false);
+  const confirmPdf = () => {
+    setPdfDialogOpen(false);
+    download("pdf", pdfLayout);
+  };
 
   const body = (() => {
-    if (availability.isLoading) {
-      return <StatusLine>Checking whether this report can be downloaded…</StatusLine>;
-    }
-    if (availability.isError) {
-      const failed = financialReportFailure(availability.error, financialReportErrorBody(availability.error));
-      return (
-        <Failure
-          message={`Couldn't check this report, so downloads are off. ${failed?.message ?? ""}`.trim()}
-          onRetry={failed?.retryable === false ? undefined : () => availability.refetch()}
-        />
-      );
-    }
-    const report = availability.report;
-    if (!report) {
-      return (
-        <Failure
-          message="The server's answer wasn't in a shape this app understands, so downloads are off."
-          onRetry={() => availability.refetch()}
-        />
-      );
-    }
     if (report.dataState !== "complete") {
       const lead =
         report.dataState === "incomplete"
@@ -124,7 +215,14 @@ const PeriodDownloads = ({
                   loading={active === format}
                   loadingText={`Preparing ${label}…`}
                   disabled={active !== null}
-                  onClick={() => download(format)}
+                  onClick={() => {
+                    if (format === "pdf") {
+                      setPdfLayout("transactions");
+                      setPdfDialogOpen(true);
+                    } else {
+                      download(format);
+                    }
+                  }}
                 >
                   {FORMAT_ICONS[format]}
                   {`Download ${label}`}
@@ -136,7 +234,11 @@ const PeriodDownloads = ({
         {failure && (
           <Failure
             message={failure.message}
-            onRetry={failure.retryable ? () => download(failure.format) : undefined}
+            onRetry={
+              failure.retryable
+                ? () => download(failure.format, failure.layout ?? undefined)
+                : undefined
+            }
           />
         )}
         {savedFileName && <StatusLine>{`Saved ${savedFileName}.`}</StatusLine>}
@@ -150,28 +252,39 @@ const PeriodDownloads = ({
         {`Period: ${formatReportPeriod(period.from, period.to)}`}
       </Text>
       {body}
+      <PdfLayoutDialog
+        open={pdfDialogOpen}
+        layout={pdfLayout}
+        busy={active !== null}
+        onLayoutChange={setPdfLayout}
+        onConfirm={confirmPdf}
+        onClose={closePdfDialog}
+      />
     </Stack>
   );
 };
 
 /**
  * Financial Report v1 downloads on the Summary report: the server's Excel
- * workbook and (where the server offers it) PDF for the period the Summary is
- * showing. Nothing is previewed or recalculated here; only a `complete`
- * report is offered, and the server checks again on download.
+ * workbook and (where the server offers it) PDF for the applied period.
+ * Nothing is previewed or recalculated here; only a `complete` report is
+ * offered, and the server checks again on download.
  */
 const FinancialReportDownloads = ({
   organisationId,
   period,
-  waiting,
+  query,
 }: {
   organisationId: string;
-  /** The Summary's resolved period; null when it isn't known reliably. */
-  period: FinancialReportPeriod | null;
-  /** True while the Summary is loading its period. */
-  waiting: boolean;
+  /** The applied Summary period (never an unsubmitted draft). */
+  period: FinancialReportPeriod;
+  /** The Summary's own Financial Report preview, shared so it is read once. */
+  query: ReportQueryState<FinancialReportPreview>;
 }) => {
   const headingId = useId();
+  const failed = query.isError
+    ? financialReportFailure(query.error, financialReportErrorBody(query.error))
+    : null;
   return (
     <Box
       as="section"
@@ -189,18 +302,25 @@ const FinancialReportDownloads = ({
       <Text fontSize="xs" color="fg.muted" mb={3}>
         {FINANCIAL_REPORT_DOWNLOADS_NOTE}
       </Text>
-      {period ? (
+      {query.isLoading ? (
+        <StatusLine>Checking whether this report can be downloaded…</StatusLine>
+      ) : query.isError ? (
+        <Failure
+          message={`Couldn't check this report, so downloads are off. ${failed?.message ?? ""}`.trim()}
+          onRetry={failed?.retryable === false ? undefined : () => query.refetch()}
+        />
+      ) : !query.report ? (
+        <Failure
+          message="The server's answer wasn't in a shape this app understands, so downloads are off."
+          onRetry={() => query.refetch()}
+        />
+      ) : (
         <PeriodDownloads
           key={`${organisationId}:${period.from}:${period.to}`}
           organisationId={organisationId}
           period={period}
+          report={query.report}
         />
-      ) : (
-        <StatusLine>
-          {waiting
-            ? "Downloads will be ready once the summary period has loaded."
-            : "The report period couldn't be confirmed, so downloads are off. Load the summary again to try."}
-        </StatusLine>
       )}
     </Box>
   );

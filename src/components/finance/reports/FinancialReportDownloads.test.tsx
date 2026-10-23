@@ -24,22 +24,87 @@ const ACCOUNTS = toLedgerAccounts([BANK]) as LedgerAccount[];
 
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const SEPTEMBER = { from: "2026-09-01", to: "2026-09-30" };
-
-const summary = (period: { from: string; to: string }) => ({
-  ...period,
-  summaryState: "known",
-  income: { totalKobo: 205000, categories: [{ accountId: "i".repeat(24), name: "Donations", active: true, amountKobo: 205000 }] },
-  expense: { totalKobo: 150000, categories: [] },
-  netKobo: 55000,
-  memberMoney: null,
-});
+/** Today in Lagos for these tests; the Summary then defaults to September. */
+const TODAY = "2026-09-30";
 
 const preview = (period: { from: string; to: string }, extra: Record<string, unknown> = {}) => ({
   organisation: { id: "org1", name: "Organisation A" },
   period,
+  openingDate: "2026-09-01",
+  lockedThrough: "2026-09-30",
   provisional: false,
+  generatedBy: { userId: "officer-1", username: "Treasurer" },
+  generatedAt: "2026-09-30T10:00:00.000Z",
+  readAt: "2026-09-30T10:00:00.000Z",
   dataState: "complete",
   issues: [],
+  excludedAccounts: [],
+  statement: {
+    broughtForward: { asOf: "2026-08-31", basis: "balance", totalKobo: 17000000 },
+    moneyReceived: {
+      totalKobo: 205000,
+      groups: [
+        {
+          key: "receipts",
+          label: "Receipts",
+          count: 1,
+          totalKobo: 205000,
+          categories: [
+            { categoryAccountId: "i".repeat(24), categoryName: "Donations", count: 1, totalKobo: 205000 },
+          ],
+          rows: [],
+          rowsTruncated: false,
+        },
+        {
+          key: "member_money",
+          label: "Money received for members",
+          count: 0,
+          totalKobo: 0,
+          categories: [],
+          rows: [],
+          rowsTruncated: false,
+        },
+      ],
+    },
+    moneyPaid: {
+      totalKobo: 150000,
+      groups: [
+        { key: "expenses", label: "Expenses", count: 1, totalKobo: 150000, categories: [], rows: [], rowsTruncated: false },
+        { key: "member_refunds", label: "Member money refunded", count: 0, totalKobo: 0, categories: [], rows: [], rowsTruncated: false },
+      ],
+    },
+    broughtIntoBooks: { totalKobo: 0, count: 0, rows: [], rowsTruncated: false },
+    transfers: { totalMovedKobo: 0, count: 0, rows: [], rowsTruncated: false },
+    carriedForward: { asOf: period.to, totalKobo: 17480000 },
+    grossBalanceKobo: 17500000,
+  },
+  accounts: [
+    {
+      accountId: BANK.id,
+      name: BANK.name,
+      kind: "bank",
+      active: true,
+      state: "in_books",
+      broughtInOn: null,
+      broughtForwardKobo: 0,
+      receivedKobo: 0,
+      paidKobo: 0,
+      transfersInKobo: 0,
+      transfersOutKobo: 0,
+      broughtInKobo: 0,
+      carriedForwardKobo: 17480000,
+      bankName: null,
+      accountNumberLast4: null,
+    },
+  ],
+  reconciliation: {
+    income: {},
+    expense: {},
+    surplusKobo: 0,
+    bridge: {},
+    allocations: {},
+    memberMoney: null,
+  },
   downloads: { xlsx: true, pdf: false },
   ...extra,
 });
@@ -53,17 +118,11 @@ const periodOf = (url: string) => {
 type Reply = unknown | Error | Promise<unknown>;
 
 interface Routes {
-  summary?: (url: string) => Reply;
   preview?: (url: string) => Reply;
   exportFile?: (url: string, config: Record<string, unknown>) => Reply;
 }
 
 const defaultRoutes: Required<Routes> = {
-  // A blank range resolves to the server's default period.
-  summary: (url) => {
-    const asked = periodOf(url);
-    return summary({ from: asked.from || SEPTEMBER.from, to: asked.to || SEPTEMBER.to });
-  },
   preview: (url) => preview(periodOf(url)),
   exportFile: (url) => ({
     data: new Blob(["file"], { type: url.includes("format=pdf") ? "application/pdf" : XLSX }),
@@ -81,10 +140,6 @@ const serve = (routes: Routes = {}) => {
       });
     if (url.includes("/ledger/reports/financial/export")) return settle(route.exportFile(url, config), false);
     if (url.includes("/ledger/reports/financial")) return settle(route.preview(url), true);
-    if (url.includes("/ledger/summary")) return settle(route.summary(url), true);
-    if (url.includes("/cashbook")) {
-      return settle({ account: BANK, balanceState: "known", balanceBeforeKobo: 0, items: [], dayClosings: [], nextCursor: null }, true);
-    }
     if (url.includes("/ledger/balances")) return settle({ asOf: "2026-09-30", accounts: [], moneyTotalKobo: 0 }, true);
     return Promise.reject(new Error(`unexpected GET ${url}`));
   });
@@ -117,6 +172,8 @@ const ui = (organisationId = "org1", downloads = true) => (
     <LedgerReportsPanel
       organisationId={organisationId}
       accounts={ACCOUNTS}
+      openingDate="2026-09-01"
+      today={TODAY}
       enabled
       financialReportDownloads={downloads}
     />
@@ -131,10 +188,22 @@ const exportCalls = () =>
 const openSummary = async (organisationId = "org1", downloads = true) => {
   const view = render(ui(organisationId, downloads));
   await selectTab(screen.getByRole("tab", { name: "Summary" }));
-  // Wait for the Cashbook tab (open first, with its own Show button) to unmount.
-  await waitFor(() => expect(screen.queryByLabelText("Account")).not.toBeInTheDocument());
-  await screen.findByText("Total income");
+  // With downloads off there is no downloads section to wait for; the
+  // statement itself is the marker. With a failed or unreadable preview the
+  // statement is replaced by its error, but the downloads section stays.
+  await screen.findByText(downloads ? "Financial Report Downloads" : "Financial Summary");
   return view;
+};
+
+/** The visible panel of one report tab (closed panels stay mounted). */
+const tabPanel = (name: "Cashbook" | "Balances" | "Summary") =>
+  screen.getByRole("tabpanel", { name });
+
+/** Confirm the PDF layout dialog and wait for it to close. */
+const confirmPdfDialog = async () => {
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Download PDF" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 };
 
 const downloadsRegion = () => screen.getByRole("region", { name: "Financial Report Downloads" });
@@ -157,29 +226,30 @@ afterAll(() => {
 });
 
 describe("Financial Report downloads gate", () => {
-  it("leaves the Summary exactly as it was while the gate is off", async () => {
+  it("leaves the financial summary statement on show while the download gate is off", async () => {
     await openSummary("org1", false);
+    expect(screen.getByText("Financial Summary")).toBeInTheDocument();
     expect(screen.getByText("1 Sep 2026 – 30 Sep 2026")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show" })).toBeInTheDocument();
     expect(screen.queryByText("Financial Report Downloads")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
-    expect(previewUrls()).toEqual([]);
+    // The statement itself still reads the preview for its figures.
+    expect(previewUrls()).toHaveLength(1);
   });
 
   it("fetches nothing for the report from the Cashbook or Balances tabs", async () => {
     render(ui());
-    await screen.findByText("No entries in this period");
+    await screen.findByText("Total income");
     await selectTab(screen.getByRole("tab", { name: "Balances" }));
     await waitFor(() => expect(urls()).toContain("/finance/org1/ledger/balances"));
-    expect(urls()).toEqual([`/finance/org1/ledger/accounts/${BANK.id}/cashbook?limit=50`, "/finance/org1/ledger/balances"]);
-    expect(screen.queryByText("Financial Report Downloads")).not.toBeInTheDocument();
+    expect(urls().some((url) => url.includes("/cashbook"))).toBe(false);
+    expect(within(tabPanel("Balances")).queryByText("Financial Report Downloads")).not.toBeInTheDocument();
   });
 });
 
 describe("Financial Report downloads period", () => {
-  it("uses the server's resolved period for a blank (default) range", async () => {
+  it("uses the summary's default month-to-date period", async () => {
     await openSummary();
-    expect(urls()).toContain("/finance/org1/ledger/summary");
     const region = downloadsRegion();
     expect(within(region).getByText(/Receipts and Payments Statement, account balances and reconciliation/)).toBeInTheDocument();
     expect(await within(region).findByRole("button", { name: "Download Excel" })).toBeEnabled();
@@ -207,35 +277,32 @@ describe("Financial Report downloads period", () => {
     ]);
   });
 
-  it("asks nothing while the summary period is loading", async () => {
-    const summaryReply = deferred();
-    serve({ summary: () => summaryReply.promise });
+  it("shows a checking state while the preview loads, then the download", async () => {
+    const pendingPreview = deferred();
+    serve({ preview: () => pendingPreview.promise });
     render(ui());
-    await selectTab(screen.getByRole("tab", { name: "Summary" }));
     expect(
-      await within(downloadsRegion()).findByText("Downloads will be ready once the summary period has loaded."),
+      await within(downloadsRegion()).findByText("Checking whether this report can be downloaded…"),
     ).toBeInTheDocument();
-    expect(previewUrls()).toEqual([]);
-    await act(async () => summaryReply.resolve(summary(SEPTEMBER)));
+    expect(previewUrls()).toHaveLength(1);
+    await act(async () => pendingPreview.resolve(preview(SEPTEMBER)));
     expect(await within(downloadsRegion()).findByRole("button", { name: "Download Excel" })).toBeInTheDocument();
   });
 
-  it("turns downloads off when the summary can't give a period", async () => {
-    serve({ summary: () => httpError(500, { error: "Server error." }) });
+  it("turns downloads off when the preview fails", async () => {
+    serve({ preview: () => httpError(500, { error: "Server error." }) });
     render(ui());
-    await selectTab(screen.getByRole("tab", { name: "Summary" }));
-    expect(await screen.findByText(/The report period couldn't be confirmed, so downloads are off/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
-    expect(previewUrls()).toEqual([]);
+    expect(await within(downloadsRegion()).findByText(/Couldn't check this report, so downloads are off\. Server error\./)).toBeInTheDocument();
+    expect(within(downloadsRegion()).queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
   });
 
-  it("turns downloads off when the summary answers for other dates than were applied", async () => {
+  it("turns downloads off when the preview answers for other dates than were applied", async () => {
     await openSummary();
-    serve({ summary: () => summary(SEPTEMBER) });
+    serve({ preview: () => preview(SEPTEMBER) });
     applyRange("2026-09-05", "2026-09-15");
-    expect(await screen.findByText(/The report period couldn't be confirmed/)).toBeInTheDocument();
-    expect(previewUrls()).not.toContainEqual(expect.stringContaining("from=2026-09-05"));
-    expect(previewUrls().every((url) => /from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/.test(url))).toBe(true);
+    expect(await within(downloadsRegion()).findByText(/wasn't in a shape this app understands/)).toBeInTheDocument();
+    expect(within(downloadsRegion()).queryByRole("button", { name: /Download/ })).not.toBeInTheDocument();
+    expect(previewUrls()).toContain("/finance/org1/ledger/reports/financial?from=2026-09-05&to=2026-09-15");
   });
 
   it("never offers a previous period's readiness while the new one loads, or a mismatched answer", async () => {
@@ -381,13 +448,61 @@ describe("Financial Report downloads", () => {
     expect(screen.getByText("Total income")).toBeInTheDocument();
   });
 
-  it("downloads the PDF when offered", async () => {
+  it("asks for the PDF layout, then downloads the chosen one", async () => {
     serve({ preview: (url) => preview(periodOf(url), { downloads: { xlsx: true, pdf: true } }) });
     await openSummary();
     fireEvent.click(await within(downloadsRegion()).findByRole("button", { name: "Download PDF" }));
+
+    // Detailed transactions is the default; nothing is requested until the
+    // officer confirms.
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("radio", { name: /Detailed transactions/ })).toBeChecked();
+    expect(exportCalls()).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Download PDF" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
     await within(downloadsRegion()).findByText("Saved Financial_Report_2026-09-01_to_2026-09-30.pdf.");
     expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), "Financial_Report_2026-09-01_to_2026-09-30.pdf");
-    expect(exportCalls()[0][0]).toContain("format=pdf");
+    expect(exportCalls()[0][0]).toBe(
+      "/finance/org1/ledger/reports/financial/export?from=2026-09-01&to=2026-09-30&format=pdf&layout=transactions",
+    );
+  });
+
+  it.each([
+    ["Summary by category", "categories", "_by_category"],
+    ["Both detailed and summary", "both", ""],
+  ])("downloads the %s PDF with its layout and file name", async (option, layout, suffix) => {
+    serve({ preview: (url) => preview(periodOf(url), { downloads: { xlsx: true, pdf: true } }) });
+    await openSummary();
+    fireEvent.click(await within(downloadsRegion()).findByRole("button", { name: "Download PDF" }));
+    const dialog = await screen.findByRole("dialog");
+    const choice = within(dialog).getByRole("radio", { name: new RegExp(option) });
+    // Ark radios settle asynchronously: flush before clicking, then wait.
+    // An async act flushes Ark's controlled value into the dialog before the
+    // confirm click; the native input alone would flip before React knows.
+    await act(async () => {
+      choice.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Download PDF" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    const fileName = `Financial_Report_2026-09-01_to_2026-09-30${suffix}.pdf`;
+    await within(downloadsRegion()).findByText(`Saved ${fileName}.`);
+    expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), fileName);
+    expect(exportCalls()[0][0]).toBe(
+      `/finance/org1/ledger/reports/financial/export?from=2026-09-01&to=2026-09-30&format=pdf&layout=${layout}`,
+    );
+  });
+
+  it("never sends a layout with the Excel download", async () => {
+    serve({ preview: (url) => preview(periodOf(url), { downloads: { xlsx: true, pdf: true } }) });
+    await openSummary();
+    fireEvent.click(await within(downloadsRegion()).findByRole("button", { name: "Download Excel" }));
+    await within(downloadsRegion()).findByText(/^Saved Financial_Report_2026-09-01_to_2026-09-30\.xlsx/);
+    expect(exportCalls()[0][0]).toBe(
+      "/finance/org1/ledger/reports/financial/export?from=2026-09-01&to=2026-09-30&format=xlsx",
+    );
   });
 
   it("shows which download is preparing and blocks a second request", async () => {
@@ -455,6 +570,7 @@ describe("Financial Report downloads", () => {
     });
     await openSummary();
     fireEvent.click(await within(downloadsRegion()).findByRole("button", { name: "Download PDF" }));
+    await confirmPdfDialog();
     const alert = await within(downloadsRegion()).findByRole("alert");
     expect(alert).toHaveTextContent("Download the Excel workbook instead.");
     expect(within(downloadsRegion()).queryByRole("button", { name: "Download PDF" })).not.toBeInTheDocument();
@@ -469,6 +585,7 @@ describe("Financial Report downloads", () => {
     });
     await openSummary();
     fireEvent.click(await within(downloadsRegion()).findByRole("button", { name: "Download PDF" }));
+    await confirmPdfDialog();
     expect(await within(downloadsRegion()).findByRole("alert")).toHaveTextContent(/download the Excel workbook/);
     expect(within(downloadsRegion()).getByRole("button", { name: "Download PDF" })).toBeInTheDocument();
   });
