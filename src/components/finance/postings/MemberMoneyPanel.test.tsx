@@ -746,6 +746,9 @@ describe("one pending posting shared with Record money", () => {
       within(recordMoney().getByRole("radiogroup", { name: "Into" })).getByRole("radio", { name: /Cash in hand/ }),
     );
     await chooseOption(recordMoney().getByLabelText("Category"), "Donations");
+    fireEvent.change(recordMoney().getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
     fireEvent.click(recordMoney().getByRole("button", { name: "Record money in" }));
     expect(await recordMoney().findByText("Journal number: R-000001")).toBeInTheDocument();
 

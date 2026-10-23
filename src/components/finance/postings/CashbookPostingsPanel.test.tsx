@@ -175,10 +175,16 @@ const openTransfer = () => {
   fireEvent.click(screen.getByRole("button", { name: /^Transfer/ }));
 };
 
+const fillDescription = (value = "Donation towards choir anniversary") =>
+  fireEvent.change(screen.getByLabelText("Description (required)"), {
+    target: { value },
+  });
+
 const fillReceipt = async (amount = "25000") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
   pickAccount("Into", "Cash in hand");
   await chooseOption(screen.getByLabelText("Category"), "Donations");
+  fillDescription();
 };
 
 const fillExpense = async (amount = "7500") => {
@@ -188,6 +194,7 @@ const fillExpense = async (amount = "7500") => {
   fireEvent.change(screen.getByLabelText("Paid to (required)"), {
     target: { value: "Venue Ltd" },
   });
+  fillDescription("Purchase of microphone cables");
 };
 
 const fillTransfer = async (amount = "20000") => {
@@ -296,6 +303,9 @@ const fillReceiptIn = async (panel: HTMLElement, amount = "25000", { open = true
   fireEvent.change(tab.getByLabelText("Amount"), { target: { value: amount } });
   pickAccount("Into", "Cash in hand", panel);
   await chooseOption(tab.getByLabelText("Category"), "Donations");
+  fireEvent.change(tab.getByLabelText("Description (required)"), {
+    target: { value: "Donation towards choir anniversary" },
+  });
 };
 
 const SUPERSEDED = "Check the journal entries before posting this";
@@ -420,6 +430,7 @@ describe("successful postings", () => {
       incomeAccountId: "income",
       method: "cash",
       counterpartyName: "Ada Obi",
+      note: "Donation towards choir anniversary",
     });
     expect(body.idempotencyKey).toMatch(/^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/);
     expect("lines" in body).toBe(false);
@@ -448,6 +459,7 @@ describe("successful postings", () => {
       fromAccountId: "bank",
       expenseAccountId: "expense",
       counterpartyName: "Venue Ltd",
+      note: "Purchase of microphone cables",
       // Paid from a bank account, so the method starts on bank transfer.
       method: "bank_transfer",
     });
@@ -653,6 +665,9 @@ describe("cross-tab coordination", () => {
     });
     pickAccount("Into", "Cash in hand", panels[0]);
     await chooseOption(first.getByLabelText("Category"), "Donations");
+    fireEvent.change(first.getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
 
     fireEvent.click(second.getByRole("button", { name: /Money in/ }));
     fireEvent.change(second.getByLabelText("Amount"), {
@@ -660,6 +675,9 @@ describe("cross-tab coordination", () => {
     });
     pickAccount("Into", "Cash in hand", panels[1]);
     await chooseOption(second.getByLabelText("Category"), "Donations");
+    fireEvent.change(second.getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
 
     const submitButtons = screen.getAllByRole("button", { name: "Record money in" });
     fireEvent.click(submitButtons[0]);
@@ -702,6 +720,43 @@ describe("validation and eligibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
 
     expect(await screen.findByText("Enter an amount.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("refuses a receipt without a description", async () => {
+    renderPanel();
+    await openReceipt();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
+    pickAccount("Into", "Cash in hand");
+    await chooseOption(screen.getByLabelText("Category"), "Donations");
+
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
+    expect(await screen.findByText("Description is required.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+
+    fillDescription("   ");
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
+    expect(screen.getByText("Description is required.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expense without a description", async () => {
+    renderPanel();
+    openExpense();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7500" } });
+    pickAccount("Paid from", "Main bank");
+    await chooseOption(screen.getByLabelText("Category"), "Venue hire");
+    fireEvent.change(screen.getByLabelText("Paid to (required)"), {
+      target: { value: "Venue Ltd" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
+    expect(await screen.findByText("Description is required.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+
+    fillDescription(" \n\t ");
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
+    expect(screen.getByText("Description is required.")).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -1284,13 +1339,35 @@ describe("shorter forms", () => {
     expect(screen.getByRole("radio", { name: "Cash" })).toBeChecked();
   });
 
-  it("keeps references and the note behind Add details", async () => {
+  it("keeps only the optional references behind Add details", async () => {
     renderPanel();
     await openReceipt();
+    // The description is a main field now, not a hidden detail.
+    expect(screen.getByLabelText("Description (required)")).toBeVisible();
     expect(screen.queryByLabelText("External reference")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Add details/ }));
     expect(screen.getByLabelText("External reference")).toBeInTheDocument();
-    expect(screen.getByLabelText("Note")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Note")).not.toBeInTheDocument();
+  });
+
+  it("shows and accepts the description at a phone width", async () => {
+    const originalWidth = window.innerWidth;
+    window.innerWidth = 375;
+    try {
+      renderPanel();
+      await openReceipt();
+      const description = screen.getByLabelText("Description (required)");
+      expect(description.tagName).toBe("TEXTAREA");
+      expect(description).toBeVisible();
+      expect(description).toBeEnabled();
+      expect(description).toHaveAttribute("maxlength", "500");
+      fireEvent.change(description, {
+        target: { value: "Donation towards choir anniversary" },
+      });
+      expect(description).toHaveValue("Donation towards choir anniversary");
+    } finally {
+      window.innerWidth = originalWidth;
+    }
   });
 
   it("starts on the account last used on this device", async () => {
@@ -1325,6 +1402,7 @@ describe("<CashbookPostingsPanel> with no category of that kind", () => {
     fireEvent.change(screen.getByLabelText("Paid to (required)"), {
       target: { value: "Generator Ltd" },
     });
+    fillDescription("Purchase of microphone cables");
 
     api.post.mockResolvedValueOnce({
       data: {

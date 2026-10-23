@@ -331,7 +331,15 @@ export const PostingDateField = ({
  * Optional details behind one tap. Opens by itself when any of them already
  * holds a value, so nothing typed is ever hidden.
  */
-export const AddDetails = ({ filled, children }: { filled: boolean; children: ReactNode }) => {
+export const AddDetails = ({
+  filled,
+  hint = "Reference, evidence, note",
+  children,
+}: {
+  filled: boolean;
+  hint?: string;
+  children: ReactNode;
+}) => {
   const [open, setOpen] = useState(false);
   const shown = open || filled;
   return (
@@ -348,7 +356,7 @@ export const AddDetails = ({ filled, children }: { filled: boolean; children: Re
         >
           {shown ? "Hide details" : "Add details"}
           <Text as="span" fontSize="sm" color="fg.muted" fontWeight="normal">
-            Reference, evidence, note
+            {hint}
           </Text>
         </Button>
       )}
@@ -490,7 +498,19 @@ export const ReceiptForm = ({
           maxLength={POSTING_TEXT_LIMITS.counterpartyName}
           helper="Optional."
         />
-        <AddDetails filled={Boolean(externalReference || evidenceReference || reference || note)}>
+        <TextField
+          label="Description"
+          value={note}
+          onChange={setNote}
+          maxLength={POSTING_TEXT_LIMITS.note}
+          helper="This description will appear on the financial report."
+          required
+          multiline
+        />
+        <AddDetails
+          filled={Boolean(externalReference || evidenceReference || reference)}
+          hint="Reference and evidence"
+        >
           <TextField
             label="External reference"
             value={externalReference}
@@ -511,14 +531,6 @@ export const ReceiptForm = ({
             onChange={setReference}
             maxLength={POSTING_TEXT_LIMITS.reference}
             helper="A short label shown in the transactions list."
-          />
-          <TextField
-            label="Note"
-            value={note}
-            onChange={setNote}
-            maxLength={POSTING_TEXT_LIMITS.note}
-            helper="Anything the next officer should know."
-            multiline
           />
         </AddDetails>
       </LockableFields>
@@ -637,7 +649,19 @@ export const ExpenseForm = ({
         />
         <MethodChips value={from.method} onChange={from.setMethod} hint={from.hint} />
         <PostingDateField context={context} value={businessDate} onChange={setBusinessDate} />
-        <AddDetails filled={Boolean(externalReference || evidenceReference || reference || note)}>
+        <TextField
+          label="Description"
+          value={note}
+          onChange={setNote}
+          maxLength={POSTING_TEXT_LIMITS.note}
+          helper="This description will appear on the financial report."
+          required
+          multiline
+        />
+        <AddDetails
+          filled={Boolean(externalReference || evidenceReference || reference)}
+          hint="Reference and evidence"
+        >
           <TextField
             label="External reference"
             value={externalReference}
@@ -658,14 +682,6 @@ export const ExpenseForm = ({
             onChange={setReference}
             maxLength={POSTING_TEXT_LIMITS.reference}
             helper="A short label shown in the transactions list."
-          />
-          <TextField
-            label="Note"
-            value={note}
-            onChange={setNote}
-            maxLength={POSTING_TEXT_LIMITS.note}
-            helper="Anything the next officer should know."
-            multiline
           />
         </AddDetails>
       </LockableFields>
