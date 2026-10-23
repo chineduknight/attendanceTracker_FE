@@ -95,3 +95,74 @@ export type SummaryReport =
       /** null when the organisation has no member-money account. */
       memberMoney: MemberMoneySummary | null;
     };
+
+/* ------------------------------------------------------------------ */
+/* Financial Report v1 preview figures                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The Financial Report preview's category totals (BE-1). `rowLimit` only
+ * bounds its sample rows; these totals cover the whole period and are what
+ * the PDF and workbook print. `name` is null for member money, which has no
+ * income or expense account.
+ */
+export interface FinancialReportCategoryTotal {
+  accountId: string | null;
+  name: string | null;
+  count: number;
+  /** Net of reversals; may be negative or zero. */
+  amountKobo: number;
+}
+
+/** One statement group ("receipts", "member_money", "expenses", ...). */
+export interface FinancialReportMoneyGroup {
+  key: string;
+  label: string;
+  /** Exact number of entries, even when the preview's rows are capped. */
+  count: number;
+  totalKobo: number;
+  categories: FinancialReportCategoryTotal[];
+}
+
+export type FinancialReportAccountState = "in_books" | "brought_in" | "unknown";
+
+/** One reported cash or bank account at period end. */
+export interface FinancialReportAccountRow {
+  accountId: string;
+  name: string;
+  kind: "cash" | "bank";
+  active: boolean;
+  state: FinancialReportAccountState;
+  /** null when the account's balance is unknown; never treated as zero. */
+  carriedForwardKobo: number | null;
+  broughtInOn: string | null;
+  bankName: string | null;
+  accountNumberLast4: string | null;
+}
+
+/**
+ * The statement as the backend computed it. B/F, gross and C/F are null when
+ * the report is incomplete; they are never recomputed here.
+ */
+export interface FinancialReportStatement {
+  broughtForwardKobo: number | null;
+  broughtForwardAsOf: string | null;
+  broughtForwardBasis: "verified_opening" | "balance" | null;
+  broughtInCount: number;
+  broughtInTotalKobo: number;
+  receivedGroups: FinancialReportMoneyGroup[];
+  receivedTotalKobo: number;
+  paidGroups: FinancialReportMoneyGroup[];
+  paidTotalKobo: number;
+  grossBalanceKobo: number | null;
+  carriedForwardKobo: number | null;
+  carriedForwardAsOf: string;
+  transfersCount: number;
+  transfersTotalKobo: number;
+}
+
+/** An account the server left out of the report (and said why). */
+export interface FinancialReportExcludedAccount {
+  name: string;
+  reason: "never_opened" | "not_yet_in_books" | null;
+}

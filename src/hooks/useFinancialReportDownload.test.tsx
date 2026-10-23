@@ -98,8 +98,37 @@ describe("useFinancialReportDownload", () => {
     );
     const { result } = render();
     await act(() => result.current.download("pdf"));
-    expect(adapter.mock.calls[0][0].url).toContain("format=pdf");
+    expect(adapter.mock.calls[0][0].url).toBe(
+      "/finance/org1/ledger/reports/financial/export?from=2026-09-01&to=2026-09-30&format=pdf&layout=transactions",
+    );
     expect((saveBlob as jest.Mock).mock.calls[0][1]).toBe("Financial_Report_2026-09-01_to_2026-09-30.pdf");
+  });
+
+  it("sends the chosen layout only for the PDF, and names a category PDF as documented", async () => {
+    adapter.mockImplementation(async (config) =>
+      ok(config, new Blob(["%PDF"], { type: "application/pdf" }), { "content-type": "application/pdf" }),
+    );
+    const { result } = render();
+    await act(() => result.current.download("pdf", "categories"));
+
+    expect(adapter.mock.calls[0][0].url).toBe(
+      "/finance/org1/ledger/reports/financial/export?from=2026-09-01&to=2026-09-30&format=pdf&layout=categories",
+    );
+    // Content-Disposition is not readable cross-origin: the documented suffix.
+    expect((saveBlob as jest.Mock).mock.calls[0][1]).toBe(
+      "Financial_Report_2026-09-01_to_2026-09-30_by_category.pdf",
+    );
+  });
+
+  it("never sends a layout with the workbook", async () => {
+    adapter.mockImplementation(async (config) =>
+      ok(config, new Blob(["x"], { type: XLSX }), { "content-type": XLSX }),
+    );
+    const { result } = render();
+    await act(() => result.current.download("xlsx", "categories"));
+    expect(adapter.mock.calls[0][0].url).toBe(
+      "/finance/org1/ledger/reports/financial/export?from=2026-09-01&to=2026-09-30&format=xlsx",
+    );
   });
 
   it("scopes the request to the organisation", async () => {
@@ -137,6 +166,7 @@ describe("useFinancialReportDownload", () => {
     expect(saveBlob).not.toHaveBeenCalled();
     expect(result.current.failure).toEqual({
       format: "xlsx",
+      layout: null,
       code: "REPORT_INCOMPLETE",
       retryable: false,
       message:

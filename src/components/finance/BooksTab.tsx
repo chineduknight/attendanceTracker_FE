@@ -606,7 +606,11 @@ const BooksScreens = ({
 
       {available("reports") && (
         <Screen screen="reports" {...screenProps}>
-          <LedgerReportsPanel organisationId={organisationId} accounts={accounts} />
+          <LedgerReportsPanel
+            organisationId={organisationId}
+            accounts={accounts}
+            openingDate={status.openingDate}
+          />
         </Screen>
       )}
 
