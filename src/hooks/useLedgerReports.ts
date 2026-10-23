@@ -2,6 +2,7 @@ import { financeRequest } from "services/api/request";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { FinancialReportPeriod, toFinancialReportAvailability } from "helpers/financialReport";
 import {
   CASHBOOK_PAGE_SIZE,
   reportQuery,
@@ -109,4 +110,30 @@ export const useLedgerSummary = (
     enabled: enabled && Boolean(organisationId),
   });
   return reportQueryState(query, toSummaryReport(query.data?.data));
+};
+
+/**
+ * Financial Report v1 readiness for one exact period: only whether, and in
+ * which formats, it can be downloaded. Nothing until the period is known.
+ * The preview is a whole-books snapshot read, so it is not repeated on every
+ * window focus; ledger writes still refresh it through `ledger.root`, and the
+ * download itself is checked again by the server.
+ */
+export const useFinancialReportAvailability = (
+  organisationId: string,
+  period: FinancialReportPeriod | null,
+) => {
+  const from = period?.from ?? "";
+  const to = period?.to ?? "";
+  const url =
+    convertParamsToString(financeRequest.LEDGER_FINANCIAL_REPORT, { organisationId }) +
+    reportQuery({ from, to });
+  const query = useQueryWrapper(queryKeys.finance.ledger.financialReport(organisationId, from, to), url, {
+    enabled: Boolean(organisationId) && period !== null,
+    refetchOnWindowFocus: false,
+  });
+  return reportQueryState(
+    query,
+    period ? toFinancialReportAvailability(query.data?.data, period) : null,
+  );
 };

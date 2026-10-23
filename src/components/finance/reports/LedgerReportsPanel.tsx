@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { Box, Tabs, Text } from "@chakra-ui/react";
 import { LedgerAccount } from "components/finance/ledgerTypes";
-import { LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
+import { FINANCIAL_REPORT_DOWNLOADS_UI_ENABLED, LEDGER_REPORTS_UI_ENABLED } from "config/ledgerReports";
 import { usePermissions } from "rbac/usePermissions";
 import BalancesReport from "components/finance/reports/BalancesReport";
 import CashbookReport, { CashbookView, INITIAL_CASHBOOK_VIEW } from "components/finance/reports/CashbookReport";
@@ -32,10 +32,13 @@ const LedgerReportsPanel = ({
   organisationId,
   accounts,
   enabled = LEDGER_REPORTS_UI_ENABLED,
+  financialReportDownloads = FINANCIAL_REPORT_DOWNLOADS_UI_ENABLED,
 }: {
   organisationId: string;
   accounts: LedgerAccount[] | null;
   enabled?: boolean;
+  /** Financial Report v1 downloads on the Summary report. */
+  financialReportDownloads?: boolean;
 }) => {
   const headingId = useId();
   const canView = usePermissions().has("finance.view");
@@ -86,6 +89,7 @@ const LedgerReportsPanel = ({
             organisationId={organisationId}
             range={summaryRange}
             onRangeChange={setSummaryRange}
+            downloadsEnabled={financialReportDownloads}
           />
         </Tabs.Content>
       </Tabs.Root>
