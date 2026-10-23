@@ -155,6 +155,9 @@ it("keeps a save that is in flight when the sheet closes, and reports its receip
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
   pickAccount("Into", "Cash in hand");
   await chooseOption(screen.getByLabelText("Category"), "Donations");
+  fireEvent.change(screen.getByLabelText("Description (required)"), {
+    target: { value: "Donation towards choir anniversary" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
 

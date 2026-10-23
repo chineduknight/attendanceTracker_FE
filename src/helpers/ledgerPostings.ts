@@ -257,6 +257,13 @@ export const receiptDraftIssue = (
       label: "Received from",
       max: POSTING_TEXT_LIMITS.counterpartyName,
     }) ??
+    // The description is printed on the Financial Report PDF, so it is required.
+    postingTextIssue({
+      value: draft.note,
+      label: "Description",
+      max: POSTING_TEXT_LIMITS.note,
+      required: true,
+    }) ??
     postingTextIssue({
       value: draft.externalReference,
       label: "External reference",
@@ -271,11 +278,6 @@ export const receiptDraftIssue = (
       value: draft.reference,
       label: "Reference",
       max: POSTING_TEXT_LIMITS.reference,
-    }) ??
-    postingTextIssue({
-      value: draft.note,
-      label: "Note",
-      max: POSTING_TEXT_LIMITS.note,
     })
   );
 };
@@ -300,6 +302,13 @@ export const expenseDraftIssue = (
       max: POSTING_TEXT_LIMITS.counterpartyName,
       required: true,
     }) ??
+    // The description is printed on the Financial Report PDF, so it is required.
+    postingTextIssue({
+      value: draft.note,
+      label: "Description",
+      max: POSTING_TEXT_LIMITS.note,
+      required: true,
+    }) ??
     postingTextIssue({
       value: draft.externalReference,
       label: "External reference",
@@ -314,11 +323,6 @@ export const expenseDraftIssue = (
       value: draft.reference,
       label: "Reference",
       max: POSTING_TEXT_LIMITS.reference,
-    }) ??
-    postingTextIssue({
-      value: draft.note,
-      label: "Note",
-      max: POSTING_TEXT_LIMITS.note,
     })
   );
 };

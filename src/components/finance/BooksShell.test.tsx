@@ -466,6 +466,9 @@ describe("Books saves the officer walks away from", () => {
     fireEvent.change(within(sheet).getByLabelText("Amount"), { target: { value: "5000" } });
     fireEvent.click(within(within(sheet).getByRole("radiogroup", { name: "Into" })).getByRole("radio", { name: /Cash in hand/ }));
     await chooseOption(within(sheet).getByLabelText("Category"), "Donations");
+    fireEvent.change(within(sheet).getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
     fireEvent.click(within(sheet).getByRole("button", { name: "Record money in" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
     fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));

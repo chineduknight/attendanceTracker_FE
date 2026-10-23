@@ -81,7 +81,7 @@ const receipt = (overrides: Partial<ReceiptDraft> = {}): ReceiptDraft => ({
   externalReference: "",
   evidenceReference: "",
   reference: "",
-  note: "",
+  note: "Donation towards choir anniversary",
   ...overrides,
 });
 
@@ -95,7 +95,7 @@ const expense = (overrides: Partial<ExpenseDraft> = {}): ExpenseDraft => ({
   externalReference: "",
   evidenceReference: "",
   reference: "",
-  note: "",
+  note: "Purchase of microphone cables",
   ...overrides,
 });
 
@@ -282,6 +282,28 @@ describe("draft validation", () => {
     ).toBe("Paid to is required.");
   });
 
+  it("requires a non-blank description on receipts and expenses", () => {
+    for (const note of ["", "   ", "\n\t "]) {
+      expect(receiptDraftIssue(receipt({ note }), CONTEXT)).toBe(
+        "Description is required.",
+      );
+      expect(expenseDraftIssue(expense({ note }), CONTEXT)).toBe(
+        "Description is required.",
+      );
+    }
+  });
+
+  it("accepts a meaningful description and keeps the 500-character limit", () => {
+    expect(
+      receiptDraftIssue(receipt({ note: "Donation towards choir anniversary" }), CONTEXT),
+    ).toBeNull();
+    expect(
+      expenseDraftIssue(expense({ note: "Purchase of microphone cables" }), CONTEXT),
+    ).toBeNull();
+    expect(receiptDraftIssue(receipt({ note: "x".repeat(500) }), CONTEXT)).toBeNull();
+    expect(expenseDraftIssue(expense({ note: "x".repeat(500) }), CONTEXT)).toBeNull();
+  });
+
   it("refuses a transfer to the same account", () => {
     expect(
       transferDraftIssue(transfer({ toAccountId: "cash" }), CONTEXT),
@@ -291,7 +313,10 @@ describe("draft validation", () => {
   it("enforces the server text limits", () => {
     expect(
       receiptDraftIssue(receipt({ note: "x".repeat(501) }), CONTEXT),
-    ).toBe("Note must be 500 characters or fewer.");
+    ).toBe("Description must be 500 characters or fewer.");
+    expect(
+      expenseDraftIssue(expense({ note: "x".repeat(501) }), CONTEXT),
+    ).toBe("Description must be 500 characters or fewer.");
     expect(
       receiptDraftIssue(receipt({ externalReference: "x".repeat(65) }), CONTEXT),
     ).toBe("External reference must be 64 characters or fewer.");
@@ -327,7 +352,7 @@ describe("exact bodies", () => {
   });
 
   it("omits blank optional fields", () => {
-    expect(buildReceiptBody(receipt(), "key-12345678")).toEqual({
+    expect(buildReceiptBody(receipt({ note: "" }), "key-12345678")).toEqual({
       idempotencyKey: "key-12345678",
       businessDate: "2026-10-18",
       amountKobo: 2500000,
@@ -338,10 +363,16 @@ describe("exact bodies", () => {
   });
 
   it("keeps the required expense payee and transfer fields only", () => {
-    expect(buildExpenseBody(expense(), "key-12345678")).toMatchObject({
+    expect(
+      buildExpenseBody(
+        expense({ note: "  Purchase of microphone cables " }),
+        "key-12345678",
+      ),
+    ).toMatchObject({
       counterpartyName: "Venue Ltd",
       fromAccountId: "bank",
       expenseAccountId: "expense",
+      note: "Purchase of microphone cables",
     });
     const body = buildTransferBody(
       transfer({ externalReference: "  T1 ", reference: "  ", note: "" }),
