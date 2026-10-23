@@ -123,6 +123,10 @@ export const financeRequest = {
   LEDGER_CASHBOOK: "/finance/:organisationId/ledger/accounts/:accountId/cashbook",
   LEDGER_BALANCES: "/finance/:organisationId/ledger/balances",
   LEDGER_SUMMARY: "/finance/:organisationId/ledger/summary",
+  // Financial Report v1: readiness preview, and the Excel/PDF download as
+  // authenticated bytes (never a URL). Gated behind config/ledgerReports.
+  LEDGER_FINANCIAL_REPORT: "/finance/:organisationId/ledger/reports/financial",
+  LEDGER_FINANCIAL_REPORT_EXPORT: "/finance/:organisationId/ledger/reports/financial/export",
   // F3-3 allocation posting (finance.manage) and F3-4 reads (finance.view).
   // Gated behind config/ledgerF3Allocations and config/ledgerF3Reconciliation.
   LEDGER_ALLOCATIONS: "/finance/:organisationId/ledger/allocations",

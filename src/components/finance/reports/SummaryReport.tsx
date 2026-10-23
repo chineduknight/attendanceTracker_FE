@@ -17,8 +17,10 @@ import {
 } from "helpers/ledgerReports";
 import { formatKobo } from "helpers/financeConstants";
 import { todayInLagos } from "helpers/openingBalances";
+import { resolveFinancialReportPeriod } from "helpers/financialReport";
 import { useLedgerSummary } from "hooks/useLedgerReports";
 import { FigureRow, ReportGate, ReportNotice } from "components/finance/reports/ReportParts";
+import FinancialReportDownloads from "components/finance/reports/FinancialReportDownloads";
 
 const Panel = ({ children }: { children: ReactNode }) => (
   <Box borderWidth="1px" borderColor="border" borderRadius="lg" bg="bg.panel" px={{ base: 3, md: 5 }} py={2}>
@@ -130,11 +132,14 @@ const SummaryReport = ({
   organisationId,
   range,
   onRangeChange,
+  downloadsEnabled,
 }: {
   organisationId: string;
   /** The applied period, held by the panel; "" for either end asks for the server's default (opening date / today). */
   range: { from: string; to: string };
   onRangeChange: (range: { from: string; to: string }) => void;
+  /** Financial Report v1 downloads (config/ledgerReports). */
+  downloadsEnabled: boolean;
 }) => {
   const [draft, setDraft] = useState(range);
   const today = todayInLagos();
@@ -178,6 +183,14 @@ const SummaryReport = ({
         <Text role="alert" fontSize="sm" color="fg.error">
           {issue}
         </Text>
+      )}
+      {downloadsEnabled && (
+        <FinancialReportDownloads
+          organisationId={organisationId}
+          // The applied range as the server resolved it, never the draft.
+          period={resolveFinancialReportPeriod(range, query.report)}
+          waiting={query.isLoading}
+        />
       )}
       <ReportGate query={query} name="financial summary">
         {(report) => <SummaryView report={report} />}
