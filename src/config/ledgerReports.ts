@@ -22,14 +22,10 @@ export const LEDGER_REPORTS_UI_ENABLED: boolean = true;
  * report. Separate from LEDGER_REPORTS_UI_ENABLED so the Summary itself is
  * unchanged while this is off.
  *
- * OFF until all of these are true:
- *
- * 1. Backend BE-1..3 are deployed: `GET /ledger/reports/financial` and
- *    `GET /ledger/reports/financial/export`.
- * 2. A real frontend/backend download has been checked against them.
- * 3. An explicit product decision enables the downloads.
+ * ON: backend BE-1..3 are deployed to Render staging and an Excel download
+ * has been checked against it.
  *
  * PDF availability is not decided here: the preview's `downloads.pdf` says
- * whether this server offers it.
+ * whether this server offers it (off on Render Free).
  */
-export const FINANCIAL_REPORT_DOWNLOADS_UI_ENABLED: boolean = false;
+export const FINANCIAL_REPORT_DOWNLOADS_UI_ENABLED: boolean = true;
