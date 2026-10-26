@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Tabs } from "@chakra-ui/react";
 import BooksTab from "components/finance/BooksTab";
 import CollectTab from "components/finance/CollectTab";
 import ObligationsTab from "components/finance/ObligationsTab";
 import StartDatesTab from "components/finance/StartDatesTab";
 import { defaultObligationId } from "helpers/financeCompliance";
+import {
+  FINANCE_TABS,
+  FinanceTab,
+  booksDepthOf,
+  readFinanceTab,
+  writeFinanceTab,
+} from "helpers/booksNavigation";
 import { useObligations } from "hooks/useFinance";
 import { usePermissions } from "rbac/usePermissions";
 import useGlobalStore from "zStore";
@@ -12,14 +20,46 @@ import PageLoader from "components/PageLoader";
 import PageContainer from "components/layout/PageContainer";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 
-const TABS = ["Collect", "Obligations", "Start dates", "Books"] as const;
-const COLLECT = 0;
-const OBLIGATIONS = 1;
-const BOOKS = 3;
+const TAB_LABELS: Record<FinanceTab, string> = {
+  collect: "Collect",
+  obligations: "Obligations",
+  "start-dates": "Start dates",
+  books: "Books",
+};
 
 const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
   const canManage = usePermissions().has("finance.manage");
-  const [tabIndex, setTabIndex] = useState(COLLECT);
+  // The tab lives in the URL so Books can keep its screens there too (Back
+  // and Forward move through them). Switching tabs replaces the entry, so
+  // Back from Collect, Obligations or Start dates leaves Finance as before.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tab = readFinanceTab(searchParams);
+  // Leaving Books from one of its inner screens first steps back over every
+  // entry Books pushed, then replaces the entry it opened on. Otherwise Back
+  // from the new tab would land on an earlier Books screen.
+  const leavingBooksFor = useRef<FinanceTab | null>(null);
+  const setTab = (next: FinanceTab) => {
+    const depth = booksDepthOf(location.state);
+    if (tab === "books" && next !== "books" && depth > 0) {
+      leavingBooksFor.current = next;
+      navigate(-depth);
+      return;
+    }
+    setSearchParams(writeFinanceTab(searchParams, next), { replace: true });
+  };
+  // Books stays mounted once opened (hidden on other tabs): a save in flight
+  // keeps its workflow, so its receipt is still there when the officer comes
+  // back. The other tabs mount when shown and unmount when left, as before.
+  const booksOpened = useRef(tab === "books");
+  if (tab === "books") booksOpened.current = true;
+  useEffect(() => {
+    const next = leavingBooksFor.current;
+    if (next === null || booksDepthOf(location.state) > 0) return;
+    leavingBooksFor.current = null;
+    setSearchParams(writeFinanceTab(searchParams, next), { replace: true });
+  }, [location, searchParams, setSearchParams]);
   const [chosenId, setChosenId] = useState("");
   const { obligations, hasData, isLoading, isError, error, refetch } =
     useObligations(organisationId);
@@ -60,7 +100,7 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
           description="Set up monthly dues or a one-off levy first."
           action={
             canManage && (
-              <Button colorPalette="teal" onClick={() => setTabIndex(OBLIGATIONS)}>
+              <Button colorPalette="teal" onClick={() => setTab("obligations")}>
                 Set up an obligation
               </Button>
             )
@@ -80,22 +120,20 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
 
   return (
     <PageContainer width="content">
-        {/* lazyMount + unmountOnExit = v2's isLazy: a tab mounts when opened and
-            unmounts when left, so its local state resets as before. */}
+        {/* Collect, Obligations and Start dates mount when opened and unmount
+            when left (v2's isLazy), so their local state resets as before. */}
         <Tabs.Root
-          value={String(tabIndex)}
-          onValueChange={({ value }) => setTabIndex(Number(value))}
+          value={tab}
+          onValueChange={({ value }) => setTab(value as FinanceTab)}
           variant="subtle"
           colorPalette="teal"
           fitted
-          lazyMount
-          unmountOnExit
         >
           <Tabs.List bg="bg.panel" borderWidth="1px" borderColor="border" borderRadius="full" p={1} mb={4}>
-            {TABS.map((label, index) => (
+            {FINANCE_TABS.map((value) => (
               <Tabs.Trigger
-                key={label}
-                value={String(index)}
+                key={value}
+                value={value}
                 fontSize="sm"
                 px={2}
                 minH="44px"
@@ -105,30 +143,30 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
                 // subtle teal is near-black in dark mode).
                 _selected={{ bg: "colorPalette.solid", color: "colorPalette.contrast" }}
               >
-                {label}
+                {TAB_LABELS[value]}
               </Tabs.Trigger>
             ))}
           </Tabs.List>
-          <Tabs.Content value={String(COLLECT)} p={0}>
-            {collect()}
+          <Tabs.Content value="collect" p={0}>
+            {tab === "collect" && collect()}
           </Tabs.Content>
-          <Tabs.Content value={String(OBLIGATIONS)} p={0}>
-            {obligationsGate() ?? (
+          <Tabs.Content value="obligations" p={0}>
+            {tab === "obligations" && (obligationsGate() ?? (
               <ObligationsTab
                 organisationId={organisationId}
                 obligations={obligations}
                 onOpen={(id) => {
                   setChosenId(id);
-                  setTabIndex(COLLECT);
+                  setTab("collect");
                 }}
               />
-            )}
+            ))}
           </Tabs.Content>
-          <Tabs.Content value="2" p={0}>
-            <StartDatesTab organisationId={organisationId} />
+          <Tabs.Content value="start-dates" p={0}>
+            {tab === "start-dates" && <StartDatesTab organisationId={organisationId} />}
           </Tabs.Content>
-          <Tabs.Content value={String(BOOKS)} p={0}>
-            <BooksTab organisationId={organisationId} />
+          <Tabs.Content value="books" p={0}>
+            {booksOpened.current && <BooksTab organisationId={organisationId} />}
           </Tabs.Content>
         </Tabs.Root>
     </PageContainer>
@@ -143,6 +181,16 @@ const FinanceWorkspace = ({ organisationId }: { organisationId: string }) => {
  */
 const Finance = () => {
   const [organisation] = useGlobalStore((s) => [s.organisation]);
+  const [, setSearchParams] = useSearchParams();
+  // The tab and Books screen live in the URL, which survives the remount.
+  // Clear them when the organisation changes so Organisation B starts on
+  // Collect, as it always has.
+  const shownOrgId = useRef(organisation.id);
+  useEffect(() => {
+    if (shownOrgId.current === organisation.id) return;
+    shownOrgId.current = organisation.id;
+    setSearchParams(new URLSearchParams(), { replace: true });
+  }, [organisation.id, setSearchParams]);
 
   return <FinanceWorkspace key={organisation.id} organisationId={organisation.id} />;
 };

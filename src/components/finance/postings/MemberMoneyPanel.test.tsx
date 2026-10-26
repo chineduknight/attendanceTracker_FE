@@ -742,9 +742,14 @@ describe("one pending posting shared with Record money", () => {
 
     fireEvent.click(recordMoney().getByRole("button", { name: /Money in/ }));
     fireEvent.change(recordMoney().getByLabelText("Amount"), { target: { value: "25000" } });
-    await chooseOption(recordMoney().getByLabelText("Money received into"), "Cash in hand");
-    await chooseOption(recordMoney().getByLabelText("Income category"), "Donations");
-    fireEvent.click(recordMoney().getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(
+      within(recordMoney().getByRole("radiogroup", { name: "Into" })).getByRole("radio", { name: /Cash in hand/ }),
+    );
+    await chooseOption(recordMoney().getByLabelText("Category"), "Donations");
+    fireEvent.change(recordMoney().getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
+    fireEvent.click(recordMoney().getByRole("button", { name: "Record money in" }));
     expect(await recordMoney().findByText("Journal number: R-000001")).toBeInTheDocument();
 
     expect(memberMoney().getByText("Check the journal entries before posting this")).toBeInTheDocument();

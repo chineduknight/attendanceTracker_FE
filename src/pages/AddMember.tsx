@@ -4,7 +4,7 @@ import { FormCheckbox } from "components/ui/checkbox";
 import { DateField, todayValue } from "components/ui/date-field";
 import { EmptyState, ErrorState, errorMessage } from "components/ui/states";
 import PageContainer from "components/layout/PageContainer";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import {
   deleteRequest,
@@ -40,6 +40,20 @@ type MemberData = Record<string, unknown>;
 
 const BUSINESS_DATE = /^\d{4}-\d{2}-\d{2}/;
 
+/**
+ * The list address an edit was opened from, so saving returns to the same
+ * filters and search. Only an in-app path is accepted; a direct visit to the
+ * form has no such state and lands on the plain list.
+ */
+const returnTarget = (state: unknown): string | null => {
+  const returnTo = (state as { returnTo?: unknown } | null)?.returnTo;
+  return typeof returnTo === "string" &&
+    returnTo.startsWith("/") &&
+    !returnTo.startsWith("//")
+    ? returnTo
+    : null;
+};
+
 /** A stored date field as the YYYY-MM-DD the date input reads ("" if unset). */
 const dateValue = (value: unknown) =>
   typeof value === "string" ? value.match(BUSINESS_DATE)?.[0] ?? "" : "";
@@ -53,6 +67,7 @@ const AddOrUpdateMemberForm = () => {
   const [org] = useGlobalStore((state) => [state.organisation]);
   const terms = useTerms();
   const navigate = useNavigate();
+  const location = useLocation();
   const params = useParams();
   const isUpdating = Boolean(params.memberId);
   const memberURL = convertParamsToString(orgRequest.MEMBER_ONE, {
@@ -152,7 +167,7 @@ const AddOrUpdateMemberForm = () => {
     onSuccess: () => {
       // Saved or deleted: moving on to the list must not ask.
       releaseLeaveGuard();
-      navigate(PROTECTED_PATHS.VIEW_MEMBER);
+      navigate(returnTarget(location.state) ?? PROTECTED_PATHS.VIEW_MEMBER);
     },
   };
 

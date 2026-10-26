@@ -2,9 +2,14 @@ import { screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "test-utils/render";
 import { queryClient } from "services/api/apiHelper";
+import { MemoryRouter } from "react-router-dom";
 import BooksTab from "components/finance/BooksTab";
+
 import { PermissionKey } from "rbac/permissions";
 import useGlobalStore, { EMPTY_ORG, EMPTY_USER } from "zStore";
+
+/** Where Books opens. */
+const booksUrl = "/finance?tab=books";
 
 /**
  * Books with every shipped finance gate on and nothing mocked but the API.
@@ -74,7 +79,7 @@ const setSession = (permissions: PermissionKey[], org = "org1", isOwner = false)
 
 const books = (organisationId = "org1") => (
   <QueryClientProvider client={queryClient}>
-    <BooksTab organisationId={organisationId} />
+    <MemoryRouter initialEntries={[booksUrl]}><BooksTab organisationId={organisationId} /></MemoryRouter>
   </QueryClientProvider>
 );
 
@@ -86,7 +91,8 @@ const WRITE_CONTROL =
 
 const enabledWriteControls = () =>
   screen
-    .queryAllByRole("button")
+    // Every screen, including the ones not currently shown.
+    .queryAllByRole("button", { hidden: true })
     .filter((button) => !button.hasAttribute("disabled") && WRITE_CONTROL.test(button.textContent?.trim() ?? ""))
     .map((button) => button.textContent?.trim());
 
@@ -109,7 +115,7 @@ describe("<BooksTab> with every finance gate on", () => {
     const controls = enabledWriteControls();
     expect(controls.some((name) => name?.startsWith("Money in"))).toBe(true);
     expect(controls.some((name) => name?.startsWith("Member money in"))).toBe(true);
-    expect(controls).toContain("New account");
+    expect(controls).toContain("Add expense category");
     // Give every section's reads time to settle; none of them may write.
     await waitFor(() => expect(api.get.mock.calls.length).toBeGreaterThan(5));
     expect(writeCalls()).toEqual([]);

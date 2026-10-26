@@ -610,3 +610,18 @@ describe("outcome wording", () => {
     ).toMatch(/doesn't report the gap window as attested/);
   });
 });
+
+describe("allocation audit labels", () => {
+  it("names allocations being turned on and off", () => {
+    const entry = (action: string) =>
+      toLedgerAuditEntry({
+        id: "a1",
+        action,
+        at: "2026-10-21T07:09:00.000Z",
+        actorId: "u1",
+        revision: 8,
+      });
+    expect(auditActionLabel(entry("member_allocations_enabled")!.action)).toBe("Allocations turned on");
+    expect(auditActionLabel(entry("member_allocations_disabled")!.action)).toBe("Allocations turned off");
+  });
+});

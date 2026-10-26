@@ -8,12 +8,7 @@ import { queryKeys } from "services/api/queryKeys";
 import LedgerSetupPanel from "components/finance/LedgerSetupPanel";
 import { LedgerAccount, LedgerKnownState, LedgerStatus } from "components/finance/ledgerTypes";
 import {
-  ACCOUNT_CHANGE_UNAVAILABLE_NOTE,
-  OPENING_PENDING_ACCOUNTS_NOTE,
   OPENING_PENDING_CREATE_NOTE,
-  SUGGESTION_FROZEN_NOTE,
-  SUSPENDED_ACCOUNTS_NOTE,
-  SUSPENDED_CREATE_NOTE,
   ledgerRecheckUsable,
 } from "helpers/ledgerSetup";
 import {
@@ -115,9 +110,9 @@ const renderPanel = (
         organisationId={ORGANISATION_ID}
         status={statusOf("not_active", { memberReceiptsEnabled: null, revision: null })}
         accounts={[]}
-        accountsError={null}
         onRetryAccounts={() => undefined}
         isRetryingAccounts={false}
+        reloadAccounts={async () => []}
         onRecheckLedger={async () => true}
         enabled
         {...props}
@@ -242,10 +237,12 @@ describe("<LedgerSetupPanel> permissions", () => {
 });
 
 describe("<LedgerSetupPanel> starting setup", () => {
-  it("keeps account management hidden until setup has started", () => {
+  it("keeps the starting suggestions hidden until setup has started", () => {
     renderPanel();
-    expect(screen.queryByText("Chart of accounts")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add bank account" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Add selected categories/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("posts the member-receipts choice and shows the returned setup state", async () => {
@@ -318,6 +315,81 @@ describe("<LedgerSetupPanel> member receipts setting", () => {
     );
   });
 
+  it("offers the same action on an active ledger, and says the server takes the dues snapshot", async () => {
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }),
+    });
+    expect(screen.queryByText(/after activation/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/read-only snapshot of the current dues and levy payment records/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no turn-off operation once it is on/)).toBeInTheDocument();
+    await confirmInDialog("Turn on");
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/settings", {
+        expectedLedgerRevision: 8,
+        memberReceiptsEnabled: true,
+      }),
+    );
+    // The organisation's ledger reloads, so every screen reads the new setting.
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.finance.ledger.root("org1") }),
+    );
+  });
+
+  it("does not mention the snapshot before activation", async () => {
+    renderPanel({ status: statusOf("pending_verification", { memberReceiptsEnabled: false, revision: 4 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).queryByText(/snapshot/)).not.toBeInTheDocument();
+  });
+
+  it("shows the server's refusal on an active ledger instead of claiming success", async () => {
+    api.patch.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: { error: "An F0 snapshot has already been taken for this organisation.", code: "LEDGER_ALREADY_EXISTS" },
+      },
+    });
+    renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+    expect(await screen.findByText("An F0 snapshot has already been taken for this organisation.")).toBeInTheDocument();
+    expect(screen.getByText("That change wasn't saved")).toBeInTheDocument();
+  });
+
+  it("latches an unconfirmed outcome on an active ledger and blocks a second attempt", async () => {
+    api.patch.mockRejectedValueOnce({ message: "Network Error", code: "ERR_NETWORK", request: {} });
+    renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+
+    expect(await screen.findByText("We couldn't confirm that change")).toBeInTheDocument();
+    expect(screen.getByText("Check whether member receipts are now on before trying again.")).toBeInTheDocument();
+    expect(readLedgerWriteUncertainty(ORGANISATION_ID)).toMatchObject({ action: "member-receipts" });
+    expect(screen.getByRole("button", { name: "Turn on member receipts" })).toBeDisabled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(api.patch).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing while suspended, and says why", () => {
+    renderPanel({ status: statusOf("suspended", { memberReceiptsEnabled: false, revision: 8 }) });
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+    expect(screen.getByText("Member receipts can't be turned on while the books are suspended.")).toBeInTheDocument();
+  });
+
+  it("offers nothing once receipts are on, or to a viewer", () => {
+    const { unmount } = renderPanel({ status: statusOf("active", { memberReceiptsEnabled: true, revision: 8 }) });
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+    unmount();
+
+    setPermissions(["finance.view"]);
+    renderPanel({ status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }) });
+    expect(screen.queryByRole("button", { name: "Turn on member receipts" })).not.toBeInTheDocument();
+  });
+
   it("offers no setting change when the read shape has no revision", () => {
     renderPanel({
       status: statusOf("setup", { memberReceiptsEnabled: false, revision: null }),
@@ -335,25 +407,36 @@ describe("<LedgerSetupPanel> member receipts setting", () => {
   });
 });
 
-describe("<LedgerSetupPanel> starter chart", () => {
-  it("never creates the suggested accounts on its own", () => {
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: true }) });
-    expect(screen.getByText("Cash in hand")).toBeInTheDocument();
-    expect(screen.getByText("Opening balance equity")).toBeInTheDocument();
-    expect(api.post).not.toHaveBeenCalled();
+describe("<LedgerSetupPanel> bookkeeping accounts after setup", () => {
+  const cash = account({
+    id: "cash",
+    name: "Cash in hand",
+    class: "asset",
+    subtype: "cash",
   });
+  const equity = account({
+    id: "equity",
+    name: "Opening balance equity",
+    class: "equity",
+    subtype: "opening_balance_equity",
+  });
+  const startSetup = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Start bookkeeping setup" }));
+    await confirmInDialog("Start setup");
+  };
 
-  it("posts only the chosen suggestions, in one batch", async () => {
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
+  it("reloads, then creates the missing accounts in one request", async () => {
+    api.post.mockResolvedValueOnce({
+      data: { data: wireStatusOf("setup", { memberReceiptsEnabled: false, revision: 0 }) },
+    });
+    const reloadAccounts = jest.fn(async () => [] as LedgerAccount[]);
+    renderPanel({ reloadAccounts });
 
-    await toggle(screen.getByRole("checkbox", { name: "Select Cash in hand" }));
-    await toggle(
-      screen.getByRole("checkbox", { name: "Select Opening balance equity" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Add selected accounts (2)" }));
+    await startSetup();
 
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
     await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+      expect(api.post).toHaveBeenLastCalledWith("/finance/org1/ledger/accounts", {
         accounts: [
           { name: "Cash in hand", class: "asset", subtype: "cash" },
           {
@@ -364,196 +447,344 @@ describe("<LedgerSetupPanel> starter chart", () => {
         ],
       }),
     );
-    expect(api.patch).not.toHaveBeenCalled();
   });
 
-  it("offers the member-money holding account only when receipts are on", () => {
-    const { unmount } = renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
+  it("includes the holding account when member receipts were chosen", async () => {
+    api.post.mockResolvedValueOnce({
+      data: { data: wireStatusOf("setup", { memberReceiptsEnabled: true, revision: 0 }) },
     });
-    expect(
-      screen.queryByRole("checkbox", { name: "Select Member money – unallocated" }),
-    ).not.toBeInTheDocument();
-    unmount();
+    renderPanel({ reloadAccounts: async () => [] });
 
-    queryClient.clear();
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: true }) });
+    await toggle(screen.getByRole("checkbox"));
+    await startSetup();
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenLastCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          { name: "Cash in hand", class: "asset", subtype: "cash" },
+          {
+            name: "Opening balance equity",
+            class: "equity",
+            subtype: "opening_balance_equity",
+          },
+          {
+            name: "Member money – unallocated",
+            class: "liability",
+            subtype: "member_receipts_unallocated",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("sends nothing when the backend already created the accounts", async () => {
+    api.post.mockResolvedValueOnce({
+      data: { data: wireStatusOf("setup", { memberReceiptsEnabled: false, revision: 0 }) },
+    });
+    const reloadAccounts = jest.fn(async () => [cash, equity]);
+    renderPanel({ reloadAccounts });
+
+    await startSetup();
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/setup", {
+      memberReceiptsEnabled: false,
+    });
+  });
+
+  it("sends only the holding account when cash and equity already exist", async () => {
+    api.post.mockResolvedValueOnce({
+      data: { data: wireStatusOf("setup", { memberReceiptsEnabled: true, revision: 0 }) },
+    });
+    renderPanel({ reloadAccounts: async () => [cash, equity] });
+
+    await toggle(screen.getByRole("checkbox"));
+    await startSetup();
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenLastCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          {
+            name: "Member money – unallocated",
+            class: "liability",
+            subtype: "member_receipts_unallocated",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("creates nothing when the reload is not usable", async () => {
+    api.post.mockResolvedValueOnce({
+      data: { data: wireStatusOf("setup", { memberReceiptsEnabled: false, revision: 0 }) },
+    });
+    const reloadAccounts = jest.fn(async () => null);
+    renderPanel({ reloadAccounts });
+
+    await startSetup();
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    // The recovery path stays available.
     expect(
-      screen.getByRole("checkbox", { name: "Select Member money – unallocated" }),
+      await screen.findByText("Finish setup: some bookkeeping accounts are missing"),
     ).toBeInTheDocument();
   });
 
-  it("hides suggestions that are already active accounts", () => {
+  it("offers Create them for an older setup, reloading before creating", async () => {
+    const reloadAccounts = jest.fn(async () => [cash]);
     renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ name: "cash in hand", revision: 1 })],
+      status: statusOf("active", { memberReceiptsEnabled: false }),
+      accounts: [cash],
+      reloadAccounts,
     });
-    expect(
-      screen.queryByRole("checkbox", { name: "Select Cash in hand" }),
-    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create them" }));
+
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          {
+            name: "Opening balance equity",
+            class: "equity",
+            subtype: "opening_balance_equity",
+          },
+        ],
+      }),
+    );
   });
-});
 
-describe("<LedgerSetupPanel> creating a custom account", () => {
-  it("posts the trimmed draft without inventing optional fields", async () => {
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
-
-    fireEvent.click(screen.getByRole("button", { name: "New account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), {
-      target: { value: "  Petty cash " },
+  it("offers only equity in recovery, never Cash in hand", async () => {
+    const reloadAccounts = jest.fn(async () => [] as LedgerAccount[]);
+    renderPanel({
+      status: statusOf("pending_verification", { memberReceiptsEnabled: false }),
+      accounts: [],
+      reloadAccounts,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    // Money accounts stay frozen while the proposal is pending.
+    expect(screen.getAllByText(OPENING_PENDING_CREATE_NOTE).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create them" }));
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
-        accounts: [{ name: "Petty cash", class: "asset", subtype: "cash" }],
+        accounts: [
+          {
+            name: "Opening balance equity",
+            class: "equity",
+            subtype: "opening_balance_equity",
+          },
+        ],
+      }),
+    );
+  });
+});
+
+describe("<LedgerSetupPanel> bank-only ledger", () => {
+  const retiredCash = account({ id: "cash", name: "Cash in hand", active: false });
+  const bank = account({ id: "bank", name: "Main account", subtype: "bank" });
+  const equity = account({
+    id: "equity",
+    name: "Opening balance equity",
+    class: "equity",
+    subtype: "opening_balance_equity",
+  });
+  const holding = account({
+    id: "holding",
+    name: "Member money – unallocated",
+    class: "liability",
+    subtype: "member_receipts_unallocated",
+  });
+
+  it("is not incomplete because Cash in hand was retired", () => {
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: true }),
+      accounts: [retiredCash, bank, equity, holding],
+    });
+
+    expect(
+      screen.queryByText("Finish setup: some bookkeeping accounts are missing"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create them" })).not.toBeInTheDocument();
+    expect(screen.getByText("The accounts the books need are ready.")).toBeInTheDocument();
+  });
+
+  it("turns on member receipts without recreating cash", async () => {
+    api.patch.mockResolvedValueOnce({
+      data: { data: wireStatusOf("active", { memberReceiptsEnabled: true, revision: 9 }) },
+    });
+    const reloadAccounts = jest.fn(async () => [retiredCash, bank, equity]);
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }),
+      accounts: [retiredCash, bank, equity],
+      reloadAccounts,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          {
+            name: "Member money – unallocated",
+            class: "liability",
+            subtype: "member_receipts_unallocated",
+          },
+        ],
+      }),
+    );
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing when the backend made the holding account with the setting", async () => {
+    api.patch.mockResolvedValueOnce({
+      data: { data: wireStatusOf("active", { memberReceiptsEnabled: true, revision: 9 }) },
+    });
+    const reloadAccounts = jest.fn(async () => [retiredCash, bank, equity, holding]);
+    renderPanel({
+      status: statusOf("active", { memberReceiptsEnabled: false, revision: 8 }),
+      accounts: [retiredCash, bank, equity],
+      reloadAccounts,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn on member receipts" }));
+    await confirmInDialog("Turn on");
+
+    await waitFor(() => expect(reloadAccounts).toHaveBeenCalled());
+    expect(api.post).not.toHaveBeenCalled();
+  });
+});
+
+describe("<LedgerSetupPanel> suggested categories", () => {
+  const cash = account({ id: "cash", name: "Cash in hand" });
+  const equity = account({
+    id: "equity",
+    name: "Opening balance equity",
+    class: "equity",
+    subtype: "opening_balance_equity",
+  });
+
+  const setupPanel = (props: Partial<ComponentProps<typeof LedgerSetupPanel>> = {}) =>
+    renderPanel({
+      status: statusOf("setup", { memberReceiptsEnabled: false }),
+      accounts: [cash, equity],
+      reloadAccounts: async () => [cash, equity],
+      ...props,
+    });
+
+  it("offers every suggestion unticked", () => {
+    setupPanel();
+
+    for (const name of ["Donations", "Offerings", "Other income", "Transport", "Utilities", "Other expenses"]) {
+      expect(screen.getByRole("checkbox", { name: `Select ${name}` })).not.toBeChecked();
+    }
+    expect(screen.getByRole("button", { name: "Add selected categories" })).toBeDisabled();
+  });
+
+  it("posts only the chosen suggestions in one batch", async () => {
+    setupPanel();
+
+    await toggle(screen.getByRole("checkbox", { name: "Select Donations" }));
+    await toggle(screen.getByRole("checkbox", { name: "Select Utilities" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected categories (2)" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          { name: "Donations", class: "income", subtype: null },
+          { name: "Utilities", class: "expense", subtype: null },
+        ],
       }),
     );
   });
 
-  it("shows the backend refusal instead of claiming success", async () => {
-    api.post.mockRejectedValue({
-      response: {
-        status: 409,
-        data: {
-          error: 'An active account named "Petty cash" already exists.',
-          code: "LEDGER_ACCOUNT_NAME_TAKEN",
-        },
-      },
+  it("hides a suggestion an active account already uses", () => {
+    setupPanel({
+      accounts: [cash, equity, account({ id: "don", name: "donations", class: "income" })],
     });
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
-
-    fireEvent.click(screen.getByRole("button", { name: "New account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), {
-      target: { value: "Petty cash" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
-
-    expect(await screen.findByText(/already exists/)).toBeInTheDocument();
-    expect(screen.queryByText(/Account added/)).not.toBeInTheDocument();
-    // The inline backend message is the only feedback: no generic toast.
-    expect(toast.error).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("checkbox", { name: "Select Donations" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("blocks a money account while opening balances are pending", () => {
-    renderPanel({ status: statusOf("pending_verification", { memberReceiptsEnabled: false }) });
+  it("offers Restore for a retired suggestion instead of a duplicate", async () => {
+    const retired = account({
+      id: "tr",
+      name: "Transport",
+      class: "expense",
+      subtype: null,
+      active: false,
+      revision: 9,
+    });
+    setupPanel({ accounts: [cash, equity, retired] });
 
-    fireEvent.click(screen.getByRole("button", { name: "New account" }));
-    expect(screen.getByRole("button", { name: "Add account" })).toBeDisabled();
-    expect(screen.getAllByText(SUGGESTION_FROZEN_NOTE).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("checkbox", { name: "Select Transport" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/tr", {
+        expectedRevision: 9,
+        active: true,
+      }),
+    );
+    expect(api.post).not.toHaveBeenCalled();
   });
 
-  it("treats an uncoded 503 as an unconfirmed outcome, not a clean failure", async () => {
-    api.post.mockRejectedValue({
-      response: { status: 503, data: { error: "Gateway timeout" } },
-    });
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
-
-    fireEvent.click(screen.getByRole("button", { name: "New account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), {
-      target: { value: "Petty cash" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
-
-    expect(await screen.findByText("We couldn't confirm that change")).toBeInTheDocument();
-    expect(screen.getByText(LEDGER_WRITE_UNCERTAIN_NOTE)).toBeInTheDocument();
-    expect(toast.error).not.toHaveBeenCalled();
-    // Further writes are blocked until someone checks the ledger.
+  it("offers no Type or Subtype control anywhere", () => {
+    setupPanel();
+    expect(screen.queryByLabelText("Type")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Subtype")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
   });
 });
 
-describe("<LedgerSetupPanel> account row actions", () => {
-  it("renames an account with its expected revision", async () => {
+describe("<LedgerSetupPanel> adding a bank account", () => {
+  it("posts a bank account with its one-time metadata", async () => {
+    const cash = account({ id: "cash", name: "Cash in hand" });
+    const equity = account({
+      id: "equity",
+      name: "Opening balance equity",
+      class: "equity",
+      subtype: "opening_balance_equity",
+    });
     renderPanel({
       status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 4 })],
+      accounts: [cash, equity],
+      reloadAccounts: async () => [cash, equity],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
-    fireEvent.change(screen.getByLabelText("Account name"), {
-      target: { value: "Cash box" },
+    fireEvent.click(screen.getByRole("button", { name: "Add bank account" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Account name"), {
+      target: { value: "Main bank" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    fireEvent.change(within(dialog).getByLabelText("Bank (optional)"), {
+      target: { value: "GTBank" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Last 4 digits (optional)"), {
+      target: { value: "1234" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add bank account" }));
 
     await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/a1", {
-        expectedRevision: 4,
-        name: "Cash box",
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [
+          {
+            name: "Main bank",
+            class: "asset",
+            subtype: "bank",
+            bankName: "GTBank",
+            accountNumberLast4: "1234",
+          },
+        ],
       }),
     );
-  });
-
-  it("deactivates only after confirmation and never deletes", async () => {
-    renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 1 })],
-    });
-
-    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
-    await confirmInDialog("Deactivate");
-
-    await waitFor(() =>
-      expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/a1", {
-        expectedRevision: 1,
-        active: false,
-      }),
-    );
-    expect(api.delete).not.toHaveBeenCalled();
-  });
-
-  it("offers no row change when the account list has no revision", () => {
-    renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: null })],
-    });
-
-    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
-    expect(screen.getByText(ACCOUNT_CHANGE_UNAVAILABLE_NOTE)).toBeInTheDocument();
-  });
-
-  it("never offers to deactivate the opening balance equity account", () => {
-    renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [
-        account({
-          name: "Opening balance equity",
-          class: "equity",
-          subtype: "opening_balance_equity",
-          revision: 2,
-        }),
-      ],
-    });
-
-    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
-  });
-
-  it("allows rename only while the ledger is suspended", () => {
-    renderPanel({
-      status: statusOf("suspended", { memberReceiptsEnabled: true }),
-      accounts: [account({ revision: 2 })],
-    });
-
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
-    expect(screen.getByText(SUSPENDED_CREATE_NOTE)).toBeInTheDocument();
-    expect(screen.getByText(SUSPENDED_ACCOUNTS_NOTE)).toBeInTheDocument();
-  });
-
-  it("freezes money accounts while opening balances are pending", () => {
-    renderPanel({
-      status: statusOf("pending_verification", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 2 })],
-    });
-
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
-    expect(screen.getByText(OPENING_PENDING_CREATE_NOTE)).toBeInTheDocument();
-    expect(screen.getByText(OPENING_PENDING_ACCOUNTS_NOTE)).toBeInTheDocument();
   });
 });
 
@@ -562,14 +793,11 @@ describe("<LedgerSetupPanel> unresolved write latch", () => {
     api.post.mockRejectedValue({ message: "Network Error", code: "ERR_NETWORK", request: {} });
     renderPanel({
       status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 2 })],
+      accounts: [],
+      reloadAccounts: async () => [],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "New account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), {
-      target: { value: "Petty cash" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create them" }));
 
     expect(await screen.findByText("We couldn't confirm that change")).toBeInTheDocument();
     expect(screen.getAllByText(LEDGER_WRITE_UNCERTAIN_NOTE).length).toBeGreaterThan(0);
@@ -577,9 +805,8 @@ describe("<LedgerSetupPanel> unresolved write latch", () => {
     expect(toast.error).not.toHaveBeenCalled();
     // Exactly one attempt was sent; none may be repeated while unresolved.
     expect(api.post).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "New account" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create them" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add bank account" })).toBeDisabled();
   });
 
   it("remembers the unresolved write across a reload", () => {
@@ -657,14 +884,20 @@ describe("<LedgerSetupPanel> organisation scope", () => {
       organisationId: "org2",
       status: statusOf("setup", { memberReceiptsEnabled: false }),
       accounts: [],
+      reloadAccounts: async () => [],
     });
 
-    await toggle(screen.getByRole("checkbox", { name: "Select Cash in hand" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add selected accounts (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create them" }));
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith("/finance/org2/ledger/accounts", {
-        accounts: [{ name: "Cash in hand", class: "asset", subtype: "cash" }],
+        accounts: [
+          {
+            name: "Opening balance equity",
+            class: "equity",
+            subtype: "opening_balance_equity",
+          },
+        ],
       }),
     );
     expect(
@@ -987,13 +1220,17 @@ describe("<LedgerSetupPanel> durable F2A-2 write lifecycle", () => {
     expect(readLedgerWriteUncertainty("org1")?.action).toBe("member-receipts");
   });
 
-  it("tracks a batch account creation before sending", async () => {
+  it("tracks a batch category creation before sending", async () => {
     const request = holdRequest(api.post);
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
+    renderPanel({
+      status: statusOf("setup", { memberReceiptsEnabled: false }),
+      accounts: [account({ id: "cash", name: "Cash in hand" }), account({ id: "eq", name: "Opening balance equity", class: "equity", subtype: "opening_balance_equity" })],
+      reloadAccounts: async () => [],
+    });
 
-    await toggle(screen.getByRole("checkbox", { name: "Select Cash in hand" }));
-    await toggle(screen.getByRole("checkbox", { name: "Select Opening balance equity" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add selected accounts (2)" }));
+    await toggle(screen.getByRole("checkbox", { name: "Select Donations" }));
+    await toggle(screen.getByRole("checkbox", { name: "Select Utilities" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected categories (2)" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
 
     expect(request.markerAtDispatch).toEqual([
@@ -1001,93 +1238,11 @@ describe("<LedgerSetupPanel> durable F2A-2 write lifecycle", () => {
     ]);
     expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
       accounts: [
-        { name: "Cash in hand", class: "asset", subtype: "cash" },
-        { name: "Opening balance equity", class: "equity", subtype: "opening_balance_equity" },
+        { name: "Donations", class: "income", subtype: null },
+        { name: "Utilities", class: "expense", subtype: null },
       ],
     });
     request.resolve({ data: { data: { accounts: [] } } });
     await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
   });
-
-  it("tracks a single custom account creation and clears its marker on refusal", async () => {
-    const request = holdRequest(api.post);
-    renderPanel({ status: statusOf("setup", { memberReceiptsEnabled: false }) });
-
-    fireEvent.click(screen.getByRole("button", { name: "New account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Petty cash" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-
-    expect(request.markerAtDispatch).toEqual([
-      expect.objectContaining({ action: "create-accounts", pending: true }),
-    ]);
-    request.reject({
-      response: {
-        status: 409,
-        data: { error: "That name is taken.", code: "LEDGER_ACCOUNT_NAME_TAKEN" },
-      },
-    });
-    expect(await screen.findByText("That name is taken.")).toBeInTheDocument();
-    expect(readLedgerWriteUncertainty("org1")).toBeNull();
-  });
-
-  it("tracks a rename durably and clears its marker on a definite revision refusal", async () => {
-    const request = holdRequest(api.patch);
-    renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 4 })],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
-    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Cash box" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
-
-    expect(request.markerAtDispatch).toEqual([
-      expect.objectContaining({ action: "update-account", pending: true }),
-    ]);
-    expect(api.patch).toHaveBeenCalledWith("/finance/org1/ledger/accounts/a1", {
-      expectedRevision: 4,
-      name: "Cash box",
-    });
-    request.reject({
-      response: {
-        status: 409,
-        data: { error: "The account changed.", code: "LEDGER_REVISION_CONFLICT" },
-      },
-    });
-    expect(await screen.findByText(/The account changed\./)).toBeInTheDocument();
-    expect(readLedgerWriteUncertainty("org1")).toBeNull();
-  });
-
-  it("tracks deactivation and reactivation durably", async () => {
-    const deactivate = holdRequest(api.patch);
-    const view = renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 1 })],
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
-    await confirmInDialog("Deactivate");
-    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
-    expect(deactivate.markerAtDispatch).toEqual([
-      expect.objectContaining({ action: "update-account", pending: true }),
-    ]);
-    deactivate.resolve({ data: { data: { id: "a1" } } });
-    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
-    view.unmount();
-
-    const reactivate = holdRequest(api.patch);
-    renderPanel({
-      status: statusOf("setup", { memberReceiptsEnabled: false }),
-      accounts: [account({ revision: 2, active: false })],
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Reactivate" }));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(2));
-    expect(reactivate.markerAtDispatch).toEqual([
-      expect.objectContaining({ action: "update-account", pending: true }),
-    ]);
-    reactivate.resolve({ data: { data: { id: "a1" } } });
-    await waitFor(() => expect(readLedgerWriteUncertainty("org1")).toBeNull());
-  });
 });
-

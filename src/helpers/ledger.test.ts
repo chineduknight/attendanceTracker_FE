@@ -494,3 +494,19 @@ describe("ledger F2 read compatibility", () => {
     expect(LEDGER_NOT_ACTIVE_NOTE).toMatch(/income/);
   });
 });
+
+describe("status notes for the Books redesign", () => {
+  it.each(["active", "setup", "pending_verification", "suspended"])(
+    "no longer claims balances aren't calculated (%s)",
+    (state) => {
+      const status = toLedgerStatus({ state, openingBalancesVerified: state === "active", postingEnabled: false });
+      expect(ledgerStatusNote(status!)).not.toMatch(/balances are not calculated/);
+    },
+  );
+
+  it("says plainly that active books are active", () => {
+    expect(ledgerStatusNote(toLedgerStatus({ state: "active", openingBalancesVerified: true, postingEnabled: true })!)).toBe(
+      "Bookkeeping is active.",
+    );
+  });
+});

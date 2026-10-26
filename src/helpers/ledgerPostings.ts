@@ -257,6 +257,13 @@ export const receiptDraftIssue = (
       label: "Received from",
       max: POSTING_TEXT_LIMITS.counterpartyName,
     }) ??
+    // The description is printed on the Financial Report PDF, so it is required.
+    postingTextIssue({
+      value: draft.note,
+      label: "Description",
+      max: POSTING_TEXT_LIMITS.note,
+      required: true,
+    }) ??
     postingTextIssue({
       value: draft.externalReference,
       label: "External reference",
@@ -271,11 +278,6 @@ export const receiptDraftIssue = (
       value: draft.reference,
       label: "Reference",
       max: POSTING_TEXT_LIMITS.reference,
-    }) ??
-    postingTextIssue({
-      value: draft.note,
-      label: "Note",
-      max: POSTING_TEXT_LIMITS.note,
     })
   );
 };
@@ -300,6 +302,13 @@ export const expenseDraftIssue = (
       max: POSTING_TEXT_LIMITS.counterpartyName,
       required: true,
     }) ??
+    // The description is printed on the Financial Report PDF, so it is required.
+    postingTextIssue({
+      value: draft.note,
+      label: "Description",
+      max: POSTING_TEXT_LIMITS.note,
+      required: true,
+    }) ??
     postingTextIssue({
       value: draft.externalReference,
       label: "External reference",
@@ -314,11 +323,6 @@ export const expenseDraftIssue = (
       value: draft.reference,
       label: "Reference",
       max: POSTING_TEXT_LIMITS.reference,
-    }) ??
-    postingTextIssue({
-      value: draft.note,
-      label: "Note",
-      max: POSTING_TEXT_LIMITS.note,
     })
   );
 };
@@ -914,7 +918,7 @@ export const receiptOperationReadiness = (
     ? { ready: true, reason: null }
     : {
         ready: false,
-        reason: "No active income category is configured. Add one before recording money in.",
+        reason: "No income category is set up yet. Add one while recording money in.",
       };
 
 export const expenseOperationReadiness = (
@@ -924,7 +928,7 @@ export const expenseOperationReadiness = (
     ? { ready: true, reason: null }
     : {
         ready: false,
-        reason: "No active expense category is configured. Add one before recording money out.",
+        reason: "No expense category is set up yet. Add one while recording money out.",
       };
 
 export const transferOperationReadiness = (
@@ -955,7 +959,7 @@ export const memberMoneyReadiness = ({
       ready: false,
       reason:
         status.memberReceiptsEnabled === false
-          ? "Member receipts are turned off for this ledger. An officer can turn them on in Bookkeeping setup before activation."
+          ? "Member receipts are turned off for this ledger. An officer who can manage finance can turn them on in Bookkeeping setup."
           : "The server didn't report whether member receipts are on, so member money can't be recorded.",
     };
   }

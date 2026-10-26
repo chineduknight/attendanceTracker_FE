@@ -182,6 +182,15 @@ export const queryKeys = {
         ["finance", organisationId, "ledger", "accounts"] as const,
       journals: (organisationId: string) =>
         ["finance", organisationId, "ledger", "journals"] as const,
+      /**
+       * Books' paged, server-filtered journal list. Under `journals`, so every
+       * ledger write that refreshes journals refreshes these pages too.
+       */
+      journalPages: (
+        organisationId: string,
+        filters: { sourceType: string; accountId: string; from: string; to: string },
+        limit: number,
+      ) => ["finance", organisationId, "ledger", "journals", "pages", filters, limit] as const,
       /** Prefix covering every opening-balance read for one organisation. */
       openingBalances: (organisationId: string) =>
         ["finance", organisationId, "ledger", "opening-balances"] as const,
@@ -230,6 +239,9 @@ export const queryKeys = {
         ["finance", organisationId, "ledger", "reports", "balances", asOf] as const,
       summary: (organisationId: string, from: string, to: string) =>
         ["finance", organisationId, "ledger", "reports", "summary", from, to] as const,
+      /** Financial Report v1 readiness for one exact period (downloads only). */
+      financialReport: (organisationId: string, from: string, to: string) =>
+        ["finance", organisationId, "ledger", "reports", "financial", from, to] as const,
       /**
        * F3-4 allocation history. Under `root`, so every ledger write refreshes
        * it; every filter and the cursor are part of the identity.

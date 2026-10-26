@@ -1,6 +1,9 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ReactNode } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { format, parseISO, subDays } from "date-fns";
-import { chooseOption, optionLabels, render } from "test-utils/render";
+import { chooseOption, optionLabels, render, shownValue } from "test-utils/render";
+import { queryClient } from "services/api/apiHelper";
 import {
   installPostingLockManager,
   removePostingLockManager,
@@ -151,13 +154,15 @@ const renderPanel = ({
   enabled?: boolean;
 } = {}) =>
   render(
-    <CashbookPostingsPanel
-      organisationId={organisationId}
-      status={status}
-      accounts={accounts}
-      enabled={enabled}
-      onRecheckLedger={jest.fn()}
-    />,
+    <QueryClientProvider client={queryClient}>
+      <CashbookPostingsPanel
+        organisationId={organisationId}
+        status={status}
+        accounts={accounts}
+        enabled={enabled}
+        onRecheckLedger={jest.fn()}
+      />
+    </QueryClientProvider>,
   );
 
 const openReceipt = async () => {
@@ -170,25 +175,32 @@ const openTransfer = () => {
   fireEvent.click(screen.getByRole("button", { name: /^Transfer/ }));
 };
 
+const fillDescription = (value = "Donation towards choir anniversary") =>
+  fireEvent.change(screen.getByLabelText("Description (required)"), {
+    target: { value },
+  });
+
 const fillReceipt = async (amount = "25000") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
-  await chooseOption(screen.getByLabelText("Money received into"), "Cash in hand");
-  await chooseOption(screen.getByLabelText("Income category"), "Donations");
+  pickAccount("Into", "Cash in hand");
+  await chooseOption(screen.getByLabelText("Category"), "Donations");
+  fillDescription();
 };
 
 const fillExpense = async (amount = "7500") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
-  await chooseOption(screen.getByLabelText("Paid from"), "Main bank");
-  await chooseOption(screen.getByLabelText("Expense category"), "Venue hire");
+  pickAccount("Paid from", "Main bank");
+  await chooseOption(screen.getByLabelText("Category"), "Venue hire");
   fireEvent.change(screen.getByLabelText("Paid to (required)"), {
     target: { value: "Venue Ltd" },
   });
+  fillDescription("Purchase of microphone cables");
 };
 
 const fillTransfer = async (amount = "20000") => {
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: amount } });
-  await chooseOption(screen.getByLabelText("Transfer from"), "Cash in hand");
-  await chooseOption(screen.getByLabelText("Transfer to"), "Main bank");
+  pickAccount("From", "Cash in hand");
+  pickAccount("To", "Main bank");
 };
 
 const submit = async (label: string) => {
@@ -243,6 +255,10 @@ const seedIntent = async (organisationId = "org1", key = "key-12345678") => {
  * it; the writing tab has either left its form or has its own request in
  * flight, and the hook ignores the event in both cases.
  */
+const withQuery = (node: ReactNode) => (
+  <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
+);
+
 const deliverStorageEvent = (organisationId = "org1") => {
   const event = new Event("storage") as StorageEvent;
   Object.defineProperty(event, "key", { value: ledgerPostingIntentKey(organisationId) });
@@ -255,18 +271,20 @@ const deliverStorageEvent = (organisationId = "org1") => {
 const renderTwoTabs = () => {
   const recheck = [jest.fn(), jest.fn()] as const;
   render(
-    <>
-      {recheck.map((onRecheckLedger, index) => (
-        <CashbookPostingsPanel
-          key={index}
-          organisationId="org1"
-          status={statusOf()}
-          accounts={ACCOUNTS}
-          enabled
-          onRecheckLedger={onRecheckLedger}
-        />
-      ))}
-    </>,
+    withQuery(
+      <>
+        {recheck.map((onRecheckLedger, index) => (
+          <CashbookPostingsPanel
+            key={index}
+            organisationId="org1"
+            status={statusOf()}
+            accounts={ACCOUNTS}
+            enabled
+            onRecheckLedger={onRecheckLedger}
+          />
+        ))}
+      </>,
+    ),
   );
   const [firstPanel, secondPanel] = screen.getAllByRole("region");
   expect(screen.getAllByRole("region")).toHaveLength(2);
@@ -283,8 +301,11 @@ const fillReceiptIn = async (panel: HTMLElement, amount = "25000", { open = true
   const tab = within(panel);
   if (open) fireEvent.click(tab.getByRole("button", { name: /Money in/ }));
   fireEvent.change(tab.getByLabelText("Amount"), { target: { value: amount } });
-  await chooseOption(tab.getByLabelText("Money received into"), "Cash in hand");
-  await chooseOption(tab.getByLabelText("Income category"), "Donations");
+  pickAccount("Into", "Cash in hand", panel);
+  await chooseOption(tab.getByLabelText("Category"), "Donations");
+  fireEvent.change(tab.getByLabelText("Description (required)"), {
+    target: { value: "Donation towards choir anniversary" },
+  });
 };
 
 const SUPERSEDED = "Check the journal entries before posting this";
@@ -295,11 +316,21 @@ const expectLocked = (panel: HTMLElement, amountShown = "25,000") => {
   expect(tab.getByText(SUPERSEDED)).toBeInTheDocument();
   expect(tab.getByLabelText("Amount")).toHaveValue(amountShown);
   expect(tab.getByLabelText("Amount")).toBeDisabled();
-  expect(tab.getByLabelText("Money received into")).toBeDisabled();
-  expect(tab.getByRole("button", { name: "Post receipt" })).toBeDisabled();
+  within(tab.getByRole("radiogroup", { name: "Into" }))
+    .getAllByRole("radio")
+    .forEach((card) => expect(card).toBeDisabled());
+  expect(tab.getByRole("button", { name: "Record money in" })).toBeDisabled();
   // Nothing claims the other tab's outcome.
   expect(tab.queryByText("Posted")).not.toBeInTheDocument();
   expect(tab.queryByText("Already posted")).not.toBeInTheDocument();
+};
+
+/** Taps one of the account cards in the named group, inside `container` when given. */
+const pickAccount = (group: string, name: string, container?: HTMLElement) => {
+  const cards = container
+    ? within(container).getByRole("radiogroup", { name: group })
+    : screen.getByRole("radiogroup", { name: group });
+  fireEvent.click(within(cards).getByRole("radio", { name: new RegExp(name) }));
 };
 
 beforeEach(() => {
@@ -387,7 +418,7 @@ describe("successful postings", () => {
     fireEvent.change(screen.getByLabelText("Received from"), {
       target: { value: "Ada Obi" },
     });
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(api.post).toHaveBeenCalledTimes(1);
     const [url, body] = api.post.mock.calls[0];
@@ -399,6 +430,7 @@ describe("successful postings", () => {
       incomeAccountId: "income",
       method: "cash",
       counterpartyName: "Ada Obi",
+      note: "Donation towards choir anniversary",
     });
     expect(body.idempotencyKey).toMatch(/^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/);
     expect("lines" in body).toBe(false);
@@ -418,7 +450,7 @@ describe("successful postings", () => {
     renderPanel();
     openExpense();
     await fillExpense();
-    await submit("Post expense");
+    await submit("Record money out");
 
     const [url, body] = api.post.mock.calls[0];
     expect(url).toBe("/finance/org1/ledger/expenses");
@@ -427,7 +459,9 @@ describe("successful postings", () => {
       fromAccountId: "bank",
       expenseAccountId: "expense",
       counterpartyName: "Venue Ltd",
-      method: "cash",
+      note: "Purchase of microphone cables",
+      // Paid from a bank account, so the method starts on bank transfer.
+      method: "bank_transfer",
     });
     expect(await screen.findByText(/Journal number: E-000001/)).toBeInTheDocument();
   });
@@ -439,7 +473,7 @@ describe("successful postings", () => {
     renderPanel();
     openTransfer();
     await fillTransfer();
-    await submit("Post transfer");
+    await submit("Record transfer");
 
     const [url, body] = api.post.mock.calls[0];
     expect(url).toBe("/finance/org1/ledger/transfers");
@@ -459,7 +493,7 @@ describe("successful postings", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("Already posted")).toBeInTheDocument();
     expect(screen.getByText("Journal number: R-000009")).toBeInTheDocument();
@@ -477,7 +511,7 @@ describe("malformed success responses", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByText("Posted")).not.toBeInTheDocument();
@@ -495,7 +529,7 @@ describe("malformed success responses", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByText("Posted")).not.toBeInTheDocument();
@@ -510,7 +544,7 @@ describe("malformed success responses", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByText("Posted")).not.toBeInTheDocument();
@@ -522,7 +556,7 @@ describe("malformed success responses", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(stored().kind).toBe("pending");
@@ -533,7 +567,7 @@ describe("malformed success responses", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByText(/Journal number:/)).not.toBeInTheDocument();
@@ -547,7 +581,7 @@ describe("malformed success responses", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(stored().kind).toBe("pending");
@@ -561,7 +595,7 @@ describe("malformed success responses", () => {
     const view = renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
 
     view.unmount();
@@ -585,7 +619,7 @@ describe("cross-tab coordination", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
 
     expect(
       await screen.findByText(/couldn't be coordinated safely across open tabs/),
@@ -602,20 +636,22 @@ describe("cross-tab coordination", () => {
       }),
     );
     render(
-      <>
-        <CashbookPostingsPanel
-          organisationId="org1"
-          status={statusOf()}
-          accounts={ACCOUNTS}
-          enabled
-        />
-        <CashbookPostingsPanel
-          organisationId="org1"
-          status={statusOf()}
-          accounts={ACCOUNTS}
-          enabled
-        />
-      </>,
+      withQuery(
+        <>
+          <CashbookPostingsPanel
+            organisationId="org1"
+            status={statusOf()}
+            accounts={ACCOUNTS}
+            enabled
+          />
+          <CashbookPostingsPanel
+            organisationId="org1"
+            status={statusOf()}
+            accounts={ACCOUNTS}
+            enabled
+          />
+        </>,
+      ),
     );
     const panels = screen.getAllByRole("region");
     expect(panels).toHaveLength(2);
@@ -627,17 +663,23 @@ describe("cross-tab coordination", () => {
     fireEvent.change(first.getByLabelText("Amount"), {
       target: { value: "25000" },
     });
-    await chooseOption(first.getByLabelText("Money received into"), "Cash in hand");
-    await chooseOption(first.getByLabelText("Income category"), "Donations");
+    pickAccount("Into", "Cash in hand", panels[0]);
+    await chooseOption(first.getByLabelText("Category"), "Donations");
+    fireEvent.change(first.getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
 
     fireEvent.click(second.getByRole("button", { name: /Money in/ }));
     fireEvent.change(second.getByLabelText("Amount"), {
       target: { value: "25000" },
     });
-    await chooseOption(second.getByLabelText("Money received into"), "Cash in hand");
-    await chooseOption(second.getByLabelText("Income category"), "Donations");
+    pickAccount("Into", "Cash in hand", panels[1]);
+    await chooseOption(second.getByLabelText("Category"), "Donations");
+    fireEvent.change(second.getByLabelText("Description (required)"), {
+      target: { value: "Donation towards choir anniversary" },
+    });
 
-    const submitButtons = screen.getAllByRole("button", { name: "Post receipt" });
+    const submitButtons = screen.getAllByRole("button", { name: "Record money in" });
     fireEvent.click(submitButtons[0]);
     fireEvent.click(submitButtons[1]);
 
@@ -657,7 +699,7 @@ describe("cross-tab coordination", () => {
     expect(stored().kind).toBe("none");
     // The first tab's record cleared, yet the second form stays locked.
     expectLocked(secondPanel);
-    fireEvent.click(second.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(second.getByRole("button", { name: "Record money in" }));
     expect(api.post).toHaveBeenCalledTimes(1);
   });
 
@@ -675,9 +717,46 @@ describe("validation and eligibility", () => {
   it("refuses to post without an amount", async () => {
     renderPanel();
     await openReceipt();
-    fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
 
     expect(await screen.findByText("Enter an amount.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("refuses a receipt without a description", async () => {
+    renderPanel();
+    await openReceipt();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
+    pickAccount("Into", "Cash in hand");
+    await chooseOption(screen.getByLabelText("Category"), "Donations");
+
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
+    expect(await screen.findByText("Description is required.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+
+    fillDescription("   ");
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
+    expect(screen.getByText("Description is required.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expense without a description", async () => {
+    renderPanel();
+    openExpense();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7500" } });
+    pickAccount("Paid from", "Main bank");
+    await chooseOption(screen.getByLabelText("Category"), "Venue hire");
+    fireEvent.change(screen.getByLabelText("Paid to (required)"), {
+      target: { value: "Venue Ltd" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
+    expect(await screen.findByText("Description is required.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+
+    fillDescription(" \n\t ");
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
+    expect(screen.getByText("Description is required.")).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -685,9 +764,9 @@ describe("validation and eligibility", () => {
     renderPanel();
     openExpense();
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7500" } });
-    await chooseOption(screen.getByLabelText("Paid from"), "Main bank");
-    await chooseOption(screen.getByLabelText("Expense category"), "Venue hire");
-    fireEvent.click(screen.getByRole("button", { name: "Post expense" }));
+    pickAccount("Paid from", "Main bank");
+    await chooseOption(screen.getByLabelText("Category"), "Venue hire");
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
 
     expect(await screen.findByText("Paid to is required.")).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
@@ -697,13 +776,13 @@ describe("validation and eligibility", () => {
     renderPanel();
     await openReceipt();
 
-    const accounts = await optionLabels(screen.getByLabelText("Money received into"));
-    expect(accounts).toEqual(["Cash in hand", "Main bank"]);
-    expect(accounts).not.toContain("Old cash");
-    expect(accounts).not.toContain("New bank");
-    expect(accounts).not.toContain("Member money held");
+    const into = within(screen.getByRole("radiogroup", { name: "Into" }));
+    expect(into.getAllByRole("radio")).toHaveLength(2);
+    expect(into.getByRole("radio", { name: /Cash in hand/ })).toBeInTheDocument();
+    expect(into.getByRole("radio", { name: /Main bank/ })).toBeInTheDocument();
+    expect(into.queryByRole("radio", { name: /Old cash|New bank|Member money held/ })).not.toBeInTheDocument();
 
-    const categories = await optionLabels(screen.getByLabelText("Income category"));
+    const categories = await optionLabels(screen.getByLabelText("Category"));
     expect(categories).toEqual(["Donations"]);
   });
 
@@ -718,17 +797,18 @@ describe("validation and eligibility", () => {
     });
     await openReceipt();
 
-    const categories = await optionLabels(screen.getByLabelText("Income category"));
+    const categories = await optionLabels(screen.getByLabelText("Category"));
     expect(categories).toEqual(["Donations", "Grants"]);
   });
 
   it("does not offer the sending account as the transfer destination", async () => {
     renderPanel();
     openTransfer();
-    await chooseOption(screen.getByLabelText("Transfer from"), "Cash in hand");
+    pickAccount("From", "Cash in hand");
 
-    const destinations = await optionLabels(screen.getByLabelText("Transfer to"));
-    expect(destinations).toEqual(["Main bank"]);
+    const destinations = within(screen.getByRole("radiogroup", { name: "To" }));
+    expect(destinations.getAllByRole("radio")).toHaveLength(1);
+    expect(destinations.getByRole("radio", { name: /Main bank/ })).toBeInTheDocument();
   });
 
   it("refuses a second click while the first posting is in flight", async () => {
@@ -742,7 +822,7 @@ describe("validation and eligibility", () => {
     await openReceipt();
     await fillReceipt();
 
-    const button = screen.getByRole("button", { name: "Post receipt" });
+    const button = screen.getByRole("button", { name: "Record money in" });
     fireEvent.click(button);
     fireEvent.click(button);
 
@@ -763,7 +843,7 @@ describe("unknown outcomes and durable retry", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     await waitFor(() => expect(stored().kind).toBe("pending"));
@@ -790,7 +870,7 @@ describe("unknown outcomes and durable retry", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(stored().kind).toBe("pending");
@@ -815,12 +895,14 @@ describe("unknown outcomes and durable retry", () => {
     // Switching back re-reads Organisation A's stored intent: it was never
     // cleared by Organisation B's screen.
     view.rerender(
-      <CashbookPostingsPanel
-        organisationId="org1"
-        status={statusOf()}
-        accounts={ACCOUNTS}
-        enabled
-      />,
+      withQuery(
+        <CashbookPostingsPanel
+          organisationId="org1"
+          status={statusOf()}
+          accounts={ACCOUNTS}
+          enabled
+        />,
+      ),
     );
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Money in/ })).not.toBeInTheDocument();
@@ -835,13 +917,13 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("The period is locked")).toBeInTheDocument();
     expect(stored().kind).toBe("none");
-    expect(screen.getByRole("button", { name: "Post receipt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record money in" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
     expect(await screen.findByText(/Journal number: R-000001/)).toBeInTheDocument();
 
     expect(api.post).toHaveBeenCalledTimes(2);
@@ -860,7 +942,7 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
     await screen.findByText("A financial posting is unconfirmed");
 
     fireEvent.click(screen.getByRole("button", { name: "Retry this posting" }));
@@ -878,7 +960,7 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry this posting" })).not.toBeInTheDocument();
@@ -899,7 +981,7 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
 
     api.post.mockRejectedValueOnce({
@@ -921,11 +1003,11 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText(/earlier attempt was voided/)).toBeInTheDocument();
     expect(stored().kind).toBe("none");
-    expect(screen.getByRole("button", { name: "Post receipt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record money in" })).toBeInTheDocument();
   });
 
   it("keeps a reused key pending and does not resend it automatically", async () => {
@@ -938,7 +1020,7 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(screen.getByText(/already used for a different posting/)).toBeInTheDocument();
@@ -958,7 +1040,7 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     expect(await screen.findByText("A financial posting is unconfirmed")).toBeInTheDocument();
     expect(pendingIntents()[0].hadAmbiguousAttempt).toBe(false);
@@ -972,7 +1054,7 @@ describe("proof rules", () => {
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    await submit("Post receipt");
+    await submit("Record money in");
 
     const url = api.post.mock.calls[0][0] as string;
     expect(url).toMatch(/^\/finance\/org1\/ledger\/(receipts|expenses|transfers)$/);
@@ -1019,7 +1101,7 @@ describe("confirmed posting whose safety record can't be cleared", () => {
       renderPanel();
       await openReceipt();
       await fillReceipt();
-      await submit("Post receipt");
+      await submit("Record money in");
 
       expect(await screen.findByText("Journal number: R-000001")).toBeInTheDocument();
       expect(screen.getByText("Posted")).toBeInTheDocument();
@@ -1097,7 +1179,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     await fillReceiptIn(firstPanel);
     await fillReceiptIn(secondPanel);
 
-    fireEvent.click(first.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(first.getByRole("button", { name: "Record money in" }));
     expect(await first.findByText(/Journal number: R-000001/)).toBeInTheDocument();
     // The first tab claimed and then cleared the record.
     deliverStorageEvent();
@@ -1107,7 +1189,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     expect(second.getByRole("button", { name: "Start a new posting" })).toBeEnabled();
 
     // The officer tries to submit the same real-world receipt again.
-    fireEvent.click(second.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(second.getByRole("button", { name: "Record money in" }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(stored().kind).toBe("none");
@@ -1117,7 +1199,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     const { first, firstPanel, second, secondPanel } = renderTwoTabs();
     await fillReceiptIn(firstPanel);
     await fillReceiptIn(secondPanel, "1000");
-    fireEvent.click(first.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(first.getByRole("button", { name: "Record money in" }));
     expect(await first.findByText(/Journal number: R-000001/)).toBeInTheDocument();
     deliverStorageEvent();
     expectLocked(secondPanel, "1,000");
@@ -1130,7 +1212,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     await fillReceiptIn(secondPanel, "1000", { open: false });
     // The server's proof must match this posting's own amount (₦1,000).
     api.post.mockResolvedValueOnce(successBody("R-000002", { totalKobo: 100000 }));
-    fireEvent.click(second.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(second.getByRole("button", { name: "Record money in" }));
     expect(await second.findByText(/Journal number: R-000002/)).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledTimes(2);
     const [firstKey, secondKey] = api.post.mock.calls.map(([, body]) => body.idempotencyKey);
@@ -1171,7 +1253,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
       expect(screen.getByText(SUPERSEDED)).toBeInTheDocument();
       expect(screen.getByText(/can't tell whether that posting was saved, refused or voided/)).toBeInTheDocument();
       expect(screen.getByLabelText("Amount")).toHaveValue("25,000");
-      expect(screen.getByRole("button", { name: "Post receipt" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Record money in" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "Start a new posting" })).toBeEnabled();
       expect(screen.queryByText("Posted")).not.toBeInTheDocument();
       expect(screen.queryByText("Already posted")).not.toBeInTheDocument();
@@ -1188,7 +1270,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     deliverStorageEvent("org2");
 
     expect(screen.queryByText(SUPERSEDED)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Post receipt" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Record money in" })).toBeEnabled();
   });
 
   it("leaves the overview usable when no form was open", async () => {
@@ -1212,7 +1294,7 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     renderPanel();
     await openReceipt();
     await fillReceipt();
-    fireEvent.click(screen.getByRole("button", { name: "Post receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
 
     // Another tab retries this tab's own record (same key) meanwhile.
@@ -1239,6 +1321,126 @@ describe("another tab changes the posting record while a form is open (F1)", () 
     await openReceipt();
     expect(screen.queryByText(SUPERSEDED)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Amount")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Post receipt" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Record money in" })).toBeEnabled();
+  });
+});
+
+describe("shorter forms", () => {
+  it("follows the account with the method until the officer picks one", async () => {
+    renderPanel();
+    await openReceipt();
+    const into = screen.getByRole("radiogroup", { name: "Into" });
+    fireEvent.click(within(into).getByRole("radio", { name: /Main bank/ }));
+    expect(screen.getByRole("radio", { name: "Bank transfer" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Cash" }));
+    fireEvent.click(within(into).getByRole("radio", { name: /Cash in hand/ }));
+    fireEvent.click(within(into).getByRole("radio", { name: /Main bank/ }));
+    expect(screen.getByRole("radio", { name: "Cash" })).toBeChecked();
+  });
+
+  it("keeps only the optional references behind Add details", async () => {
+    renderPanel();
+    await openReceipt();
+    // The description is a main field now, not a hidden detail.
+    expect(screen.getByLabelText("Description (required)")).toBeVisible();
+    expect(screen.queryByLabelText("External reference")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Add details/ }));
+    expect(screen.getByLabelText("External reference")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Note")).not.toBeInTheDocument();
+  });
+
+  it("shows and accepts the description at a phone width", async () => {
+    const originalWidth = window.innerWidth;
+    window.innerWidth = 375;
+    try {
+      renderPanel();
+      await openReceipt();
+      const description = screen.getByLabelText("Description (required)");
+      expect(description.tagName).toBe("TEXTAREA");
+      expect(description).toBeVisible();
+      expect(description).toBeEnabled();
+      expect(description).toHaveAttribute("maxlength", "500");
+      fireEvent.change(description, {
+        target: { value: "Donation towards choir anniversary" },
+      });
+      expect(description).toHaveValue("Donation towards choir anniversary");
+    } finally {
+      window.innerWidth = originalWidth;
+    }
+  });
+
+  it("starts on the account last used on this device", async () => {
+    window.localStorage.setItem("presence-pro:books-last-account:org1:receipt", "bank");
+    renderPanel();
+    await openReceipt();
+    expect(screen.getByRole("radio", { name: /Main bank/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Bank transfer" })).toBeChecked();
+  });
+});
+
+describe("<CashbookPostingsPanel> with no category of that kind", () => {
+  it("still opens Money in for a manager, refusing to post until a category is chosen", async () => {
+    renderPanel({ accounts: ACCOUNTS.filter((entry) => entry.class !== "income") });
+
+    expect(screen.getByRole("button", { name: /Money in/ })).toBeEnabled();
+    await openReceipt();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25000" } });
+    pickAccount("Into", "Cash in hand");
+    fireEvent.click(screen.getByRole("button", { name: "Record money in" }));
+
+    expect(await screen.findByText("Choose an active income category.")).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("opens Money out and adds a category from inside the form", async () => {
+    renderPanel({ accounts: ACCOUNTS.filter((entry) => entry.class !== "expense") });
+    openExpense();
+
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7500" } });
+    pickAccount("Paid from", "Main bank");
+    fireEvent.change(screen.getByLabelText("Paid to (required)"), {
+      target: { value: "Generator Ltd" },
+    });
+    fillDescription("Purchase of microphone cables");
+
+    api.post.mockResolvedValueOnce({
+      data: {
+        data: {
+          accounts: [
+            {
+              id: "new-exp",
+              name: "Generator fuel",
+              class: "expense",
+              subtype: null,
+              active: true,
+              revision: 0,
+            },
+          ],
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ New category" }));
+    fireEvent.change(screen.getByLabelText("New category name"), {
+      target: { value: "Generator fuel" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/finance/org1/ledger/accounts", {
+        accounts: [{ name: "Generator fuel", class: "expense", subtype: null }],
+      }),
+    );
+    await waitFor(() =>
+      expect(shownValue(screen.getByLabelText("Category"))).toContain("Generator fuel"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Record money out" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+    expect(api.post.mock.calls[1][0]).toBe("/finance/org1/ledger/expenses");
+    expect(api.post.mock.calls[1][1]).toMatchObject({
+      expenseAccountId: "new-exp",
+      counterpartyName: "Generator Ltd",
+    });
   });
 });

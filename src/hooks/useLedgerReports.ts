@@ -2,6 +2,7 @@ import { financeRequest } from "services/api/request";
 import { useQueryWrapper } from "services/api/apiHelper";
 import { queryKeys } from "services/api/queryKeys";
 import { convertParamsToString } from "helpers/stringManipulations";
+import { FinancialReportPeriod, toFinancialReportPreview } from "helpers/financialReport";
 import {
   CASHBOOK_PAGE_SIZE,
   reportQuery,
@@ -109,4 +110,32 @@ export const useLedgerSummary = (
     enabled: enabled && Boolean(organisationId),
   });
   return reportQueryState(query, toSummaryReport(query.data?.data));
+};
+
+/**
+ * Financial Report v1 for one exact period: the statement figures the PDF
+ * prints, and whether (and in which formats) it can be downloaded. The
+ * Summary renders from this query and the downloads share it, so the same
+ * preview answers both and is requested once.
+ *
+ * The preview is a whole-books snapshot read, so it is not repeated on every
+ * window focus; ledger writes still refresh it through `ledger.root`, and the
+ * download itself is checked again by the server.
+ */
+export const useFinancialReportPreview = (
+  organisationId: string,
+  period: FinancialReportPeriod,
+) => {
+  const url =
+    convertParamsToString(financeRequest.LEDGER_FINANCIAL_REPORT, { organisationId }) +
+    reportQuery({ from: period.from, to: period.to });
+  const query = useQueryWrapper(
+    queryKeys.finance.ledger.financialReport(organisationId, period.from, period.to),
+    url,
+    {
+      enabled: Boolean(organisationId),
+      refetchOnWindowFocus: false,
+    },
+  );
+  return reportQueryState(query, toFinancialReportPreview(query.data?.data, period));
 };

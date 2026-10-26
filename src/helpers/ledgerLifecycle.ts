@@ -130,6 +130,8 @@ export const ledgerAuditActionLabels: Record<
   period_locked: "Period lock set",
   period_unlocked: "Period lock moved back or removed",
   attempt_voided: "Posting attempt voided",
+  member_allocations_enabled: "Allocations turned on",
+  member_allocations_disabled: "Allocations turned off",
   unknown: "Unrecognised action",
 };
 

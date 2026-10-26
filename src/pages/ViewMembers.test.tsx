@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { render } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -290,6 +290,129 @@ describe("<ViewMembers> at phone width", () => {
     expect(screen.queryByRole("button", { name: /edit ada/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add Member" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export" })).toBeInTheDocument();
+  });
+});
+
+describe("<ViewMembers> keeps its list in the address", () => {
+  const MEMBERS = [
+    { id: "m1", name: "Ada", part: "soprano" },
+    { id: "m2", name: "Bayo", part: "tenor" },
+  ];
+  const MODEL_FIELDS = [
+    {
+      _id: "f1",
+      name: "part",
+      label: "Voice Part",
+      type: "option",
+      options: ["soprano", "tenor"],
+    },
+  ];
+
+  // Shows the address the page wrote, as a refresh or Back would find it.
+  const LocationProbe = () => {
+    const location = useLocation();
+    return <output data-testid="location">{location.search}</output>;
+  };
+  const shownSearch = () =>
+    new URLSearchParams(screen.getByTestId("location").textContent ?? "");
+
+  const renderAt = (path = "/members") =>
+    renderRoute(
+      <>
+        <ViewMembers />
+        <LocationProbe />
+      </>,
+      "/members",
+      path
+    );
+
+  beforeEach(() => {
+    queryClient.clear();
+    localStorage.clear();
+    useGlobalStore.setState({
+      organisation: { ...EMPTY_ORG, id: "org1", isOwner: true },
+    });
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/model"))
+        return Promise.resolve({ data: { data: { fields: MODEL_FIELDS } } });
+      return Promise.resolve({ data: { data: MEMBERS } });
+    });
+  });
+
+  it("restores filters and the name search from the address", async () => {
+    renderAt("/members?filter.part=tenor&q=bay");
+    expect(await screen.findByText("Bayo")).toBeInTheDocument();
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filters (1)" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search member")).toHaveValue("bay");
+  });
+
+  it("writes a selected filter to the address", async () => {
+    renderAt();
+    await screen.findByText("Ada");
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    const select = await screen.findByLabelText("Filter by Voice Part");
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByText("Tenor"));
+
+    expect(shownSearch().getAll("filter.part")).toEqual(["tenor"]);
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    expect(screen.getByText("Bayo")).toBeInTheDocument();
+  });
+
+  it("writes the name search to the address and clears it there", async () => {
+    renderAt();
+    await screen.findByText("Ada");
+    fireEvent.change(screen.getByPlaceholderText("Search member"), {
+      target: { value: "bay" },
+    });
+    expect(shownSearch().get("q")).toBe("bay");
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(shownSearch().get("q")).toBeNull();
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+  });
+
+  it("drops filters the organisation's model no longer offers", async () => {
+    renderAt("/members?filter.part=mezzo&filter.voice=bass&filter.part=tenor");
+    expect(await screen.findByText("Bayo")).toBeInTheDocument();
+    // The valid tenor filter stays; the unknown field and option are dropped.
+    expect(screen.getByRole("button", { name: "Filters (1)" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(shownSearch().toString()).toBe("filter.part=tenor")
+    );
+  });
+
+  it("hands the edit page the working list to return to", async () => {
+    const EditProbe = () => {
+      const location = useLocation();
+      return (
+        <output data-testid="edit-state">{JSON.stringify(location.state)}</output>
+      );
+    };
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/members?q=bay&filter.part=tenor"]}>
+            <Routes>
+              <Route path="/members" element={<ViewMembers />} />
+              <Route path="/member/update/:memberId" element={<EditProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>
+    );
+    expect(await screen.findByText("Bayo")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Bayo" }));
+
+    const state = JSON.parse(
+      screen.getByTestId("edit-state").textContent ?? "{}"
+    );
+    const returned = new URL(state.returnTo, "http://x");
+    expect(returned.pathname).toBe("/members");
+    expect(returned.searchParams.get("q")).toBe("bay");
+    expect(returned.searchParams.getAll("filter.part")).toEqual(["tenor"]);
   });
 });
 
