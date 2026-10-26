@@ -1050,7 +1050,11 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
     api.put.mockRejectedValueOnce(httpError(422, "Amount exceeds what is owed"));
     await saveDuesApr();
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Amount exceeds what is owed"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Amount exceeds what is owed", {
+        toastId: "Amount exceeds what is owed",
+      }),
+    );
     expect(toast.success).not.toHaveBeenCalled();
     expect(within(sheet).getByLabelText("Apr")).toHaveValue("500");
     expect(within(sheet).queryByText("Record changed")).not.toBeInTheDocument();
@@ -1512,7 +1516,9 @@ describe("<Finance> stale-screen correction guard (F0c)", () => {
       api.post.mockRejectedValueOnce(httpError(status, message));
       submitRecord(sheet);
 
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(message, { toastId: message }),
+      );
       expect(toast.success).not.toHaveBeenCalled();
       expect(within(sheet).queryByText("Payment not confirmed")).not.toBeInTheDocument();
       expect(within(sheet).getByLabelText("Amount received")).toHaveValue("500");

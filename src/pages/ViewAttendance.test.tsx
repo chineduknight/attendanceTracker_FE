@@ -499,7 +499,9 @@ describe("<ViewAttendance> analytics inclusion", () => {
     fireEvent.click((await dialog()).getByRole("button", { name: "Restore" }));
 
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("Restore not allowed")
+      expect(toast.error).toHaveBeenCalledWith("Restore not allowed", {
+        toastId: "Restore not allowed",
+      })
     );
     expect(screen.getByText("Excluded from analytics")).toBeInTheDocument();
     expect(toast.success).not.toHaveBeenCalled();
@@ -1345,9 +1347,17 @@ describe("<ViewAttendance> sharing the session report", () => {
           });
         });
       const viaSession = async () => {
-        fireEvent.click(screen.getByRole("button", { name: "open other session" }));
+        // The prepared report is a modal, so it hides the session switcher
+        // from the accessibility tree. This test covers the cleanup when the
+        // session changes underneath it, so reach the button explicitly
+        // instead of racing the modal's hide-others step under parallel load.
+        fireEvent.click(
+          screen.getByRole("button", { name: "open other session", hidden: true })
+        );
         await waitFor(() => expect(screen.queryByText("Ada")).not.toBeInTheDocument());
-        fireEvent.click(screen.getByRole("button", { name: "back to first session" }));
+        fireEvent.click(
+          screen.getByRole("button", { name: "back to first session", hidden: true })
+        );
       };
       const viaOrganisation = async () => {
         toOrg("org2");

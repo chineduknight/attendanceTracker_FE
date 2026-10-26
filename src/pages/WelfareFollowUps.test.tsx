@@ -698,6 +698,10 @@ describe("<Welfare> follow-ups — workflow", () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
         "This welfare follow-up was changed by someone else. Refresh and try again.",
+        {
+          toastId:
+            "This welfare follow-up was changed by someone else. Refresh and try again.",
+        },
       ),
     );
     await waitFor(() =>
@@ -885,7 +889,11 @@ describe("<Welfare> follow-ups — revision after an edit", () => {
 
     await editNote("Not saved.");
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Server error"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Server error", {
+        toastId: "Server error",
+      }),
+    );
     // The editor stays open on a non-stale failure, with the edit still
     // unsaved; the officer cancels it and discards the edit.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
