@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Link, MemoryRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { system } from "styles/theme";
 import { queryClient } from "services/api/apiHelper";
@@ -66,6 +66,61 @@ const confirmSubmit = async () => {
   await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
   return mockPost.mock.calls[0];
 };
+
+describe("<AddMember> returns to the list it was opened from", () => {
+  // Shows the address a save landed on, query string included.
+  const LocationProbe = () => {
+    const location = useLocation();
+    return (
+      <output data-testid="location">{`${location.pathname}${location.search}`}</output>
+    );
+  };
+
+  const renderUpdateWithReturn = (state: unknown) =>
+    render(
+      <ChakraProvider value={system}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter
+            initialEntries={[{ pathname: "/member/update/m1", state }]}
+          >
+            <Routes>
+              <Route path={PROTECTED_PATHS.UPDATE_MEMBER} element={<AddMember />} />
+              <Route path={PROTECTED_PATHS.VIEW_MEMBER} element={<LocationProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ChakraProvider>,
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+    useGlobalStore.setState({ organisation: { ...EMPTY_ORG, id: "org1", permissions: [] } });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url.endsWith("/model") ? MODEL : ADA } }),
+    );
+    mockPost.mockImplementation(() => Promise.resolve({ data: { data: {} } }));
+  });
+
+  it("keeps the filters and search it was opened with after a save", async () => {
+    const returnTo = "/view-member?q=ada&filter.part=Alto";
+    renderUpdateWithReturn({ returnTo });
+    await waitFor(() => expect(screen.getByLabelText(/Full Name/)).toHaveValue("Ada"));
+    await confirmSubmit();
+
+    expect(await screen.findByTestId("location")).toHaveTextContent(returnTo);
+  });
+
+  it("never follows a return target that leaves the app", async () => {
+    renderUpdateWithReturn({ returnTo: "//evil.example/members" });
+    await waitFor(() => expect(screen.getByLabelText(/Full Name/)).toHaveValue("Ada"));
+    await confirmSubmit();
+
+    expect(await screen.findByTestId("location")).toHaveTextContent(
+      PROTECTED_PATHS.VIEW_MEMBER,
+    );
+  });
+});
 
 describe("<AddMember> with display labels", () => {
   beforeEach(() => {

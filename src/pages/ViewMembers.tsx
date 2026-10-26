@@ -31,7 +31,7 @@ import {
   FaColumns,
   FaRegCalendarAlt,
 } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PROTECTED_PATHS } from "routes/pagePath";
 import { MultiValue } from "react-select";
 import { ThemedSelect } from "components/ui/themed-select";
@@ -53,6 +53,12 @@ import {
   legacyShownFieldsStorageKey,
   shownFieldsStorageKey,
 } from "helpers/memberListFields";
+import {
+  readMemberListParams,
+  reconcileMemberListFilters,
+  writeMemberListParams,
+} from "helpers/memberListFilters";
+import type { MemberListState } from "helpers/memberListFilters";
 
 type SelectOption = {
   value: string;
@@ -158,9 +164,16 @@ const ViewMembers: React.FC = () => {
   const terms = useTerms();
   const [org] = useGlobalStore((state) => [state.organisation]);
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const pinnedSearch = usePinnedSearch(searchQuery);
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const location = useLocation();
+  // Filters and the name search live in the address: a refresh, or Back from
+  // a member, returns to the same working list. Every write replaces the
+  // entry, so Back leaves the list in one step.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const listState = useMemo(
+    () => readMemberListParams(searchParams),
+    [searchParams]
+  );
+  const pinnedSearch = usePinnedSearch(listState.q);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   const [chosenFields, setChosenFields] = useState<string[] | null>(() =>
     readShownFields(org.id)
@@ -191,6 +204,32 @@ const ViewMembers: React.FC = () => {
     () => new Set(filterableFields.map((field) => field.name)),
     [filterableFields]
   );
+  // Until the model arrives the address is taken at its word; after that,
+  // values the organisation no longer offers are dropped (see the helper).
+  const filters = useMemo(
+    () =>
+      hasModel
+        ? reconcileMemberListFilters(listState.filters, filterableFields)
+        : listState.filters,
+    [hasModel, listState.filters, filterableFields]
+  );
+  const updateListState = (patch: Partial<MemberListState>) =>
+    setSearchParams(
+      writeMemberListParams({ ...listState, filters, ...patch }, searchParams),
+      { replace: true }
+    );
+
+  // A stale value is already gone from the visible list; also drop it from
+  // the address, so a copied link never carries a filter nobody can see.
+  useEffect(() => {
+    if (!hasModel) return;
+    const current = writeMemberListParams(listState, searchParams);
+    const next = writeMemberListParams({ ...listState, filters }, searchParams);
+    if (next.toString() !== current.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [hasModel, listState, filters, searchParams, setSearchParams]);
+
   const allExtraFields = useMemo(
     () =>
       members.length > 0 ? Object.keys(_.omit(members[0], HIDDEN_KEYS)) : [],
@@ -266,7 +305,7 @@ const ViewMembers: React.FC = () => {
   const exportUnavailable = !org.id || isLoading || isError || !hasModel;
 
   const filteredMembers = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = listState.q.toLowerCase();
     return members.filter(
       (member) =>
         member.name.toLowerCase().includes(query) &&
@@ -274,7 +313,7 @@ const ViewMembers: React.FC = () => {
           values.includes(member[field] as string)
         )
     );
-  }, [members, searchQuery, activeFilters]);
+  }, [members, listState.q, activeFilters]);
 
   const togglePanel = (panel: Exclude<OpenPanel, null>) =>
     setOpenPanel((current) => (current === panel ? null : panel));
@@ -370,7 +409,9 @@ const ViewMembers: React.FC = () => {
             {/* Filters and column choice open inline, half-width each, so
                 neither covers the list or fights the phone keyboard. */}
             <Flex mt="3" gap={2}>
-              {filterableFields.length > 0 && (
+              {/* An address can carry a filter before (or without) the model;
+                  it stays visible and clearable either way. */}
+              {(filterableFields.length > 0 || activeFilters.length > 0) && (
                 <Button
                   flex="1"
                   variant="outline"
@@ -426,7 +467,7 @@ const ViewMembers: React.FC = () => {
                       me={-2}
                       color="blue.fg"
                       _hover={{ textDecoration: "underline" }}
-                      onClick={() => setFilters({})}
+                      onClick={() => updateListState({ filters: {} })}
                     >
                       Clear all
                     </Button>
@@ -453,10 +494,12 @@ const ViewMembers: React.FC = () => {
                           value={selected}
                           closeMenuOnSelect={false}
                           onChange={(values: MultiValue<SelectOption>) =>
-                            setFilters((prev) => ({
-                              ...prev,
-                              [field.name]: values.map((item) => item.value),
-                            }))
+                            updateListState({
+                              filters: {
+                                ...filters,
+                                [field.name]: values.map((item) => item.value),
+                              },
+                            })
                           }
                         />
                       </Box>
@@ -502,8 +545,8 @@ const ViewMembers: React.FC = () => {
                 anything taller would squeeze the results it is filtering. */}
             <PinnedSearchBar
               pinnedSearch={pinnedSearch}
-              value={searchQuery}
-              onChange={setSearchQuery}
+              value={listState.q}
+              onChange={(value) => updateListState({ q: value })}
               placeholder={`Search ${lowerTerm(terms.memberSingular)}`}
               maxW={{ md: "400px" }}
             />
@@ -538,17 +581,23 @@ const ViewMembers: React.FC = () => {
                   <EmptyState
                     title={`No ${lowerTerm(terms.memberPlural)} found`}
                     description={
-                      searchQuery
-                        ? `Nothing matches "${searchQuery}".`
+                      listState.q
+                        ? `Nothing matches "${listState.q}".`
                         : "Nothing matches these filters."
                     }
                     action={
-                      searchQuery ? (
-                        <Button variant="outline" onClick={() => setSearchQuery("")}>
+                      listState.q ? (
+                        <Button
+                          variant="outline"
+                          onClick={() => updateListState({ q: "" })}
+                        >
                           Clear search
                         </Button>
                       ) : activeFilters.length > 0 ? (
-                        <Button variant="outline" onClick={() => setFilters({})}>
+                        <Button
+                          variant="outline"
+                          onClick={() => updateListState({ filters: {} })}
+                        >
                           Clear filters
                         </Button>
                       ) : undefined
@@ -618,7 +667,14 @@ const ViewMembers: React.FC = () => {
                                     convertParamsToString(
                                       PROTECTED_PATHS.UPDATE_MEMBER,
                                       { memberId: member.id }
-                                    )
+                                    ),
+                                    // Saving returns here, filters and search
+                                    // intact, instead of a bare member list.
+                                    {
+                                      state: {
+                                        returnTo: `${location.pathname}${location.search}`,
+                                      },
+                                    }
                                   )
                                 }
                               >
