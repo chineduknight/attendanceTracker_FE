@@ -5,7 +5,7 @@
 > Repository: `chineduknight/attendanceTracker_FE`  
 > Product: Presence Pro  
 > Primary integration branch: `staging`  
-> Runtime: Node 22  
+> Runtime: Node 26  
 > Package manager: Yarn 1.22.22  
 > Framework: React 18 + TypeScript + Create React App  
 > UI: Chakra UI v3 (with v2-parity theme overrides)  
@@ -109,7 +109,7 @@ Note adjacent debt separately.
 `.nvmrc` contains:
 
 ```text
-22
+26
 ```
 
 Use:
@@ -120,6 +120,11 @@ node --version
 ```
 
 Do not silently develop/test on a different major Node version.
+
+`@chakra-ui/cli` (postinstall typegen) depends on `@visulima/boxen@2`, whose
+engines stop at Node 25, so Yarn Classic refuses to install on 26.
+`package.json` `resolutions` pins it to 3.1.0 (same `boxen` API, open engines).
+Drop that resolution once the CLI depends on a release that allows Node 26.
 
 ## Package manager
 
@@ -2320,7 +2325,7 @@ Seed forms deliberately.
 
 ## Do not assume CRA is Vite
 
-Use `REACT_APP_*`, `react-scripts`, Node 22.
+Use `REACT_APP_*`, `react-scripts`, Node 26.
 
 ---
 
@@ -2467,7 +2472,7 @@ When you remember nothing else, remember this:
 staging is the default integration branch.
 Do not merge or deploy without explicit approval.
 
-This is CRA on Node 22 and Yarn 1.22.22, not Vite.
+This is CRA on Node 26 and Yarn 1.22.22, not Vite.
 
 React Query owns server state.
 Zustand owns small persisted client/global state.
