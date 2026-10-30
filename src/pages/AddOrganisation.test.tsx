@@ -54,7 +54,11 @@ describe("<AddOrganisation>", () => {
     renderPage();
     typeName("Demo Choir");
     submit();
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Name already taken"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Name already taken", {
+        toastId: "Name already taken",
+      }),
+    );
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/Organisation name/)).toHaveValue("Demo Choir");
   });

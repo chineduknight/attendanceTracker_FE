@@ -95,7 +95,11 @@ describe("useAttendanceAnalyticsInclusion", () => {
     const result = renderInclusion();
     act(() => result.current.setInclusion(RESTORE_CHANGE, onSuccess));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Not allowed"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Not allowed", {
+        toastId: "Not allowed",
+      }),
+    );
     expect(onSuccess).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryState(queryKeys.attendance("orgA", "att1"))

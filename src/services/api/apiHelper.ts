@@ -31,8 +31,13 @@ export const deleteRequest = async ({ url, data }: any) => {
 };
 
 /**
- * The default mutation failure: toast the backend's message(s). Exported so a
- * mutation with its own handling for some statuses can fall back to it.
+ * The default mutation failure: one toast for the backend's message(s).
+ *
+ * A validation response can list several messages; one toast per message used
+ * to stack up to a screenful, so they are joined into a single toast (kept
+ * open until dismissed). Repeated identical messages share a toast id, so a
+ * retry or a burst of the same failure replaces the toast instead of adding
+ * another copy.
  */
 export const showMutationError = (error: unknown) => {
   const err = error as Record<any, any>;
@@ -43,15 +48,17 @@ export const showMutationError = (error: unknown) => {
     return;
   }
 
-  const message: any = err?.response?.data?.error;
+  const message: unknown = err?.response?.data?.error;
+  const messages = (Array.isArray(message) ? message : [message])
+    .map((item) => `${item ?? "An error occured"}`)
+    .filter((item) => item.trim() !== "");
+  const text = messages.length ? messages.join(" • ") : "An error occured";
+
   if (Array.isArray(message)) {
-    message.map((errorMsg) =>
-      toast.error(`${errorMsg ?? "An error occured"}`, {
-        autoClose: false,
-      }),
-    );
+    // A validation list is meant to be read; it stays until dismissed.
+    toast.error(text, { autoClose: false, toastId: text });
   } else {
-    toast.error(`${message ?? "An error occured"}`);
+    toast.error(text, { toastId: text });
   }
 };
 

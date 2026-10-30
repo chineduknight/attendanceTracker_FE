@@ -60,7 +60,8 @@ describe("useAttendanceAvailabilityMutations", () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "This availability period overlaps an existing period."
+        "This availability period overlaps an existing period.",
+        { toastId: "This availability period overlaps an existing period." },
       )
     );
   });

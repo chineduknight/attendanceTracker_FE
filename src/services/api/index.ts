@@ -39,7 +39,12 @@ interface ErrorResponse {
   error?: string;
   // define other properties if needed
 }
-const onResponseError = (error: AxiosError): Promise<AxiosError> => {
+/**
+ * Exported for its tests. A burst of parallel requests all returning 401 used
+ * to add one toast each; the stable id makes identical refusals share a single
+ * toast, while the container still signs the user out once.
+ */
+export const onResponseError = (error: AxiosError): Promise<AxiosError> => {
   if (error.response) {
     const statusCode = error.response.status;
     const data = error.response.data as ErrorResponse;
@@ -50,7 +55,7 @@ const onResponseError = (error: AxiosError): Promise<AxiosError> => {
     const isUpdatePassword = error.config?.url?.endsWith(authRequest.UPDATE_PASSWORD);
     if (statusCode === 401 && !isUpdatePassword) {
       // logout user
-      toast.error(errMsg);
+      toast.error(errMsg, { toastId: `auth-${errMsg}` });
       useGlobalStore.setState({ user: EMPTY_USER });
     }
   } else {

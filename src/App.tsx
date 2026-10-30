@@ -19,7 +19,9 @@ const RenderDevTool = () => {
 
 const ThemedToastContainer = () => {
   const { colorMode } = useColorMode();
-  return <ToastContainer theme={colorMode} />;
+  // At most three at once: a burst of failed requests or validation messages
+  // must never cover the screen. Further toasts wait their turn.
+  return <ToastContainer theme={colorMode} limit={3} />;
 };
 
 const App = () => {
